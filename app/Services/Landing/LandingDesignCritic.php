@@ -406,10 +406,13 @@ class LandingDesignCritic
                 ->description('0-100 vanguard quality. 90+ = best-in-market; 70-89 = strong but revise; <70 = generic.')
                 ->required(),
             'must_fix' => $schema->array()
+                ->items($schema->string())
                 ->description('Blocking, SPECIFIC, actionable design changes (name the section, the property, the direction). Empty only when ship is true.'),
             'direction' => $schema->array()
+                ->items($schema->string())
                 ->description('Concrete art-direction pushes toward vanguard, grounded in the intent — where to add tension, motion, a bolder idea.'),
             'strengths' => $schema->array()
+                ->items($schema->string())
                 ->description('What already works and must be kept.'),
         ];
 

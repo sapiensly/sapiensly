@@ -61,6 +61,7 @@ DESC;
     {
         return [
             'exclude' => $schema->array()
+                ->items($schema->string())
                 ->description('semantic_key values the page already shows, so they are not proposed again.'),
             'max' => $schema->integer()
                 ->description('How many findings to return (default 5, max 20).'),

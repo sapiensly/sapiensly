@@ -90,7 +90,11 @@ class McpServerTool implements ToolContract
             'integer' => $schema->integer(),
             'number' => $schema->number(),
             'boolean' => $schema->boolean(),
-            'array' => $schema->array(),
+            // Map the source schema's item type through; string when it has
+            // none — some providers (Gemini) reject an array without items.
+            'array' => $schema->array()->items(
+                $this->mapType($schema, is_array($prop['items'] ?? null) ? $prop['items'] : []),
+            ),
             'object' => $schema->object(),
             default => $schema->string(),
         };

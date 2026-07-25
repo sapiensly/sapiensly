@@ -168,7 +168,7 @@ TXT,
             fn ($schema) => [
                 'title' => $schema->string(),
                 'purpose' => $schema->string(),
-                'insights' => $schema->array()->description('[{variant, title, body}] mismo orden y cantidad.'),
+                'insights' => $schema->array()->items($schema->object(['variant' => $schema->string(), 'title' => $schema->string(), 'body' => $schema->string()]))->description('[{variant, title, body}] mismo orden y cantidad.'),
             ],
             fn () => [
                 'title' => (string) ($spec['title'] ?? 'Dashboard'),

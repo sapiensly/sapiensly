@@ -66,8 +66,10 @@ DESC;
             'search' => $schema->string()
                 ->description('Optional free-text search across the object\'s text fields (case-insensitive).'),
             'expand' => $schema->array()
+                ->items($schema->string())
                 ->description('Optional relation field ids to resolve inline; each row gains expanded[field_id]: belongs_to → { id, data } | null; has_many → { items, count, truncated }.'),
             'sort' => $schema->array()
+                ->items($schema->object(['field_id' => $schema->string(), 'direction' => $schema->string()]))
                 ->description('Optional [{field_id, direction: asc|desc}].'),
             'limit' => $schema->integer()
                 ->description('Max rows to return (capped at 50).'),

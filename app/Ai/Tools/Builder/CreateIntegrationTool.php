@@ -69,7 +69,7 @@ DESC;
             'cache_key' => $schema->string()->description('The cache_key returned by discover_integration (OAuth2 path).'),
             'description' => $schema->string()->description('Optional one-line description.'),
             'reason' => $schema->string()->description('Why the flow needs this connection, e.g. "to post the deal summary to Slack". Shown on the provisioning card.'),
-            'actions' => $schema->array()->description('The actions the flow needs from this integration, each a short label, e.g. ["Post a message"]. Shown on the provisioning card.'),
+            'actions' => $schema->array()->items($schema->string())->description('The actions the flow needs from this integration, each a short label, e.g. ["Post a message"]. Shown on the provisioning card.'),
         ];
     }
 

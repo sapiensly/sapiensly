@@ -60,6 +60,7 @@ class VerifyWorkflowTool implements Tool
             'trigger_payload' => $schema->object()
                 ->description('Optional sample trigger payload to seed the run (e.g. the record that fired the trigger).'),
             'assertions' => $schema->array()
+                ->items($schema->string())
                 ->description('Optional custom assertions from the closed set. Omit to use the default checks (every step completes, no external write applied).'),
         ];
     }

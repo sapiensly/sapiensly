@@ -39,6 +39,7 @@ DESC;
     {
         return [
             'step_ids' => $schema->array()
+                ->items($schema->string())
                 ->description('Ids of the plan steps this turn will work on.')
                 ->required(),
         ];

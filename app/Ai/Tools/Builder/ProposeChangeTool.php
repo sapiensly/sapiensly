@@ -115,6 +115,10 @@ DESC;
         return [
             'ops' => $schema
                 ->array()
+                // Typed items: Gemini rejects any array schema without `items`
+                // ("missing field", observed live). `value`/`from` stay free-form
+                // via additionalProperties.
+                ->items($schema->object(['op' => $schema->string(), 'path' => $schema->string()]))
                 ->description('RFC 6902 ops array. Each item is {op, path, value?, from?}.')
                 ->required(),
             'change_summary' => $schema

@@ -53,11 +53,14 @@ DESC;
                 ->description('Plain description of what starts the flow, e.g. "HubSpot deal stage → closed".')
                 ->required(),
             'steps' => $schema->array()
+                ->items($schema->object(['label' => $schema->string()]))
                 ->description('Ordered steps. Each: {label, effect?: "read"|"write"|null, integration?: name}. effect is set only for steps that touch an external system.')
                 ->required(),
             'touches' => $schema->array()
+                ->items($schema->object(['system' => $schema->string(), 'effect' => $schema->string()]))
                 ->description('Every external system touched, each {system, effect: "read"|"write"} — the blast radius shown before building. Empty if the flow touches no external system.'),
             'assumptions' => $schema->array()
+                ->items($schema->object(['label' => $schema->string(), 'default' => $schema->string()]))
                 ->description('Defaults you chose, each {label, default}. e.g. {label: "Slack channel", default: "#sales"}. Never a blank question.'),
         ];
     }

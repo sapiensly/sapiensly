@@ -789,6 +789,14 @@ class BuilderAiService
             if ($e instanceof RequestException && $e->response !== null) {
                 $body = json_decode($e->response->body(), true);
                 $providerError = $body['error']['message'] ?? mb_substr($e->response->body(), 0, 500);
+                // OpenRouter wraps the upstream provider's own message in
+                // error.metadata.raw — without it a rejection surfaces as an
+                // undiagnosable "Provider returned error" (observed live on
+                // gemini-3.6-flash: the Google detail never reached the log).
+                $raw = $body['error']['metadata']['raw'] ?? null;
+                if (is_string($raw) && trim($raw) !== '') {
+                    $providerError .= ' — '.mb_substr($raw, 0, 800);
+                }
             }
 
             Log::error('Builder AI stream failed', [

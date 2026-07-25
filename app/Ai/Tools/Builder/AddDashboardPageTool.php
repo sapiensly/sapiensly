@@ -88,14 +88,17 @@ DESC;
             'date_field_id' => $schema->string()
                 ->description('Date/datetime field driving the range filter and time axes. Defaults to the first date field, else sys_created_at.'),
             'kpis' => $schema->array()
+                ->items($schema->object(['label' => $schema->string(), 'aggregation' => $schema->string()]))
                 ->description('1-8 KPI items: {label, aggregation, field_id?, object_slug? (read a different existing object), format?, icon?, filter?, compare?, delta_good?}. Required unless use_suggestion is true.'),
             'charts' => $schema->array()
+                ->items($schema->object(['label' => $schema->string(), 'chart_type' => $schema->string(), 'aggregation' => $schema->string()]))
                 ->description('1-10 charts: {label, chart_type, aggregation, y_field_id?, group_by_field_id?, x_field_id?, bucket?, series_field_id?, stacked?, filter?, limit?, object_slug? (read a different existing object)}. Vary the chart types. Required unless use_suggestion is true.'),
             'use_suggestion' => $schema->boolean()
                 ->description('Compile the deterministic suggested_spec from prepare_dashboard (recomputed server-side — no need to echo it back).'),
             'overrides' => $schema->object()
                 ->description('With use_suggestion: parts to replace in the suggestion (title, purpose, date_field_id, kpis, charts, insights, include_hero, include_date_filter). Each key you send replaces that whole part.'),
             'insights' => $schema->array()
+                ->items($schema->object(['variant' => $schema->string(), 'title' => $schema->string()]))
                 ->description('0-4 insight cards: {variant, title, body?, compute?, metric_label?}. metric_label is a short unit under the big figure (e.g. "semanas"). At least one card is required by the dashboard lints. EVERY FIGURE IN A BODY IS CHECKED AGAINST THE ROWS: state only numbers the data contains or that follow from it (a total, a share, an average, the weighted rate of a derived percentage). An invented figure is rejected and named back to you — do not write one from memory, and never pair a count with a percentage unless the count actually divides to it.'),
             'include_hero' => $schema->boolean()
                 ->description('Open with a compact left-aligned brand hero (default true).'),
