@@ -75,6 +75,23 @@ This is a Laravel 12 + Inertia.js + Vue 3 application. Auth is Laravel Fortify (
 - **Authentication**: Laravel Fortify + spatie/laravel-permission (teams = `organization_id`); `SetPermissionsTeam` middleware sets the team per request
 - **Controllers**: Located in `app/Http/Controllers/`, with settings controllers in a `Settings/` subdirectory
 
+## Landing Builder
+
+Landings are apps with `settings.surface="landing"` (auto-tagged `kind=landing`), rendered chrome-less/full-bleed and — once published — public at `/l/{public_slug}` (kebab-case, globally unique; `LandingPublisher`) or at a custom domain (`CustomDomainService`, CNAME + optional Cloudflare-for-SaaS). They are **bespoke-designed by construction**: pages are `html` blocks styled via `settings.custom_css` (60k budget, compiled/scoped by `ScopedAppCss`; `@import` forbidden) plus `data-sp-*` motion hooks hydrated by the runtime. The conversion loop is a leads object (use the real `email`/`url`/`phone` field types) + a `lead_form` block + a `record.created` workflow; the public form posts with honeypot/Turnstile/throttle built in.
+
+**Deterministic rails** (prompt rules alone proved insufficient — each rail exists because a live build violated it):
+- `ManifestValidator` rejects the generic marketing blocks (`hero`, `feature_grid`, `cta`, `testimonials`, `pricing`, `faq`, `stat_band`) anywhere on a landing surface (`generic_block_on_landing`).
+- `ScaffoldAppTool` refuses landing-intent requests (`App\Support\Landing\LandingIntent`; escape hatch `confirm_not_landing`).
+- The lead form must belong to the design: an empty `<div data-sp-slot="lead_form"></div>` in the html places it (BlockLeadForm moves itself in on mount) and `.sp-lead-form` must be styled — both enforced by the design gate's floor.
+
+**The design gate** (`LandingDesignCritic`, exposed as `critique_landing_design` in the builder and over MCP) is mandatory before finishing: a deterministic floor (bespoke css, display type scale, motion, the lead-form rules) + a demanding director model pass, with a convergence policy (score ≥85 ships; round 3 demotes leftovers to polish). The director sees **real pixels**: `DraftPreviewShot` asks the open builder tab to render the current draft off-screen and post a JPEG back (cache rendezvous via `TenantCache`, no tenant storage needed; degrades to `LatestPreviewShot`/text-only headless) — `judged_pixels` reports `'draft' | 'applied' | false`.
+
+**Model routing**: the optional `landing_builder` module in `AiDefaults` (admin AI > Defaults > "Landing Builder") switches the builder to a dedicated model for landing work — from turn ONE via `BuilderAiService::moduleFor()` (app tagged landing, or the request matches `LandingIntent`). The UI picker only sends an explicit `model` override when the user actually picked one; the director critiques on the same landing model.
+
+**Typography**: five self-hosted OFL families (Fraunces, Instrument Serif, Bricolage Grotesque, Archivo variable-width, IBM Plex Mono) declared in `resources/css/landing-fonts.css`, referenced by family name in custom_css — no external font requests on public pages.
+
+**Working notes**: long strings (custom_css, big html) are written/revised in chunks with the `{op:"append", path, value}` extension in `ManifestPatch` — never resend a huge `replace`. The landing surface wrapper clips horizontal overflow (`overflow-x-clip` in `runtime/Page.vue`). Tests live in `tests/Feature/Landing/`, `tests/Unit/Services/Landing/`, `tests/Unit/Support/Landing/`; the authoring playbook the builder reads is the `landings` topic in `FrameworkReferenceTool` + rule 1d-land in `BuilderAiService` — keep those in sync with any behavior change here.
+
 ## Database & Multi-Tenancy
 
 Tenant isolation is enforced **at the database layer**, not just in application code. Three Postgres roles map to three Laravel connections against one database, with two schemas:
