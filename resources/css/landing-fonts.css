@@ -19,6 +19,10 @@
  *                       condensed-to-expanded display range for bold,
  *                       typographic hero statements.
  *  IBM Plex Mono        400/500 — the eyebrow/label/data voice.
+ *  Alfa Slab One        single-weight slab display — the POSTER voice: loud,
+ *                       thick, unmissable (cartel/lucha-libre briefs).
+ *  Anton                single-weight condensed poster sans — tall impact
+ *                       headlines, pairs under Alfa Slab One.
  */
 
 @font-face {
@@ -77,4 +81,18 @@
     font-weight: 500;
     font-display: swap;
     src: url('/fonts/ibm-plex-mono-500.woff2') format('woff2');
+}
+@font-face {
+    font-family: 'Alfa Slab One';
+    font-style: normal;
+    font-weight: 400;
+    font-display: swap;
+    src: url('/fonts/alfa-slab-one.woff2') format('woff2');
+}
+@font-face {
+    font-family: 'Anton';
+    font-style: normal;
+    font-weight: 400;
+    font-display: swap;
+    src: url('/fonts/anton.woff2') format('woff2');
 }
