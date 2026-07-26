@@ -126,12 +126,12 @@ DESC;
         return [
             'objects' => $schema
                 ->array()
-                ->items($schema->object(['name' => $schema->string()]))
+                ->items($schema->object())
                 ->description('Objects to create. Each: {name: string (required), slug?: string, fields?: [{name: string, type?: string, options?: string[]}]}. An object with no fields gets a "Nombre" text field.')
                 ->required(),
             'links' => $schema
                 ->array()
-                ->items($schema->object(['from' => $schema->string(), 'to' => $schema->string()]))
+                ->items($schema->object())
                 ->description('Relations between objects: [{from: <object slug>, to: <object slug>, name?: <label on the from side>, type?: "belongs_to"|"many_to_many"}]. Default belongs_to = a <from> belongs to one <to>. Use type "many_to_many" for a symmetric link where both sides hold many (give it once per pair). Only applied when scaffolding a fresh (empty) app.'),
             'include_pages' => $schema
                 ->boolean()

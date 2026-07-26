@@ -115,10 +115,13 @@ DESC;
         return [
             'ops' => $schema
                 ->array()
-                // Typed items: Gemini rejects any array schema without `items`
-                // ("missing field", observed live). `value`/`from` stay free-form
-                // via additionalProperties.
-                ->items($schema->object(['op' => $schema->string(), 'path' => $schema->string()]))
+                // Bare object items: Gemini rejects an array schema without
+                // `items` ("missing field"), but LISTING properties here steers
+                // weaker models into emitting ONLY those keys — observed live:
+                // items typed {op, path} sent Grok into a ~70-call retry loop
+                // of value-less/malformed patches. The shape lives in the
+                // description; the schema stays non-prescriptive.
+                ->items($schema->object())
                 ->description('RFC 6902 ops array. Each item is {op, path, value?, from?}.')
                 ->required(),
             'change_summary' => $schema

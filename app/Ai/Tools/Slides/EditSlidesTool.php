@@ -46,7 +46,7 @@ class EditSlidesTool implements Tool
     {
         return [
             'operations' => $schema->array()
-                ->items($schema->object(['op' => $schema->string(), 'index' => $schema->integer()]))
+                ->items($schema->object())
                 ->description('Slide operations applied in order, each {op: replace|insert|remove|move, index, slide?, to?}. `slide` is a full slide object {layout, ...fields}.'),
             'name' => $schema->string()->description('Optional new deck title.'),
             'theme' => $schema->string()->enum(DeckValidator::THEMES)->description('Optional new theme.'),

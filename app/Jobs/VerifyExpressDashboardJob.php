@@ -81,7 +81,7 @@ TXT,
                 'numeros_renderizados' => array_slice($run->result['rendered'] ?? [], 0, 40),
             ], JSON_UNESCAPED_UNICODE),
             fn ($schema) => [
-                'fixes' => $schema->array()->items($schema->object(['action' => $schema->string(), 'block_id' => $schema->string()]))->description('[{action: remove_block|rename_block|change_chart_type, block_id, value?}]'),
+                'fixes' => $schema->array()->items($schema->object())->description('[{action: remove_block|rename_block|change_chart_type, block_id, value?}]'),
             ],
             ['fixes' => []],
             $user,

@@ -83,7 +83,7 @@ DESC;
                 ->description('Audience + the questions the dashboard answers, and why the top rows are the most important — one or two sentences.')
                 ->required(),
             'rows' => $schema->array()
-                ->items($schema->object(['blocks' => $schema->array()->items($schema->object(['type' => $schema->string()]))]))
+                ->items($schema->object(['blocks' => $schema->array()->items($schema->object())]))
                 ->description('The layout, top→bottom, most important first. Each row: {section?: string (title of the group this row belongs to), blocks: [{type: string, chart_type?: string (for type=chart), col_span?: int 1-12 (width weight in the row)}]}. A row\'s blocks render side by side at equal height.')
                 ->required(),
         ];

@@ -69,7 +69,7 @@ DESC;
                 ->items($schema->string())
                 ->description('Optional relation field ids to resolve inline; each row gains expanded[field_id]: belongs_to → { id, data } | null; has_many → { items, count, truncated }.'),
             'sort' => $schema->array()
-                ->items($schema->object(['field_id' => $schema->string(), 'direction' => $schema->string()]))
+                ->items($schema->object())
                 ->description('Optional [{field_id, direction: asc|desc}].'),
             'limit' => $schema->integer()
                 ->description('Max rows to return (capped at 50).'),

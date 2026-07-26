@@ -43,7 +43,7 @@ DESC;
             'goal' => $schema->string()
                 ->description('One-line statement of the overall objective (optional).'),
             'steps' => $schema->array()
-                ->items($schema->object(['title' => $schema->string()]))
+                ->items($schema->object())
                 ->description('Ordered steps: [{id?: string (pass the existing id when editing a step), title: string (required), detail?: string}]. Omit id for new steps — the server mints it.')
                 ->required(),
         ];

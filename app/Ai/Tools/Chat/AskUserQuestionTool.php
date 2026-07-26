@@ -50,7 +50,7 @@ class AskUserQuestionTool implements ToolContract
         return [
             'question' => $schema->string()->description('The question to ask, in the user\'s language. One clear sentence.')->required(),
             'options' => $schema->array()
-                ->items($schema->object(['label' => $schema->string()]))
+                ->items($schema->object())
                 ->description('The choices, as an array of objects: [{"label": string (required, the button text, max 80 chars), "description"?: string (optional one-line clarification, max 160 chars)}]. Provide 2-6 distinct, mutually exclusive options.')
                 ->required(),
             'allow_other' => $schema->boolean()->description('Whether to offer a free-text "Other" field so the user can answer outside the listed options. Default true; set false only when the options are exhaustive.'),
