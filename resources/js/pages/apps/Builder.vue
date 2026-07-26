@@ -4451,7 +4451,7 @@ function statusTone(status: Message['status']): string {
                     >
                         <div
                             ref="draftShotPane"
-                            class="sp-app-surface relative text-ink"
+                            class="sp-app-surface relative text-ink [contain:layout_paint]"
                             :style="draftShotSurfaceStyle"
                         >
                             <component
@@ -4475,6 +4475,12 @@ function statusTone(status: Message['status']): string {
                         @click.capture="onManualPreviewClick"
                         :class="[
                             'relative flex-1 overflow-auto p-5 transition-colors',
+                            // Paint containment: a landing's position:fixed
+                            // overlays (grain, scanlines) position against the
+                            // VIEWPORT and painted over the whole builder UI —
+                            // contain makes this pane their containing block
+                            // and clips them to it (observed live).
+                            '[contain:layout_paint]',
                             // Scope the preview to the builder chrome's current light/dark
                             // mode (previewTheme follows the <html> `.dark` class), so the
                             // preview inherits the theme instead of pinning the manifest's.
