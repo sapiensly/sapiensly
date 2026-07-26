@@ -32,8 +32,29 @@ const html = computed(() =>
 // the initial render and whenever the content changes (builder preview edits).
 const rootEl = ref<HTMLElement | null>(null);
 const { hydrate } = useLandingMotion(rootEl);
-onMounted(() => nextTick(hydrate));
-watch(html, () => nextTick(hydrate));
+
+// Stamp the block id onto the authored top-level element(s). The wrapper is
+// display:contents (so the authored <section> is the layout box), and
+// inheritAttrs is off, so AppRenderer's data-block-id never reaches the DOM —
+// without this the fine-tune manual mode can't select a landing section (and
+// selectionRect would measure a boxless wrapper). Harmless on the public page:
+// it's just a data attribute on the section.
+function stampBlockId(): void {
+    const el = rootEl.value;
+    if (!el) return;
+    for (const child of Array.from(el.children)) {
+        child.setAttribute('data-block-id', props.block.id);
+        child.setAttribute('data-block-type', 'html');
+    }
+}
+
+function afterRender(): void {
+    hydrate();
+    stampBlockId();
+}
+
+onMounted(() => nextTick(afterRender));
+watch(html, () => nextTick(afterRender));
 </script>
 
 <template>

@@ -77,12 +77,15 @@ import BuilderPlanCard, {
 } from '@/components/apps/builder/BuilderPlanCard.vue';
 import CopyButton from '@/components/chat/CopyButton.vue';
 import {
+    ArrowDown,
     ArrowLeft,
+    ArrowUp,
     BarChart3,
     Camera,
     Check,
     ChevronDown,
     Code,
+    Copy,
     Database,
     Download,
     Eye,
@@ -115,6 +118,7 @@ import {
     SlidersHorizontal,
     Sparkles,
     Square,
+    Trash2,
     Wand2,
     Workflow as WorkflowIcon,
     X,
@@ -1875,6 +1879,85 @@ watch(previewIsLanding, (landing) => {
         viewMode.value = 'preview';
     }
 });
+
+// ---- Landing fine-tune: section-level manual actions -----------------------
+// A landing's sections ARE its top-level html blocks; reorder/duplicate/delete
+// them through the same versioned endpoints the dashboard manual mode uses.
+// Selection (data-block-id click → selectedBlockId) and the selectionRect
+// overlay are already wired; this adds the section toolbar's behaviour.
+const landingSectionIds = computed<string[]>(() =>
+    (
+        (props.preview?.page as { blocks?: { id?: string }[] } | undefined)
+            ?.blocks ?? []
+    )
+        .map((b) => b?.id)
+        .filter((id): id is string => typeof id === 'string'),
+);
+const selectedSectionIndex = computed(() =>
+    selectedBlockId.value
+        ? landingSectionIds.value.indexOf(selectedBlockId.value)
+        : -1,
+);
+const canMoveSectionUp = computed(() => selectedSectionIndex.value > 0);
+const canMoveSectionDown = computed(
+    () =>
+        selectedSectionIndex.value >= 0 &&
+        selectedSectionIndex.value < landingSectionIds.value.length - 1,
+);
+const sectionBusy = ref(false);
+async function moveSection(dir: 'up' | 'down') {
+    const ids = landingSectionIds.value;
+    const i = selectedSectionIndex.value;
+    const target = dir === 'up' ? ids[i - 1] : ids[i + 1];
+    if (!selectedBlockId.value || !target || sectionBusy.value) return;
+    sectionBusy.value = true;
+    try {
+        await axios.post(`/apps/${props.app.id}/builder/blocks/move`, {
+            block_id: selectedBlockId.value,
+            target_block_id: target,
+            // Plain vertical reorder — landings stack, never row-wrap.
+            position: dir === 'up' ? 'above' : 'below',
+        });
+        afterManualChange();
+    } catch {
+        toast.error(t('apps.builder.section_action_failed'));
+    } finally {
+        sectionBusy.value = false;
+    }
+}
+async function duplicateSection() {
+    if (!selectedBlockId.value || sectionBusy.value) return;
+    sectionBusy.value = true;
+    try {
+        const { data } = await axios.post(
+            `/apps/${props.app.id}/builder/blocks/duplicate`,
+            { block_id: selectedBlockId.value },
+        );
+        afterManualChange();
+        if (typeof data?.new_block_id === 'string') {
+            selectedBlockId.value = data.new_block_id;
+        }
+    } catch {
+        toast.error(t('apps.builder.section_action_failed'));
+    } finally {
+        sectionBusy.value = false;
+    }
+}
+async function deleteSection() {
+    if (!selectedBlockId.value || sectionBusy.value) return;
+    sectionBusy.value = true;
+    try {
+        await axios.post(`/apps/${props.app.id}/builder/blocks/delete`, {
+            block_id: selectedBlockId.value,
+        });
+        selectedBlockId.value = null;
+        afterManualChange();
+    } catch {
+        toast.error(t('apps.builder.section_action_failed'));
+    } finally {
+        sectionBusy.value = false;
+    }
+}
 // Publish / unpublish the landing from the header. Same gate + global slug
 // minting as the MCP tool (shared LandingPublisher server-side). The live URL
 // chip reflects the CURRENT state without a reload.
@@ -3301,6 +3384,46 @@ function statusTone(status: Message['status']): string {
                          live-URL chip + unpublish. Same server path as the MCP
                          publish_landing tool. -->
                     <template v-if="previewIsLanding">
+                        <!-- Fine-tuning: flip between the AI builder (chat) and
+                             manual click-and-edit on the landing sections. -->
+                        <div
+                            v-if="viewMode === 'preview'"
+                            class="inline-flex items-center rounded-pill border border-medium bg-surface p-0.5"
+                        >
+                            <button
+                                v-for="m in [
+                                    {
+                                        id: 'chat',
+                                        label: t('apps.builder.panel_mode_chat'),
+                                    },
+                                    {
+                                        id: 'manual',
+                                        label: t(
+                                            'apps.builder.panel_mode_manual',
+                                        ),
+                                    },
+                                ] as const"
+                                :key="m.id"
+                                type="button"
+                                @click="panelMode = m.id"
+                                :class="[
+                                    'inline-flex items-center gap-1 rounded-pill px-3 py-1 text-xs transition-colors',
+                                    panelMode === m.id
+                                        ? 'bg-accent-blue/15 text-accent-blue'
+                                        : 'text-ink-muted hover:text-ink',
+                                ]"
+                            >
+                                <SlidersHorizontal
+                                    v-if="m.id === 'manual'"
+                                    class="size-3"
+                                />
+                                {{ m.label }}
+                            </button>
+                        </div>
+                        <span
+                            v-if="viewMode === 'preview'"
+                            class="h-5 w-px bg-current opacity-15"
+                        />
                         <template v-if="landingPublicSlug">
                             <a
                                 :href="`/l/${landingPublicSlug}`"
@@ -4567,9 +4690,70 @@ function statusTone(status: Message['status']): string {
                             }"
                         />
 
-                        <!-- Resize handles on the selected card -->
+                        <!-- Landing section toolbar: reorder / duplicate /
+                             delete the selected section, floating above it. -->
+                        <div
+                            v-if="
+                                previewIsLanding &&
+                                panelMode === 'manual' &&
+                                selectionRect &&
+                                selectedBlockId
+                            "
+                            class="absolute z-[60] flex items-center gap-0.5 rounded-pill border border-medium bg-navy-elevated px-1 py-1 shadow-xl"
+                            :style="{
+                                left:
+                                    selectionRect.left +
+                                    selectionRect.width / 2 -
+                                    74 +
+                                    'px',
+                                top: Math.max(selectionRect.top - 42, 4) + 'px',
+                            }"
+                        >
+                            <button
+                                type="button"
+                                :disabled="!canMoveSectionUp || sectionBusy"
+                                @click="moveSection('up')"
+                                :title="t('apps.builder.section_move_up')"
+                                class="flex size-7 items-center justify-center rounded-full text-ink-muted hover:bg-white/10 hover:text-ink disabled:opacity-30"
+                            >
+                                <ArrowUp class="size-4" />
+                            </button>
+                            <button
+                                type="button"
+                                :disabled="!canMoveSectionDown || sectionBusy"
+                                @click="moveSection('down')"
+                                :title="t('apps.builder.section_move_down')"
+                                class="flex size-7 items-center justify-center rounded-full text-ink-muted hover:bg-white/10 hover:text-ink disabled:opacity-30"
+                            >
+                                <ArrowDown class="size-4" />
+                            </button>
+                            <span class="mx-0.5 h-4 w-px bg-white/15" />
+                            <button
+                                type="button"
+                                :disabled="sectionBusy"
+                                @click="duplicateSection"
+                                :title="t('apps.builder.section_duplicate')"
+                                class="flex size-7 items-center justify-center rounded-full text-ink-muted hover:bg-white/10 hover:text-ink disabled:opacity-40"
+                            >
+                                <Copy class="size-4" />
+                            </button>
+                            <button
+                                type="button"
+                                :disabled="sectionBusy"
+                                @click="deleteSection"
+                                :title="t('apps.builder.section_delete')"
+                                class="flex size-7 items-center justify-center rounded-full text-red-300 hover:bg-red-500/15 disabled:opacity-40"
+                            >
+                                <Trash2 class="size-4" />
+                            </button>
+                        </div>
+
+                        <!-- Resize handles on the selected card (dashboard grid
+                             only — landings reorder as plain vertical sections
+                             via the section toolbar below). -->
                         <template
                             v-if="
+                                app.kind === 'dashboard' &&
                                 panelMode === 'manual' &&
                                 selectedBlock &&
                                 selectionRect &&
