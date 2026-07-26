@@ -109,6 +109,15 @@ it('failed() marks the message error when there is no checkpointed work', functi
     expect($message->fresh()->status)->toBe('error');
 });
 
+it('gets the longer landing timeout only when flagged as a landing turn', function () {
+    expect((new RunBuilderAiJob('bmsg_x', 'crea una app'))->timeout)
+        ->toBe(RunBuilderAiJob::DEFAULT_TIMEOUT)
+        ->and((new RunBuilderAiJob('bmsg_x', 'quiero una landing', isLanding: true))->timeout)
+        ->toBe(RunBuilderAiJob::LANDING_TIMEOUT)
+        // The landing cap must stay under supervisor-ai's 600s worker timeout.
+        ->and(RunBuilderAiJob::LANDING_TIMEOUT)->toBeLessThan(600);
+});
+
 it('failed() bills the usage snapshot of a timed-out turn so its spend is attributed', function () {
     $message = BuilderMessage::create([
         'conversation_id' => $this->conversation->id,

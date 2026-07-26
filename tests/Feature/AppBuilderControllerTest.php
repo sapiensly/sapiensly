@@ -145,6 +145,33 @@ it('names an unnamed app from its first builder prompt', function () {
         ->and($manifest['slug'])->toBe($app->slug);
 });
 
+it('dispatches the builder turn with the landing timeout for a landing-intent message', function () {
+    Queue::fake();
+
+    $app = App::factory()->create(['user_id' => $this->user->id, 'visibility' => 'private']);
+    app(AppManifestService::class)->createVersion($app, bldcm($app->id), $this->user);
+    $conv = BuilderConversation::create(['app_id' => $app->id, 'user_id' => $this->user->id, 'status' => 'active']);
+
+    // A landing-intent first turn on an untagged app must get the longer cap so it
+    // finishes constructor + gate in one turn instead of paying for an auto-resume.
+    $this->actingAs($this->user)->postJson("/apps/{$app->id}/builder/messages", [
+        'conversation_id' => $conv->id,
+        'message' => 'quiero una landing de producto para mi negocio',
+    ])->assertOk();
+
+    Queue::assertPushed(RunBuilderAiJob::class, fn (RunBuilderAiJob $job) => $job->isLanding
+        && $job->timeout === RunBuilderAiJob::LANDING_TIMEOUT);
+
+    // A plain app request keeps the default cap.
+    $this->actingAs($this->user)->postJson("/apps/{$app->id}/builder/messages", [
+        'conversation_id' => $conv->id,
+        'message' => 'crea una app de inventario con productos',
+    ])->assertOk();
+
+    Queue::assertPushed(RunBuilderAiJob::class, fn (RunBuilderAiJob $job) => ! $job->isLanding
+        && $job->timeout === RunBuilderAiJob::DEFAULT_TIMEOUT);
+});
+
 it('blocks builder access to users who cannot see the App', function () {
     $other = User::factory()->create(['email_verified_at' => now()]);
     $this->actingAs($other)

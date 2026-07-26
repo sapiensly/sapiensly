@@ -630,6 +630,19 @@ it('moduleFor routes a landing app to landing_builder ONLY when one is configure
         ->and(BuilderAiService::moduleFor($regular, 'crea una app de inventario'))->toBe('builder');
 });
 
+it('isLandingTurn detects a tagged landing app or a landing-intent request', function () {
+    $landing = App::factory()->create(['user_id' => $this->user->id, 'kind' => AppKind::Landing]);
+    $regular = App::factory()->create(['user_id' => $this->user->id, 'kind' => AppKind::App]);
+
+    expect(BuilderAiService::isLandingTurn($landing))->toBeTrue()
+        // Untagged app but the request itself reads as a landing (turn one).
+        ->and(BuilderAiService::isLandingTurn($regular, 'Quiero una landing para mi vivero'))->toBeTrue()
+        // A plain app request is not landing work.
+        ->and(BuilderAiService::isLandingTurn($regular, 'crea una app de inventario'))->toBeFalse()
+        ->and(BuilderAiService::isLandingTurn($regular))->toBeFalse()
+        ->and(BuilderAiService::isLandingTurn(null))->toBeFalse();
+});
+
 it('a discarded plan card does not word the pause as awaiting a decision', function () {
     Queue::fake();
     $conv = $this->service->startConversation($this->testApp, $this->user);

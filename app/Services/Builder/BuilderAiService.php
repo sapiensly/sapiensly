@@ -148,11 +148,22 @@ class BuilderAiService
      */
     public static function moduleFor(?App $app, ?string $intentText = null): string
     {
-        $landing = $app?->kind === AppKind::Landing || LandingIntent::matches($intentText);
-
-        return $landing && app(AiDefaults::class)->primary('landing_builder') !== null
+        return self::isLandingTurn($app, $intentText)
+            && app(AiDefaults::class)->primary('landing_builder') !== null
             ? 'landing_builder'
             : 'builder';
+    }
+
+    /**
+     * Whether a turn is landing work — the app is already tagged as a landing, or
+     * (before any tag exists) the request itself reads as one ({@see LandingIntent}).
+     * The deterministic signal shared by model routing ({@see moduleFor}), the
+     * playbook preload, and RunBuilderAiJob's landing timeout, so all three agree
+     * from turn ONE.
+     */
+    public static function isLandingTurn(?App $app, ?string $intentText = null): bool
+    {
+        return $app?->kind === AppKind::Landing || LandingIntent::matches($intentText);
     }
 
     /**
@@ -1301,7 +1312,7 @@ class BuilderAiService
             $this->autonomousTurnDto($placeholder),
         ]));
 
-        RunBuilderAiJob::dispatch($placeholder->id, $prompt, null, null, $modelOverride, $remaining, true, true, $resumeRemaining, $gateRemaining);
+        RunBuilderAiJob::dispatch($placeholder->id, $prompt, null, null, $modelOverride, $remaining, true, true, $resumeRemaining, $gateRemaining, self::isLandingTurn($conversation->app));
     }
 
     /**

@@ -334,6 +334,19 @@ class LandingDesignCritic
             return null;
         }
 
+        // On-demand critique (critique_landing_design over MCP / the builder tool)
+        // runs in a WEB request whose max_execution_time (30s in dev) is far below
+        // the director's own HTTP timeout, so the request died mid-pass before a
+        // verdict came back. Extend it to cover a full pass (every attempt) — but
+        // only when a finite limit is set: on CLI/queue (max_execution_time=0) the
+        // job's own timeout governs, and imposing a cap here could cut off a later
+        // step of the same worker job.
+        $executionBudget = (self::MAX_DIRECTOR_ATTEMPTS * self::TIMEOUT_SECONDS) + 60;
+        $currentLimit = (int) ini_get('max_execution_time');
+        if ($currentLimit !== 0 && $currentLimit < $executionBudget) {
+            @set_time_limit($executionBudget);
+        }
+
         try {
             $this->providers->applyRuntimeConfig($user);
             $candidates = $this->directorCandidates($modelOverride);

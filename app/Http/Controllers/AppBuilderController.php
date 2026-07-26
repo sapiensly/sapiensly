@@ -421,7 +421,7 @@ class AppBuilderController extends Controller
         // Seed the autonomous budget only when asked; a normal turn passes 0.
         $autonomousRemaining = ($data['autonomous'] ?? false) ? BuilderAiService::AUTONOMOUS_MAX_TURNS : 0;
 
-        RunBuilderAiJob::dispatch($placeholder->id, $data['message'], $attachmentPath, $attachmentDisk, $data['model'] ?? null, $autonomousRemaining);
+        RunBuilderAiJob::dispatch($placeholder->id, $data['message'], $attachmentPath, $attachmentDisk, $data['model'] ?? null, $autonomousRemaining, isLanding: BuilderAiService::isLandingTurn($app, $data['message']));
 
         return response()->json([
             'conversation_id' => $conversation->id,
@@ -666,6 +666,7 @@ class AppBuilderController extends Controller
             $filename,
             $diskName,
             BuilderAiService::VISUAL_REVIEW_MODEL,
+            isLanding: BuilderAiService::isLandingTurn($conversation->app, $userText),
         );
 
         return response()->json([
@@ -799,7 +800,7 @@ class AppBuilderController extends Controller
             'status' => 'streaming',
         ]);
 
-        RunBuilderAiJob::dispatch($placeholder->id, $userText, $attachmentPath, $attachmentDisk);
+        RunBuilderAiJob::dispatch($placeholder->id, $userText, $attachmentPath, $attachmentDisk, isLanding: BuilderAiService::isLandingTurn($conversation->app, $userText));
 
         return response()->json([
             'conversation_id' => $conversation->id,

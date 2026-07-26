@@ -78,6 +78,7 @@ class ContinueBuilderConversationTool extends SapiensTool
             null,
             0,
             $apply,
+            isLanding: BuilderAiService::isLandingTurn($app, $text),
         );
 
         return Response::json([

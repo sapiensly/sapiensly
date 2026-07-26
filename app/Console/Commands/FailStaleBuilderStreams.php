@@ -3,6 +3,7 @@
 namespace App\Console\Commands;
 
 use App\Events\Builder\BuilderStreamComplete;
+use App\Jobs\RunBuilderAiJob;
 use App\Models\BuilderMessage;
 use Illuminate\Console\Attributes\Description;
 use Illuminate\Console\Attributes\Signature;
@@ -33,9 +34,10 @@ class FailStaleBuilderStreams extends Command
     /**
      * RunBuilderAiJob's max wall-clock (its $timeout) plus grace for the
      * end-of-turn finalization (apply/checkpoint, broadcasts) before a turn
-     * counts as dead. A turn cannot legitimately stream longer than this.
+     * counts as dead. A turn cannot legitimately stream longer than this — keyed
+     * to the LONGEST cap (landing turns) so a legit slow landing is never swept.
      */
-    private const CAP_SECONDS = 300 + 300;
+    private const CAP_SECONDS = RunBuilderAiJob::LANDING_TIMEOUT + 300;
 
     private const ERROR_MESSAGE = 'The build was interrupted before finishing (the process was stopped — usually a restart or a memory limit). Please try again — and if it was a large build, ask for it in smaller steps.';
 

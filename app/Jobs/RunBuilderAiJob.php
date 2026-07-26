@@ -22,10 +22,11 @@ use Throwable;
  * immediately. BuilderAiService::streamMessage emits BuilderStreamChunk /
  * Complete / Error broadcasts that the frontend consumes via Reverb.
  *
- * Queue selection matters here: `ai` runs on supervisor-ai (timeout=300). The
- * default supervisor kills a worker at timeout=60, and a builder turn takes
- * 80-115s — so landing on `default` is not a slow path, it is a coin toss the
- * build loses whenever the model goes quiet for a minute.
+ * Queue selection matters here: `ai` runs on supervisor-ai (worker timeout=600,
+ * config/horizon.php). The default supervisor kills a worker at timeout=60, and a
+ * builder turn takes 80-115s (a landing turn far more) — so landing on `default`
+ * is not a slow path, it is a coin toss the build loses whenever the model goes
+ * quiet for a minute. This job's own $timeout stays under the 600s worker cap.
  *
  * This used to be expressed as `viaQueue()`, which reads like the framework hook
  * it is NOT: Illuminate\Bus\Dispatcher never calls it (only the event dispatcher
@@ -38,8 +39,20 @@ class RunBuilderAiJob implements ShouldQueue
 {
     use Queueable;
 
-    /** Max wall-clock per run. Claude with 10 tools rarely needs > 2 min. */
-    public int $timeout = 300;
+    /** A regular build with ~10 tools rarely needs > 2 min. */
+    public const DEFAULT_TIMEOUT = 300;
+
+    /**
+     * Landing builds routinely outrun the default: one turn does bespoke CSS/HTML
+     * chunks PLUS several ~40s design-gate passes, so at 300s they always tripped
+     * the cap and paid for an extra auto-resume turn. 540s lets a landing finish
+     * in one turn, still comfortably under supervisor-ai's 600s worker timeout
+     * (config/horizon.php). Applied in the constructor when $isLanding.
+     */
+    public const LANDING_TIMEOUT = 540;
+
+    /** Max wall-clock per run; the worker reads $job->timeout (so a property). */
+    public int $timeout = self::DEFAULT_TIMEOUT;
 
     /** Auto-retry is off — failures broadcast an error and the user retries. */
     public int $tries = 1;
@@ -113,7 +126,18 @@ class RunBuilderAiJob implements ShouldQueue
          * unshipped gate round and called itself done.
          */
         public int $gateRemaining = 2,
-    ) {}
+        /**
+         * True when this turn builds a landing (tagged app, or a landing-intent
+         * request on turn one — {@see BuilderAiService::isLandingTurn}). Landings
+         * get LANDING_TIMEOUT so a constructor + gate pass finishes in one turn
+         * instead of tripping the cap and paying for an auto-resume.
+         */
+        public bool $isLanding = false,
+    ) {
+        if ($isLanding) {
+            $this->timeout = self::LANDING_TIMEOUT;
+        }
+    }
 
     public function handle(BuilderAiService $service): void
     {
