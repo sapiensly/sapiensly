@@ -5,6 +5,7 @@ namespace App\Services\Express;
 use App\Models\App;
 use App\Models\Integration;
 use App\Models\User;
+use App\Support\Landing\LandingIntent;
 use Illuminate\Support\Str;
 
 /**
@@ -157,12 +158,21 @@ class ExpressIntentRouter
      * dashboard word, with the process opt-outs ("paso a paso", a leading
      * interrogative) removed. Deliberately conservative — any ambiguity falls
      * back to the conversational path.
+     *
+     * A LANDING ask stands down here too, mirroring messageAsksForApp: a landing
+     * brief almost always carries a stat/metrics band ("una franja de métricas:
+     * OTD, envíos a tiempo…") plus a build verb ("quiero"), which trips the bare
+     * dashboard-word heuristic and hijacked a "quiero una landing…" brief into
+     * Express fit_check (observed live). A landing is a creative-mode decision
+     * for the conversational builder (LandingIntent + rule 1d-land), so it must
+     * never autoroute to the dashboard pipeline.
      */
     private function messageAsksForDashboard(string $message): bool
     {
         $text = Str::lower($message);
         if (preg_match(self::OPT_OUT_WORDS, $text) === 1
             || preg_match(self::OPT_OUT_OPENERS, trim($text)) === 1
+            || LandingIntent::matches($message)
             || $this->describesAppBuild($text)) {
             return false;
         }

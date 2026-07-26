@@ -93,6 +93,30 @@ it('does not hijack a full app-build brief that merely mentions a dashboard', fu
         ->and($router->shouldRunExpress('crea un tablero con métricas de mis órdenes y sus campos de estado', $this->testApp))->toBeTrue();
 });
 
+it('does not hijack a landing brief that carries a stat/metrics band', function () {
+    config(['express.enabled' => true, 'express.autoroute' => true]);
+    Integration::factory()->forUser($this->user)->create([
+        'is_mcp' => true, 'status' => 'active', 'auth_type' => 'bearer', 'auth_config' => ['token' => 'T'],
+        'base_url' => 'https://mcp.example.com/v1',
+    ]);
+
+    $router = app(ExpressIntentRouter::class);
+
+    // The exact shape that got hijacked into Express fit_check: a landing brief
+    // whose "franja de métricas" trips the bare dashboard-word heuristic. It must
+    // fall to the conversational builder (LandingIntent), never the dashboard pipeline.
+    $landingBrief = 'Quiero una landing de producto para Yuhu, una plataforma de logística de última milla. '
+        .'Objetivo de conversión: capturar solicitudes de demo con un formulario. Secciones: hero con CTA, '
+        .'una franja de métricas (OTD, envíos a tiempo, tiempo de entrega) y bloques de beneficios.';
+
+    expect($router->shouldRunExpress($landingBrief, $this->testApp))->toBeFalse()
+        // Shorter, unambiguous landing asks stand down regardless of a build verb + metrics word.
+        ->and($router->shouldRunExpress('crea una landing con una sección de métricas y KPIs', $this->testApp))->toBeFalse()
+        ->and($router->shouldRunExpress('quiero una página de aterrizaje con un reporte de resultados', $this->testApp))->toBeFalse()
+        // A genuine dashboard ask that does NOT mention a landing still routes.
+        ->and($router->shouldRunExpress('crea un dashboard de tickets con KPIs', $this->testApp))->toBeTrue();
+});
+
 it('routes typoed dashboard words — "dahsboard" defeated the route twice in prod', function () {
     config(['express.enabled' => true, 'express.autoroute' => true]);
     Integration::factory()->forUser($this->user)->create([
