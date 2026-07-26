@@ -67,6 +67,18 @@ it('does not fire once the conversation has shipped', function () {
     Queue::assertNothingPushed();
 });
 
+it('never fires on a PUBLISHED landing — publishing is the user\'s blessing', function () {
+    // Observed live: a pre-stamp published landing got an uninvited gate turn
+    // after a contrast tweak, and its round-cap ship regressed the live page.
+    Queue::fake();
+    [$conv, $finished] = railSetup();
+    $conv->app->forceFill(['published_at' => now(), 'public_slug' => 'rail-published-guard'])->save();
+
+    app(BuilderAiService::class)->continueForLandingGate($finished, null, 2);
+
+    Queue::assertNothingPushed();
+});
+
 it('does not fire for non-landing apps, unapplied turns, or an exhausted budget', function () {
     Queue::fake();
 

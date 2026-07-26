@@ -1210,6 +1210,16 @@ class BuilderAiService
             return;
         }
 
+        // A PUBLISHED landing is user-blessed — the platform must never
+        // redesign it uninvited. This also covers every conversation that
+        // shipped before landing_shipped_at existed (observed live: the rail
+        // fired on a published, pre-stamp landing after a contrast tweak and
+        // its gate turn regressed the live design to a score-68 round-cap
+        // ship — rolled back).
+        if ($app->published_at !== null) {
+            return;
+        }
+
         // Another turn is already queued/streaming (a plan chain, a resume) —
         // the rail re-evaluates when THAT turn finishes, on the idle end.
         $busy = BuilderMessage::query()
@@ -1223,7 +1233,7 @@ class BuilderAiService
 
         $this->queueAutoTurn(
             $conversation,
-            '(riel de diseño) La landing tiene cambios aplicados pero el design gate NO ha dado ship:true en esta conversación. Llama critique_landing_design con el intent de la página; corrige cada must_fix con propose_change y re-llama con round incrementado hasta ship:true. No hagas nada más.',
+            '(riel de diseño) La landing tiene cambios aplicados pero el design gate NO ha dado ship:true en esta conversación. Llama critique_landing_design con el intent de la página; corrige cada must_fix con propose_change haciendo los cambios MÍNIMOS que cierren cada nota (CSS por append, nunca reenvíes la hoja completa; no rediseñes lo que el gate no objetó) y re-llama con round incrementado hasta ship:true. No hagas nada más.',
             $modelOverride,
             0,
             gateRemaining: $gateRemaining - 1,
