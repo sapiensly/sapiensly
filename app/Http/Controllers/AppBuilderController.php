@@ -1697,6 +1697,120 @@ class AppBuilderController extends Controller
      * @param  list<array<string, mixed>>  $blocks  mutated in place
      * @return array<string, mixed>|null
      */
+    /**
+     * Fine-tune: duplicate ONE block (with its whole subtree, freshly re-id'd)
+     * as a plain vertical sibling right below the original. Versioned like every
+     * other manual edit. The clone lands as 'below' (never row-wrapped) so a
+     * landing section duplicates into a stacked section, not a side-by-side row.
+     */
+    public function duplicateBlock(Request $request, App $app): JsonResponse
+    {
+        $this->assertCanAccess($request, $app);
+
+        $data = $request->validate([
+            'block_id' => ['required', 'string'],
+        ]);
+
+        $manifest = $this->manifestService->getActiveManifest($app);
+        if (! is_array($manifest)) {
+            abort(404, 'App has no active manifest yet.');
+        }
+
+        foreach ($manifest['pages'] ?? [] as $pageIndex => $page) {
+            $blocks = $page['blocks'] ?? [];
+            $original = $this->findBlock($blocks, $data['block_id']);
+            if ($original === null) {
+                continue;
+            }
+
+            $clone = $this->reidBlock($original);
+            if (! $this->insertNearBlock($blocks, $data['block_id'], 'below', $clone)) {
+                return response()->json(['error' => 'not_found', 'message' => 'Ese bloque ya no existe.'], 404);
+            }
+
+            try {
+                $version = $this->manifestService->applyPatch(
+                    $app,
+                    [['op' => 'replace', 'path' => '/pages/'.$pageIndex.'/blocks', 'value' => array_values($blocks)]],
+                    $request->user(),
+                    'Ajuste fino: dupliqué «'.(string) ($original['label'] ?? $data['block_id']).'»',
+                );
+            } catch (InvalidManifestException $e) {
+                return response()->json(['error' => 'invalid_manifest', 'errors' => $e->result->errorsArray()], 422);
+            }
+
+            return response()->json(['ok' => true, 'version' => $version->version_number, 'new_block_id' => $clone['id']]);
+        }
+
+        return response()->json(['error' => 'not_found', 'message' => 'Ese bloque ya no existe.'], 404);
+    }
+
+    /**
+     * Read-only deep find (a value copy, source untouched) — the non-mutating
+     * sibling of extractBlock, descending the same nested-block keys.
+     *
+     * @param  list<array<string, mixed>>  $blocks
+     * @return array<string, mixed>|null
+     */
+    private function findBlock(array $blocks, string $blockId): ?array
+    {
+        foreach ($blocks as $block) {
+            if (! is_array($block)) {
+                continue;
+            }
+            if (($block['id'] ?? null) === $blockId) {
+                return $block;
+            }
+            foreach (['blocks', 'left_blocks', 'right_blocks'] as $key) {
+                if (is_array($block[$key] ?? null)) {
+                    $hit = $this->findBlock($block[$key], $blockId);
+                    if ($hit !== null) {
+                        return $hit;
+                    }
+                }
+            }
+            foreach (['tabs', 'sections'] as $key) {
+                foreach ($block[$key] ?? [] as $sub) {
+                    if (is_array($sub) && is_array($sub['blocks'] ?? null)) {
+                        $hit = $this->findBlock($sub['blocks'], $blockId);
+                        if ($hit !== null) {
+                            return $hit;
+                        }
+                    }
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Return a deep copy of a block subtree with every prefixed `id`
+     * regenerated (prefix kept, ULID re-minted) so the clone collides with
+     * nothing. Only `id` keys are touched — references (field_id, object_id,
+     * target_block_id, …) are NOT, so the copy keeps pointing at the same data.
+     *
+     * @param  array<string, mixed>  $node
+     * @return array<string, mixed>
+     */
+    private function reidBlock(array $node): array
+    {
+        $out = [];
+        foreach ($node as $key => $value) {
+            if ($key === 'id' && is_string($value) && preg_match('/^([a-z]{2,6})_[0-9a-z]{10,}$/i', $value, $m) === 1) {
+                $out[$key] = $m[1].'_'.strtolower((string) Str::ulid());
+            } elseif (is_array($value)) {
+                $out[$key] = array_is_list($value)
+                    ? array_map(fn ($v) => is_array($v) ? $this->reidBlock($v) : $v, $value)
+                    : $this->reidBlock($value);
+            } else {
+                $out[$key] = $value;
+            }
+        }
+
+        return $out;
+    }
+
     private function extractBlock(array &$blocks, string $blockId): ?array
     {
         foreach ($blocks as $i => $block) {

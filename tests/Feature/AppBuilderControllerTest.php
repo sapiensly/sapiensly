@@ -1450,6 +1450,45 @@ it('manual adjust reorders a block before another — one versioned move', funct
         ->and($row['blocks'][1]['id'])->toBe('blk_manualbar0');
 });
 
+it('fine tune duplicates a landing section as a plain sibling with a fresh id', function () {
+    $aId = 'htm_'.strtolower((string) Str::ulid());
+    $bId = 'htm_'.strtolower((string) Str::ulid());
+    $manifest = [
+        'schema_version' => '1.0.0',
+        'id' => $this->testApp->id,
+        'slug' => 'lp_dup',
+        'name' => 'LP',
+        'version' => 1,
+        'objects' => [],
+        'pages' => [[
+            'id' => 'pag_'.strtolower((string) Str::ulid()),
+            'slug' => 'home', 'name' => 'Home', 'path' => '/',
+            'blocks' => [
+                ['id' => $aId, 'type' => 'html', 'content' => '<section class="a"><h1>Hola</h1></section>'],
+                ['id' => $bId, 'type' => 'html', 'content' => '<section class="b">B</section>'],
+            ],
+        ]],
+        'settings' => ['surface' => 'landing'],
+        'permissions' => ['roles' => [['id' => 'rol_'.strtolower((string) Str::ulid()), 'slug' => 'admin', 'name' => 'Admin']]],
+    ];
+    app(AppManifestService::class)->createVersion($this->testApp, $manifest, $this->user, 'landing');
+
+    $newId = $this->actingAs($this->user)
+        ->postJson("/apps/{$this->testApp->id}/builder/blocks/duplicate", ['block_id' => $aId])
+        ->assertOk()
+        ->json('new_block_id');
+
+    $blocks = app(AppManifestService::class)->getActiveManifest($this->testApp->fresh())['pages'][0]['blocks'];
+
+    // The clone lands right below the original as a PLAIN top-level sibling
+    // (not wrapped into a row), with a fresh htm_ id and identical content.
+    expect(collect($blocks)->pluck('id')->all())->toBe([$aId, $newId, $bId])
+        ->and($newId)->not->toBe($aId)
+        ->and($newId)->toStartWith('htm_')
+        ->and($blocks[1]['type'])->toBe('html')
+        ->and($blocks[1]['content'])->toBe('<section class="a"><h1>Hola</h1></section>');
+});
+
 it('dropping on a row\'s empty space moves the card INSIDE that row', function () {
     app(AppManifestService::class)->createVersion($this->testApp, manualDashManifest($this->testApp->id), $this->user);
 
