@@ -3,10 +3,12 @@
 namespace App\Services\Landing;
 
 use App\Ai\ExpressGateAgent;
+use App\Models\App;
 use App\Models\User;
 use App\Services\Ai\AiDefaults;
 use App\Services\Ai\AiUsageRecorder;
 use App\Services\AiProviderService;
+use App\Support\Branding\OrganizationBrand;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Illuminate\Contracts\Support\Arrayable;
 use Illuminate\Support\Facades\Log;
@@ -92,6 +94,100 @@ class LandingDesignCritic
         return $this;
     }
 
+    /** Resolved-once cache for the subject app's org Brandbook. */
+    private ?OrganizationBrand $brandCache = null;
+
+    private bool $brandResolved = false;
+
+    /**
+     * The org Brandbook for the subject app — but ONLY when it actually carries
+     * content. A brandbook with nothing set means the platform default applies,
+     * which is not a brand to enforce: this returns null in that case (and when
+     * there's no subject app), so every brand rule downstream is a clean no-op
+     * for an unset brandbook. Callers should still check each field (accentColor,
+     * logoUrl, font) individually — a brand may set only some.
+     */
+    private function brandFacts(): ?OrganizationBrand
+    {
+        if ($this->brandResolved) {
+            return $this->brandCache;
+        }
+        $this->brandResolved = true;
+
+        if ($this->subjectAppId === null) {
+            return $this->brandCache = null;
+        }
+
+        try {
+            $brand = App::with('organization')->find($this->subjectAppId)?->organization?->brandbook();
+            $this->brandCache = ($brand !== null && ! $brand->isEmpty()) ? $brand : null;
+        } catch (\Throwable) {
+            $this->brandCache = null;
+        }
+
+        return $this->brandCache;
+    }
+
+    /**
+     * The BRAND ADHERENCE block for the director prompt — empty string when the
+     * brandbook is unset/empty (the design is then free). Only names the fields
+     * the brand actually set.
+     */
+    private function brandDirective(): string
+    {
+        $brand = $this->brandFacts();
+        if ($brand === null) {
+            return '';
+        }
+
+        $facts = [];
+        if ($brand->accentColor !== null) {
+            $facts[] = "brand accent {$brand->accentColor}";
+        }
+        if ($brand->logoUrl !== null) {
+            $facts[] = 'a brand logo image';
+        }
+        if ($brand->font !== null) {
+            $facts[] = "a brand body-font family ({$brand->font})";
+        }
+        if ($facts === []) {
+            return '';
+        }
+
+        $logoLine = $brand->logoUrl !== null
+            ? ', and the brand LOGO should appear (nav and/or footer)'
+            : '';
+
+        return 'BRAND ADHERENCE — this org has a Brandbook ('.implode(', ', $facts).'). '
+            ."The landing MUST read as this brand's: build the palette AROUND the brand accent — the accent itself or a deliberate, evident harmony with it, never an unrelated hero colour"
+            .$logoLine
+            .'. If the design ignores the brand identity, raise it as a BLOCKING must_fix. '
+            ."(This is about the accent identity and the logo — the page may still use its own neutrals/ink and a characterful DISPLAY font; brand adherence is not flattening the design.)\n\n";
+    }
+
+    /**
+     * A deterministic, NON-blocking hint that the brand accent is nowhere in the
+     * css — a backup for when the director is unavailable. Empty (no-op) unless
+     * the brandbook actually set an accent. Heuristic only (a brand-adjacent
+     * shade is legitimate), so it never blocks — the director makes the call.
+     *
+     * @return list<string>
+     */
+    private function brandTells(string $css): array
+    {
+        $brand = $this->brandFacts();
+        if ($brand === null || $brand->accentColor === null) {
+            return [];
+        }
+
+        $haystack = strtolower($css);
+        if (str_contains($haystack, strtolower($brand->accentColor)) || str_contains($haystack, '--sp-accent')) {
+            return [];
+        }
+
+        return ["The org Brandbook accent ({$brand->accentColor}) does not appear in the custom_css — the landing may be off-brand. Build the palette around the brand accent (or a deliberate harmony), or reference the --sp-accent CSS vars."];
+    }
+
     /**
      * Judge a landing's authored design. `$round` is the 1-based iteration of the
      * revise→re-critique loop; it drives the max-rounds half of the convergence
@@ -111,6 +207,7 @@ class LandingDesignCritic
     ): array {
         $det = $this->deterministicTells($html, $css);
         $floorFix = $det['must_fix'];
+        $tells = array_values(array_merge($det['tells'], $this->brandTells($css)));
         $ai = $this->directorCritique($intent, $html, $css, $user, $modelOverride, $screenshot, $screenshotIsCurrentDraft);
 
         $mustFix = $floorFix;
@@ -161,7 +258,7 @@ class LandingDesignCritic
             'ship' => $ship,
             'score' => $score,
             'must_fix' => array_values(array_unique($mustFix)),
-            'tells' => $det['tells'],
+            'tells' => array_values(array_unique($tells)),
             'direction' => $direction,
             'strengths' => $strengths,
             'judged_by' => $judgedBy,
@@ -485,6 +582,7 @@ class LandingDesignCritic
             ."--- HTML (structure) ---\n".$this->clip($html)."\n\n"
             ."--- CUSTOM CSS (the look) ---\n".$this->clip($css)."\n\n"
             ."NOTE ON MOTION: data-sp-* attributes are LIVE motion hydrated by the runtime — you will NOT see their keyframes in the CSS, so credit them as working motion rather than asking for CSS that isn't there. data-sp-reveal = fade + rise on scroll; data-sp-sequence = the element's children stagger in one by one (e.g. a chat animating message-by-message); data-sp-motion=\"ambient-field\" = an animated connected-node field behind the element. Judge whether the motion CHOICES are ambitious enough, not whether CSS keyframes are present.\n\n"
+            .$this->brandDirective()
             .'Judge this landing against the vanguard bar. Be demanding — a beautiful-but-generic page is a revise. Ground every note in the intent.';
     }
 
