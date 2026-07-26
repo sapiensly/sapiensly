@@ -27,6 +27,7 @@ class BuilderMessage extends Model
         'attachment_disk',
         'plan_step_ids',
         'timeline',
+        'usage',
     ];
 
     protected function casts(): array
@@ -37,6 +38,7 @@ class BuilderMessage extends Model
             'integration_proposal' => 'array',
             'plan_step_ids' => 'array',
             'timeline' => 'array',
+            'usage' => 'array',
         ];
     }
 

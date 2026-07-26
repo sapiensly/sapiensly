@@ -86,7 +86,9 @@ use Laravel\Ai\Enums\Lab;
 use Laravel\Ai\Files\StoredImage;
 use Laravel\Ai\Messages\AssistantMessage;
 use Laravel\Ai\Messages\UserMessage;
+use Laravel\Ai\Responses\Data\Usage;
 use Laravel\Ai\Streaming\Events\Error as StreamingError;
+use Laravel\Ai\Streaming\Events\StreamEnd;
 use Laravel\Ai\Streaming\Events\TextDelta;
 use Laravel\Ai\Streaming\Events\TextStart;
 use Laravel\Ai\Streaming\Events\ToolCall;
@@ -570,6 +572,24 @@ class BuilderAiService
                     // Telemetry only — never let it break the turn.
                 }
             };
+            // Running usage tally, persisted after each model round-trip (a
+            // StreamEnd event) so a turn hard-killed at the wall-clock cap still
+            // leaves its spend on the message for RunBuilderAiJob::failed() to
+            // bill — the end-of-turn AiUsageRecorder::record below never runs on
+            // a timeout. `recorded:false` until that end-of-turn record flips it.
+            $accumulatedUsage = new Usage;
+            $persistUsage = function (Usage $usage, bool $recorded) use ($placeholder, $resolvedModel): void {
+                try {
+                    BuilderMessage::query()->whereKey($placeholder->id)->update([
+                        'usage' => json_encode($usage->toArray() + [
+                            'model' => $resolvedModel,
+                            'recorded' => $recorded,
+                        ]),
+                    ]);
+                } catch (\Throwable) {
+                    // Telemetry only — never let it break the turn.
+                }
+            };
             foreach ($stream as $event) {
                 // Provider/stream errors arrive as an Error EVENT, not an
                 // exception — OpenRouter (unlike Anthropic) reports SSE-level and
@@ -581,6 +601,16 @@ class BuilderAiService
                     throw new RuntimeException(
                         trim(($event->type ?? '').': '.($event->message ?? '')) ?: 'Provider returned a stream error.'
                     );
+                }
+
+                // One StreamEnd closes each model round-trip and carries that
+                // step's usage. Accumulate and persist after every step so the
+                // tally survives a timeout kill (the turn does many round-trips).
+                if ($event instanceof StreamEnd) {
+                    $accumulatedUsage = $accumulatedUsage->add($event->usage);
+                    $persistUsage($accumulatedUsage, false);
+
+                    continue;
                 }
 
                 // Surface each tool the model invokes so the user sees what it is
@@ -699,6 +729,10 @@ class BuilderAiService
                 'builder', $resolvedModel, $conversation->user, $app->organization_id, $stream->usage ?? null,
                 appId: $app->id, conversationId: $conversation->id,
             );
+            // The turn is now billed — flip the snapshot to recorded:true with the
+            // authoritative final usage, so a timeout in the commit/apply steps
+            // below cannot make failed() bill this turn a second time.
+            $persistUsage($stream->usage ?? $accumulatedUsage, true);
 
             // apply=false (MCP "leave pending for review"): keep the accumulated
             // proposal on the placeholder as `pending` without creating a version.

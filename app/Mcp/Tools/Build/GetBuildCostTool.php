@@ -148,13 +148,25 @@ class GetBuildCostTool extends SapiensTool
             ->whereIn('conversation_id', $conversationIds)
             ->where('role', 'assistant')
             ->where('created_at', '>=', $since)
-            ->get(['id', 'timeline']);
+            ->get(['id', 'timeline', 'usage']);
 
-        $builderTurns = $assistantTurns->count();
+        // A "builder turn" is an assistant message that actually ran the builder
+        // model — it either logged tool round-trips (timeline) or carries a usage
+        // snapshot. Express narration ("Localizando la fuente…") and terminal
+        // markers ("✅ Plan completado.") are assistant messages too but ran no
+        // builder call; counting them inflated unattributed_turns and cried wolf.
+        $realTurns = $assistantTurns->filter(function (BuilderMessage $message): bool {
+            $timeline = is_array($message->timeline) ? $message->timeline : [];
+
+            return collect($timeline)->where('event', 'call')->isNotEmpty()
+                || is_array($message->usage);
+        });
+
+        $builderTurns = $realTurns->count();
 
         // Each turn's timeline logs one 'call' event per model round-trip — the
         // true number of model calls the aggregated usage events stand for.
-        $modelRoundTrips = $assistantTurns->reduce(function (int $carry, BuilderMessage $message): int {
+        $modelRoundTrips = $realTurns->reduce(function (int $carry, BuilderMessage $message): int {
             $timeline = is_array($message->timeline) ? $message->timeline : [];
 
             return $carry + collect($timeline)->where('event', 'call')->count();

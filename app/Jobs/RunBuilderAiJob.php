@@ -5,6 +5,7 @@ namespace App\Jobs;
 use App\Events\Builder\BuilderStreamComplete;
 use App\Events\Builder\BuilderStreamError;
 use App\Models\BuilderMessage;
+use App\Services\Ai\AiUsageRecorder;
 use App\Services\Builder\BuilderAiService;
 use App\Services\Builder\BuilderCancellation;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -13,6 +14,7 @@ use Illuminate\Queue\Attributes\Queue;
 use Illuminate\Queue\MaxAttemptsExceededException;
 use Illuminate\Queue\TimeoutExceededException;
 use Illuminate\Support\Facades\Log;
+use Laravel\Ai\Responses\Data\Usage;
 use Throwable;
 
 /**
@@ -186,6 +188,13 @@ class RunBuilderAiJob implements ShouldQueue
             return;
         }
 
+        // The turn was hard-killed (typically the 300s timeout) before
+        // BuilderAiService recorded its usage, so the model tokens it already
+        // spent would go UNATTRIBUTED. Bill them from the running snapshot the
+        // stream persisted per round-trip. Done first, and best-effort, so a
+        // checkpoint failure below can never swallow the billing.
+        $this->recordTimedOutUsage($message);
+
         // The turn died mid-loop (typically the 300s timeout) before the
         // end-of-turn apply ran. If propose_change checkpointed valid
         // accumulated work onto the message, bank it as a new version so the
@@ -277,6 +286,55 @@ class RunBuilderAiJob implements ShouldQueue
             broadcast(new BuilderStreamError($message->conversation_id, $message->id, $reason));
         } catch (Throwable) {
             // swallow
+        }
+    }
+
+    /**
+     * Bill the spend of a turn that died before BuilderAiService could record it,
+     * from the usage snapshot the stream persisted after each round-trip. Idempotent
+     * via the snapshot's `recorded` flag (the success path sets it true, and this
+     * flips it true after billing) so a turn is never double-counted. A turn killed
+     * before its first round-trip completed has no snapshot and nothing to bill —
+     * the SDK never reported final usage for the in-flight call either.
+     */
+    private function recordTimedOutUsage(BuilderMessage $message): void
+    {
+        $snapshot = $message->usage;
+        if (! is_array($snapshot) || ($snapshot['recorded'] ?? false) === true) {
+            return;
+        }
+
+        $model = $snapshot['model'] ?? null;
+        if (! is_string($model) || $model === '') {
+            return;
+        }
+
+        try {
+            $conversation = $message->conversation()->first();
+
+            app(AiUsageRecorder::class)->record(
+                'builder',
+                $model,
+                $conversation?->user,
+                $conversation?->organization_id,
+                new Usage(
+                    promptTokens: (int) ($snapshot['prompt_tokens'] ?? 0),
+                    completionTokens: (int) ($snapshot['completion_tokens'] ?? 0),
+                    cacheWriteInputTokens: (int) ($snapshot['cache_write_input_tokens'] ?? 0),
+                    cacheReadInputTokens: (int) ($snapshot['cache_read_input_tokens'] ?? 0),
+                    reasoningTokens: (int) ($snapshot['reasoning_tokens'] ?? 0),
+                ),
+                appId: $conversation?->app_id,
+                conversationId: $message->conversation_id,
+            );
+
+            $message->usage = ['recorded' => true] + $snapshot;
+            $message->save();
+        } catch (Throwable $e) {
+            Log::warning('RunBuilderAiJob: timed-out usage billing failed', [
+                'message_id' => $message->id,
+                'error' => $e->getMessage(),
+            ]);
         }
     }
 }

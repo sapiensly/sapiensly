@@ -1,12 +1,26 @@
 <?php
 
 use App\Jobs\RunBuilderAiJob;
+use App\Models\AiUsageEvent;
 use App\Models\App;
 use App\Models\BuilderConversation;
 use App\Models\BuilderMessage;
 use App\Models\User;
 use App\Services\Manifest\AppManifestService;
 use Illuminate\Support\Str;
+
+function usage_snapshot(array $overrides = []): array
+{
+    return array_merge([
+        'model' => 'anthropic/claude-opus-5',
+        'prompt_tokens' => 1200,
+        'completion_tokens' => 340,
+        'cache_read_input_tokens' => 800,
+        'cache_write_input_tokens' => 0,
+        'reasoning_tokens' => 0,
+        'recorded' => false,
+    ], $overrides);
+}
 
 function job_manifest(string $appId): array
 {
@@ -93,6 +107,58 @@ it('failed() marks the message error when there is no checkpointed work', functi
     (new RunBuilderAiJob($message->id, 'crea una app'))->failed(new RuntimeException('timed out'));
 
     expect($message->fresh()->status)->toBe('error');
+});
+
+it('failed() bills the usage snapshot of a timed-out turn so its spend is attributed', function () {
+    $message = BuilderMessage::create([
+        'conversation_id' => $this->conversation->id,
+        'role' => 'assistant',
+        'status' => 'streaming',
+        'content' => '',
+        'usage' => usage_snapshot(),
+    ]);
+
+    expect(AiUsageEvent::where('app_id', $this->testApp->id)->where('module', 'builder')->count())->toBe(0);
+
+    (new RunBuilderAiJob($message->id, 'crea una app'))->failed(new RuntimeException('timed out'));
+
+    $event = AiUsageEvent::where('app_id', $this->testApp->id)->where('module', 'builder')->first();
+    expect($event)->not->toBeNull()
+        ->and($event->model)->toBe('anthropic/claude-opus-5')
+        ->and($event->input_tokens)->toBe(1200)
+        ->and($event->output_tokens)->toBe(340)
+        ->and($event->cache_read_tokens)->toBe(800)
+        ->and($event->conversation_id)->toBe($this->conversation->id)
+        // The snapshot is flipped to recorded so a later failed() can't re-bill it.
+        ->and($message->fresh()->usage['recorded'])->toBeTrue();
+});
+
+it('failed() does not double-bill a turn whose usage was already recorded', function () {
+    $message = BuilderMessage::create([
+        'conversation_id' => $this->conversation->id,
+        'role' => 'assistant',
+        'status' => 'streaming',
+        'content' => '',
+        'usage' => usage_snapshot(['recorded' => true]),
+    ]);
+
+    (new RunBuilderAiJob($message->id, 'crea una app'))->failed(new RuntimeException('timed out'));
+
+    expect(AiUsageEvent::where('app_id', $this->testApp->id)->where('module', 'builder')->count())->toBe(0);
+});
+
+it('failed() records no usage event when the turn died before any round-trip', function () {
+    $message = BuilderMessage::create([
+        'conversation_id' => $this->conversation->id,
+        'role' => 'assistant',
+        'status' => 'streaming',
+        'content' => '',
+    ]);
+
+    (new RunBuilderAiJob($message->id, 'crea una app'))->failed(new RuntimeException('timed out'));
+
+    expect(AiUsageEvent::where('app_id', $this->testApp->id)->where('module', 'builder')->count())->toBe(0)
+        ->and($message->fresh()->status)->toBe('error');
 });
 
 it('failed() leaves an already-completed turn untouched', function () {

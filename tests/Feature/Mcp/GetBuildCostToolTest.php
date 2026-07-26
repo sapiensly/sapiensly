@@ -141,6 +141,40 @@ it('flags a builder turn that recorded no usage event as an attribution gap', fu
         ->assertSee('NOT in the totals');
 });
 
+it('does not count express narration or terminal markers as builder turns', function () {
+    $conv = BuilderConversation::create([
+        'app_id' => $this->testApp->id, 'user_id' => $this->user->id, 'status' => 'active',
+    ]);
+    // A real turn that ran tools.
+    assistantTurn($conv->id, [['event' => 'call', 'tool' => 'propose_change'], ['event' => 'result']]);
+    // A real zero-tool turn — no timeline calls, but it billed the model, so its
+    // usage snapshot marks it as a genuine builder turn.
+    BuilderMessage::create([
+        'conversation_id' => $conv->id, 'role' => 'assistant', 'status' => 'applied',
+        'content' => 'listo', 'usage' => ['model' => 'claude-fable-5', 'prompt_tokens' => 10, 'recorded' => true],
+    ]);
+    // Noise that must NOT count as builder turns: Express narration and the
+    // terminal plan marker — assistant messages that ran no builder model call.
+    BuilderMessage::create([
+        'conversation_id' => $conv->id, 'role' => 'assistant', 'status' => 'none',
+        'content' => 'Localizando la fuente de datos…',
+    ]);
+    BuilderMessage::create([
+        'conversation_id' => $conv->id, 'role' => 'assistant', 'status' => 'none',
+        'content' => '✅ Plan completado.',
+    ]);
+    costEvent($this->testApp->id, ['conversation_id' => $conv->id, 'cost' => 0.004]);
+    costEvent($this->testApp->id, ['conversation_id' => $conv->id, 'cost' => 0.002]);
+
+    SapiensServer::actingAs($this->user)
+        ->tool(GetBuildCostTool::class, ['app_slug' => 'cost_target'])
+        ->assertOk()
+        // 2 real turns, NOT 4 — narration + marker are excluded, so the gap is honest.
+        ->assertSee('"builder_turns":2')
+        ->assertSee('"builder_usage_events":2')
+        ->assertSee('"complete":true');
+});
+
 it('include_gates surfaces which model ran each Express gate', function () {
     $conv = BuilderConversation::create([
         'app_id' => $this->testApp->id, 'user_id' => $this->user->id, 'status' => 'active',
