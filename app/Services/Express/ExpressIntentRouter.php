@@ -106,6 +106,38 @@ class ExpressIntentRouter
         return $this->hasLiveMcpSource($user->organization_id, $user->id);
     }
 
+    /**
+     * G-0 for the LANDING handoff from the general chat: a clear ask to BUILD a
+     * LANDING / marketing page hands straight to the async builder (like the app
+     * and dashboard handoffs), instead of the conversational model asking which
+     * mode first. Needs NO live MCP source (a landing carries its own data) and,
+     * like the dashboard route, is on whenever Express autoroute is — no separate
+     * flag. Disjoint from the other two: the dashboard route stands down for a
+     * landing ask and the app route excludes landing nouns, so a landing brief
+     * only ever matches here.
+     */
+    public function shouldBuildLandingForUser(string $message, User $user): bool
+    {
+        return $this->enabled() && $this->messageAsksForLanding($message);
+    }
+
+    /**
+     * The textual half of the landing heuristic: a build verb over a landing/website
+     * intent ({@see LandingIntent}), with the process opt-outs and a leading
+     * interrogative removed ("¿cómo hago una landing?" is a question, not a brief).
+     */
+    private function messageAsksForLanding(string $message): bool
+    {
+        $text = Str::lower($message);
+        if (preg_match(self::OPT_OUT_WORDS, $text) === 1
+            || preg_match(self::OPT_OUT_OPENERS, trim($text)) === 1) {
+            return false;
+        }
+
+        return preg_match(self::BUILD_WORDS, Str::ascii($text)) === 1
+            && LandingIntent::matches($message);
+    }
+
     private function enabled(): bool
     {
         return (bool) config('express.enabled') && (bool) config('express.autoroute');

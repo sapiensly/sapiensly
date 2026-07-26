@@ -99,16 +99,42 @@ it('does not autoroute an attachment turn even with app-build intent', function 
     Queue::assertNotPushed(ExpressAppJob::class);
 });
 
-it('keeps a landing ask on the conversational path (the model asks the mode first)', function () {
+it('autoroutes a landing-build chat message to the async builder (direct handoff)', function () {
+    config(['express.enabled' => true, 'express.autoroute' => true]);
     Queue::fake();
     $chat = Chat::factory()->forUser($this->user)->create();
 
     $this->actingAs($this->user)
         ->postJson(route('chat.messages.store', $chat), ['content' => 'créame una landing para mi SaaS de logística'])
-        ->assertCreated();
+        ->assertCreated()
+        ->assertJsonPath('placeholder.status', 'complete');
 
-    Queue::assertNotPushed(ExpressAppJob::class);
-    Queue::assertPushed(RunChatAiJob::class);
+    // Direct handoff to the builder — no conversational turn, no "which mode?" ask.
+    Queue::assertPushed(ExpressAppJob::class);
+    Queue::assertNotPushed(RunChatAiJob::class);
+
+    $app = App::query()->where('user_id', $this->user->id)->firstOrFail();
+    $assistant = ChatMessage::query()->where('chat_id', $chat->id)->where('role', 'assistant')->firstOrFail();
+    // Worded as a landing, in-progress card that announces on completion.
+    expect($assistant->content)->toContain('landing')
+        ->and($assistant->content)->toContain('te avisaré');
+    $run = PipelineRun::query()->where('app_id', $app->id)->where('kind', 'app_express')->firstOrFail();
+    expect($run->chat_message_id)->toBe($assistant->id);
+});
+
+it('detects landing-build intent for the direct handoff', function () {
+    config(['express.enabled' => true, 'express.autoroute' => true]);
+    $router = app(ExpressIntentRouter::class);
+    $user = User::factory()->make();
+
+    expect($router->shouldBuildLandingForUser('créame una landing para mi SaaS', $user))->toBeTrue()
+        ->and($router->shouldBuildLandingForUser('quiero una página de aterrizaje para el lanzamiento', $user))->toBeTrue()
+        ->and($router->shouldBuildLandingForUser('haz un sitio web para mi restaurante', $user))->toBeTrue()
+        // Not a landing build: a question, an opt-out, a plain app, a plain dashboard.
+        ->and($router->shouldBuildLandingForUser('¿cómo hago una landing?', $user))->toBeFalse()
+        ->and($router->shouldBuildLandingForUser('explícame cómo hacer una landing paso a paso', $user))->toBeFalse()
+        ->and($router->shouldBuildLandingForUser('crea una app de inventario', $user))->toBeFalse()
+        ->and($router->shouldBuildLandingForUser('crea un dashboard de ventas', $user))->toBeFalse();
 });
 
 it('build_landing card: provisions the app and launches the async builder turn', function () {

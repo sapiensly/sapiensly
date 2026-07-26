@@ -17,6 +17,7 @@ use App\Services\Chat\MultiAgentDispatcher;
 use App\Services\Express\ExpressIntentRouter;
 use App\Services\Express\ExpressLauncher;
 use App\Support\Chat\ChatMessagePresenter;
+use App\Support\Landing\LandingIntent;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
@@ -111,6 +112,19 @@ class ChatMessageController extends Controller
             && $content !== ''
             && $this->expressRouter->shouldRunExpressForUser($content, $user)) {
             return $this->launchExpressFromChat($chat, $user, $userMessage, $content, $model);
+        }
+
+        // Landing handoff: a clear "build me a landing / marketing page" hands
+        // straight to the async builder (bespoke design + the design-director
+        // gate) and announces it here when it ships — same direct handoff as
+        // dashboards, no "which mode?" question. Disjoint from the dashboard and
+        // app routes (both stand down for a landing ask). Uses the shared app-build
+        // launcher, which words the progress/completion as a landing.
+        if ($agentId === null
+            && empty($attachmentIds)
+            && $content !== ''
+            && $this->expressRouter->shouldBuildLandingForUser($content, $user)) {
+            return $this->launchAppBuildFromChat($chat, $user, $userMessage, $content, $model);
         }
 
         // Full-app builder handoff: a clear "build me an app for X" (not a
@@ -238,7 +252,7 @@ class ChatMessageController extends Controller
             'role' => 'assistant',
             'content' => $this->appBuildingContent(
                 $app->name,
-                $this->expressRouter->mentionsLanding($prompt) ? 'landing' : 'app',
+                LandingIntent::matches($prompt) ? 'landing' : 'app',
             ),
             'model' => $model,
             'status' => 'complete',
