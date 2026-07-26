@@ -107,6 +107,7 @@ import {
     MoreVertical,
     Minus,
     MousePointerClick,
+    PaintBucket,
     Palette,
     PanelLeftClose,
     PanelLeftOpen,
@@ -2149,9 +2150,12 @@ const styleTargetId = ref<string | null>(null);
 const styleBusy = ref(false);
 const styleValues = ref({
     color: '#000000',
+    background: '#111111',
     fontSizePx: 16,
     fontWeight: '400',
     textAlign: 'left',
+    letterSpacingPx: 0,
+    lineHeight: 1.2,
 });
 
 function rgbToHex(rgb: string): string {
@@ -2168,9 +2172,14 @@ function rgbToHex(rgb: string): string {
 function readStyleValues(el: HTMLElement) {
     const cs = getComputedStyle(el);
     const w = cs.fontWeight;
+    const fontPx = Math.round(parseFloat(cs.fontSize) || 16);
+    const lhPx = parseFloat(cs.lineHeight); // NaN for 'normal'
     styleValues.value = {
         color: rgbToHex(cs.color),
-        fontSizePx: Math.round(parseFloat(cs.fontSize) || 16),
+        background: isTransparent(cs.backgroundColor)
+            ? '#111111'
+            : rgbToHex(cs.backgroundColor),
+        fontSizePx: fontPx,
         fontWeight:
             w === 'normal'
                 ? '400'
@@ -2180,7 +2189,18 @@ function readStyleValues(el: HTMLElement) {
         textAlign: ['left', 'center', 'right', 'justify'].includes(cs.textAlign)
             ? cs.textAlign
             : 'left',
+        letterSpacingPx:
+            cs.letterSpacing === 'normal'
+                ? 0
+                : Math.round((parseFloat(cs.letterSpacing) || 0) * 10) / 10,
+        lineHeight: isNaN(lhPx)
+            ? 1.2
+            : Math.round((lhPx / fontPx) * 10) / 10,
     };
+}
+function isTransparent(color: string): boolean {
+    const m = color.match(/[\d.]+/g);
+    return !m || (m.length >= 4 && Number(m[3]) === 0);
 }
 function selectStyleTarget(el: HTMLElement) {
     styleTargetEl.value?.classList.remove('sp-style-target');
@@ -2244,6 +2264,20 @@ function stepFontSize(delta: number) {
         Math.max(8, (styleValues.value.fontSizePx || 16) + delta),
     );
     applyElementStyle({ font_size: `${next}px` });
+}
+function stepLetterSpacing(delta: number) {
+    const next =
+        Math.round(
+            Math.min(16, Math.max(-4, (styleValues.value.letterSpacingPx || 0) + delta)) * 10,
+        ) / 10;
+    applyElementStyle({ letter_spacing: `${next}px` });
+}
+function stepLineHeight(delta: number) {
+    const next =
+        Math.round(
+            Math.min(3, Math.max(0.8, (styleValues.value.lineHeight || 1.2) + delta)) * 10,
+        ) / 10;
+    applyElementStyle({ line_height: `${next}` });
 }
 // Re-resolve the styled element after a preview reload so the style bar persists.
 watch(
@@ -5076,7 +5110,7 @@ function statusTone(status: Message['status']): string {
                                 styleTargetEl &&
                                 !textEditing
                             "
-                            class="fixed bottom-5 left-1/2 z-[60] flex -translate-x-1/2 items-center gap-3 rounded-pill border border-medium bg-navy-elevated px-3 py-2 text-xs text-ink shadow-xl"
+                            class="fixed bottom-5 left-1/2 z-[60] flex max-w-[94%] -translate-x-1/2 flex-wrap items-center justify-center gap-x-3 gap-y-1.5 rounded-2xl border border-medium bg-navy-elevated px-3 py-2 text-xs text-ink shadow-xl"
                         >
                             <span
                                 class="font-mono text-[10px] tracking-wider text-ink-subtle uppercase"
@@ -5095,6 +5129,24 @@ function statusTone(status: Message['status']): string {
                                     @change="
                                         applyElementStyle({
                                             color: (
+                                                $event.target as HTMLInputElement
+                                            ).value,
+                                        })
+                                    "
+                                    class="h-5 w-6 cursor-pointer rounded border border-medium bg-transparent p-0"
+                                />
+                            </label>
+                            <label
+                                class="flex items-center gap-1.5"
+                                :title="t('apps.builder.style_background')"
+                            >
+                                <PaintBucket class="size-3.5 text-ink-muted" />
+                                <input
+                                    type="color"
+                                    :value="styleValues.background"
+                                    @change="
+                                        applyElementStyle({
+                                            background: (
                                                 $event.target as HTMLInputElement
                                             ).value,
                                         })
@@ -5174,6 +5226,66 @@ function statusTone(status: Message['status']): string {
                                         class="size-3.5"
                                     />
                                     <AlignRight v-else class="size-3.5" />
+                                </button>
+                            </div>
+                            <span class="h-4 w-px bg-white/15" />
+                            <div
+                                class="flex items-center gap-1"
+                                :title="t('apps.builder.style_letter_spacing')"
+                            >
+                                <span
+                                    class="font-mono text-[10px] text-ink-subtle"
+                                    >LS</span
+                                >
+                                <button
+                                    type="button"
+                                    :disabled="styleBusy"
+                                    @click="stepLetterSpacing(-0.5)"
+                                    class="flex size-6 items-center justify-center rounded-full text-ink-muted hover:bg-white/10 hover:text-ink disabled:opacity-40"
+                                >
+                                    <Minus class="size-3.5" />
+                                </button>
+                                <span
+                                    class="w-10 text-center font-mono tabular-nums"
+                                    >{{ styleValues.letterSpacingPx }}px</span
+                                >
+                                <button
+                                    type="button"
+                                    :disabled="styleBusy"
+                                    @click="stepLetterSpacing(0.5)"
+                                    class="flex size-6 items-center justify-center rounded-full text-ink-muted hover:bg-white/10 hover:text-ink disabled:opacity-40"
+                                >
+                                    <Plus class="size-3.5" />
+                                </button>
+                            </div>
+                            <span class="h-4 w-px bg-white/15" />
+                            <div
+                                class="flex items-center gap-1"
+                                :title="t('apps.builder.style_line_height')"
+                            >
+                                <span
+                                    class="font-mono text-[10px] text-ink-subtle"
+                                    >LH</span
+                                >
+                                <button
+                                    type="button"
+                                    :disabled="styleBusy"
+                                    @click="stepLineHeight(-0.1)"
+                                    class="flex size-6 items-center justify-center rounded-full text-ink-muted hover:bg-white/10 hover:text-ink disabled:opacity-40"
+                                >
+                                    <Minus class="size-3.5" />
+                                </button>
+                                <span
+                                    class="w-8 text-center font-mono tabular-nums"
+                                    >{{ styleValues.lineHeight }}</span
+                                >
+                                <button
+                                    type="button"
+                                    :disabled="styleBusy"
+                                    @click="stepLineHeight(0.1)"
+                                    class="flex size-6 items-center justify-center rounded-full text-ink-muted hover:bg-white/10 hover:text-ink disabled:opacity-40"
+                                >
+                                    <Plus class="size-3.5" />
                                 </button>
                             </div>
                             <span class="h-4 w-px bg-white/15" />
