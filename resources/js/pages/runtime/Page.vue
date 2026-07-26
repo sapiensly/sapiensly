@@ -13,7 +13,7 @@ import { useScrollReveal } from '@/runtime/useReveal';
 import { useSidebarCollapsed } from '@/runtime/useSidebarCollapsed';
 import { Head } from '@inertiajs/vue3';
 import { PanelLeftClose, PanelLeftOpen } from '@lucide/vue';
-import { computed, onUnmounted, provide, ref, watch } from 'vue';
+import { computed, onMounted, onUnmounted, provide, ref, watch } from 'vue';
 
 const props = defineProps<RuntimePageProps>();
 
@@ -208,6 +208,24 @@ const sidebarCollapsed = useSidebarCollapsed();
 
 const sectionsEl = ref<HTMLElement | null>(null);
 useScrollReveal(sectionsEl);
+
+// Headless-render readiness. HeadlessLandingShot drives this page in Chrome with
+// prefers-reduced-motion forced (so every data-sp-reveal is already at its final
+// visible state) and waits for this flag before capturing — so the screenshot
+// includes the web fonts and the settled first paint, not a flash of unstyled
+// text. Harmless outside the renderer: nothing else reads window.__spLandingReady.
+onMounted(() => {
+    const ready = () =>
+        requestAnimationFrame(() => {
+            (window as unknown as { __spLandingReady?: boolean }).__spLandingReady = true;
+        });
+    const fonts = (document as unknown as { fonts?: { ready?: Promise<unknown> } }).fonts;
+    if (fonts?.ready) {
+        fonts.ready.then(ready, ready);
+    } else {
+        ready();
+    }
+});
 </script>
 
 <template>

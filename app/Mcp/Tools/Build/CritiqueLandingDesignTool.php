@@ -4,6 +4,7 @@ namespace App\Mcp\Tools\Build;
 
 use App\Mcp\Tools\SapiensTool;
 use App\Models\User;
+use App\Services\Landing\HeadlessLandingShot;
 use App\Services\Landing\LandingDesignCritic;
 use App\Services\Landing\LatestPreviewShot;
 use App\Services\Manifest\AppManifestService;
@@ -41,8 +42,19 @@ class CritiqueLandingDesignTool extends SapiensTool
         }
 
         ['html' => $html, 'css' => $css] = LandingDesignCritic::extractSurfaces($manifest);
-        $screenshot = app(LatestPreviewShot::class)->for($app);
         $round = max(1, (int) ($validated['round'] ?? 1));
+
+        // Pixel resolution for the director's eyes, best available first:
+        //   1. an upload from an OPEN builder tab (freshest, what the user sees),
+        //   2. else a HEADLESS render — so a fully external/headless caller (this
+        //      MCP tool with no browser attached) still judges real pixels instead
+        //      of degrading to text-only (judged_pixels was always false before).
+        $screenshot = app(LatestPreviewShot::class)->for($app);
+        $headlessShots = null;
+        if ($screenshot === null) {
+            $headlessShots = app(HeadlessLandingShot::class);
+            $screenshot = $headlessShots->capture($app, $user);
+        }
 
         // Same bar, same eyes, same MODEL as the builder gate: the critic
         // resolves the director chain itself (`landing_director` default + its
@@ -56,6 +68,11 @@ class CritiqueLandingDesignTool extends SapiensTool
             $round,
             $screenshot,
         );
+
+        // The critic has consumed the pixels; drop the headless temp file.
+        if ($headlessShots !== null) {
+            $headlessShots->cleanup($screenshot);
+        }
 
         return Response::json([
             'ship' => $result['ship'],

@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\AccountSwitchController;
+use App\Http\Controllers\LandingRenderController;
 use App\Http\Controllers\PublicLandingController;
 use App\Http\Controllers\PublicLeadController;
 use App\Http\Controllers\Settings\OrganizationBrandController;
@@ -60,6 +61,13 @@ Route::post('l/{public_slug}/lead', PublicLeadController::class)
     ->where('public_slug', '[a-z0-9][a-z0-9_-]*')
     ->middleware([BindPublicLandingContext::class, 'throttle:10,1'])
     ->name('landing.public.lead');
+
+// Signed headless-render of an owner's landing (published OR draft) for
+// HeadlessLandingShot's Browsershot capture. No session — the tenant scope
+// travels in the signature's uid/org params (see LandingRenderController).
+Route::get('apps/{app}/landing-render', LandingRenderController::class)
+    ->middleware('signed')
+    ->name('landing.render');
 
 Route::middleware([
     'auth',
