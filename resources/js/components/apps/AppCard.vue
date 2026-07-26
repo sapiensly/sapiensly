@@ -8,6 +8,7 @@ import {
     History,
     LayoutDashboard,
     Lock,
+    Rocket,
     Sparkles,
 } from '@lucide/vue';
 import { computed, type Component } from 'vue';
@@ -37,6 +38,7 @@ const { t } = useI18n();
 const tint = props.app.color ?? 'var(--sp-accent-blue)';
 
 const isDashboard = computed(() => props.app.kind === 'dashboard');
+const isLanding = computed(() => props.app.kind === 'landing');
 
 interface PillStyle {
     icon: Component;
@@ -107,7 +109,13 @@ const versionPill = computed<PillStyle>(() => {
                         }"
                     >
                         <component
-                            :is="isDashboard ? LayoutDashboard : AppWindow"
+                            :is="
+                                isDashboard
+                                    ? LayoutDashboard
+                                    : isLanding
+                                      ? Rocket
+                                      : AppWindow
+                            "
                             class="size-4"
                         />
                     </div>
@@ -129,7 +137,14 @@ const versionPill = computed<PillStyle>(() => {
                         class="inline-flex items-center gap-1 rounded-pill border border-accent-blue/30 bg-accent-blue/10 px-2 py-0.5 text-[10px] tracking-wider text-accent-blue uppercase"
                     >
                         <LayoutDashboard class="size-3" />
-                        Dashboard
+                        {{ t('apps.builder.dashboard_badge') }}
+                    </span>
+                    <span
+                        v-else-if="isLanding"
+                        class="inline-flex items-center gap-1 rounded-pill border border-accent-blue/30 bg-accent-blue/10 px-2 py-0.5 text-[10px] tracking-wider text-accent-blue uppercase"
+                    >
+                        <Rocket class="size-3" />
+                        {{ t('apps.builder.landing_badge') }}
                     </span>
                     <span
                         :class="[
