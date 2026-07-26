@@ -103,6 +103,14 @@ class RunBuilderAiJob implements ShouldQueue
          * without the user typing "continúa" after every timeout.
          */
         public int $resumeRemaining = 2,
+        /**
+         * The ship:true rail's budget: how many gate turns the platform may
+         * still queue when a landing turn applies changes without the design
+         * gate ever shipping (see BuilderAiService::continueForLandingGate).
+         * Prompt rules alone proved insufficient — a build finished with one
+         * unshipped gate round and called itself done.
+         */
+        public int $gateRemaining = 2,
     ) {}
 
     public function handle(BuilderAiService $service): void
@@ -144,16 +152,19 @@ class RunBuilderAiJob implements ShouldQueue
         // is hit (see continueAutonomously).
         if ($this->autonomousRemaining > 0) {
             $service->continueAutonomously($finished, $this->autonomousRemaining, $this->modelOverride);
-
-            return;
-        }
-
-        // Plan-driven autonomy: a user-initiated turn that authored or advanced
-        // an active build plan keeps executing it without the UI toggle. Never
-        // for auto-queued turns — an exhausted chain must not re-seed itself.
-        if (! $this->autoQueued) {
+        } elseif (! $this->autoQueued) {
+            // Plan-driven autonomy: a user-initiated turn that authored or
+            // advanced an active build plan keeps executing it without the UI
+            // toggle. Never for auto-queued turns — an exhausted chain must
+            // not re-seed itself.
             $service->continueFromPlan($finished, $this->modelOverride);
         }
+
+        // The ship:true rail: an applied landing turn whose conversation has
+        // never received a shipped gate verdict gets a platform-queued gate
+        // turn. Runs after the plan chains — it skips itself whenever another
+        // turn is already queued, so it only fires on an idle conversation.
+        $service->continueForLandingGate($finished, $this->modelOverride, $this->gateRemaining);
     }
 
     /**

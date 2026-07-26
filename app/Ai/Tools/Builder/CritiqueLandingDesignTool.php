@@ -3,6 +3,7 @@
 namespace App\Ai\Tools\Builder;
 
 use App\Models\App;
+use App\Models\BuilderConversation;
 use App\Models\User;
 use App\Services\Landing\DraftPreviewShot;
 use App\Services\Landing\LandingDesignCritic;
@@ -124,6 +125,21 @@ DESC;
         } finally {
             if ($pixelSource === 'draft') {
                 $draftShots?->cleanup($screenshot);
+            }
+        }
+
+        // First ship:true stamps the conversation — the signal the ship:true
+        // rail (BuilderAiService::continueForLandingGate) reads to know this
+        // landing HAS been blessed and needs no platform-queued gate turn.
+        if ($result['ship'] && $this->conversationId !== null) {
+            try {
+                BuilderConversation::query()
+                    ->whereKey($this->conversationId)
+                    ->whereNull('landing_shipped_at')
+                    ->update(['landing_shipped_at' => now()]);
+            } catch (\Throwable) {
+                // Best-effort: a failed stamp only means the rail may queue one
+                // redundant gate turn, which will re-ship and stamp again.
             }
         }
 

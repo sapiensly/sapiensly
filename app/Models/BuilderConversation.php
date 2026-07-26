@@ -19,12 +19,14 @@ class BuilderConversation extends Model
         'user_id',
         'status',
         'build_plan',
+        'landing_shipped_at',
     ];
 
     protected function casts(): array
     {
         return [
             'build_plan' => 'array',
+            'landing_shipped_at' => 'datetime',
         ];
     }
 

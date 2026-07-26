@@ -1169,12 +1169,74 @@ class BuilderAiService
     }
 
     /**
+     * The ship:true rail. A landing that applied changes while its design gate
+     * NEVER returned ship is not done — the "do not finish until ship:true"
+     * rule is prompt-only, and an undisciplined model walks straight past it
+     * (observed live: a build ran ONE gate round, applied the must_fix and
+     * called itself finished — the page never got a verdict). When that
+     * happens on an otherwise idle conversation, the platform queues the gate
+     * turn itself, bounded by $gateRemaining so a director that never ships
+     * can't loop the build forever. First shipped verdict stamps
+     * `landing_shipped_at` (see CritiqueLandingDesignTool) and retires the
+     * rail for the conversation — post-ship tweak turns never re-force the
+     * gate.
+     */
+    public function continueForLandingGate(BuilderMessage $finished, ?string $modelOverride, int $gateRemaining): void
+    {
+        if ($gateRemaining <= 0) {
+            return;
+        }
+
+        $conversation = $finished->conversation;
+        $conversation->refresh();
+
+        // Only turns that actually applied design work; a Q&A turn, an error
+        // or a pending proposal is not a finished landing.
+        if ((string) $finished->status !== 'applied') {
+            return;
+        }
+
+        if ($conversation->landing_shipped_at !== null) {
+            return;
+        }
+
+        // The user pressed Detener — a stopped build stays stopped.
+        if (app(BuilderCancellation::class)->requested($conversation)) {
+            return;
+        }
+
+        $app = $conversation->app;
+        if ($app === null || $app->kind !== AppKind::Landing) {
+            return;
+        }
+
+        // Another turn is already queued/streaming (a plan chain, a resume) —
+        // the rail re-evaluates when THAT turn finishes, on the idle end.
+        $busy = BuilderMessage::query()
+            ->where('conversation_id', $conversation->id)
+            ->where('role', 'assistant')
+            ->where('status', 'streaming')
+            ->exists();
+        if ($busy) {
+            return;
+        }
+
+        $this->queueAutoTurn(
+            $conversation,
+            '(riel de diseño) La landing tiene cambios aplicados pero el design gate NO ha dado ship:true en esta conversación. Llama critique_landing_design con el intent de la página; corrige cada must_fix con propose_change y re-llama con round incrementado hasta ship:true. No hagas nada más.',
+            $modelOverride,
+            0,
+            gateRemaining: $gateRemaining - 1,
+        );
+    }
+
+    /**
      * Queue a server-driven follow-up turn: persist the synthetic user turn +
      * streaming placeholder, push them to the client (no HTTP response carries
      * them), and dispatch the job flagged autoQueued so an exhausted chain can
      * never re-seed itself through continueFromPlan.
      */
-    private function queueAutoTurn(BuilderConversation $conversation, string $prompt, ?string $modelOverride, int $remaining, int $resumeRemaining = 2): void
+    private function queueAutoTurn(BuilderConversation $conversation, string $prompt, ?string $modelOverride, int $remaining, int $resumeRemaining = 2, int $gateRemaining = 2): void
     {
         $userTurn = BuilderMessage::create([
             'conversation_id' => $conversation->id,
@@ -1195,7 +1257,7 @@ class BuilderAiService
             $this->autonomousTurnDto($placeholder),
         ]));
 
-        RunBuilderAiJob::dispatch($placeholder->id, $prompt, null, null, $modelOverride, $remaining, true, true, $resumeRemaining);
+        RunBuilderAiJob::dispatch($placeholder->id, $prompt, null, null, $modelOverride, $remaining, true, true, $resumeRemaining, $gateRemaining);
     }
 
     /**
