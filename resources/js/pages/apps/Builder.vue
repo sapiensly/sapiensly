@@ -41,6 +41,7 @@ import {
     type SlashCommand,
 } from '@/lib/builderSlashCommands';
 import AppRenderer from '@/runtime/AppRenderer.vue';
+import { ensureManifestFontLinks } from '@/runtime/fonts';
 import BlockBreadcrumb from '@/runtime/blocks/BlockBreadcrumb.vue';
 import {
     runtimeSettingsStyle,
@@ -755,6 +756,14 @@ watch([selectedBlockId, () => props.preview], () => {
         }, 80),
     );
 });
+
+// settings.fonts — the preview must render the manifest's extra Google Fonts
+// families (bunny.net mirror) or the authored typography previews as fallback.
+watch(
+    () => (props.preview?.settings as { fonts?: string[] } | undefined)?.fonts,
+    (fonts) => ensureManifestFontLinks(fonts),
+    { immediate: true, deep: true },
+);
 onMounted(() => {
     previewPane.value?.addEventListener('scroll', updateSelectionRect, {
         passive: true,
@@ -2550,9 +2559,25 @@ async function captureDraftShot(nonce: string) {
             { timeout: 10_000 },
         );
         draftShot.value = { nonce, ...data };
+        // The draft may declare settings.fonts the applied manifest doesn't
+        // have yet — load them before the shot or the director judges
+        // fallback typography.
+        ensureManifestFontLinks(
+            (data.settings as { fonts?: string[] } | undefined)?.fonts,
+        );
         await nextTick();
         // A beat for BlockHtml to hydrate motion and fonts/layout to settle.
         await new Promise((resolve) => setTimeout(resolve, 700));
+        // Best-effort: let webfonts finish loading so the pixels the director
+        // judges are the real faces, not the fallback stack.
+        try {
+            await Promise.race([
+                document.fonts.ready,
+                new Promise((resolve) => setTimeout(resolve, 1500)),
+            ]);
+        } catch {
+            // Font readiness is cosmetic — never block the capture on it.
+        }
         const node = draftShotPane.value;
         if (!node) return;
         const blob = await capturePreviewJpeg(node);

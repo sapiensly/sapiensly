@@ -6854,6 +6854,16 @@
                     "default": "sans",
                     "description": "Body/heading font family family: sans (modern), serif (editorial), rounded (friendly), mono (technical)."
                 },
+                "fonts": {
+                    "type": "array",
+                    "maxItems": 4,
+                    "description": "Extra web-font families for this app's pages, loaded from the privacy-friendly Google Fonts mirror (fonts.bunny.net) — ANY Google Fonts family works. Each entry: \"Family Name\" or \"Family Name:400,700,400i\" (comma-separated weights, i = italic; omit for the default weight). Reach for this when the curated self-hosted catalog doesn't carry the voice the intent needs, then reference the family BY NAME in custom_css with a generic fallback (font-family: 'Space Grotesk', sans-serif). Prefer 1-2 families with explicit weights — every family+weight adds page weight.",
+                    "items": {
+                        "type": "string",
+                        "maxLength": 64,
+                        "pattern": "^[A-Za-z0-9][A-Za-z0-9 ]{0,48}(:[0-9]{3}i?(,[0-9]{3}i?)*)?$"
+                    }
+                },
                 "navigation_layout": {
                     "enum": [
                         "top",

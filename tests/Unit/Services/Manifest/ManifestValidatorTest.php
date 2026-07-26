@@ -3108,6 +3108,24 @@ it('accepts safe custom_css', function () {
     expect((new ManifestValidator)->validate($manifest)->valid)->toBeTrue();
 });
 
+// --- settings.fonts (any Google Fonts family, via the sanctioned channel) ---
+
+it('accepts settings.fonts with valid family specs', function () {
+    $manifest = baseManifest();
+    $manifest['settings']['fonts'] = ['Space Grotesk:400,700,400i', 'UnifrakturMaguntia'];
+
+    expect((new ManifestValidator)->validate($manifest)->valid)->toBeTrue();
+});
+
+it('rejects settings.fonts specs that could smuggle URL syntax', function () {
+    $manifest = baseManifest();
+    // Anything beyond letters/digits/spaces + a weights suffix is rejected —
+    // the spec becomes a fonts.bunny.net URL, so the pattern IS the security.
+    $manifest['settings']['fonts'] = ['Inter);@import url(evil'];
+
+    expect((new ManifestValidator)->validate($manifest)->valid)->toBeFalse();
+});
+
 it('rejects custom_css with a forbidden construct', function () {
     $manifest = baseManifest();
     $manifest['settings']['custom_css'] = '@import url(http://evil.test/x.css);';

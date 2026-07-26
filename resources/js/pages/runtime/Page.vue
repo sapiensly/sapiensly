@@ -2,6 +2,7 @@
 import AppRenderer from '@/runtime/AppRenderer.vue';
 import BlockBreadcrumb from '@/runtime/blocks/BlockBreadcrumb.vue';
 import RuntimeChatPanel from '@/runtime/RuntimeChatPanel.vue';
+import { manifestFontHrefs } from '@/runtime/fonts';
 import { runtimeSettingsStyle } from '@/runtime/runtimeStyle';
 import SiteFooter from '@/runtime/SiteFooter.vue';
 import SiteHeader from '@/runtime/SiteHeader.vue';
@@ -34,6 +35,7 @@ interface RuntimeSettings {
     footer?: { text?: string; links?: Array<{ label: string; href: string }> };
     accent?: string;
     font?: string;
+    fonts?: string[];
     palette?: {
         ramp?: Record<string, string>;
         soft?: string;
@@ -120,6 +122,9 @@ const brand = computed(() => ({
     ...(settings.value.brand ?? {}),
 }));
 const footer = computed(() => settings.value.footer);
+// settings.fonts — extra Google Fonts families (served from the bunny.net
+// mirror), rendered as <link>s inside <Head> so SSR ships them with the page.
+const fontHrefs = computed(() => manifestFontHrefs(settings.value.fonts));
 // Accent colour + font family as CSS vars / inline style on the page surface.
 const surfaceStyle = computed(() => ({
     '--sp-bleed': '1.25rem',
@@ -219,6 +224,12 @@ useScrollReveal(sectionsEl);
             :content="seo.description"
         />
         <meta v-if="seo.og_image" property="og:image" :content="seo.og_image" />
+        <link
+            v-for="href in fontHrefs"
+            :key="href"
+            rel="stylesheet"
+            :href="href"
+        />
     </Head>
 
     <!-- Runtime is full-screen (no platform shell), so the app owns the viewport.

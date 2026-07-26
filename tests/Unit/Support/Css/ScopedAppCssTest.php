@@ -69,10 +69,11 @@ it('does not touch tbody or .body class selectors', function () {
         ->and($out)->toContain('.body{color:red;}');
 });
 
-it('rejects @import but the reason points at the font catalog', function () {
+it('rejects @import but the reason points at the catalog and settings.fonts', function () {
     $issues = ScopedAppCss::issues("@import url('https://fonts.googleapis.com/css2?family=Inter');");
 
     expect($issues)->toHaveCount(1)
         ->and($issues[0])->toContain('@import is not allowed')
-        ->and($issues[0])->toContain('Fraunces');
+        ->and($issues[0])->toContain('Fraunces')
+        ->and($issues[0])->toContain('settings.fonts');
 });

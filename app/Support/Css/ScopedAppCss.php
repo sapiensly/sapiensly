@@ -31,7 +31,7 @@ final class ScopedAppCss
      */
     private const FORBIDDEN = [
         '/<\s*\/?\s*(?:style|script)\b/i' => '<style>/<script> tags are not allowed in custom CSS.',
-        '/@import\b/i' => '@import is not allowed — inline the styles instead. For fonts, the platform ships a curated self-hosted catalog (Fraunces, Instrument Serif, Bricolage Grotesque, Archivo, IBM Plex Mono, Alfa Slab One, Anton) — reference those families directly, no import needed.',
+        '/@import\b/i' => '@import is not allowed — inline the styles instead. For fonts: the platform ships a curated self-hosted catalog (Fraunces, Instrument Serif, Bricolage Grotesque, Archivo, IBM Plex Mono, Alfa Slab One, Anton) you can reference directly, and ANY other Google Fonts family loads via settings.fonts (e.g. ["Space Grotesk:400,700"]) — never via @import.',
         '/\bexpression\s*\(/i' => 'CSS expression(...) is not allowed.',
         '/javascript\s*:/i' => 'javascript: URLs are not allowed.',
         '/\bbehavior\s*:/i' => 'CSS behavior is not allowed.',
