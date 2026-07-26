@@ -1489,6 +1489,48 @@ it('fine tune duplicates a landing section as a plain sibling with a fresh id', 
         ->and($blocks[1]['content'])->toBe('<section class="a"><h1>Hola</h1></section>');
 });
 
+it('fine tune sets a landing section content in place (text edit)', function () {
+    $aId = 'htm_'.strtolower((string) Str::ulid());
+    $manifest = [
+        'schema_version' => '1.0.0',
+        'id' => $this->testApp->id,
+        'slug' => 'lp_txt',
+        'name' => 'LP',
+        'version' => 1,
+        'objects' => [],
+        'pages' => [[
+            'id' => 'pag_'.strtolower((string) Str::ulid()),
+            'slug' => 'home', 'name' => 'Home', 'path' => '/',
+            'blocks' => [
+                ['id' => $aId, 'type' => 'html', 'content' => '<section class="a"><h1>Hola</h1></section>'],
+            ],
+        ]],
+        'settings' => ['surface' => 'landing'],
+        'permissions' => ['roles' => [['id' => 'rol_'.strtolower((string) Str::ulid()), 'slug' => 'admin', 'name' => 'Admin']]],
+    ];
+    app(AppManifestService::class)->createVersion($this->testApp, $manifest, $this->user, 'landing');
+
+    $this->actingAs($this->user)
+        ->postJson("/apps/{$this->testApp->id}/builder/blocks/content", [
+            'block_id' => $aId,
+            'content' => '<section class="a"><h1>Hola editado</h1></section>',
+        ])->assertOk();
+
+    $block = app(AppManifestService::class)->getActiveManifest($this->testApp->fresh())['pages'][0]['blocks'][0];
+    expect($block['content'])->toContain('Hola editado')
+        ->and($block['content'])->not->toContain('>Hola<');
+});
+
+it('fine tune content edit refuses a non-html block', function () {
+    app(AppManifestService::class)->createVersion($this->testApp, manualDashManifest($this->testApp->id), $this->user);
+
+    $this->actingAs($this->user)
+        ->postJson("/apps/{$this->testApp->id}/builder/blocks/content", [
+            'block_id' => 'blk_manualbar0',
+            'content' => '<section>x</section>',
+        ])->assertStatus(422);
+});
+
 it('dropping on a row\'s empty space moves the card INSIDE that row', function () {
     app(AppManifestService::class)->createVersion($this->testApp, manualDashManifest($this->testApp->id), $this->user);
 

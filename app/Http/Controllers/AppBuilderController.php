@@ -1698,6 +1698,52 @@ class AppBuilderController extends Controller
      * @return array<string, mixed>|null
      */
     /**
+     * Fine-tune: replace the whole `content` of an html section (in-place text
+     * edits). The client does the surgical swap on the STORED content string
+     * (never the hydrated DOM, which carries runtime-injected motion styles) and
+     * sends the new content; the manifest save re-runs LandingHtmlSanitizer, so
+     * this stays the trust boundary even though the string arrives from the client.
+     * Versioned like every other manual edit.
+     */
+    public function setBlockContent(Request $request, App $app): JsonResponse
+    {
+        $this->assertCanAccess($request, $app);
+
+        $data = $request->validate([
+            'block_id' => ['required', 'string'],
+            'content' => ['required', 'string', 'max:60000'],
+        ]);
+
+        $manifest = $this->manifestService->getActiveManifest($app);
+        if (! is_array($manifest)) {
+            abort(404, 'App has no active manifest yet.');
+        }
+
+        $found = $this->findBlockPath($manifest, $data['block_id']);
+        if ($found === null) {
+            return response()->json(['error' => 'not_found', 'message' => 'Ese bloque ya no existe en el manifiesto.'], 404);
+        }
+        [$pointer, $block] = $found;
+
+        if (($block['type'] ?? null) !== 'html') {
+            return response()->json(['error' => 'not_html', 'message' => 'Solo una sección html tiene contenido editable en línea.'], 422);
+        }
+
+        try {
+            $version = $this->manifestService->applyPatch(
+                $app,
+                [['op' => 'add', 'path' => $pointer.'/content', 'value' => $data['content']]],
+                $request->user(),
+                'Ajuste fino: edité el texto de una sección',
+            );
+        } catch (InvalidManifestException $e) {
+            return response()->json(['error' => 'invalid_manifest', 'errors' => $e->result->errorsArray()], 422);
+        }
+
+        return response()->json(['ok' => true, 'version' => $version->version_number]);
+    }
+
+    /**
      * Fine-tune: duplicate ONE block (with its whole subtree, freshly re-id'd)
      * as a plain vertical sibling right below the original. Versioned like every
      * other manual edit. The clone lands as 'below' (never row-wrapped) so a

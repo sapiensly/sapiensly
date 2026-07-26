@@ -661,14 +661,26 @@ const selectedObject = computed(() => {
           } | null) ?? null)
         : null;
 });
-// Highlight the selected card without touching block components.
-const manualSelectionCss = computed(() =>
-    panelMode.value === 'manual' && selectedBlockId.value
-        ? `[data-block-id="${selectedBlockId.value}"]{outline:2px solid #3b82f6;outline-offset:3px;border-radius:14px;}`
-        : '',
-);
+// Highlight the selected card + the text element being edited. Injected as a
+// GLOBAL <style> (the landing content is v-html, so scoped styles can't reach it).
+const manualSelectionCss = computed(() => {
+    if (panelMode.value !== 'manual') return '';
+    const parts: string[] = [];
+    if (selectedBlockId.value) {
+        parts.push(
+            `[data-block-id="${selectedBlockId.value}"]{outline:2px solid #3b82f6;outline-offset:3px;border-radius:14px;}`,
+        );
+    }
+    // The in-place text editor's caret target.
+    parts.push(
+        '.sp-editing-text{outline:2px solid #22c55e;outline-offset:2px;border-radius:4px;cursor:text;}',
+    );
+    return parts.join('');
+});
 function onManualPreviewClick(e: MouseEvent) {
     if (panelMode.value !== 'manual') return;
+    // Don't steal clicks (caret placement) while editing text in place.
+    if (textEditing.value) return;
     const el = (e.target as HTMLElement).closest?.('[data-block-id]');
     if (!(el instanceof HTMLElement)) return;
     e.preventDefault();
@@ -1957,6 +1969,153 @@ async function deleteSection() {
     } finally {
         sectionBusy.value = false;
     }
+}
+
+// ---- Landing fine-tune: in-place text editing ------------------------------
+// Double-click a leaf text element in a landing section to edit it inline. The
+// write-back is SURGICAL: we swap only that element's text in the block's STORED
+// content string (parsed fresh, never the hydrated DOM — which carries the
+// runtime's injected motion styles), so nothing but the text changes. The server
+// re-sanitises on save.
+const EDITABLE_TEXT_TAGS = new Set([
+    'h1',
+    'h2',
+    'h3',
+    'h4',
+    'h5',
+    'h6',
+    'p',
+    'span',
+    'a',
+    'li',
+    'blockquote',
+    'small',
+    'label',
+    'strong',
+    'em',
+    'button',
+]);
+const textEditing = ref<{
+    blockId: string;
+    tag: string;
+    occurrence: number;
+    original: string;
+    el: HTMLElement;
+} | null>(null);
+
+function landingBlockContent(blockId: string): string | null {
+    const block = findBlockById(
+        (props.preview?.page as { blocks?: unknown[] } | undefined)?.blocks ??
+            [],
+        blockId,
+    );
+    return typeof block?.content === 'string' ? block.content : null;
+}
+
+function onManualPreviewDblClick(e: MouseEvent) {
+    if (panelMode.value !== 'manual' || !previewIsLanding.value) return;
+    const el = e.target as HTMLElement;
+    const section = el.closest?.('[data-block-id]');
+    // Only a LEAF text element (its text is its whole content) inside a section.
+    if (
+        !(section instanceof HTMLElement) ||
+        el.childElementCount > 0 ||
+        !EDITABLE_TEXT_TAGS.has(el.tagName.toLowerCase())
+    ) {
+        return;
+    }
+    e.preventDefault();
+    e.stopPropagation();
+    startTextEdit(el, section.dataset.blockId ?? '');
+}
+
+function startTextEdit(el: HTMLElement, blockId: string) {
+    if (!blockId) return;
+    const tag = el.tagName.toLowerCase();
+    const original = el.textContent ?? '';
+    const section = el.closest('[data-block-id]');
+    const twins = section
+        ? [...section.querySelectorAll(tag)].filter(
+              (n) =>
+                  n.childElementCount === 0 &&
+                  (n.textContent ?? '').trim() === original.trim(),
+          )
+        : [el];
+    textEditing.value = {
+        blockId,
+        tag,
+        occurrence: Math.max(0, twins.indexOf(el)),
+        original,
+        el,
+    };
+    el.setAttribute('contenteditable', 'plaintext-only');
+    el.classList.add('sp-editing-text');
+    el.focus();
+    const range = document.createRange();
+    range.selectNodeContents(el);
+    const sel = window.getSelection();
+    sel?.removeAllRanges();
+    sel?.addRange(range);
+    el.addEventListener('keydown', textEditKeydown);
+    el.addEventListener('blur', commitTextEdit, { once: true });
+}
+
+function textEditKeydown(e: KeyboardEvent) {
+    if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        (e.target as HTMLElement).blur();
+    } else if (e.key === 'Escape') {
+        e.preventDefault();
+        const ed = textEditing.value;
+        if (ed) {
+            ed.el.textContent = ed.original; // restore, then bail
+            ed.el.removeEventListener('keydown', textEditKeydown);
+            ed.el.removeEventListener('blur', commitTextEdit);
+            ed.el.setAttribute('contenteditable', 'false');
+            ed.el.classList.remove('sp-editing-text');
+            textEditing.value = null;
+        }
+    }
+}
+
+async function commitTextEdit() {
+    const ed = textEditing.value;
+    if (!ed) return;
+    ed.el.removeEventListener('keydown', textEditKeydown);
+    ed.el.setAttribute('contenteditable', 'false');
+    ed.el.classList.remove('sp-editing-text');
+    const newText = ed.el.textContent ?? '';
+    textEditing.value = null;
+    if (newText.trim() === ed.original.trim() || newText.trim() === '') {
+        ed.el.textContent = ed.original; // no-op / empty guard: restore
+        return;
+    }
+
+    const stored = landingBlockContent(ed.blockId);
+    if (stored == null) return;
+    const doc = new DOMParser().parseFromString(stored, 'text/html');
+    const cands = [...doc.body.querySelectorAll(ed.tag)].filter(
+        (n) =>
+            n.childElementCount === 0 &&
+            (n.textContent ?? '').trim() === ed.original.trim(),
+    );
+    const target = cands[ed.occurrence] ?? cands[0];
+    if (!target) {
+        toast.error(t('apps.builder.section_action_failed'));
+        afterManualChange();
+        return;
+    }
+    target.textContent = newText;
+
+    try {
+        await axios.post(`/apps/${props.app.id}/builder/blocks/content`, {
+            block_id: ed.blockId,
+            content: doc.body.innerHTML,
+        });
+    } catch {
+        toast.error(t('apps.builder.section_action_failed'));
+    }
+    afterManualChange();
 }
 // Publish / unpublish the landing from the header. Same gate + global slug
 // minting as the MCP tool (shared LandingPublisher server-side). The live URL
@@ -4596,6 +4755,7 @@ function statusTone(status: Message['status']): string {
                         v-if="viewMode === 'preview'"
                         ref="previewPane"
                         @click.capture="onManualPreviewClick"
+                        @dblclick.capture="onManualPreviewDblClick"
                         :class="[
                             'relative flex-1 overflow-auto p-5 transition-colors',
                             // Paint containment: a landing's position:fixed
@@ -4746,6 +4906,18 @@ function statusTone(status: Message['status']): string {
                             >
                                 <Trash2 class="size-4" />
                             </button>
+                        </div>
+
+                        <!-- Fine-tune discoverability hint. -->
+                        <div
+                            v-if="
+                                previewIsLanding &&
+                                panelMode === 'manual' &&
+                                !textEditing
+                            "
+                            class="pointer-events-none fixed bottom-6 left-1/2 z-[60] -translate-x-1/2 rounded-pill bg-navy-elevated/90 px-3 py-1 text-[11px] text-ink-muted shadow-lg backdrop-blur"
+                        >
+                            {{ t('apps.builder.fine_tune_hint') }}
                         </div>
 
                         <!-- Resize handles on the selected card (dashboard grid

@@ -54,6 +54,7 @@ Route::middleware([
     Route::post('/apps/{app}/builder/blocks/move', [AppBuilderController::class, 'moveBlock'])->name('apps.builder.blocks.move');
     Route::post('/apps/{app}/builder/blocks/delete', [AppBuilderController::class, 'deleteBlock'])->name('apps.builder.blocks.delete');
     Route::post('/apps/{app}/builder/blocks/duplicate', [AppBuilderController::class, 'duplicateBlock'])->name('apps.builder.blocks.duplicate');
+    Route::post('/apps/{app}/builder/blocks/content', [AppBuilderController::class, 'setBlockContent'])->name('apps.builder.blocks.content');
     Route::post('/apps/{app}/builder/messages/{message}/approve', [AppBuilderController::class, 'approve'])->name('apps.builder.approve');
     Route::post('/apps/{app}/builder/messages/{message}/reject', [AppBuilderController::class, 'reject'])->name('apps.builder.reject');
     Route::post('/apps/{app}/builder/messages/{message}/revert', [AppBuilderController::class, 'revert'])->name('apps.builder.revert');

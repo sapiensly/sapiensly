@@ -2744,6 +2744,7 @@
     "apps.builder.section_duplicate": "Duplicar sección",
     "apps.builder.section_delete": "Eliminar sección",
     "apps.builder.section_action_failed": "No se pudo aplicar el cambio — inténtalo de nuevo.",
+    "apps.builder.fine_tune_hint": "Clic en una sección para reordenar · doble clic en un texto para editarlo",
     "apps.builder.accent_close": "Cerrar colores de acento",
     "apps.builder.accent_hint": "Color de acento — define botones, enlaces y resaltados",
     "apps.builder.accent_label": "Acento",
