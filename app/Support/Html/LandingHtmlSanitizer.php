@@ -42,6 +42,10 @@ class LandingHtmlSanitizer
         'ul', 'ol', 'li', 'dl', 'dt', 'dd',
         // links, media, actions
         'a', 'img', 'picture', 'source', 'button',
+        // native disclosure — the ONLY honest accordion on a page that allows
+        // no JS: <details>/<summary> toggle in pure HTML. A decorative +/− that
+        // does nothing is a lying affordance (observed in live FAQ sections).
+        'details', 'summary',
         // tables
         'table', 'thead', 'tbody', 'tfoot', 'tr', 'th', 'td', 'caption', 'colgroup', 'col',
     ];
@@ -187,6 +191,12 @@ class LandingHtmlSanitizer
             // Harmless presentational media attributes.
             if (in_array($tag, ['img', 'source'], true)
                 && in_array($lower, ['alt', 'width', 'height', 'loading', 'decoding', 'sizes'], true)) {
+                continue;
+            }
+
+            // <details open>: render an entry expanded by default (e.g. the
+            // first FAQ item). Boolean, no scripting surface.
+            if ($tag === 'details' && $lower === 'open') {
                 continue;
             }
 

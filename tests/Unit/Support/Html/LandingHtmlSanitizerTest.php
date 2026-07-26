@@ -24,6 +24,18 @@ it('keeps every heading level', function () {
     }
 });
 
+it('keeps <details>/<summary> — the honest zero-JS accordion — with `open` intact', function () {
+    // A decorative +/− that toggles nothing is a lying affordance (observed
+    // live in FAQ sections); native disclosure is the sanctioned alternative.
+    $out = clean('<details class="faq-item" open onclick="x()"><summary class="faq-q">¿Y si ya la vi?</summary><p>Pasa 1 de cada 10 veces.</p></details>');
+
+    expect($out)
+        ->toContain('<details class="faq-item" open')
+        ->toContain('<summary class="faq-q">¿Y si ya la vi?</summary>')
+        ->toContain('<p>Pasa 1 de cada 10 veces.</p>')
+        ->not->toContain('onclick');
+});
+
 it('drops <script> whole, including its text', function () {
     $out = clean('<div>ok</div><script>alert(1)</script>');
     expect($out)->toContain('<div>ok</div>')
