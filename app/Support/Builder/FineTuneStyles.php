@@ -157,6 +157,21 @@ class FineTuneStyles
     }
 
     /**
+     * Drop an anchor's whole override rule from the managed region (the per-element
+     * "reset to the original design"). Removing the last rule drops the region too.
+     */
+    public static function remove(?string $css, string $editId): string
+    {
+        if (preg_match(self::EDIT_ID_PATTERN, $editId) !== 1) {
+            throw new InvalidArgumentException("Invalid edit id: {$editId}");
+        }
+        [$base, $rules] = self::split($css ?? '');
+        unset($rules[$editId]);
+
+        return self::assemble($base, $rules);
+    }
+
+    /**
      * Split a stylesheet into [css-without-the-region, editId => declarations map].
      *
      * @return array{0: string, 1: array<string, array<string, string>>}

@@ -2753,6 +2753,7 @@
     "apps.builder.style_weight": "Peso de fuente",
     "apps.builder.style_align": "Alineación",
     "apps.builder.style_done": "Listo",
+    "apps.builder.style_reset": "Restablecer al original",
     "apps.builder.accent_close": "Cerrar colores de acento",
     "apps.builder.accent_hint": "Color de acento — define botones, enlaces y resaltados",
     "apps.builder.accent_label": "Acento",

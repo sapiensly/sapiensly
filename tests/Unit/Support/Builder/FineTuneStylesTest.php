@@ -99,3 +99,22 @@ it("preserve keeps the new turn's region over the previous one", function () {
 it('preserve is a no-op when neither stylesheet has a region', function () {
     expect(FineTuneStyles::preserve('.a{}', '.b{color:red}'))->toBe('.b{color:red}');
 });
+
+it('remove drops one anchor rule, keeping the others and the region', function () {
+    $css = FineTuneStyles::upsert('.lp{}', 'spe_aa11', ['color' => '#ffffff']);
+    $css = FineTuneStyles::upsert($css, 'spe_bb22', ['color' => '#000000']);
+
+    $css = FineTuneStyles::remove($css, 'spe_aa11');
+
+    expect($css)->not->toContain('spe_aa11')
+        ->toContain('[data-sp-edit-id="spe_bb22"]{color:#000000}')
+        ->toContain(FineTuneStyles::REGION_START);
+});
+
+it('remove drops the whole region when the last anchor is reset', function () {
+    $css = FineTuneStyles::upsert('.lp{color:#000}', 'spe_aa11', ['color' => '#ffffff']);
+    $css = FineTuneStyles::remove($css, 'spe_aa11');
+
+    expect($css)->toBe('.lp{color:#000}')
+        ->not->toContain(FineTuneStyles::REGION_START);
+});

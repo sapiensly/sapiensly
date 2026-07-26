@@ -1797,7 +1797,63 @@ class AppBuilderController extends Controller
         $ops[] = ['op' => 'add', 'path' => '/settings/custom_css', 'value' => $newCss];
 
         try {
-            $version = $this->manifestService->applyPatch($app, $ops, $request->user(), 'Ajuste fino: estilo de un elemento');
+            // Authoritative over the fine-tune region — skip the preserve rail so
+            // it isn't restored/reordered under us.
+            $version = $this->manifestService->applyPatch($app, $ops, $request->user(), 'Ajuste fino: estilo de un elemento', preserveFineTune: false);
+        } catch (InvalidManifestException $e) {
+            return response()->json(['error' => 'invalid_manifest', 'errors' => $e->result->errorsArray()], 422);
+        }
+
+        return response()->json(['ok' => true, 'version' => $version->version_number]);
+    }
+
+    /**
+     * Fine-tune: RESET one element to its original design — drop its whole override
+     * rule from the managed region (removing the last rule drops the region) and,
+     * when the client sends it, the anchored content with the data-sp-edit-id
+     * stripped, so no trace is left. Authoritative over the region (skips the
+     * preserve rail) — otherwise a reset of the last override would be resurrected.
+     */
+    public function resetElement(Request $request, App $app): JsonResponse
+    {
+        $this->assertCanAccess($request, $app);
+
+        $data = $request->validate([
+            'block_id' => ['required', 'string'],
+            'edit_id' => ['required', 'string'],
+            'content' => ['sometimes', 'nullable', 'string', 'max:60000'],
+        ]);
+
+        $manifest = $this->manifestService->getActiveManifest($app);
+        if (! is_array($manifest)) {
+            abort(404, 'App has no active manifest yet.');
+        }
+
+        $found = $this->findBlockPath($manifest, $data['block_id']);
+        if ($found === null) {
+            return response()->json(['error' => 'not_found', 'message' => 'Ese bloque ya no existe en el manifiesto.'], 404);
+        }
+        [$pointer, $block] = $found;
+        if (($block['type'] ?? null) !== 'html') {
+            return response()->json(['error' => 'not_html', 'message' => 'Solo una sección html tiene elementos con estilo editable.'], 422);
+        }
+
+        try {
+            $newCss = FineTuneStyles::remove($manifest['settings']['custom_css'] ?? null, $data['edit_id']);
+        } catch (\InvalidArgumentException $e) {
+            return response()->json(['error' => 'invalid_style', 'message' => $e->getMessage()], 422);
+        }
+
+        $ops = [];
+        if (! empty($data['content'])) {
+            $ops[] = ['op' => 'add', 'path' => $pointer.'/content', 'value' => $data['content']];
+        }
+        $ops[] = $newCss === '' && array_key_exists('custom_css', $manifest['settings'] ?? [])
+            ? ['op' => 'remove', 'path' => '/settings/custom_css']
+            : ['op' => 'add', 'path' => '/settings/custom_css', 'value' => $newCss];
+
+        try {
+            $version = $this->manifestService->applyPatch($app, $ops, $request->user(), 'Ajuste fino: restablecí el estilo de un elemento', preserveFineTune: false);
         } catch (InvalidManifestException $e) {
             return response()->json(['error' => 'invalid_manifest', 'errors' => $e->result->errorsArray()], 422);
         }

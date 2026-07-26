@@ -2753,6 +2753,7 @@
     "apps.builder.style_weight": "Font weight",
     "apps.builder.style_align": "Text alignment",
     "apps.builder.style_done": "Done",
+    "apps.builder.style_reset": "Reset to original",
     "apps.builder.accent_close": "Close accent colours",
     "apps.builder.accent_hint": "Accent colour — drives buttons, links and highlights",
     "apps.builder.accent_label": "Accent",

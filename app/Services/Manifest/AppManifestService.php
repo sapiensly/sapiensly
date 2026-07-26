@@ -137,14 +137,17 @@ class AppManifestService
      *
      * @param  array<string, mixed>  $manifest
      */
-    public function createVersion(App $app, array $manifest, ?User $user = null, ?string $summary = null): AppVersion
+    public function createVersion(App $app, array $manifest, ?User $user = null, ?string $summary = null, bool $preserveFineTune = true): AppVersion
     {
         // Deterministic AI⇄manual rail: preserve the managed fine-tune override
         // region (manual per-element styles) across EVERY save and keep it last,
         // so an AI turn can neither nuke nor out-cascade the user's hand edits.
         // No-op when neither the previous nor the new css carries the region.
-        $previousCss = data_get($this->getActiveManifest($app), 'settings.custom_css');
-        if (isset($manifest['settings']) && is_array($manifest['settings'])) {
+        // Skipped for the fine-tune endpoints themselves ($preserveFineTune=false):
+        // they are AUTHORITATIVE over the region, so a reset that empties it must
+        // not be resurrected from the previous version.
+        if ($preserveFineTune && isset($manifest['settings']) && is_array($manifest['settings'])) {
+            $previousCss = data_get($this->getActiveManifest($app), 'settings.custom_css');
             $manifest['settings']['custom_css'] = FineTuneStyles::preserve(
                 is_string($previousCss) ? $previousCss : null,
                 (string) ($manifest['settings']['custom_css'] ?? ''),
@@ -265,7 +268,7 @@ class AppManifestService
      *
      * @param  list<array<string, mixed>>  $jsonPatchOps  RFC 6902 ops
      */
-    public function applyPatch(App $app, array $jsonPatchOps, ?User $user = null, ?string $summary = null): AppVersion
+    public function applyPatch(App $app, array $jsonPatchOps, ?User $user = null, ?string $summary = null, bool $preserveFineTune = true): AppVersion
     {
         $current = $this->getActiveManifest($app);
         if ($current === null) {
@@ -278,7 +281,7 @@ class AppManifestService
 
         $patched = $this->applyJsonPatch($current, $jsonPatchOps);
 
-        return $this->createVersion($app, $patched, $user, $summary);
+        return $this->createVersion($app, $patched, $user, $summary, $preserveFineTune);
     }
 
     /**

@@ -2279,6 +2279,46 @@ function stepLineHeight(delta: number) {
         ) / 10;
     applyElementStyle({ line_height: `${next}` });
 }
+// Reset the element to its original design: drop its whole override rule + strip
+// the anchor from the content, so it falls back to the author/AI base CSS.
+async function resetStyleElement() {
+    const el = styleTargetEl.value;
+    if (!el || styleBusy.value) return;
+    const editId = el.getAttribute('data-sp-edit-id') ?? styleTargetId.value;
+    if (!editId) {
+        clearStyleTarget();
+        return;
+    }
+    const section = el.closest('[data-block-id]');
+    if (!(section instanceof HTMLElement)) return;
+    const blockId = section.dataset.blockId ?? '';
+    styleBusy.value = true;
+    try {
+        const stored = landingBlockContent(blockId);
+        let content: string | undefined;
+        if (stored != null) {
+            const doc = new DOMParser().parseFromString(stored, 'text/html');
+            const target = doc.body.querySelector(
+                `[data-sp-edit-id="${editId}"]`,
+            );
+            if (target) {
+                target.removeAttribute('data-sp-edit-id');
+                content = doc.body.innerHTML;
+            }
+        }
+        await axios.post(`/apps/${props.app.id}/builder/blocks/style/reset`, {
+            block_id: blockId,
+            edit_id: editId,
+            ...(content ? { content } : {}),
+        });
+        clearStyleTarget();
+        afterManualChange();
+    } catch {
+        toast.error(t('apps.builder.section_action_failed'));
+    } finally {
+        styleBusy.value = false;
+    }
+}
 // Re-resolve the styled element after a preview reload so the style bar persists.
 watch(
     () => props.preview,
@@ -5288,6 +5328,18 @@ function statusTone(status: Message['status']): string {
                                     <Plus class="size-3.5" />
                                 </button>
                             </div>
+                            <template v-if="styleTargetId">
+                                <span class="h-4 w-px bg-white/15" />
+                                <button
+                                    type="button"
+                                    :disabled="styleBusy"
+                                    @click="resetStyleElement"
+                                    :title="t('apps.builder.style_reset')"
+                                    class="flex size-6 items-center justify-center rounded-full text-ink-muted hover:bg-amber-500/15 hover:text-amber-300 disabled:opacity-40"
+                                >
+                                    <RotateCcw class="size-3.5" />
+                                </button>
+                            </template>
                             <span class="h-4 w-px bg-white/15" />
                             <button
                                 type="button"

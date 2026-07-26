@@ -1598,6 +1598,32 @@ it('preserves the fine-tune override region when a later version drops it (AI tu
         ->and(rtrim($css))->toEndWith(FineTuneStyles::REGION_END);
 });
 
+it('fine tune resets an element — drops the override and preserve does not resurrect it', function () {
+    $aId = 'htm_'.strtolower((string) Str::ulid());
+    $css = FineTuneStyles::upsert('.lp{color:#000}', 'spe_hero1', ['color' => '#00d67f', 'font-size' => '3rem']);
+    $manifest = [
+        'schema_version' => '1.0.0', 'id' => $this->testApp->id, 'slug' => 'lp_reset', 'name' => 'LP', 'version' => 1,
+        'objects' => [],
+        'pages' => [['id' => 'pag_'.strtolower((string) Str::ulid()), 'slug' => 'home', 'name' => 'Home', 'path' => '/',
+            'blocks' => [['id' => $aId, 'type' => 'html', 'content' => '<section class="lp"><h1 data-sp-edit-id="spe_hero1">Hola</h1></section>']]]],
+        'settings' => ['surface' => 'landing', 'custom_css' => $css],
+        'permissions' => ['roles' => [['id' => 'rol_'.strtolower((string) Str::ulid()), 'slug' => 'admin', 'name' => 'Admin']]],
+    ];
+    app(AppManifestService::class)->createVersion($this->testApp, $manifest, $this->user, 'landing');
+
+    $this->actingAs($this->user)
+        ->postJson("/apps/{$this->testApp->id}/builder/blocks/style/reset", [
+            'block_id' => $aId,
+            'edit_id' => 'spe_hero1',
+            'content' => '<section class="lp"><h1>Hola</h1></section>',
+        ])->assertOk();
+
+    $manifest = app(AppManifestService::class)->getActiveManifest($this->testApp->fresh());
+    // Override gone, region gone, base css kept — and NOT resurrected by the rail.
+    expect($manifest['settings']['custom_css'])->toBe('.lp{color:#000}')
+        ->and($manifest['pages'][0]['blocks'][0]['content'])->not->toContain('data-sp-edit-id');
+});
+
 it('fine tune content edit refuses a non-html block', function () {
     app(AppManifestService::class)->createVersion($this->testApp, manualDashManifest($this->testApp->id), $this->user);
 
