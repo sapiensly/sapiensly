@@ -77,6 +77,9 @@ import BuilderPlanCard, {
 } from '@/components/apps/builder/BuilderPlanCard.vue';
 import CopyButton from '@/components/chat/CopyButton.vue';
 import {
+    AlignCenter,
+    AlignLeft,
+    AlignRight,
     ArrowDown,
     ArrowLeft,
     ArrowUp,
@@ -102,6 +105,7 @@ import {
     Maximize2,
     Minimize2,
     MoreVertical,
+    Minus,
     MousePointerClick,
     Palette,
     PanelLeftClose,
@@ -590,6 +594,7 @@ const drawerOpen = computed(
 const leftPanelHidden = ref(false);
 watch(panelMode, (mode) => {
     selectedBlockId.value = null;
+    clearStyleTarget();
     leftPanelHidden.value = mode === 'manual';
 });
 // Showing the add-chart panel deselects the card (closes the right drawer)…
@@ -675,6 +680,10 @@ const manualSelectionCss = computed(() => {
     parts.push(
         '.sp-editing-text{outline:2px solid #22c55e;outline-offset:2px;border-radius:4px;cursor:text;}',
     );
+    // The element selected for styling (Fase 2).
+    parts.push(
+        '.sp-style-target{outline:2px dashed #22c55e;outline-offset:2px;}',
+    );
     return parts.join('');
 });
 function onManualPreviewClick(e: MouseEvent) {
@@ -686,6 +695,19 @@ function onManualPreviewClick(e: MouseEvent) {
     e.preventDefault();
     e.stopPropagation();
     selectedBlockId.value = el.dataset.blockId ?? null;
+    // On a landing, also pick the exact element clicked as the style target
+    // (skip the runtime's injected canvas and the boxless html wrapper).
+    if (previewIsLanding.value) {
+        const clicked = e.target as HTMLElement;
+        const tag = clicked?.tagName?.toLowerCase();
+        if (
+            clicked instanceof HTMLElement &&
+            tag !== 'canvas' &&
+            !clicked.classList.contains('sp-html-block')
+        ) {
+            selectStyleTarget(clicked);
+        }
+    }
 }
 function afterManualChange() {
     router.reload({ only: ['preview', 'previewBlockData', 'manifest'] });
@@ -2117,6 +2139,131 @@ async function commitTextEdit() {
     }
     afterManualChange();
 }
+
+// ---- Landing fine-tune: per-element STYLE overrides (Fase 2) ---------------
+// Clicking an element selects it for styling; the style bar writes override rules
+// keyed by a lazily-assigned data-sp-edit-id anchor (persisted into the block
+// content on first style) — the author's base CSS is never touched.
+const styleTargetEl = ref<HTMLElement | null>(null);
+const styleTargetId = ref<string | null>(null);
+const styleBusy = ref(false);
+const styleValues = ref({
+    color: '#000000',
+    fontSizePx: 16,
+    fontWeight: '400',
+    textAlign: 'left',
+});
+
+function rgbToHex(rgb: string): string {
+    const m = rgb.match(/\d+/g);
+    if (!m || m.length < 3) return '#000000';
+    return (
+        '#' +
+        m
+            .slice(0, 3)
+            .map((n) => Number(n).toString(16).padStart(2, '0'))
+            .join('')
+    );
+}
+function readStyleValues(el: HTMLElement) {
+    const cs = getComputedStyle(el);
+    const w = cs.fontWeight;
+    styleValues.value = {
+        color: rgbToHex(cs.color),
+        fontSizePx: Math.round(parseFloat(cs.fontSize) || 16),
+        fontWeight:
+            w === 'normal'
+                ? '400'
+                : w === 'bold'
+                  ? '700'
+                  : String(parseInt(w) || 400),
+        textAlign: ['left', 'center', 'right', 'justify'].includes(cs.textAlign)
+            ? cs.textAlign
+            : 'left',
+    };
+}
+function selectStyleTarget(el: HTMLElement) {
+    styleTargetEl.value?.classList.remove('sp-style-target');
+    styleTargetEl.value = el;
+    styleTargetId.value = el.getAttribute('data-sp-edit-id');
+    el.classList.add('sp-style-target');
+    readStyleValues(el);
+}
+function clearStyleTarget() {
+    styleTargetEl.value?.classList.remove('sp-style-target');
+    styleTargetEl.value = null;
+    styleTargetId.value = null;
+}
+function ensureStyleAnchor(
+    el: HTMLElement,
+    blockId: string,
+    section: Element,
+): { editId: string; content?: string } {
+    const existing = el.getAttribute('data-sp-edit-id');
+    if (existing) return { editId: existing };
+    const editId = 'spe_' + Math.random().toString(36).slice(2, 10);
+    el.setAttribute('data-sp-edit-id', editId);
+    // Inject the same anchor into the STORED content string so the override rule
+    // has something to match (located by tag + ordinal within the section).
+    const stored = landingBlockContent(blockId);
+    if (stored == null) return { editId };
+    const tag = el.tagName.toLowerCase();
+    const ordinal = Math.max(0, [...section.querySelectorAll(tag)].indexOf(el));
+    const doc = new DOMParser().parseFromString(stored, 'text/html');
+    const cand = [...doc.body.querySelectorAll(tag)][ordinal];
+    if (!cand) return { editId };
+    cand.setAttribute('data-sp-edit-id', editId);
+    return { editId, content: doc.body.innerHTML };
+}
+async function applyElementStyle(styles: Record<string, string>) {
+    const el = styleTargetEl.value;
+    if (!el || styleBusy.value) return;
+    const section = el.closest('[data-block-id]');
+    if (!(section instanceof HTMLElement)) return;
+    const blockId = section.dataset.blockId ?? '';
+    styleBusy.value = true;
+    try {
+        const { editId, content } = ensureStyleAnchor(el, blockId, section);
+        styleTargetId.value = editId;
+        await axios.post(`/apps/${props.app.id}/builder/blocks/style`, {
+            block_id: blockId,
+            edit_id: editId,
+            styles,
+            ...(content ? { content } : {}),
+        });
+        afterManualChange();
+    } catch {
+        toast.error(t('apps.builder.section_action_failed'));
+    } finally {
+        styleBusy.value = false;
+    }
+}
+function stepFontSize(delta: number) {
+    const next = Math.min(
+        160,
+        Math.max(8, (styleValues.value.fontSizePx || 16) + delta),
+    );
+    applyElementStyle({ font_size: `${next}px` });
+}
+// Re-resolve the styled element after a preview reload so the style bar persists.
+watch(
+    () => props.preview,
+    () => {
+        if (!styleTargetId.value) return;
+        nextTick(() =>
+            setTimeout(() => {
+                const el = previewPane.value?.querySelector(
+                    `[data-sp-edit-id="${styleTargetId.value}"]`,
+                );
+                if (el instanceof HTMLElement) {
+                    styleTargetEl.value = el;
+                    el.classList.add('sp-style-target');
+                    readStyleValues(el);
+                }
+            }, 120),
+        );
+    },
+);
 // Publish / unpublish the landing from the header. Same gate + global slug
 // minting as the MCP tool (shared LandingPublisher server-side). The live URL
 // chip reflects the CURRENT state without a reload.
@@ -4913,11 +5060,131 @@ function statusTone(status: Message['status']): string {
                             v-if="
                                 previewIsLanding &&
                                 panelMode === 'manual' &&
-                                !textEditing
+                                !textEditing &&
+                                !styleTargetEl
                             "
                             class="pointer-events-none fixed bottom-6 left-1/2 z-[60] -translate-x-1/2 rounded-pill bg-navy-elevated/90 px-3 py-1 text-[11px] text-ink-muted shadow-lg backdrop-blur"
                         >
                             {{ t('apps.builder.fine_tune_hint') }}
+                        </div>
+
+                        <!-- Fase 2: per-element style bar for the selected element. -->
+                        <div
+                            v-if="
+                                previewIsLanding &&
+                                panelMode === 'manual' &&
+                                styleTargetEl &&
+                                !textEditing
+                            "
+                            class="fixed bottom-5 left-1/2 z-[60] flex -translate-x-1/2 items-center gap-3 rounded-pill border border-medium bg-navy-elevated px-3 py-2 text-xs text-ink shadow-xl"
+                        >
+                            <span
+                                class="font-mono text-[10px] tracking-wider text-ink-subtle uppercase"
+                                >{{
+                                    styleTargetEl.tagName.toLowerCase()
+                                }}</span
+                            >
+                            <label
+                                class="flex items-center gap-1.5"
+                                :title="t('apps.builder.style_color')"
+                            >
+                                <Palette class="size-3.5 text-ink-muted" />
+                                <input
+                                    type="color"
+                                    :value="styleValues.color"
+                                    @change="
+                                        applyElementStyle({
+                                            color: (
+                                                $event.target as HTMLInputElement
+                                            ).value,
+                                        })
+                                    "
+                                    class="h-5 w-6 cursor-pointer rounded border border-medium bg-transparent p-0"
+                                />
+                            </label>
+                            <span class="h-4 w-px bg-white/15" />
+                            <div
+                                class="flex items-center gap-1"
+                                :title="t('apps.builder.style_size')"
+                            >
+                                <button
+                                    type="button"
+                                    :disabled="styleBusy"
+                                    @click="stepFontSize(-2)"
+                                    class="flex size-6 items-center justify-center rounded-full text-ink-muted hover:bg-white/10 hover:text-ink disabled:opacity-40"
+                                >
+                                    <Minus class="size-3.5" />
+                                </button>
+                                <span
+                                    class="w-10 text-center font-mono tabular-nums"
+                                    >{{ styleValues.fontSizePx }}px</span
+                                >
+                                <button
+                                    type="button"
+                                    :disabled="styleBusy"
+                                    @click="stepFontSize(2)"
+                                    class="flex size-6 items-center justify-center rounded-full text-ink-muted hover:bg-white/10 hover:text-ink disabled:opacity-40"
+                                >
+                                    <Plus class="size-3.5" />
+                                </button>
+                            </div>
+                            <span class="h-4 w-px bg-white/15" />
+                            <select
+                                :value="styleValues.fontWeight"
+                                @change="
+                                    applyElementStyle({
+                                        font_weight: (
+                                            $event.target as HTMLSelectElement
+                                        ).value,
+                                    })
+                                "
+                                :title="t('apps.builder.style_weight')"
+                                class="rounded border border-medium bg-surface px-1.5 py-0.5 text-xs text-ink"
+                            >
+                                <option value="400">400</option>
+                                <option value="500">500</option>
+                                <option value="600">600</option>
+                                <option value="700">700</option>
+                                <option value="800">800</option>
+                            </select>
+                            <span class="h-4 w-px bg-white/15" />
+                            <div
+                                class="flex items-center gap-0.5"
+                                :title="t('apps.builder.style_align')"
+                            >
+                                <button
+                                    v-for="a in ['left', 'center', 'right'] as const"
+                                    :key="a"
+                                    type="button"
+                                    :disabled="styleBusy"
+                                    @click="applyElementStyle({ text_align: a })"
+                                    :class="[
+                                        'flex size-6 items-center justify-center rounded-full',
+                                        styleValues.textAlign === a
+                                            ? 'bg-accent-blue/15 text-accent-blue'
+                                            : 'text-ink-muted hover:bg-white/10 hover:text-ink',
+                                    ]"
+                                >
+                                    <AlignLeft
+                                        v-if="a === 'left'"
+                                        class="size-3.5"
+                                    />
+                                    <AlignCenter
+                                        v-else-if="a === 'center'"
+                                        class="size-3.5"
+                                    />
+                                    <AlignRight v-else class="size-3.5" />
+                                </button>
+                            </div>
+                            <span class="h-4 w-px bg-white/15" />
+                            <button
+                                type="button"
+                                @click="clearStyleTarget"
+                                :title="t('apps.builder.style_done')"
+                                class="flex size-6 items-center justify-center rounded-full text-ink-muted hover:bg-white/10 hover:text-ink"
+                            >
+                                <X class="size-3.5" />
+                            </button>
                         </div>
 
                         <!-- Resize handles on the selected card (dashboard grid

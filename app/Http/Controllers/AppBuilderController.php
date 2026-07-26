@@ -40,6 +40,7 @@ use App\Services\Storage\TenantStorage;
 use App\Support\Apps\AppNaming;
 use App\Support\Branding\ColorPalette;
 use App\Support\Branding\OrganizationBrand;
+use App\Support\Builder\FineTuneStyles;
 use App\Support\Css\ScopedAppCss;
 use App\Support\Manifest\PageNavigation;
 use App\Support\Storage\TenantPath;
@@ -1736,6 +1737,67 @@ class AppBuilderController extends Controller
                 $request->user(),
                 'Ajuste fino: edité el texto de una sección',
             );
+        } catch (InvalidManifestException $e) {
+            return response()->json(['error' => 'invalid_manifest', 'errors' => $e->result->errorsArray()], 422);
+        }
+
+        return response()->json(['ok' => true, 'version' => $version->version_number]);
+    }
+
+    /**
+     * Fine-tune: per-element STYLE override. Writes a rule keyed by the element's
+     * data-sp-edit-id anchor into the managed region of settings.custom_css (never
+     * the author's own rules — the cascade favours the later region), and, on the
+     * FIRST style of an element, banks the content with the anchor injected (sent
+     * by the client). Style values pass the FineTuneStyles whitelist — the trust
+     * boundary, since they land in the stylesheet. Versioned like every edit.
+     */
+    public function styleElement(Request $request, App $app): JsonResponse
+    {
+        $this->assertCanAccess($request, $app);
+
+        $data = $request->validate([
+            'block_id' => ['required', 'string'],
+            'edit_id' => ['required', 'string'],
+            'styles' => ['required', 'array'],
+            // Present only when the anchor was just injected into the content.
+            'content' => ['sometimes', 'nullable', 'string', 'max:60000'],
+        ]);
+
+        try {
+            $decls = FineTuneStyles::sanitize($data['styles']);
+        } catch (\InvalidArgumentException $e) {
+            return response()->json(['error' => 'invalid_style', 'message' => $e->getMessage()], 422);
+        }
+
+        $manifest = $this->manifestService->getActiveManifest($app);
+        if (! is_array($manifest)) {
+            abort(404, 'App has no active manifest yet.');
+        }
+
+        $found = $this->findBlockPath($manifest, $data['block_id']);
+        if ($found === null) {
+            return response()->json(['error' => 'not_found', 'message' => 'Ese bloque ya no existe en el manifiesto.'], 404);
+        }
+        [$pointer, $block] = $found;
+        if (($block['type'] ?? null) !== 'html') {
+            return response()->json(['error' => 'not_html', 'message' => 'Solo una sección html tiene elementos con estilo editable.'], 422);
+        }
+
+        try {
+            $newCss = FineTuneStyles::upsert($manifest['settings']['custom_css'] ?? null, $data['edit_id'], $decls);
+        } catch (\InvalidArgumentException $e) {
+            return response()->json(['error' => 'invalid_style', 'message' => $e->getMessage()], 422);
+        }
+
+        $ops = [];
+        if (! empty($data['content'])) {
+            $ops[] = ['op' => 'add', 'path' => $pointer.'/content', 'value' => $data['content']];
+        }
+        $ops[] = ['op' => 'add', 'path' => '/settings/custom_css', 'value' => $newCss];
+
+        try {
+            $version = $this->manifestService->applyPatch($app, $ops, $request->user(), 'Ajuste fino: estilo de un elemento');
         } catch (InvalidManifestException $e) {
             return response()->json(['error' => 'invalid_manifest', 'errors' => $e->result->errorsArray()], 422);
         }

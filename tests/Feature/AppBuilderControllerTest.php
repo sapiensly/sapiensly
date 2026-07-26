@@ -1521,6 +1521,61 @@ it('fine tune sets a landing section content in place (text edit)', function () 
         ->and($block['content'])->not->toContain('>Hola<');
 });
 
+it('fine tune styles an element via override css keyed by its anchor', function () {
+    $aId = 'htm_'.strtolower((string) Str::ulid());
+    $manifest = [
+        'schema_version' => '1.0.0',
+        'id' => $this->testApp->id,
+        'slug' => 'lp_style',
+        'name' => 'LP',
+        'version' => 1,
+        'objects' => [],
+        'pages' => [[
+            'id' => 'pag_'.strtolower((string) Str::ulid()),
+            'slug' => 'home', 'name' => 'Home', 'path' => '/',
+            'blocks' => [
+                ['id' => $aId, 'type' => 'html', 'content' => '<section class="a"><h1>Hola</h1></section>'],
+            ],
+        ]],
+        'settings' => ['surface' => 'landing', 'custom_css' => '.a{padding:2rem}'],
+        'permissions' => ['roles' => [['id' => 'rol_'.strtolower((string) Str::ulid()), 'slug' => 'admin', 'name' => 'Admin']]],
+    ];
+    app(AppManifestService::class)->createVersion($this->testApp, $manifest, $this->user, 'landing');
+
+    // First style of the element: the client sends the content with the anchor injected.
+    $this->actingAs($this->user)
+        ->postJson("/apps/{$this->testApp->id}/builder/blocks/style", [
+            'block_id' => $aId,
+            'edit_id' => 'spe_hero01',
+            'styles' => ['color' => '#00d67f', 'font_size' => '3rem', 'text_align' => 'center'],
+            'content' => '<section class="a"><h1 data-sp-edit-id="spe_hero01">Hola</h1></section>',
+        ])->assertOk();
+
+    $manifest = app(AppManifestService::class)->getActiveManifest($this->testApp->fresh());
+    expect($manifest['settings']['custom_css'])
+        ->toContain('.a{padding:2rem}')                                   // base css untouched
+        ->toContain('[data-sp-edit-id="spe_hero01"]{color:#00d67f;font-size:3rem;text-align:center}')
+        ->and($manifest['pages'][0]['blocks'][0]['content'])->toContain('data-sp-edit-id="spe_hero01"');
+});
+
+it('fine tune style rejects an invalid declaration value', function () {
+    $aId = 'htm_'.strtolower((string) Str::ulid());
+    $manifest = [
+        'schema_version' => '1.0.0', 'id' => $this->testApp->id, 'slug' => 'lp_style2', 'name' => 'LP', 'version' => 1,
+        'objects' => [],
+        'pages' => [['id' => 'pag_'.strtolower((string) Str::ulid()), 'slug' => 'home', 'name' => 'Home', 'path' => '/',
+            'blocks' => [['id' => $aId, 'type' => 'html', 'content' => '<section><h1>x</h1></section>']]]],
+        'settings' => ['surface' => 'landing'],
+        'permissions' => ['roles' => [['id' => 'rol_'.strtolower((string) Str::ulid()), 'slug' => 'admin', 'name' => 'Admin']]],
+    ];
+    app(AppManifestService::class)->createVersion($this->testApp, $manifest, $this->user, 'landing');
+
+    $this->actingAs($this->user)
+        ->postJson("/apps/{$this->testApp->id}/builder/blocks/style", [
+            'block_id' => $aId, 'edit_id' => 'spe_x1', 'styles' => ['color' => 'red;}body{display:none}'],
+        ])->assertStatus(422);
+});
+
 it('fine tune content edit refuses a non-html block', function () {
     app(AppManifestService::class)->createVersion($this->testApp, manualDashManifest($this->testApp->id), $this->user);
 
