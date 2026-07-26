@@ -6,6 +6,7 @@ use App\Enums\AppKind;
 use App\Models\App;
 use App\Models\AppVersion;
 use App\Models\User;
+use App\Support\Builder\FineTuneStyles;
 use App\Support\Html\LandingHtmlSanitizer;
 use App\Support\Locale\PromptLanguage;
 use Illuminate\Contracts\Cache\Repository as CacheRepository;
@@ -138,6 +139,21 @@ class AppManifestService
      */
     public function createVersion(App $app, array $manifest, ?User $user = null, ?string $summary = null): AppVersion
     {
+        // Deterministic AI⇄manual rail: preserve the managed fine-tune override
+        // region (manual per-element styles) across EVERY save and keep it last,
+        // so an AI turn can neither nuke nor out-cascade the user's hand edits.
+        // No-op when neither the previous nor the new css carries the region.
+        $previousCss = data_get($this->getActiveManifest($app), 'settings.custom_css');
+        if (isset($manifest['settings']) && is_array($manifest['settings'])) {
+            $manifest['settings']['custom_css'] = FineTuneStyles::preserve(
+                is_string($previousCss) ? $previousCss : null,
+                (string) ($manifest['settings']['custom_css'] ?? ''),
+            );
+            if ($manifest['settings']['custom_css'] === '') {
+                unset($manifest['settings']['custom_css']);
+            }
+        }
+
         // Sanitise bespoke `html`-block markup before it is validated or stored,
         // so the persisted manifest (what the runtime renders) can never carry a
         // <script>, an event handler or an inline style — the trust boundary

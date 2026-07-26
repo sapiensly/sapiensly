@@ -109,18 +109,65 @@ class FineTuneStyles
     }
 
     /**
-     * Split a stylesheet into [css-before-the-region, editId => declarations map].
+     * Preserve the managed fine-tune region across ANY manifest save, and keep it
+     * LAST so manual overrides always win the cascade. Runs on every version:
+     *
+     *  - A MANUAL turn's css carries the region → it wins (latest manual state).
+     *  - An AI turn dropped it (a rare full replace) → restore it from the
+     *    previous version, so manual style overrides are never nuked.
+     *  - An AI turn appended rules AFTER it → we strip it from the body and
+     *    re-append it at the very end, so the AI can never out-cascade a manual
+     *    override.
+     *
+     * A no-op when neither stylesheet has a region (every non-landing / un-tuned
+     * landing save).
+     */
+    public static function preserve(?string $prevCss, string $newCss): string
+    {
+        $region = self::extractRegion($newCss) ?? self::extractRegion($prevCss ?? '');
+        if ($region === null) {
+            return $newCss;
+        }
+        $body = rtrim(self::stripRegion($newCss));
+
+        return ($body === '' ? '' : $body."\n\n").$region;
+    }
+
+    /** The managed region incl. its markers, or null when absent. */
+    private static function extractRegion(string $css): ?string
+    {
+        $start = strpos($css, self::REGION_START);
+        if ($start === false) {
+            return null;
+        }
+        $end = strpos($css, self::REGION_END, $start);
+        if ($end === false) {
+            return null;
+        }
+
+        return substr($css, $start, $end - $start + strlen(self::REGION_END));
+    }
+
+    /** The stylesheet with the managed region removed (wherever it sits). */
+    private static function stripRegion(string $css): string
+    {
+        $region = self::extractRegion($css);
+
+        return $region === null ? $css : str_replace($region, '', $css);
+    }
+
+    /**
+     * Split a stylesheet into [css-without-the-region, editId => declarations map].
      *
      * @return array{0: string, 1: array<string, array<string, string>>}
      */
     private static function split(string $css): array
     {
-        $start = strpos($css, self::REGION_START);
-        if ($start === false) {
+        $region = self::extractRegion($css);
+        if ($region === null) {
             return [rtrim($css), []];
         }
-        $base = rtrim(substr($css, 0, $start));
-        $region = substr($css, $start);
+        $base = rtrim(self::stripRegion($css));
 
         $rules = [];
         if (preg_match_all('/\[data-sp-edit-id="([^"\]]+)"\]\s*\{([^}]*)\}/', $region, $matches, PREG_SET_ORDER)) {

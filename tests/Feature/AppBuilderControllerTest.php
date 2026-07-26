@@ -13,6 +13,7 @@ use App\Services\Apps\AppNamer;
 use App\Services\Builder\BuilderAiService;
 use App\Services\Manifest\AppManifestService;
 use App\Support\Branding\ColorPalette;
+use App\Support\Builder\FineTuneStyles;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\Http;
@@ -1574,6 +1575,27 @@ it('fine tune style rejects an invalid declaration value', function () {
         ->postJson("/apps/{$this->testApp->id}/builder/blocks/style", [
             'block_id' => $aId, 'edit_id' => 'spe_x1', 'styles' => ['color' => 'red;}body{display:none}'],
         ])->assertStatus(422);
+});
+
+it('preserves the fine-tune override region when a later version drops it (AI turn)', function () {
+    $cssWithRegion = FineTuneStyles::upsert('.lp{color:#000}', 'spe_hero1', ['color' => '#00d67f']);
+    $base = [
+        'schema_version' => '1.0.0', 'id' => $this->testApp->id, 'slug' => 'lp_pre', 'name' => 'LP', 'version' => 1,
+        'objects' => [],
+        'pages' => [['id' => 'pag_'.strtolower((string) Str::ulid()), 'slug' => 'home', 'name' => 'Home', 'path' => '/',
+            'blocks' => [['id' => 'htm_'.strtolower((string) Str::ulid()), 'type' => 'html', 'content' => '<section><h1>x</h1></section>']]]],
+        'permissions' => ['roles' => [['id' => 'rol_'.strtolower((string) Str::ulid()), 'slug' => 'admin', 'name' => 'Admin']]],
+    ];
+    // v1 carries a manual override region.
+    app(AppManifestService::class)->createVersion($this->testApp, $base + ['settings' => ['surface' => 'landing', 'custom_css' => $cssWithRegion]], $this->user);
+
+    // v2 (an AI turn) rewrites custom_css WITHOUT the region.
+    app(AppManifestService::class)->createVersion($this->testApp->fresh(), $base + ['settings' => ['surface' => 'landing', 'custom_css' => '.lp{color:red}']], $this->user);
+
+    $css = app(AppManifestService::class)->getActiveManifest($this->testApp->fresh())['settings']['custom_css'];
+    expect($css)->toContain('.lp{color:red}')                                  // the AI's change kept
+        ->toContain('[data-sp-edit-id="spe_hero1"]{color:#00d67f}')            // the manual override survived
+        ->and(rtrim($css))->toEndWith(FineTuneStyles::REGION_END);
 });
 
 it('fine tune content edit refuses a non-html block', function () {
