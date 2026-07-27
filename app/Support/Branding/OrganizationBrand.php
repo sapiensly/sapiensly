@@ -25,6 +25,8 @@ final class OrganizationBrand
     public function __construct(
         public readonly ?string $logoUrl = null,
         public readonly ?string $iconUrl = null,
+        public readonly ?string $logoDarkUrl = null,
+        public readonly ?string $iconDarkUrl = null,
         public readonly ?string $accentColor = null,
         public readonly ?string $logoBgColor = null,
         public readonly ?string $font = null,
@@ -41,6 +43,8 @@ final class OrganizationBrand
         return new self(
             logoUrl: self::str($data['logo_url'] ?? null),
             iconUrl: self::str($data['icon_url'] ?? null),
+            logoDarkUrl: self::str($data['logo_dark_url'] ?? null),
+            iconDarkUrl: self::str($data['icon_dark_url'] ?? null),
             accentColor: self::hex($data['accent_color'] ?? null),
             logoBgColor: self::hex($data['logo_bg_color'] ?? null),
             font: in_array($data['font'] ?? null, self::FONTS, true) ? $data['font'] : null,
@@ -59,6 +63,8 @@ final class OrganizationBrand
         return [
             'logo_url' => $this->logoUrl,
             'icon_url' => $this->iconUrl,
+            'logo_dark_url' => $this->logoDarkUrl,
+            'icon_dark_url' => $this->iconDarkUrl,
             'accent_color' => $this->accentColor,
             'logo_bg_color' => $this->logoBgColor,
             'font' => $this->font,
@@ -75,6 +81,23 @@ final class OrganizationBrand
     public function effectiveAccent(): string
     {
         return $this->accentColor ?? self::DEFAULT_ACCENT;
+    }
+
+    /**
+     * The wide logo for a surface rendered in `$theme`. A dark surface prefers the
+     * dark variant and falls back to the base (light) logo when the variant is
+     * unset — so defining only a light logo still works on dark. Light always uses
+     * the base logo. Mirrors the client-side switch in SiteHeader/SiteSidebar.
+     */
+    public function logoFor(?string $theme): ?string
+    {
+        return $theme === 'dark' ? ($this->logoDarkUrl ?? $this->logoUrl) : $this->logoUrl;
+    }
+
+    /** The square icon for a surface rendered in `$theme`; same fallback as {@see logoFor}. */
+    public function iconFor(?string $theme): ?string
+    {
+        return $theme === 'dark' ? ($this->iconDarkUrl ?? $this->iconUrl) : $this->iconUrl;
     }
 
     /**
@@ -96,16 +119,25 @@ final class OrganizationBrand
         if ($this->theme !== null && empty($settings['theme'])) {
             $settings['theme'] = $this->theme;
         }
-        if ($this->logoUrl !== null || $this->logoBgColor !== null || $this->iconUrl !== null) {
+        if ($this->logoUrl !== null || $this->logoDarkUrl !== null || $this->logoBgColor !== null || $this->iconUrl !== null || $this->iconDarkUrl !== null) {
             $brand = $settings['brand'] ?? [];
+            // Both variants flow through; the runtime (SiteHeader/SiteSidebar) picks
+            // by the active theme and falls back to the base logo when a variant is
+            // unset. Each is fill-the-gaps so a per-app override still wins.
             if ($this->logoUrl !== null && empty($brand['logo'])) {
                 $brand['logo'] = $this->logoUrl;
+            }
+            if ($this->logoDarkUrl !== null && empty($brand['logo_dark'])) {
+                $brand['logo_dark'] = $this->logoDarkUrl;
             }
             if ($this->logoBgColor !== null && empty($brand['header_bg'])) {
                 $brand['header_bg'] = $this->logoBgColor;
             }
             if ($this->iconUrl !== null && empty($brand['icon'])) {
                 $brand['icon'] = $this->iconUrl;
+            }
+            if ($this->iconDarkUrl !== null && empty($brand['icon_dark'])) {
+                $brand['icon_dark'] = $this->iconDarkUrl;
             }
             $settings['brand'] = $brand;
         }
@@ -136,7 +168,10 @@ final class OrganizationBrand
         };
 
         $fill('primary_color', $this->accentColor);
-        $fill('logo_url', $this->logoUrl);
+        // The widget has no light/dark toggle — its surface IS its background_color,
+        // so the right logo is decided once by whether that background is dark.
+        $bg = $appearance['background_color'] ?? ($defaults['background_color'] ?? null);
+        $fill('logo_url', $this->logoFor(self::isDarkHex($bg) ? 'dark' : 'light'));
 
         return $appearance;
     }
@@ -149,5 +184,23 @@ final class OrganizationBrand
     private static function hex(mixed $value): ?string
     {
         return is_string($value) && preg_match('/^#[0-9A-Fa-f]{6}$/', $value) ? $value : null;
+    }
+
+    /**
+     * Whether a #RRGGBB colour reads as dark (relative luminance below the
+     * midpoint), so a surface painted with it should use the dark logo variant.
+     * A non-hex/unknown value is treated as light (the default surface).
+     */
+    public static function isDarkHex(?string $hex): bool
+    {
+        $hex = self::hex($hex);
+        if ($hex === null) {
+            return false;
+        }
+        $r = hexdec(substr($hex, 1, 2));
+        $g = hexdec(substr($hex, 3, 2));
+        $b = hexdec(substr($hex, 5, 2));
+
+        return (0.299 * $r + 0.587 * $g + 0.114 * $b) / 255 < 0.5;
     }
 }

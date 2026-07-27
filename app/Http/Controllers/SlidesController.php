@@ -105,6 +105,7 @@ class SlidesController extends Controller
             'brand' => [
                 'accent' => $brand?->effectiveAccent(),
                 'logo_url' => $brand?->logoUrl,
+                'logo_url_dark' => $brand?->logoDarkUrl,
             ],
             'as_of' => $asOf,
         ]);
@@ -224,6 +225,7 @@ class SlidesController extends Controller
             'brand' => [
                 'accent' => $brand?->effectiveAccent(),
                 'logo_url' => $brand?->logoUrl,
+                'logo_url_dark' => $brand?->logoDarkUrl,
             ],
             'messages' => array_values((array) ($deck->metadata['builder_chat'] ?? [])),
             'refresh' => (array) ($deck->metadata['refresh'] ?? []),
@@ -487,7 +489,7 @@ class SlidesController extends Controller
 
             return [
                 ['id' => $deck->id, 'name' => $deck->name, 'manifest' => $manifest],
-                ['accent' => $brand?->effectiveAccent(), 'logo_url' => $brand?->logoUrl],
+                ['accent' => $brand?->effectiveAccent(), 'logo_url' => $brand?->logoUrl, 'logo_url_dark' => $brand?->logoDarkUrl],
                 $asOf,
             ];
         } finally {

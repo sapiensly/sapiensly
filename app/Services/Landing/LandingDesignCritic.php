@@ -154,9 +154,12 @@ class LandingDesignCritic
             return '';
         }
 
-        $logoLine = $brand->logoUrl !== null
-            ? ', and the brand LOGO should appear (nav and/or footer)'
-            : '';
+        $logoLine = '';
+        if ($brand->logoUrl !== null) {
+            $logoLine = $brand->logoDarkUrl !== null
+                ? ', and the brand LOGO should appear (nav and/or footer) — a dark-background logo variant exists, so use the variant that matches each section\'s background'
+                : ', and the brand LOGO should appear (nav and/or footer)';
+        }
 
         return 'BRAND ADHERENCE — this org has a Brandbook ('.implode(', ', $facts).'). '
             ."The landing MUST read as this brand's: build the palette AROUND the brand accent — the accent itself or a deliberate, evident harmony with it, never an unrelated hero colour"

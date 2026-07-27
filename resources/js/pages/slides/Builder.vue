@@ -6,6 +6,7 @@ import SlideInspector from '@/components/slides/SlideInspector.vue';
 import echo from '@/echo';
 import {
     DECK_LAYOUTS,
+    deckLogo,
     deckTheme,
     defaultSlide,
     type DeckBrand,
@@ -86,6 +87,8 @@ const previewSlides = computed(() => resolved.value.slides ?? []);
 const tokens = computed(() =>
     deckTheme(manifest.value.theme, props.brand.accent),
 );
+// Logo resolved for the deck theme (dark theme → dark variant, falls back to base).
+const brandLogo = computed(() => deckLogo(props.brand, manifest.value.theme));
 
 const stageStyle = computed(() => ({
     '--deck-bg': tokens.value.bg,
@@ -793,7 +796,7 @@ async function shareDeck() {
                                 :slide="previewSlides[selected]"
                                 :position="selected + 1"
                                 :tokens="tokens"
-                                :logo-url="brand.logo_url"
+                                :logo-url="brandLogo"
                             />
                         </div>
                     </div>
@@ -857,7 +860,7 @@ async function shareDeck() {
                                 :slide="slide"
                                 :position="i + 1"
                                 :tokens="tokens"
-                                :logo-url="brand.logo_url"
+                                :logo-url="brandLogo"
                                 :print-mode="true"
                             />
                         </div>

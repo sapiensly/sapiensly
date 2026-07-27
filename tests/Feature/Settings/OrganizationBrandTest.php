@@ -92,6 +92,22 @@ it('lets an org owner save the brandbook (normalized)', function () {
         ->and($brand->logoUrl)->toBe('https://cdn.example.com/logo.png');
 });
 
+it('saves the dark-surface logo/icon variants', function () {
+    $this->actingAs($this->owner)
+        ->put('/settings/organization/brand', [
+            'logo_url' => 'https://cdn.example.com/logo.png',
+            'logo_dark_url' => 'https://cdn.example.com/logo-dark.png',
+            'icon_dark_url' => 'https://cdn.example.com/icon-dark.png',
+        ])
+        ->assertRedirect()
+        ->assertSessionHasNoErrors();
+
+    $brand = $this->org->refresh()->brandbook();
+    expect($brand->logoDarkUrl)->toBe('https://cdn.example.com/logo-dark.png')
+        ->and($brand->iconDarkUrl)->toBe('https://cdn.example.com/icon-dark.png')
+        ->and($brand->logoFor('dark'))->toBe('https://cdn.example.com/logo-dark.png');
+});
+
 it('rejects an invalid colour', function () {
     $this->actingAs($this->owner)
         ->put('/settings/organization/brand', ['accent_color' => 'blue'])
@@ -135,6 +151,21 @@ it('uploads a logo asset to the tenant cloud disk (not local) and returns a serv
 
     // The returned url is the public serve route for this org's asset.
     expect($response->json('url'))->toContain("brand-asset/{$this->org->id}/logo-");
+});
+
+it('uploads a dark-variant logo asset under its own kind', function () {
+    fakeCloudStorage();
+
+    $response = $this->actingAs($this->owner)
+        ->postJson('/settings/organization/brand/asset', [
+            'kind' => 'logo_dark',
+            'file' => UploadedFile::fake()->image('logo-dark.png', 200, 80),
+        ])
+        ->assertOk()
+        ->assertJsonPath('kind', 'logo_dark')
+        ->assertJsonStructure(['url']);
+
+    expect($response->json('url'))->toContain("brand-asset/{$this->org->id}/logo_dark-");
 });
 
 it('refuses the upload with 503 when no object storage is configured', function () {

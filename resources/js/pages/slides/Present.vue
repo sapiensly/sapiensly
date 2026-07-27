@@ -2,7 +2,12 @@
 import * as DocumentController from '@/actions/App/Http/Controllers/DocumentController';
 import * as SlidesController from '@/actions/App/Http/Controllers/SlidesController';
 import DeckSlide from '@/components/slides/DeckSlide.vue';
-import { deckTheme, type DeckBrand, type DeckManifest } from '@/lib/deck';
+import {
+    deckLogo,
+    deckTheme,
+    type DeckBrand,
+    type DeckManifest,
+} from '@/lib/deck';
 import { Head, router } from '@inertiajs/vue3';
 import {
     Check,
@@ -42,6 +47,10 @@ const DESIGN_H = 720;
 const slides = computed(() => props.deck.manifest.slides ?? []);
 const tokens = computed(() =>
     deckTheme(props.deck.manifest.theme, props.brand.accent),
+);
+// Logo resolved for the deck theme (dark theme → dark variant, falls back to base).
+const brandLogo = computed(() =>
+    deckLogo(props.brand, props.deck.manifest.theme),
 );
 
 const current = ref(0);
@@ -213,7 +222,7 @@ const progress = computed(() =>
                             :slide="slides[current]"
                             :position="current + 1"
                             :tokens="tokens"
-                            :logo-url="brand.logo_url"
+                            :logo-url="brandLogo"
                         />
                     </div>
                 </Transition>
@@ -235,7 +244,7 @@ const progress = computed(() =>
                         :slide="slides[current]"
                         :position="current + 1"
                         :tokens="tokens"
-                        :logo-url="brand.logo_url"
+                        :logo-url="brandLogo"
                     />
                 </div>
             </div>
@@ -257,7 +266,7 @@ const progress = computed(() =>
                                 :slide="slides[current + 1]"
                                 :position="current + 2"
                                 :tokens="tokens"
-                                :logo-url="brand.logo_url"
+                                :logo-url="brandLogo"
                                 :print-mode="true"
                             />
                         </div>

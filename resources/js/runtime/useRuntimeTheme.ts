@@ -1,4 +1,4 @@
-import { inject, type InjectionKey } from 'vue';
+import { inject, onUnmounted, ref, type InjectionKey, type Ref } from 'vue';
 import type { RuntimeTheme } from './types/manifest';
 
 export const ThemeKey: InjectionKey<RuntimeTheme> = Symbol('runtime-theme');
@@ -10,6 +10,33 @@ export const ThemeKey: InjectionKey<RuntimeTheme> = Symbol('runtime-theme');
  */
 export function useRuntimeTheme(): RuntimeTheme {
     return inject(ThemeKey, 'dark');
+}
+
+/**
+ * Reactive "is the current surface rendered dark?" — tracks the ambient `.dark`
+ * class the platform toggles on <html> (via useAppearance), the SAME signal the
+ * token palette flips on, so brand assets switch in lockstep with a live
+ * light/dark toggle. SSR-safe: falls back to the declared runtime theme until the
+ * client mounts and can read the DOM.
+ */
+export function useIsDarkSurface(): Ref<boolean> {
+    const declared = useRuntimeTheme();
+    const isDark = ref(declared === 'dark');
+
+    if (typeof document !== 'undefined') {
+        const sync = () =>
+            (isDark.value =
+                document.documentElement.classList.contains('dark'));
+        sync();
+        const observer = new MutationObserver(sync);
+        observer.observe(document.documentElement, {
+            attributes: true,
+            attributeFilter: ['class'],
+        });
+        onUnmounted(() => observer.disconnect());
+    }
+
+    return isDark;
 }
 
 /**

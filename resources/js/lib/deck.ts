@@ -38,6 +38,8 @@ export interface DeckManifest {
 export interface DeckBrand {
     accent: string | null;
     logo_url: string | null;
+    /** Optional logo variant for dark themes; falls back to logo_url when unset. */
+    logo_url_dark?: string | null;
 }
 
 /**
@@ -102,6 +104,34 @@ export function deckTheme(
     const base = DECK_THEMES[theme ?? 'executive'] ?? DECK_THEMES.executive;
     if (!accent) return base;
     return { ...base, series: [accent, ...base.series.slice(1)] };
+}
+
+/** Whether a #RRGGBB colour reads as dark (relative luminance below the midpoint). */
+function isDarkHex(hex: string): boolean {
+    const c = hex.replace('#', '');
+    if (c.length !== 6) return false;
+    const r = parseInt(c.slice(0, 2), 16);
+    const g = parseInt(c.slice(2, 4), 16);
+    const b = parseInt(c.slice(4, 6), 16);
+    return (0.299 * r + 0.587 * g + 0.114 * b) / 255 < 0.5;
+}
+
+/**
+ * The brand logo to use for a deck's theme: a dark theme (a dark stage
+ * background) prefers the dark variant and falls back to the base logo when it's
+ * unset; a light theme always uses the base logo. Mirrors the server-side
+ * OrganizationBrand::logoFor resolution.
+ */
+export function deckLogo(
+    brand: DeckBrand,
+    theme: string | undefined,
+): string | null {
+    const bg = (DECK_THEMES[theme ?? 'executive'] ?? DECK_THEMES.executive).bg;
+    return (
+        (isDarkHex(bg)
+            ? (brand.logo_url_dark ?? brand.logo_url)
+            : brand.logo_url) ?? null
+    );
 }
 
 export const DECK_LAYOUTS: DeckLayout[] = [

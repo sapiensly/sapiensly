@@ -22,6 +22,8 @@ import { toast } from 'vue-sonner';
 interface Brand {
     logo_url: string | null;
     icon_url: string | null;
+    logo_dark_url: string | null;
+    icon_dark_url: string | null;
     accent_color: string | null;
     logo_bg_color: string | null;
     font: string | null;
@@ -49,6 +51,8 @@ const DEFAULT_ACCENT = '#0096ff';
 const form = useForm({
     logo_url: props.brand.logo_url ?? '',
     icon_url: props.brand.icon_url ?? '',
+    logo_dark_url: props.brand.logo_dark_url ?? '',
+    icon_dark_url: props.brand.icon_dark_url ?? '',
     accent_color: props.brand.accent_color ?? DEFAULT_ACCENT,
     logo_bg_color: props.brand.logo_bg_color ?? '',
     font: props.brand.font ?? '',
@@ -62,10 +66,29 @@ const FONT_STACKS: Record<string, string> = {
     mono: 'ui-monospace, SFMono-Regular, Menlo, monospace',
 };
 
-const uploading = ref<Record<string, boolean>>({ logo: false, icon: false });
+type AssetKind = 'logo' | 'icon' | 'logo_dark' | 'icon_dark';
 
-/** Upload a logo/icon file; on success store the returned URL on the form. */
-async function uploadAsset(kind: 'logo' | 'icon', event: Event): Promise<void> {
+// Maps an upload kind to the form field that holds its URL, so the base and
+// dark-surface variants share one upload path.
+const ASSET_FIELD: Record<
+    AssetKind,
+    'logo_url' | 'icon_url' | 'logo_dark_url' | 'icon_dark_url'
+> = {
+    logo: 'logo_url',
+    icon: 'icon_url',
+    logo_dark: 'logo_dark_url',
+    icon_dark: 'icon_dark_url',
+};
+
+const uploading = ref<Record<AssetKind, boolean>>({
+    logo: false,
+    icon: false,
+    logo_dark: false,
+    icon_dark: false,
+});
+
+/** Upload a logo/icon file (base or dark variant); on success store the returned URL. */
+async function uploadAsset(kind: AssetKind, event: Event): Promise<void> {
     const input = event.target as HTMLInputElement;
     const file = input.files?.[0];
     if (!file) return;
@@ -79,8 +102,8 @@ async function uploadAsset(kind: 'logo' | 'icon', event: Event): Promise<void> {
             '/settings/organization/brand/asset',
             data,
         );
-        if (kind === 'logo') form.logo_url = res.url;
-        else form.icon_url = res.url;
+        (form as unknown as Record<string, unknown>)[ASSET_FIELD[kind]] =
+            res.url;
         toast.success(t('settings.brand.asset_uploaded'));
     } catch {
         toast.error(t('settings.brand.asset_failed'));
@@ -110,6 +133,21 @@ const previewStyle = computed(() => ({
     fontFamily: form.font ? FONT_STACKS[form.font] : 'inherit',
 }));
 const accent = computed(() => form.accent_color || DEFAULT_ACCENT);
+
+// The preview honours the selected default theme: a dark preview shows the dark
+// logo/icon variant, falling back to the base asset when the variant is unset.
+const previewLogo = computed<string>(
+    () =>
+        (form.theme === 'dark'
+            ? form.logo_dark_url || form.logo_url
+            : form.logo_url) || '',
+);
+const previewIcon = computed<string>(
+    () =>
+        (form.theme === 'dark'
+            ? form.icon_dark_url || form.icon_url
+            : form.icon_url) || '',
+);
 
 // The preview header strip adopts the logo bg colour with a readable text colour.
 function readableText(hex: string): string {
@@ -217,14 +255,14 @@ const RAMP_STOPS = ['100', '300', '500', '700', '900'];
                         :style="previewHeaderStyle"
                     >
                         <img
-                            v-if="form.logo_url"
-                            :src="form.logo_url"
+                            v-if="previewLogo"
+                            :src="previewLogo"
                             alt="logo"
                             class="h-6 max-w-[140px] object-contain"
                         />
                         <img
-                            v-else-if="form.icon_url"
-                            :src="form.icon_url"
+                            v-else-if="previewIcon"
+                            :src="previewIcon"
                             alt="icon"
                             class="size-6 rounded object-contain"
                         />
@@ -343,6 +381,112 @@ const RAMP_STOPS = ['100', '300', '500', '700', '900'];
                             </button>
                         </div>
                         <InputError :message="form.errors.icon_url" />
+                    </div>
+                </div>
+
+                <!-- Dark-surface variants. Optional: when unset, dark surfaces
+                     fall back to the base logo/icon above. -->
+                <div class="mt-5 border-t border-soft pt-4">
+                    <p class="text-sm font-medium">
+                        {{ t('settings.brand.dark_variants') }}
+                    </p>
+                    <p class="mt-0.5 text-xs text-ink-muted">
+                        {{ t('settings.brand.dark_variants_hint') }}
+                    </p>
+                    <div class="mt-3 grid gap-4 sm:grid-cols-2">
+                        <div class="space-y-1.5">
+                            <Label>{{ t('settings.brand.logo_dark') }}</Label>
+                            <div class="flex items-center gap-3">
+                                <span
+                                    class="flex size-12 shrink-0 items-center justify-center overflow-hidden rounded-sp-sm border border-soft bg-[#0b1220]"
+                                >
+                                    <img
+                                        v-if="form.logo_dark_url"
+                                        :src="form.logo_dark_url"
+                                        alt="dark logo"
+                                        class="size-full object-contain"
+                                    />
+                                    <ImagePlus
+                                        v-else
+                                        class="size-4 text-white/40"
+                                    />
+                                </span>
+                                <label
+                                    class="inline-flex h-9 shrink-0 cursor-pointer items-center gap-1.5 rounded-xs border border-soft px-3 text-xs text-ink-muted transition-colors hover:bg-surface hover:text-ink"
+                                >
+                                    <Loader2
+                                        v-if="uploading.logo_dark"
+                                        class="size-3.5 animate-spin"
+                                    />
+                                    <ImagePlus v-else class="size-3.5" />
+                                    {{ t('settings.brand.upload') }}
+                                    <input
+                                        type="file"
+                                        accept="image/*"
+                                        class="hidden"
+                                        @change="
+                                            uploadAsset('logo_dark', $event)
+                                        "
+                                    />
+                                </label>
+                                <button
+                                    v-if="form.logo_dark_url"
+                                    type="button"
+                                    class="shrink-0 text-xs text-ink-muted underline-offset-2 hover:text-ink hover:underline"
+                                    @click="form.logo_dark_url = ''"
+                                >
+                                    {{ t('settings.brand.clear') }}
+                                </button>
+                            </div>
+                            <InputError :message="form.errors.logo_dark_url" />
+                        </div>
+
+                        <div class="space-y-1.5">
+                            <Label>{{ t('settings.brand.icon_dark') }}</Label>
+                            <div class="flex items-center gap-3">
+                                <span
+                                    class="flex size-12 shrink-0 items-center justify-center overflow-hidden rounded-sp-sm border border-soft bg-[#0b1220]"
+                                >
+                                    <img
+                                        v-if="form.icon_dark_url"
+                                        :src="form.icon_dark_url"
+                                        alt="dark icon"
+                                        class="size-full object-contain"
+                                    />
+                                    <ImagePlus
+                                        v-else
+                                        class="size-4 text-white/40"
+                                    />
+                                </span>
+                                <label
+                                    class="inline-flex h-9 shrink-0 cursor-pointer items-center gap-1.5 rounded-xs border border-soft px-3 text-xs text-ink-muted transition-colors hover:bg-surface hover:text-ink"
+                                >
+                                    <Loader2
+                                        v-if="uploading.icon_dark"
+                                        class="size-3.5 animate-spin"
+                                    />
+                                    <ImagePlus v-else class="size-3.5" />
+                                    {{ t('settings.brand.upload') }}
+                                    <input
+                                        type="file"
+                                        accept="image/*"
+                                        class="hidden"
+                                        @change="
+                                            uploadAsset('icon_dark', $event)
+                                        "
+                                    />
+                                </label>
+                                <button
+                                    v-if="form.icon_dark_url"
+                                    type="button"
+                                    class="shrink-0 text-xs text-ink-muted underline-offset-2 hover:text-ink hover:underline"
+                                    @click="form.icon_dark_url = ''"
+                                >
+                                    {{ t('settings.brand.clear') }}
+                                </button>
+                            </div>
+                            <InputError :message="form.errors.icon_dark_url" />
+                        </div>
                     </div>
                 </div>
             </SettingsCard>

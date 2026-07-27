@@ -12,14 +12,14 @@ use Laravel\Mcp\Request;
 use Laravel\Mcp\Response;
 use Laravel\Mcp\Server\Attributes\Description;
 
-#[Description("Set the organization's Brandbook (logo, icon, colours, font, theme). Only the fields you pass are changed; pass null to clear one. New apps/chatbots are seeded with this brand and existing surfaces follow it live where they didn't override. Organization owners / sysadmins only.")]
+#[Description("Set the organization's Brandbook (logo, icon, optional dark-surface logo/icon variants, colours, font, theme). Only the fields you pass are changed; pass null to clear one. Dark variants (logo_dark_url/icon_dark_url) are used on dark surfaces and fall back to the base logo/icon when unset. New apps/chatbots are seeded with this brand and existing surfaces follow it live where they didn't override. Organization owners / sysadmins only.")]
 class SetOrganizationBrandTool extends SapiensTool
 {
     // No ability gate; owner/sysadmin-gated below, like the web Brandbook page.
 
     /** Canonical brand fields this tool accepts. */
     private const FIELDS = [
-        'logo_url', 'icon_url', 'accent_color', 'logo_bg_color', 'font', 'theme',
+        'logo_url', 'icon_url', 'logo_dark_url', 'icon_dark_url', 'accent_color', 'logo_bg_color', 'font', 'theme',
     ];
 
     public function handle(Request $request): Response
@@ -37,6 +37,8 @@ class SetOrganizationBrandTool extends SapiensTool
         $validated = $request->validate([
             'logo_url' => ['nullable', 'string', 'max:2000'],
             'icon_url' => ['nullable', 'string', 'max:2000'],
+            'logo_dark_url' => ['nullable', 'string', 'max:2000'],
+            'icon_dark_url' => ['nullable', 'string', 'max:2000'],
             'accent_color' => ['nullable', 'string', 'regex:/^#[0-9A-Fa-f]{6}$/'],
             'logo_bg_color' => ['nullable', 'string', 'regex:/^#[0-9A-Fa-f]{6}$/'],
             'font' => ['nullable', Rule::in(OrganizationBrand::FONTS)],
@@ -67,8 +69,10 @@ class SetOrganizationBrandTool extends SapiensTool
     public function schema(JsonSchema $schema): array
     {
         return [
-            'logo_url' => $schema->string()->description('Wide logo image URL (header). Pass null to clear.'),
-            'icon_url' => $schema->string()->description('Square icon image URL. Pass null to clear.'),
+            'logo_url' => $schema->string()->description('Wide logo image URL (header), used on LIGHT surfaces. Pass null to clear.'),
+            'icon_url' => $schema->string()->description('Square icon image URL, used on LIGHT surfaces. Pass null to clear.'),
+            'logo_dark_url' => $schema->string()->description('Optional wide logo variant for DARK surfaces (a light-ink logo for dark backgrounds). Falls back to logo_url when unset. Pass null to clear.'),
+            'icon_dark_url' => $schema->string()->description('Optional square icon variant for DARK surfaces. Falls back to icon_url when unset. Pass null to clear.'),
             'accent_color' => $schema->string()->description('Brand accent colour as #RRGGBB (defaults to the platform blue '.OrganizationBrand::DEFAULT_ACCENT.' when unset).'),
             'logo_bg_color' => $schema->string()->description('Background colour (#RRGGBB) for an app\'s header bar (logo + main menu). Header text auto-contrasts. Unset → the subtle default header.'),
             'font' => $schema->string()->enum(OrganizationBrand::FONTS)->description('Default font family.'),

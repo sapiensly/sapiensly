@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import RuntimeIcon from '@/runtime/RuntimeIcon.vue';
 import RuntimeUserMenu from '@/runtime/RuntimeUserMenu.vue';
+import { useIsDarkSurface } from '@/runtime/useRuntimeTheme';
 import { useSidebarCollapsed } from '@/runtime/useSidebarCollapsed';
 import { ChevronDown } from '@lucide/vue';
 import { computed, reactive } from 'vue';
@@ -9,6 +10,8 @@ interface Brand {
     name?: string;
     logo?: string;
     icon?: string;
+    logo_dark?: string;
+    icon_dark?: string;
     header_bg?: string;
 }
 interface NavItem {
@@ -102,7 +105,21 @@ function isOpen(n: Node): boolean {
 // standard location for it), so it lives in a module-level singleton.
 const collapsed = useSidebarCollapsed();
 
-const brandIcon = computed(() => props.brand?.icon ?? null);
+// Logo + icon swap to their dark-surface variants when the sidebar renders on a
+// dark background, each falling back to the base asset when no variant is set.
+const isDark = useIsDarkSurface();
+const logoSrc = computed<string | undefined>(
+    () =>
+        (isDark.value
+            ? (props.brand?.logo_dark ?? props.brand?.logo)
+            : props.brand?.logo) || undefined,
+);
+const brandIcon = computed<string | null>(
+    () =>
+        (isDark.value
+            ? (props.brand?.icon_dark ?? props.brand?.icon)
+            : props.brand?.icon) ?? null,
+);
 function isUrl(s: string): boolean {
     return /^https?:\/\//.test(s) || s.startsWith('/');
 }
@@ -163,8 +180,8 @@ const activeStyle = {
             </template>
             <template v-else>
                 <img
-                    v-if="brand?.logo"
-                    :src="brand.logo"
+                    v-if="logoSrc"
+                    :src="logoSrc"
                     alt=""
                     class="h-7 w-auto max-w-full object-contain"
                 />

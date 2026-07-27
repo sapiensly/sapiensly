@@ -98,3 +98,81 @@ it('keeps a chatbot custom primary_color over the brand accent', function () {
 
     expect($appearance['primary_color'])->toBe('#0000FF'); // customized, kept
 });
+
+it('roundtrips the dark-surface logo/icon variants', function () {
+    $brand = OrganizationBrand::fromArray([
+        'logo_url' => 'https://cdn/logo.png',
+        'logo_dark_url' => '  https://cdn/logo-dark.png  ',
+        'icon_dark_url' => 'https://cdn/icon-dark.png',
+    ]);
+
+    expect($brand->logoDarkUrl)->toBe('https://cdn/logo-dark.png') // trimmed
+        ->and($brand->iconDarkUrl)->toBe('https://cdn/icon-dark.png')
+        ->and($brand->toArray())->toHaveKeys(['logo_dark_url', 'icon_dark_url'])
+        ->and($brand->toArray()['logo_dark_url'])->toBe('https://cdn/logo-dark.png');
+});
+
+it('resolves logo/icon per theme with an asymmetric dark fallback', function () {
+    // Both a light logo and a dark variant, only a light icon.
+    $brand = OrganizationBrand::fromArray([
+        'logo_url' => 'https://cdn/logo.png',
+        'logo_dark_url' => 'https://cdn/logo-dark.png',
+        'icon_url' => 'https://cdn/icon.png',
+    ]);
+
+    expect($brand->logoFor('dark'))->toBe('https://cdn/logo-dark.png')  // variant used
+        ->and($brand->logoFor('light'))->toBe('https://cdn/logo.png')   // base on light
+        ->and($brand->logoFor(null))->toBe('https://cdn/logo.png')      // unknown → base
+        ->and($brand->iconFor('dark'))->toBe('https://cdn/icon.png')    // no dark variant → base
+        ->and($brand->iconFor('light'))->toBe('https://cdn/icon.png');
+});
+
+it('picks the chatbot logo by the widget background darkness', function () {
+    $brand = OrganizationBrand::fromArray([
+        'logo_url' => 'https://cdn/logo.png',
+        'logo_dark_url' => 'https://cdn/logo-dark.png',
+    ]);
+    $defaults = ['background_color' => '#FFFFFF', 'logo_url' => null];
+
+    // Dark widget background → dark logo variant.
+    $dark = $brand->applyToChatbotAppearance(
+        ['background_color' => '#0B1220', 'logo_url' => null],
+        $defaults,
+    );
+    expect($dark['logo_url'])->toBe('https://cdn/logo-dark.png');
+
+    // Light widget background → base logo.
+    $light = $brand->applyToChatbotAppearance(
+        ['background_color' => '#FFFFFF', 'logo_url' => null],
+        $defaults,
+    );
+    expect($light['logo_url'])->toBe('https://cdn/logo.png');
+});
+
+it('falls back to the base logo on a dark chatbot with no dark variant', function () {
+    $brand = OrganizationBrand::fromArray(['logo_url' => 'https://cdn/logo.png']);
+
+    $out = $brand->applyToChatbotAppearance(
+        ['background_color' => '#0B1220', 'logo_url' => null],
+        ['background_color' => '#FFFFFF', 'logo_url' => null],
+    );
+
+    expect($out['logo_url'])->toBe('https://cdn/logo.png');
+});
+
+it('flows both logo variants into app settings fill-the-gaps', function () {
+    $brand = OrganizationBrand::fromArray([
+        'logo_url' => 'https://cdn/logo.png',
+        'logo_dark_url' => 'https://cdn/logo-dark.png',
+        'icon_dark_url' => 'https://cdn/icon-dark.png',
+    ]);
+
+    // App set its own dark logo — that wins; the base + dark icon are filled.
+    $settings = $brand->applyToAppSettings([
+        'brand' => ['logo_dark' => 'https://cdn/app-dark.png'],
+    ]);
+
+    expect($settings['brand']['logo'])->toBe('https://cdn/logo.png')          // filled
+        ->and($settings['brand']['logo_dark'])->toBe('https://cdn/app-dark.png') // app wins
+        ->and($settings['brand']['icon_dark'])->toBe('https://cdn/icon-dark.png'); // filled
+});

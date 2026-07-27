@@ -29,7 +29,7 @@ class OrganizationBrandController extends Controller
 {
     /** The brand fields accepted from the form, in canonical (stored) vocabulary. */
     private const FIELDS = [
-        'logo_url', 'icon_url', 'accent_color', 'logo_bg_color', 'font', 'theme',
+        'logo_url', 'icon_url', 'logo_dark_url', 'icon_dark_url', 'accent_color', 'logo_bg_color', 'font', 'theme',
     ];
 
     /** Content storage prefix (under the tenant partition) for brand assets. */
@@ -88,6 +88,8 @@ class OrganizationBrandController extends Controller
         $validated = $request->validate([
             'logo_url' => ['nullable', 'string', 'max:2000'],
             'icon_url' => ['nullable', 'string', 'max:2000'],
+            'logo_dark_url' => ['nullable', 'string', 'max:2000'],
+            'icon_dark_url' => ['nullable', 'string', 'max:2000'],
             'accent_color' => ['nullable', 'string', 'regex:/^#[0-9A-Fa-f]{6}$/'],
             'logo_bg_color' => ['nullable', 'string', 'regex:/^#[0-9A-Fa-f]{6}$/'],
             'font' => ['nullable', Rule::in(OrganizationBrand::FONTS)],
@@ -138,7 +140,7 @@ class OrganizationBrandController extends Controller
         $organization = $this->authorizeOrganization($request);
 
         $validated = $request->validate([
-            'kind' => ['required', Rule::in(['logo', 'icon'])],
+            'kind' => ['required', Rule::in(['logo', 'icon', 'logo_dark', 'icon_dark'])],
             'file' => ['required', 'file', 'mimes:png,jpg,jpeg,svg,webp', 'max:2048'],
         ]);
 

@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import RuntimeUserMenu from '@/runtime/RuntimeUserMenu.vue';
+import { useIsDarkSurface } from '@/runtime/useRuntimeTheme';
 import { computed } from 'vue';
 
 interface Brand {
     name?: string;
     logo?: string;
+    logo_dark?: string;
     header_bg?: string;
     cta?: { label: string; href: string };
 }
@@ -61,6 +63,16 @@ const headerStyle = computed(() => {
     };
 });
 
+// Logo swaps to the dark-surface variant when the header renders on a dark
+// background, falling back to the base logo when no variant is set.
+const isDark = useIsDarkSurface();
+const logoSrc = computed<string | undefined>(
+    () =>
+        (isDark.value
+            ? (props.brand?.logo_dark ?? props.brand?.logo)
+            : props.brand?.logo) || undefined,
+);
+
 // Active nav item — the same accent-tinted pill the sidebar uses, so the two
 // navigation layouts read as one system.
 const activeStyle = {
@@ -82,12 +94,7 @@ const activeStyle = {
             class="flex items-center gap-2 font-semibold"
             :href="hrefFor ? hrefFor(menuPages[0]?.slug ?? '') : '#'"
         >
-            <img
-                v-if="brand?.logo"
-                :src="brand.logo"
-                alt=""
-                class="h-7 w-auto"
-            />
+            <img v-if="logoSrc" :src="logoSrc" alt="" class="h-7 w-auto" />
             <span v-if="brand?.name" class="text-base tracking-tight">{{
                 brand.name
             }}</span>
