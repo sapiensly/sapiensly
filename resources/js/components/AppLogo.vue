@@ -29,7 +29,7 @@ const wordmarkClass = computed(() =>
         class="flex aspect-square size-8 shrink-0 items-center justify-center rounded-md text-sidebar-primary-foreground"
     >
         <AppLogoIcon
-            class="size-5 fill-transparent text-white dark:text-black"
+            class="size-7 fill-transparent text-white dark:text-black"
         />
     </div>
     <div
