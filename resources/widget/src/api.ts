@@ -2,6 +2,7 @@ import type {
     Attachment,
     ConversationData,
     Message,
+    MessagePage,
     SessionData,
     StreamEvent,
     VisitorInfo,
@@ -139,11 +140,28 @@ export class ApiClient {
      * Get messages for a conversation.
      */
     async getMessages(conversationId: string): Promise<Message[]> {
-        const response = await this.request<{ messages: Message[] }>(
+        return (await this.getMessagePage(conversationId)).messages;
+    }
+
+    /**
+     * The transcript (or just what came after `after`), plus whether a person is
+     * currently holding the conversation.
+     *
+     * This doubles as the poll used during a live handoff. Polling rather than a
+     * socket is deliberate: this bundle is embedded in strangers' pages and has
+     * to stay tiny and work everywhere, and an open SSE per waiting visitor
+     * would pin a PHP worker each.
+     */
+    async getMessagePage(
+        conversationId: string,
+        after?: string,
+    ): Promise<MessagePage> {
+        const query = after ? `?after=${encodeURIComponent(after)}` : '';
+
+        return this.request<MessagePage>(
             'GET',
-            `/conversations/${conversationId}/messages`,
+            `/conversations/${conversationId}/messages${query}`,
         );
-        return response.messages;
     }
 
     /**
@@ -189,7 +207,11 @@ export class ApiClient {
         conversationId: string,
         content: string,
         attachmentIds: string[] = [],
-    ): Promise<{ message_id: string; stream_url: string }> {
+    ): Promise<{
+        message_id: string;
+        stream_url: string;
+        with_person: boolean;
+    }> {
         return this.request(
             'POST',
             `/conversations/${conversationId}/messages`,

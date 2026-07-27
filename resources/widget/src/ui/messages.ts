@@ -54,12 +54,33 @@ export class Messages {
         messageEl.className = `sapiensly-message sapiensly-message-${message.role}`;
         messageEl.dataset.messageId = message.id;
 
+        // A person wrote this one. The visitor is owed that difference — an
+        // unlabelled human reply reads as the bot, which makes the whole handoff
+        // pointless, and an unlabelled bot reply after a person spoke is worse.
+        if (message.human) {
+            messageEl.classList.add('sapiensly-message-human');
+
+            const byline = document.createElement('span');
+            byline.className = 'sapiensly-message-byline';
+            // textContent, always: this is a name from the tenant's user table
+            // arriving in a page we do not own.
+            byline.textContent = message.sender_name || '';
+            if (byline.textContent !== '') {
+                messageEl.appendChild(byline);
+            }
+        }
+
+        const body = document.createElement('div');
+        body.className = 'sapiensly-message-body';
+
         // User messages: escape HTML, Assistant messages: render markdown
         if (message.role === 'user') {
-            messageEl.textContent = message.content;
+            body.textContent = message.content;
         } else {
-            messageEl.innerHTML = parseMarkdown(message.content);
+            body.innerHTML = parseMarkdown(message.content);
         }
+
+        messageEl.appendChild(body);
 
         if (message.attachments?.length) {
             messageEl.appendChild(this.renderAttachments(message.attachments));
@@ -100,14 +121,22 @@ export class Messages {
         ) as HTMLDivElement;
 
         if (messageEl) {
+            // Write into the body, not the bubble: the bubble may also hold the
+            // byline that says a person is speaking, and replacing its innerHTML
+            // would silently drop that attribution mid-stream.
+            const body =
+                (messageEl.querySelector(
+                    '.sapiensly-message-body',
+                ) as HTMLDivElement | null) ?? messageEl;
+
             // Check if it's an assistant message by class
             const isAssistant = messageEl.classList.contains(
                 'sapiensly-message-assistant',
             );
             if (isAssistant) {
-                messageEl.innerHTML = parseMarkdown(content);
+                body.innerHTML = parseMarkdown(content);
             } else {
-                messageEl.textContent = content;
+                body.textContent = content;
             }
             this.scrollToBottom();
         }

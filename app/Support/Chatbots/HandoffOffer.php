@@ -21,6 +21,12 @@ final class HandoffOffer
         public readonly ?string $channel = null,
     ) {}
 
+    /** Someone is watching the inbox and can join this conversation. */
+    public static function live(): self
+    {
+        return new self(HandoffMode::Live);
+    }
+
     /** The organization named where people actually answer. */
     public static function redirect(string $channel): self
     {
@@ -51,6 +57,21 @@ a moment — no one is coming into this conversation.
 EOT;
 
         return match ($this->mode) {
+            // The one branch that may promise a person, because someone is
+            // demonstrably watching the inbox as this turn is answered.
+            HandoffMode::Live => <<<'EOT'
+Someone from the team IS watching right now and can join this conversation.
+
+When they ask for a person — or when you have nothing useful left to offer —
+call the `leave_message_for_the_team` tool. It puts this conversation in front
+of the team, and the person who takes it replies HERE, in this chat.
+
+So you may say a person has been asked to join. Say it plainly and without a
+time: "aviso al equipo, alguien se une aquí en un momento" is honest; "en 2
+minutos" is not, because you do not know. Take their email too if they offer it,
+in case they close the page. After you have called the tool, stop answering for
+the team and let the person speak.
+EOT,
             HandoffMode::Redirect => $shared."\n\n".<<<EOT
 What you MAY do when they want a person: point them at how this organization is
 reached, exactly as written here — {$this->channel} — and offer to take their

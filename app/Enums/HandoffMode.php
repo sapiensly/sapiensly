@@ -5,13 +5,17 @@ namespace App\Enums;
 /**
  * What a public bot is allowed to offer when a visitor wants a person.
  *
- * There is deliberately no `Live` case yet. Live takeover needs somewhere for
- * the human's words to come back through, and until that exists a bot told
- * "someone is available" would be making the same empty promise this whole
- * change removes. The case arrives with the channel that makes it true.
+ * Ordered by how much the product can actually deliver. `Live` was withheld
+ * until there was a way for a human's words to reach the visitor, because a bot
+ * told "someone is available" without that is the same empty promise this whole
+ * line of work removes — it now exists, and it is gated on measured presence
+ * rather than on hope or on a configured schedule.
  */
 enum HandoffMode: string
 {
+    /** Someone is watching the inbox right now and can join this conversation. */
+    case Live = 'live';
+
     /** The organization named a channel where people actually answer. */
     case Redirect = 'redirect';
 

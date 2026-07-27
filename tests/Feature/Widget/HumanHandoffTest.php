@@ -213,7 +213,7 @@ it('refuses to claim it took a message outside a widget turn', function () {
 });
 
 it('offers to take details when the organization named nowhere to send people', function () {
-    $offer = app(HandoffResolver::class)->forOrganizationId($this->org->id);
+    $offer = app(HandoffResolver::class)->forOwner($this->org->id);
 
     expect($offer->mode)->toBe(HandoffMode::Capture)
         ->and($offer->promptClause())->toContain('Never say you are transferring them');
@@ -226,7 +226,7 @@ it('points at the channel the organization declared in its Contextbook', functio
         'profile' => ['escalation' => 'soporte@acme.mx'],
     ])->recompile()->save();
 
-    $offer = app(HandoffResolver::class)->forOrganizationId($this->org->id);
+    $offer = app(HandoffResolver::class)->forOwner($this->org->id);
 
     expect($offer->mode)->toBe(HandoffMode::Redirect)
         ->and($offer->channel)->toBe('soporte@acme.mx')

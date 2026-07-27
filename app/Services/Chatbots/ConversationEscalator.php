@@ -39,7 +39,7 @@ class ConversationEscalator
         ?string $visitorName = null,
         ?string $visitorEmail = null,
     ): HandoffOffer {
-        $offer = $this->handoffs->forOrganizationId($chatbot->organization_id);
+        $offer = $this->handoffs->forOwner($chatbot->organization_id, $chatbot->user_id);
 
         $metadata = $conversation->metadata ?? [];
         $metadata['handoff'] = [

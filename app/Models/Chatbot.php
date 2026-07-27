@@ -259,6 +259,12 @@ class Chatbot extends Model
             'resolution_yes' => 'Yes, thanks',
             'resolution_no' => 'Not really',
             'resolution_thanks' => 'Thanks for telling us.',
+            // Read by the visitor when a person joins or steps away. Both are
+            // appearance strings rather than server-side __() calls for the same
+            // reason as everything above: the app's locale is the OWNER's, and
+            // these are read by a stranger on the owner's website.
+            'operator_joined' => 'Someone from the team has joined the chat.',
+            'operator_left' => 'The team stepped away for now, so I am back — how else can I help?',
         ];
     }
 

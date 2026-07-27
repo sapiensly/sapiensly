@@ -8,6 +8,7 @@ use App\Models\Message;
 use App\Models\Organization;
 use App\Models\OrganizationAiContext;
 use App\Models\User;
+use App\Services\Chatbots\OperatorPresence;
 use App\Services\LLMService;
 use App\Services\RetrievalService;
 use App\Support\Ai\PublicTurnContext;
@@ -61,12 +62,24 @@ function askGrounded(Agent $agent, string $question): void
     app(LLMService::class)->chatWithKnowledgeAndTools($agent, [$message]);
 }
 
-/** The same turn, but across the public trust boundary a visitor sits behind. */
+/**
+ * The same turn, but across the public trust boundary a visitor sits behind.
+ *
+ * ONE service instance, and the owner bound on it. LLMService is not a
+ * singleton, so setting the context on `app(LLMService::class)` and then letting
+ * a helper resolve its own gave a second instance with no owner at all — and a
+ * clause computed for nobody. It made a passing test that proved nothing.
+ */
 function askGroundedPublicly(Agent $agent, string $question): void
 {
-    app(PublicTurnContext::class)->runPublic(function () use ($agent, $question) {
-        app(LLMService::class)->setContext($agent->user);
-        askGrounded($agent, $question);
+    $message = new Message;
+    $message->role = MessageRole::User;
+    $message->content = $question;
+
+    app(PublicTurnContext::class)->runPublic(function () use ($agent, $message) {
+        app(LLMService::class)
+            ->setContext($agent->user)
+            ->chatWithKnowledgeAndTools($agent, [$message]);
     });
 }
 
@@ -140,7 +153,28 @@ it('points at the escalation channel the organization declared', function () {
 
     askGroundedPublicly($this->agent, 'Quiero hablar con una persona');
 
-    expect(groundingInstructions())->toContain('soporte@acme.mx');
+    // Asserted on the handoff clause specifically. The address also appears in
+    // the Contextbook block injected into every turn, so a bare toContain() on
+    // the whole prompt passes whether or not this feature works at all.
+    expect(groundingInstructions())
+        ->toContain('exactly as written here — soporte@acme.mx');
+});
+
+/**
+ * The one branch allowed to promise a person — and only while someone is
+ * demonstrably watching. The bot's licence to say "alguien se une" is created
+ * and withdrawn by whether an inbox is open, not by a setting.
+ */
+it('may offer a person only while someone is watching the inbox', function () {
+    retrievalReturning('El envío tarda 3 días hábiles.');
+    Ai::fakeAgent(RuntimeAgent::class, ['Tres días.']);
+
+    app(OperatorPresence::class)->touch($this->user);
+    askGroundedPublicly($this->agent, 'Quiero hablar con una persona');
+
+    expect(groundingInstructions())
+        ->toContain('Someone from the team IS watching right now')
+        ->not->toContain('Never say you are transferring them');
 });
 
 /**

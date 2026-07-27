@@ -18,6 +18,7 @@ class WidgetMessage extends Model
     protected $fillable = [
         'widget_conversation_id',
         'role',
+        'sender_user_id',
         'content',
         'tokens_used',
         'model',
@@ -45,6 +46,11 @@ class WidgetMessage extends Model
         return $this->hasMany(WidgetAttachment::class, 'widget_message_id');
     }
 
+    public function sender(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'sender_user_id');
+    }
+
     public function isFromUser(): bool
     {
         return $this->role === MessageRole::User;
@@ -53,5 +59,18 @@ class WidgetMessage extends Model
     public function isFromAssistant(): bool
     {
         return $this->role === MessageRole::Assistant;
+    }
+
+    /**
+     * Written by a person, not by the model.
+     *
+     * The role stays `assistant` — to the visitor it is still "the other side of
+     * the conversation", and every reader that groups the transcript by role
+     * keeps working. What changes is that analytics measuring the BOT must
+     * exclude these, and the widget must say a person is speaking.
+     */
+    public function isFromHuman(): bool
+    {
+        return $this->sender_user_id !== null;
     }
 }

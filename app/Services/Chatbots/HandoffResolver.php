@@ -28,8 +28,20 @@ class HandoffResolver
     /** @var array<string, HandoffOffer> */
     private array $memo = [];
 
-    public function forOrganizationId(?string $organizationId): HandoffOffer
+    public function __construct(
+        private readonly OperatorPresence $presence = new OperatorPresence,
+    ) {}
+
+    public function forOwner(?string $organizationId, ?int $userId = null): HandoffOffer
     {
+        // Deliberately OUTSIDE the memo: whether someone is watching changes
+        // minute to minute, and even a service that lives for one turn would be
+        // long enough to promise a person who has since left. The Contextbook
+        // lookup below is the part worth memoizing.
+        if ($this->presence->anyoneWatching($organizationId, $userId)) {
+            return HandoffOffer::live();
+        }
+
         if ($organizationId === null || $organizationId === '') {
             return HandoffOffer::capture();
         }

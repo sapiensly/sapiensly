@@ -76,6 +76,9 @@ export interface WidgetConversation {
     feedback: string | null;
     is_resolved: boolean;
     is_abandoned: boolean;
+    /** `escalated` means a person holds it and the bot is muted. */
+    status: 'pending' | 'open' | 'resolved' | 'escalated' | 'abandoned';
+    assigned_user_id: number | null;
     /** Present once a human_handoff node fired — the conversation asked for a person. */
     metadata: {
         handoff?: {
@@ -101,10 +104,12 @@ export interface WidgetMessage {
     id: string;
     widget_conversation_id: string;
     role: 'user' | 'assistant' | 'system';
+    /** Set when a person on the team wrote this, not the model. */
+    sender_user_id: number | null;
     content: string;
     tokens_used: number | null;
     model: string | null;
-    metadata: Record<string, unknown> | null;
+    metadata: { sender_name?: string; human?: boolean } | null;
     response_time_ms: number | null;
     created_at: string;
 }

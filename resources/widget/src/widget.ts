@@ -43,6 +43,16 @@ export class Widget {
     private resolutionAsked = false;
     private abortStream: (() => void) | null = null;
 
+    /**
+     * Live-handoff polling. While a person holds the conversation the bot is
+     * muted server-side, so there is no stream to read — their words arrive by
+     * asking for what is new every few seconds.
+     */
+    private personPollTimer: ReturnType<typeof setInterval> | null = null;
+
+    /** The newest message id the server has confirmed, for `after` polling. */
+    private lastSeenMessageId: string | null = null;
+
     constructor(options: WidgetOptions) {
         this.options = options;
         this.events = new EventEmitter();
@@ -107,15 +117,29 @@ export class Widget {
                 this.api.setSessionToken(savedSession.session_token);
             }
 
+            // Set once the transcript shows a person is mid-handoff; acted on
+            // after the UI exists, so their next message has somewhere to land.
+            let restoreListening: string | null = null;
+
             // Restore conversation from storage
             const savedConversation = this.storage.getConversation();
             if (savedConversation) {
                 this.conversation = savedConversation;
                 // Load existing messages
                 try {
-                    this.messages = await this.api.getMessages(
+                    const page = await this.api.getMessagePage(
                         savedConversation.conversation_id,
                     );
+                    this.messages = page.messages;
+                    this.lastSeenMessageId =
+                        page.messages[page.messages.length - 1]?.id ?? null;
+
+                    // Reloading the page mid-handoff must not strand the visitor
+                    // waiting on a person whose next message has nowhere to
+                    // land. Resume listening where the transcript left off.
+                    if (page.with_person) {
+                        restoreListening = savedConversation.conversation_id;
+                    }
                 } catch {
                     // Conversation might have expired, start fresh
                     this.storage.clearConversation();
@@ -142,6 +166,10 @@ export class Widget {
             // Add existing messages to UI
             for (const message of this.messages) {
                 this.container.addMessage(message);
+            }
+
+            if (restoreListening) {
+                this.startListeningForPerson(restoreListening);
             }
 
             this.isInitialized = true;
@@ -210,6 +238,7 @@ export class Widget {
         if (this.abortStream) {
             this.abortStream();
         }
+        this.stopListeningForPerson();
         if (this.cleanupErrorHandlers) {
             this.cleanupErrorHandlers();
         }
@@ -329,6 +358,18 @@ export class Widget {
 
             // Update message ID
             userMessage.id = response.message_id;
+            this.lastSeenMessageId = response.message_id;
+
+            // A person has this conversation. Don't ask for a stream that cannot
+            // come — hand the visitor back their composer and start listening
+            // for the human instead.
+            if (response.with_person) {
+                this.isStreaming = false;
+                this.container?.enableInput();
+                this.startListeningForPerson(conversation.conversation_id);
+
+                return;
+            }
 
             // Show typing indicator
             this.container?.showTyping();
@@ -467,6 +508,81 @@ export class Widget {
         this.streamContent = '';
 
         this.askIfResolved();
+    }
+
+    /**
+     * How often to ask for what a person has said.
+     *
+     * A support reply is typed by a human, so seconds of latency are invisible
+     * to the visitor — this is nowhere near a chat protocol, and does not need
+     * to be. Slow enough that an open widget costs a trickle of requests,
+     * quick enough that an answer feels like it arrived, not like it was fetched.
+     */
+    private static readonly PERSON_POLL_MS = 4000;
+
+    /**
+     * Listen for a human's words while they hold the conversation.
+     *
+     * Polling and not a socket: this bundle runs inside strangers' pages, where
+     * a WebSocket dependency is weight and a blocked port is someone else's
+     * firewall — and an open SSE per waiting visitor would pin a PHP worker
+     * each. The loop stops itself the moment the server says the bot has the
+     * conversation back, so it lives exactly as long as a handoff does.
+     */
+    private startListeningForPerson(conversationId: string): void {
+        if (this.personPollTimer) {
+            return;
+        }
+
+        const poll = async (): Promise<void> => {
+            try {
+                const page = await this.api.getMessagePage(
+                    conversationId,
+                    this.lastSeenMessageId ?? undefined,
+                );
+
+                for (const message of page.messages) {
+                    this.lastSeenMessageId = message.id;
+
+                    // Our own message coming back from the server; it is already
+                    // on screen from the moment it was typed.
+                    if (message.role === 'user') {
+                        continue;
+                    }
+
+                    this.messages.push(message);
+                    this.container?.addMessage(message);
+                    this.events.emit('message:received', message);
+                    this.events.emit('message', message);
+                }
+
+                if (page.messages.length > 0) {
+                    this.container?.scrollToBottom();
+                }
+
+                if (!page.with_person) {
+                    this.stopListeningForPerson();
+                }
+            } catch (error) {
+                // A failed poll is not a failed conversation — the network
+                // blinked, or the page was backgrounded. Keep the loop alive and
+                // let the next tick catch up; only a server that says the bot is
+                // back ends it.
+                this.errorTracker.capture(error as Error, {
+                    phase: 'personPoll',
+                });
+            }
+        };
+
+        this.personPollTimer = setInterval(poll, Widget.PERSON_POLL_MS);
+        void poll();
+    }
+
+    private stopListeningForPerson(): void {
+        if (this.personPollTimer) {
+            clearInterval(this.personPollTimer);
+            this.personPollTimer = null;
+        }
     }
 
     /**

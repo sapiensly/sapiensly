@@ -76,6 +76,22 @@ export interface Message {
     created_at: string;
     isStreaming?: boolean;
     attachments?: Attachment[];
+    /** Written by a person from the team, not by the bot. */
+    human?: boolean;
+    /** Who wrote it, when a person did. */
+    sender_name?: string | null;
+}
+
+/**
+ * A transcript page, plus whether a person currently holds the conversation.
+ *
+ * `with_person` is what the widget polls on: while it is true the bot is muted
+ * server-side, so asking for a stream would only get a 409 — the words arrive
+ * from a human typing at their own pace instead.
+ */
+export interface MessagePage {
+    messages: Message[];
+    with_person: boolean;
 }
 
 /**

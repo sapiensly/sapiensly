@@ -1,16 +1,18 @@
 <script setup lang="ts">
 import * as ChatbotController from '@/actions/App/Http/Controllers/ChatbotController';
+import * as WidgetConversationController from '@/actions/App/Http/Controllers/WidgetConversationController';
 import HeadingSmall from '@/components/HeadingSmall.vue';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
 import AppLayoutV2 from '@/layouts/AppLayoutV2.vue';
 import type {
     Chatbot,
     WidgetConversation,
     WidgetMessage,
 } from '@/types/chatbot';
-import { Head, Link } from '@inertiajs/vue3';
+import { Head, Link, router } from '@inertiajs/vue3';
 import {
     Bot,
     Clock,
@@ -20,7 +22,7 @@ import {
     User,
     UserRound,
 } from '@lucide/vue';
-import { computed } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 
 const { t } = useI18n();
@@ -37,6 +39,83 @@ interface Props {
 const props = defineProps<Props>();
 
 const handoff = computed(() => props.conversation.metadata?.handoff ?? null);
+
+const isTaken = computed(() => props.conversation.status === 'escalated');
+
+const draft = ref('');
+const busy = ref(false);
+
+const target = computed(() => ({
+    chatbot: props.chatbot.id,
+    conversation: props.conversation.id,
+}));
+
+const takeOver = () => {
+    busy.value = true;
+    router.post(
+        WidgetConversationController.takeover(target.value).url,
+        {},
+        { preserveScroll: true, onFinish: () => (busy.value = false) },
+    );
+};
+
+const release = () => {
+    busy.value = true;
+    router.post(
+        WidgetConversationController.release(target.value).url,
+        {},
+        { preserveScroll: true, onFinish: () => (busy.value = false) },
+    );
+};
+
+const send = () => {
+    const content = draft.value.trim();
+    if (!content) return;
+
+    busy.value = true;
+    router.post(
+        WidgetConversationController.reply(target.value).url,
+        { content },
+        {
+            preserveScroll: true,
+            onSuccess: () => (draft.value = ''),
+            onFinish: () => (busy.value = false),
+        },
+    );
+};
+
+/**
+ * Tell the server this inbox is open, every heartbeat.
+ *
+ * This is what lets a bot offer a person at all: the offer is gated on measured
+ * presence, and this page is the measurement. Stopping on unmount matters as
+ * much as starting — a bot must not keep promising someone who navigated away.
+ */
+const HEARTBEAT_MS = 20_000;
+let heartbeat: ReturnType<typeof setInterval> | null = null;
+
+const beat = () => {
+    void fetch(WidgetConversationController.heartbeat().url, {
+        method: 'POST',
+        headers: { 'X-Requested-With': 'XMLHttpRequest' },
+    });
+};
+
+onMounted(() => {
+    beat();
+    heartbeat = setInterval(beat, HEARTBEAT_MS);
+});
+
+onBeforeUnmount(() => {
+    if (heartbeat) clearInterval(heartbeat);
+    // Best effort, and deliberately not awaited: the TTL would expire us anyway
+    // within the minute, this just makes leaving immediate.
+    void fetch(WidgetConversationController.leave().url, {
+        method: 'POST',
+        headers: { 'X-Requested-With': 'XMLHttpRequest' },
+        keepalive: true,
+    });
+});
 
 /** Whatever address a person could actually answer on. */
 const replyTo = computed(
@@ -78,8 +157,13 @@ const formatTime = (date: string) => {
                         >
                             {{ t('chatbots.conversation.heading') }}
                         </h1>
+                        <!-- Held by a person outranks every other state: it is
+                             the only one where someone is expected to act. -->
+                        <Badge v-if="isTaken" variant="default">
+                            {{ t('chatbots.conversation.with_person') }}
+                        </Badge>
                         <Badge
-                            v-if="conversation.is_resolved"
+                            v-else-if="conversation.is_resolved"
                             variant="default"
                         >
                             Resolved
@@ -274,6 +358,36 @@ const formatTime = (date: string) => {
                         description="Full conversation transcript"
                     />
 
+                    <!--
+                        Taking the conversation mutes the bot, so it is offered
+                        only where the transcript is: you decide after reading
+                        what was already said, not from a list.
+                    -->
+                    <div class="mt-4 flex items-center gap-2">
+                        <Button
+                            v-if="!isTaken"
+                            size="sm"
+                            @click="takeOver"
+                            :disabled="busy"
+                        >
+                            <UserRound class="mr-2 h-4 w-4" />
+                            {{ t('chatbots.conversation.take_over') }}
+                        </Button>
+                        <template v-else>
+                            <Badge variant="default">
+                                {{ t('chatbots.conversation.you_have_it') }}
+                            </Badge>
+                            <Button
+                                size="sm"
+                                variant="outline"
+                                @click="release"
+                                :disabled="busy"
+                            >
+                                {{ t('chatbots.conversation.give_back') }}
+                            </Button>
+                        </template>
+                    </div>
+
                     <div class="mt-4 space-y-4">
                         <div
                             v-for="message in conversation.messages"
@@ -295,6 +409,10 @@ const formatTime = (date: string) => {
                             >
                                 <User
                                     v-if="message.role === 'user'"
+                                    class="h-4 w-4"
+                                />
+                                <UserRound
+                                    v-else-if="message.sender_user_id"
                                     class="h-4 w-4"
                                 />
                                 <Bot v-else class="h-4 w-4" />
@@ -325,6 +443,16 @@ const formatTime = (date: string) => {
                                     <span>{{
                                         formatTime(message.created_at)
                                     }}</span>
+                                    <!-- Who actually said this. Without it a
+                                         teammate's words are indistinguishable
+                                         from the model's in the record of what
+                                         was said on the org's behalf. -->
+                                    <span
+                                        v-if="message.metadata?.sender_name"
+                                        class="font-medium text-foreground"
+                                    >
+                                        {{ message.metadata.sender_name }}
+                                    </span>
                                     <span v-if="message.model" class="text-xs">
                                         &bull; {{ message.model }}
                                     </span>
@@ -339,6 +467,24 @@ const formatTime = (date: string) => {
                             </div>
                         </div>
                     </div>
+
+                    <!--
+                        The composer. Typing here takes the conversation if you
+                        have not already: an operator's words interleaved with
+                        the model's would be two voices answering one person.
+                    -->
+                    <form class="mt-6 flex gap-2" @submit.prevent="send">
+                        <Input
+                            v-model="draft"
+                            :placeholder="
+                                t('chatbots.conversation.reply_placeholder')
+                            "
+                            :disabled="busy"
+                        />
+                        <Button type="submit" :disabled="busy || !draft.trim()">
+                            {{ t('chatbots.conversation.send') }}
+                        </Button>
+                    </form>
                 </div>
             </div>
         </div>

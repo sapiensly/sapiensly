@@ -624,7 +624,7 @@ EOT;
     private function handoffNotice(string $originalPrompt): string
     {
         $clause = $this->getHandoffResolver()
-            ->forOrganizationId($this->contextUser?->organization_id)
+            ->forOwner($this->contextUser?->organization_id, $this->contextUser?->id)
             ->promptClause();
 
         return $originalPrompt."\n\n---\n## When they ask for a person\n\n".$clause;

@@ -61,3 +61,12 @@ Schedule::command('builder:fail-stale-streams')
     ->everyFiveMinutes()
     ->withoutOverlapping()
     ->runInBackground();
+
+// Give back any chat a person took over and then went quiet on. A visitor left
+// waiting on someone who closed their laptop is the worst outcome the handoff
+// can produce, and it is produced by the feature working — so the bound runs on
+// a timer rather than on anyone remembering.
+Schedule::command('chatbot:reclaim-unattended')
+    ->everyFiveMinutes()
+    ->withoutOverlapping()
+    ->runInBackground();

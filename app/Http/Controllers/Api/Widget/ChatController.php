@@ -119,19 +119,33 @@ class ChatController extends Controller
             ], 404);
         }
 
+        // `after` turns this into the poll the widget runs while a person holds
+        // the conversation: only what it has not seen. Without it the widget
+        // would re-download the whole transcript every few seconds.
+        $after = trim((string) $request->query('after', ''));
+
         $messages = $widgetConversation->messages()
+            ->when($after !== '', fn ($query) => $query->where('id', '>', $after))
             ->orderBy('created_at')
             ->get()
             ->map(fn (WidgetMessage $msg) => [
                 'id' => $msg->id,
                 'role' => $msg->role->value,
                 'content' => $msg->content,
+                // Whether a PERSON wrote this. The visitor is owed the
+                // difference, and the name makes the handoff feel like one.
+                'human' => $msg->isFromHuman(),
+                'sender_name' => $msg->metadata['sender_name'] ?? null,
                 'created_at' => $msg->created_at->toISOString(),
             ]);
 
         return response()->json([
             'conversation_id' => $widgetConversation->id,
             'messages' => $messages,
+            // Drives the widget's polling: while true it keeps asking, and it
+            // hides the composer's bot affordances. When it flips back the bot
+            // is answering again.
+            'with_person' => ! $widgetConversation->botMayReply(),
         ]);
     }
 
@@ -228,6 +242,12 @@ class ChatController extends Controller
             'stream_url' => route('widget.conversations.stream', [
                 'conversation' => $widgetConversation->id,
             ]),
+            // A person is holding this conversation, so there is no stream to
+            // open — asking for one would only earn a 409. Told here rather than
+            // discovered by a failed request, because the widget has to decide
+            // between "wait for the bot" and "wait for a human" the moment the
+            // visitor hits send.
+            'with_person' => ! $widgetConversation->botMayReply(),
         ], 201);
     }
 

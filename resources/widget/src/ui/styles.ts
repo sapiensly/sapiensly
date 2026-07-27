@@ -162,6 +162,22 @@ export function generateStyles(config: AppearanceConfig): string {
             border-bottom-left-radius: 4px;
         }
 
+        /* A person is speaking, not the bot. Marked with the accent rather than
+           a different bubble colour: it should read as the same conversation
+           someone new has joined, not as a different channel. */
+        .sapiensly-message-human {
+            border-left: 3px solid var(--sw-primary);
+        }
+
+        .sapiensly-message-byline {
+            display: block;
+            font-size: 11px;
+            font-weight: 600;
+            letter-spacing: 0.02em;
+            color: var(--sw-primary);
+            margin-bottom: 4px;
+        }
+
         /* Markdown styles for assistant messages */
         .sapiensly-message-assistant p {
             margin: 0 0 0.5em 0;

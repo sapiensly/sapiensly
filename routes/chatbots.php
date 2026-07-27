@@ -4,6 +4,7 @@ use App\Http\Controllers\BotFlowController;
 use App\Http\Controllers\ChatbotAnalyticsController;
 use App\Http\Controllers\ChatbotController;
 use App\Http\Controllers\ChatbotPreviewController;
+use App\Http\Controllers\WidgetConversationController;
 use Illuminate\Support\Facades\Route;
 
 Route::middleware([
@@ -47,4 +48,18 @@ Route::middleware([
 
     Route::get('chatbots/{chatbot}/conversations/{conversation}', [ChatbotController::class, 'conversation'])
         ->name('chatbots.conversation');
+
+    // Live handoff: the same three verbs as the WhatsApp inbox, on the widget.
+    Route::post('chatbots/{chatbot}/conversations/{conversation}/takeover', [WidgetConversationController::class, 'takeover'])
+        ->name('chatbots.conversation.takeover');
+    Route::post('chatbots/{chatbot}/conversations/{conversation}/release', [WidgetConversationController::class, 'release'])
+        ->name('chatbots.conversation.release');
+    Route::post('chatbots/{chatbot}/conversations/{conversation}/reply', [WidgetConversationController::class, 'reply'])
+        ->name('chatbots.conversation.reply');
+
+    // Presence. The bot may only offer a person while one of these is arriving.
+    Route::post('chatbots/operators/heartbeat', [WidgetConversationController::class, 'heartbeat'])
+        ->name('chatbots.operators.heartbeat');
+    Route::post('chatbots/operators/leave', [WidgetConversationController::class, 'leave'])
+        ->name('chatbots.operators.leave');
 });
