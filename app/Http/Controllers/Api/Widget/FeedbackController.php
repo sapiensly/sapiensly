@@ -2,9 +2,9 @@
 
 namespace App\Http\Controllers\Api\Widget;
 
+use App\Http\Controllers\Api\Widget\Concerns\ResolvesVisitorConversation;
 use App\Http\Controllers\Controller;
 use App\Models\Chatbot;
-use App\Models\WidgetConversation;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -13,6 +13,8 @@ use Illuminate\Http\Request;
  */
 class FeedbackController extends Controller
 {
+    use ResolvesVisitorConversation;
+
     /**
      * Submit feedback for a conversation.
      *
@@ -23,9 +25,7 @@ class FeedbackController extends Controller
         /** @var Chatbot $chatbot */
         $chatbot = $request->attributes->get('chatbot');
 
-        $widgetConversation = WidgetConversation::where('chatbot_id', $chatbot->id)
-            ->where('id', $conversation)
-            ->first();
+        $widgetConversation = $this->visitorConversation($request, $chatbot, $conversation);
 
         if (! $widgetConversation) {
             return response()->json([

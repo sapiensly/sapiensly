@@ -15,6 +15,10 @@ use InvalidArgumentException;
  */
 class LandingPublisher
 {
+    public function __construct(
+        private readonly ChatbotLandingOrigins $origins,
+    ) {}
+
     /**
      * @return array{public_slug: string, url: string}
      *
@@ -38,6 +42,11 @@ class LandingPublisher
             'published_at' => $app->published_at ?? now(),
         ])->save();
 
+        // Publishing is what makes this page's origin legitimate for the chatbot
+        // it carries; drop the derived-origins memo so the widget accepts it now
+        // rather than up to a minute from now.
+        $this->origins->forget($app->chatbot_id);
+
         return [
             'public_slug' => $publicSlug,
             'url' => route('landing.public', ['public_slug' => $publicSlug]),
@@ -47,6 +56,9 @@ class LandingPublisher
     public function unpublish(App $app): void
     {
         $app->forceFill(['public_slug' => null, 'published_at' => null])->save();
+
+        // …and taking it down withdraws that origin immediately.
+        $this->origins->forget($app->chatbot_id);
     }
 
     /**

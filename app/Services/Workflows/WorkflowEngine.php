@@ -17,6 +17,7 @@ use App\Services\Ai\AiSpendGuard;
 use App\Services\Ai\AiUsageRecorder;
 use App\Services\AiProviderService;
 use App\Services\Connectors\ConnectorCallGate;
+use App\Services\Context\OrganizationContextResolver;
 use App\Services\LLMService;
 use App\Services\Records\ExpressionResolver;
 use App\Services\Records\RecordQueryService;
@@ -67,6 +68,7 @@ class WorkflowEngine
         private SafeHttpClient $safeHttp,
         private ToolExecutionService $toolExecution,
         private ConnectorCallGate $connectorGate,
+        private OrganizationContextResolver $organizationContext,
     ) {}
 
     /**
@@ -302,6 +304,11 @@ class WorkflowEngine
         app(AiSpendGuard::class)->assertWithinBudget(
             $user, $user?->organization_id, $model,
         );
+
+        // An ai.complete step writes on behalf of the organization (summaries,
+        // replies, classifications), so it gets the Contextbook too — its
+        // vocabulary and boundaries are exactly what such a step tends to need.
+        $systemPrompt = $this->organizationContext->forUser($user)->prepend($systemPrompt);
 
         $sdkAgent = new AnonymousAgent($systemPrompt, [], []);
         $response = $sdkAgent->prompt($userPrompt, provider: $provider, model: $model, timeout: (int) config('ai.request_timeout', 180));

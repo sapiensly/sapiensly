@@ -75,8 +75,11 @@ class PlatformToolsFactory
         'create_knowledge_base',
         'create_presentation',
         'generate_demo_data',
-        // Org-wide state and app access changes are user decisions too.
+        // Org-wide state and app access changes are user decisions too. The
+        // Contextbook lands in the system prompt of every agent in the org, so
+        // a model must never edit it on its own initiative.
         'set_organization_brand',
+        'set_organization_context',
         'assign_app_role',
         'revoke_app_role',
         // Putting a landing on the public internet is an outward-facing action.

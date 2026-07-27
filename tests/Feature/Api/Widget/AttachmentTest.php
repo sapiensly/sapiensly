@@ -49,7 +49,7 @@ it('uploads an image attachment to the cloud disk', function () {
     $this->postJson(
         "/api/widget/v1/conversations/{$this->conversation->id}/attachments",
         ['file' => UploadedFile::fake()->image('photo.png')],
-        ['Authorization' => "Bearer {$this->token->token}"],
+        ['Authorization' => "Bearer {$this->token->token}", 'X-Session-Token' => $this->session->session_token],
     )
         ->assertCreated()
         ->assertJsonStructure(['id', 'original_name', 'mime', 'kind', 'size_bytes', 'url'])
@@ -68,7 +68,7 @@ it('extracts text from a document upload', function () {
     $this->postJson(
         "/api/widget/v1/conversations/{$this->conversation->id}/attachments",
         ['file' => UploadedFile::fake()->createWithContent('notes.txt', 'The order number is 12345.')],
-        ['Authorization' => "Bearer {$this->token->token}"],
+        ['Authorization' => "Bearer {$this->token->token}", 'X-Session-Token' => $this->session->session_token],
     )->assertCreated()->assertJsonPath('kind', 'document');
 
     $attachment = WidgetAttachment::where('widget_conversation_id', $this->conversation->id)->firstOrFail();
@@ -85,7 +85,7 @@ it('refuses the upload with 503 when no cloud disk is configured', function () {
     $this->postJson(
         "/api/widget/v1/conversations/{$this->conversation->id}/attachments",
         ['file' => UploadedFile::fake()->image('photo.png')],
-        ['Authorization' => "Bearer {$this->token->token}"],
+        ['Authorization' => "Bearer {$this->token->token}", 'X-Session-Token' => $this->session->session_token],
     )->assertStatus(503);
 });
 
@@ -95,7 +95,7 @@ it('rejects a disallowed mime type', function () {
     $this->postJson(
         "/api/widget/v1/conversations/{$this->conversation->id}/attachments",
         ['file' => UploadedFile::fake()->create('malware.exe', 10)],
-        ['Authorization' => "Bearer {$this->token->token}"],
+        ['Authorization' => "Bearer {$this->token->token}", 'X-Session-Token' => $this->session->session_token],
     )->assertStatus(422);
 });
 
@@ -110,7 +110,7 @@ it('serves an uploaded attachment back', function () {
 
     $this->get(
         "/api/widget/v1/conversations/{$this->conversation->id}/attachments/{$attachment->id}",
-        ['Authorization' => "Bearer {$this->token->token}"],
+        ['Authorization' => "Bearer {$this->token->token}", 'X-Session-Token' => $this->session->session_token],
     )->assertOk();
 });
 
@@ -124,7 +124,7 @@ it('links pre-uploaded attachments to the sent message', function () {
     $this->postJson(
         "/api/widget/v1/conversations/{$this->conversation->id}/messages",
         ['content' => 'See attached', 'attachment_ids' => [$attachment->id]],
-        ['Authorization' => "Bearer {$this->token->token}"],
+        ['Authorization' => "Bearer {$this->token->token}", 'X-Session-Token' => $this->session->session_token],
     )->assertCreated();
 
     $message = WidgetMessage::where('widget_conversation_id', $this->conversation->id)->latest('created_at')->firstOrFail();
@@ -140,7 +140,7 @@ it('allows an attachment-only message (no text)', function () {
     $this->postJson(
         "/api/widget/v1/conversations/{$this->conversation->id}/messages",
         ['attachment_ids' => [$attachment->id]],
-        ['Authorization' => "Bearer {$this->token->token}"],
+        ['Authorization' => "Bearer {$this->token->token}", 'X-Session-Token' => $this->session->session_token],
     )->assertCreated();
 });
 
@@ -148,6 +148,6 @@ it('rejects an empty message with no text and no attachments', function () {
     $this->postJson(
         "/api/widget/v1/conversations/{$this->conversation->id}/messages",
         [],
-        ['Authorization' => "Bearer {$this->token->token}"],
+        ['Authorization' => "Bearer {$this->token->token}", 'X-Session-Token' => $this->session->session_token],
     )->assertStatus(422);
 });

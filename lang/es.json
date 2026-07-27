@@ -138,5 +138,12 @@
     "⏹ Build stopped by the user. Progress already applied is preserved.": "⏹ Build detenido por el usuario. El progreso ya aplicado se conserva.",
     "I couldn't finish the dashboard this time.": "No pude terminar el dashboard esta vez.",
     "You can try again, or tell me what to build and we'll do it step by step.": "Puedes intentarlo de nuevo, o dime qué construir y lo armamos paso a paso.",
-    "Interpreting your request… → \":translated\"": "Interpretando tu pedido… → «:translated»"
+    "Interpreting your request… → \":translated\"": "Interpretando tu pedido… → «:translated»",
+    "Support": "Soporte",
+    "Hello! How can I help you today?": "¡Hola! ¿En qué puedo ayudarte?",
+    "Type your message...": "Escribe tu mensaje...",
+    "Did this answer your question?": "¿Esto resolvió tu duda?",
+    "Yes, thanks": "Sí, gracias",
+    "Not really": "No del todo",
+    "Thanks for telling us.": "Gracias por decírnoslo."
 }

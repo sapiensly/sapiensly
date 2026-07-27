@@ -15,6 +15,7 @@ import type {
     WidgetOptions,
 } from './types';
 import { Container } from './ui/container';
+import { buildResolutionPrompt } from './ui/resolution';
 
 /**
  * Main Widget class that orchestrates all components.
@@ -37,6 +38,9 @@ export class Widget {
     private isStreaming = false;
     private currentStreamingMessageId: string | null = null;
     private streamContent = '';
+
+    /** Whether this conversation has already been asked if it was resolved. */
+    private resolutionAsked = false;
     private abortStream: (() => void) | null = null;
 
     constructor(options: WidgetOptions) {
@@ -74,8 +78,21 @@ export class Widget {
         if (this.isInitialized) return;
 
         try {
-            // Fetch configuration
+            // Fetch configuration, then let the host page overlay its own look.
+            // Only keys the caller actually passed win, so an override channel
+            // can never blank a value the server did configure.
             this.config = await this.api.getConfig();
+            if (this.options.appearance) {
+                this.config.config.appearance = {
+                    ...this.config.config.appearance,
+                    ...Object.fromEntries(
+                        Object.entries(this.options.appearance).filter(
+                            ([, value]) =>
+                                value !== undefined && value !== null,
+                        ),
+                    ),
+                };
+            }
 
             // Set error tracking context
             this.errorTracker.setContext(this.config.chatbot_id);
@@ -448,5 +465,46 @@ export class Widget {
         this.abortStream = null;
         this.currentStreamingMessageId = null;
         this.streamContent = '';
+
+        this.askIfResolved();
+    }
+
+    /**
+     * Ask, once per conversation, whether the bot actually helped.
+     *
+     * Once — not after every answer: a prompt that repeats gets dismissed, and a
+     * dismissed prompt measures nothing. Asked right under an answer, which is
+     * the moment the visitor knows the answer.
+     */
+    private askIfResolved(): void {
+        if (this.resolutionAsked || !this.conversation || !this.config) return;
+
+        this.resolutionAsked = true;
+
+        const conversationId = this.conversation.conversation_id;
+        const prompt = buildResolutionPrompt(
+            this.config.config.appearance,
+            (resolved) => {
+                // The endpoint wants a 1-5 rating; the two answers map to its
+                // ends. `is_resolved` is the field that actually feeds the
+                // owner's resolution metric.
+                this.api
+                    .submitFeedback(
+                        conversationId,
+                        resolved ? 5 : 1,
+                        undefined,
+                        resolved,
+                    )
+                    .catch((error) =>
+                        this.errorTracker.capture(error as Error, {
+                            phase: 'resolutionFeedback',
+                        }),
+                    );
+
+                this.events.emit('resolution', { resolved });
+            },
+        );
+
+        this.container?.appendToMessages(prompt);
     }
 }

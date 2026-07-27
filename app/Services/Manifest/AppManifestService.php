@@ -163,7 +163,9 @@ class AppManifestService
         // against a prompt-injected author. No-op for manifests without html blocks.
         $manifest = $this->sanitizeHtmlBlocks($manifest);
 
-        $result = $this->validator->validate($manifest);
+        // The app goes in so the rules that can't be decided from the manifest
+        // alone run here too — this is the chokepoint every write passes through.
+        $result = $this->validator->validate($manifest, $app);
         if (! $result->valid) {
             throw new InvalidManifestException($result);
         }
@@ -194,13 +196,36 @@ class AppManifestService
 
             // Re-classify the product (App vs Dashboard) from the manifest's
             // content on every write, so the tag tracks what was actually built.
+            // `chatbot_id` is denormalized from settings.chatbot in the same
+            // write, so the column can never drift from the manifest that is now
+            // live — it is only ever a read index over it.
             $locked->update([
                 'current_version_id' => $version->id,
                 'kind' => AppKind::classify($manifest)->value,
+                'chatbot_id' => self::chatbotIdOf($manifest),
             ]);
 
             return $version->refresh();
         });
+    }
+
+    /**
+     * The chatbot a manifest binds, or null. Only a landing can carry one (the
+     * validator enforces that), so a binding on any other surface is read as
+     * absent rather than indexed — the column must mean "this page serves that
+     * bot", nothing looser.
+     *
+     * @param  array<string, mixed>  $manifest
+     */
+    public static function chatbotIdOf(array $manifest): ?string
+    {
+        if (($manifest['settings']['surface'] ?? null) !== 'landing') {
+            return null;
+        }
+
+        $id = $manifest['settings']['chatbot']['id'] ?? null;
+
+        return is_string($id) && trim($id) !== '' ? trim($id) : null;
     }
 
     /**

@@ -1,4 +1,5 @@
 import type {
+    AppearanceConfig,
     VisitorInfo,
     WidgetEventCallback,
     WidgetEventType,
@@ -6,10 +7,19 @@ import type {
 import { Widget } from './widget';
 
 /**
+ * Optional second argument to `init`. A host page that owns its own design —
+ * a Sapiensly landing — passes its look here instead of the bot's stored one.
+ * Omitted by the copy-paste embed snippet, which wants exactly the server config.
+ */
+export interface WidgetInitOverrides {
+    appearance?: Partial<AppearanceConfig>;
+}
+
+/**
  * Global command queue type.
  */
 type CommandArgs =
-    | ['init', string]
+    | ['init', string, WidgetInitOverrides?]
     | ['open']
     | ['close']
     | ['toggle']
@@ -40,7 +50,11 @@ function processCommand(args: CommandArgs): void {
                 console.warn('[Sapiensly] Widget already initialized');
                 return;
             }
-            widget = new Widget({ token: params[0] as string });
+            widget = new Widget({
+                token: params[0] as string,
+                appearance: (params[1] as WidgetInitOverrides | undefined)
+                    ?.appearance,
+            });
             widget.init().catch((error) => {
                 console.error('[Sapiensly] Initialization failed:', error);
             });

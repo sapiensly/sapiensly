@@ -8,92 +8,130 @@ use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
 
 /**
- * Rate limiting middleware for Widget API requests.
+ * Rate limiting for the Widget API, in TWO buckets, because one bucket cannot do
+ * both jobs at once.
  *
- * Applies different rate limits based on the endpoint:
- * - Config: 60 requests per minute (initial widget load)
- * - Session: 30 requests per minute
- * - Chat messages: 20 requests per minute
- * - Stream: 10 requests per minute (long-running)
+ * The per-visitor bucket is keyed on ip + chatbot + session token and exists for
+ * FAIRNESS: it keeps one tab from monopolising the bot while an office full of
+ * people behind a single NAT address each get their own allowance.
+ *
+ * That key is useless for ABUSE, though, because the session token is chosen by
+ * whoever is calling: mint a fresh session (cheap) and you mint a fresh bucket
+ * with it. Keyed that way alone, one address could open ~30 sessions a minute
+ * and drive ~300 streams through them — each one a model call billed to the
+ * tenant, with only the organization's spend budget underneath, and a budget
+ * caps the total, not the rate.
+ *
+ * So the second bucket is keyed on ip + chatbot ONLY — nothing the caller can
+ * rotate — and bounds what a single address can cost per minute no matter how
+ * many identities it invents. A request must pass both.
  */
 class ThrottleWidgetRequests
 {
+    private const WINDOW_SECONDS = 60;
+
+    /** Per-visitor allowance: generous, since it only has to stop one tab running away. */
+    private const PER_VISITOR = [
+        'config' => 60,
+        'sessions' => 30,
+        'stream' => 10,
+        'send' => 20,
+        'feedback' => 30,
+        'default' => 30,
+    ];
+
+    /**
+     * Per-address ceiling, ignoring session identity. Higher than the per-visitor
+     * figure so a shared office address is not punished for being shared, but
+     * finite so a single address cannot spin the meter indefinitely.
+     */
+    private const PER_ADDRESS = [
+        'config' => 120,
+        'sessions' => 40,
+        'stream' => 40,
+        'send' => 60,
+        'feedback' => 60,
+        'default' => 60,
+    ];
+
     public function __construct(
         private RateLimiter $limiter
     ) {}
 
     public function handle(Request $request, Closure $next): Response
     {
-        $key = $this->resolveRequestKey($request);
-        $maxAttempts = $this->getMaxAttempts($request);
-        $decaySeconds = 60; // 1 minute window
+        $route = $this->routeBucket($request);
 
-        if ($this->limiter->tooManyAttempts($key, $maxAttempts)) {
-            $retryAfter = $this->limiter->availableIn($key);
+        $visitorKey = $this->key($request, $route, withSession: true);
+        $addressKey = $this->key($request, $route, withSession: false);
 
-            return response()->json([
-                'error' => 'Too many requests',
-                'message' => 'Rate limit exceeded. Please try again later.',
-                'retry_after' => $retryAfter,
-            ], 429, [
-                'Retry-After' => $retryAfter,
-                'X-RateLimit-Limit' => $maxAttempts,
-                'X-RateLimit-Remaining' => 0,
-            ]);
+        $visitorMax = self::PER_VISITOR[$route];
+        $addressMax = self::PER_ADDRESS[$route];
+
+        foreach ([[$visitorKey, $visitorMax], [$addressKey, $addressMax]] as [$key, $max]) {
+            if ($this->limiter->tooManyAttempts($key, $max)) {
+                $retryAfter = $this->limiter->availableIn($key);
+
+                return response()->json([
+                    'error' => 'Too many requests',
+                    'message' => 'Rate limit exceeded. Please try again later.',
+                    'retry_after' => $retryAfter,
+                ], 429, [
+                    'Retry-After' => $retryAfter,
+                    'X-RateLimit-Limit' => $max,
+                    'X-RateLimit-Remaining' => 0,
+                ]);
+            }
         }
 
-        $this->limiter->hit($key, $decaySeconds);
+        $this->limiter->hit($visitorKey, self::WINDOW_SECONDS);
+        $this->limiter->hit($addressKey, self::WINDOW_SECONDS);
 
         $response = $next($request);
 
-        // Add rate limit headers to response
+        // Report the allowance the caller is closest to spending.
         if ($response instanceof Response) {
-            $response->headers->set('X-RateLimit-Limit', $maxAttempts);
-            $response->headers->set('X-RateLimit-Remaining', max(0, $maxAttempts - $this->limiter->attempts($key)));
+            $visitorLeft = max(0, $visitorMax - $this->limiter->attempts($visitorKey));
+            $addressLeft = max(0, $addressMax - $this->limiter->attempts($addressKey));
+
+            $response->headers->set('X-RateLimit-Limit', $visitorLeft <= $addressLeft ? $visitorMax : $addressMax);
+            $response->headers->set('X-RateLimit-Remaining', min($visitorLeft, $addressLeft));
         }
 
         return $response;
     }
 
     /**
-     * Generate a unique key for rate limiting.
-     *
-     * Uses a combination of IP address and session token (if available)
-     * to identify unique visitors.
+     * The bucket key. `withSession: false` deliberately drops the one component
+     * the caller controls, so the resulting ceiling cannot be multiplied by
+     * inventing identities.
      */
-    private function resolveRequestKey(Request $request): string
+    private function key(Request $request, string $route, bool $withSession): string
     {
         $chatbot = $request->attributes->get('chatbot');
-        $chatbotId = $chatbot?->id ?? 'unknown';
+        $identifier = $request->ip().'|'.($chatbot?->id ?? 'unknown');
 
-        // Try to get session token from request
-        $sessionToken = $request->input('session_token')
-            ?? $request->header('X-Session-Token')
-            ?? '';
+        if ($withSession) {
+            $identifier .= '|'.($request->input('session_token')
+                ?? $request->header('X-Session-Token')
+                ?? '');
+        }
 
-        // Combine IP, chatbot ID, and session token
-        $identifier = $request->ip().'|'.$chatbotId.'|'.$sessionToken;
-
-        // Include the route name for endpoint-specific limits
-        $routeName = $request->route()?->getName() ?? 'widget';
-
-        return 'widget_throttle:'.$routeName.':'.sha1($identifier);
+        return 'widget_throttle:'.($withSession ? 'visitor' : 'addr').':'.$route.':'.sha1($identifier);
     }
 
-    /**
-     * Get the maximum number of attempts based on the endpoint.
-     */
-    private function getMaxAttempts(Request $request): int
+    /** Which quota family this route falls under. */
+    private function routeBucket(Request $request): string
     {
         $routeName = $request->route()?->getName() ?? '';
 
         return match (true) {
-            str_contains($routeName, 'config') => 60,
-            str_contains($routeName, 'sessions') => 30,
-            str_contains($routeName, 'stream') => 10,
-            str_contains($routeName, 'send') => 20,
-            str_contains($routeName, 'feedback') => 30,
-            default => 30,
+            str_contains($routeName, 'config') => 'config',
+            str_contains($routeName, 'sessions') => 'sessions',
+            str_contains($routeName, 'stream') => 'stream',
+            str_contains($routeName, 'send') => 'send',
+            str_contains($routeName, 'feedback') => 'feedback',
+            default => 'default',
         };
     }
 }

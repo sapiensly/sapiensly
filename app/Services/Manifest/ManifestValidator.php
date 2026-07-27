@@ -2,6 +2,8 @@
 
 namespace App\Services\Manifest;
 
+use App\Models\App;
+use App\Models\Chatbot;
 use App\Services\Records\RecordQueryService;
 use App\Services\Records\SafeExpressionEvaluator;
 use App\Support\Css\ScopedAppCss;
@@ -54,8 +56,13 @@ class ManifestValidator
 
     /**
      * @param  array<string, mixed>  $manifest
+     * @param  App|null  $app  the app this manifest belongs to, when the caller
+     *                         knows it. Required for the rules that cannot be
+     *                         decided from the manifest alone — today, that a
+     *                         referenced chatbot is one this owner may use.
+     *                         Omitted ⇒ those rules are skipped (draft checks).
      */
-    public function validate(array $manifest): ManifestValidationResult
+    public function validate(array $manifest, ?App $app = null): ManifestValidationResult
     {
         $schemaErrors = $this->validateSchema($manifest);
 
@@ -66,13 +73,75 @@ class ManifestValidator
         }
 
         $warnings = $this->collectWarnings($manifest);
-        $semanticErrors = $this->validateCrossCutting($manifest);
+        $semanticErrors = array_merge(
+            $this->validateCrossCutting($manifest),
+            $this->validateChatbotBinding($manifest, $app),
+        );
 
         if ($semanticErrors !== []) {
             return ManifestValidationResult::fail($semanticErrors, $warnings);
         }
 
         return ManifestValidationResult::ok($warnings);
+    }
+
+    /**
+     * `settings.chatbot` puts one of the organization's chatbots on a landing.
+     * Two rails, both here because the manifest is written by a MODEL:
+     *
+     *  1. Landing surface only. On an authenticated app the bubble would sit
+     *     next to the runtime agent, which is the same job done twice.
+     *  2. The chatbot must be one this app's owner actually has. Without this a
+     *     hallucinated (or copied-from-another-tenant) id would render another
+     *     organization's bot — and its widget API binds ITS owner's tenant
+     *     scope, so the conversation would run against their data.
+     *
+     * Ownership needs the App, which a bare manifest doesn't carry: with no app
+     * (a draft check) only rail 1 runs, and rail 2 is enforced again at render.
+     *
+     * @param  array<string, mixed>  $manifest
+     * @return list<ManifestValidationError>
+     */
+    private function validateChatbotBinding(array $manifest, ?App $app): array
+    {
+        $binding = $manifest['settings']['chatbot'] ?? null;
+        if (! is_array($binding)) {
+            return [];
+        }
+
+        if (($manifest['settings']['surface'] ?? null) !== 'landing') {
+            return [new ManifestValidationError(
+                '/settings/chatbot',
+                'A chatbot bubble is only available on a landing surface (settings.surface = "landing"). '
+                .'An app or dashboard serves its assistant through the runtime agent instead.',
+                'chatbot_not_on_landing',
+            )];
+        }
+
+        $chatbotId = (string) ($binding['id'] ?? '');
+        if ($app === null || $chatbotId === '') {
+            return [];
+        }
+
+        $owned = Chatbot::query()
+            ->where('id', $chatbotId)
+            ->where(function ($query) use ($app) {
+                $app->organization_id !== null
+                    ? $query->where('organization_id', $app->organization_id)
+                    : $query->whereNull('organization_id')->where('user_id', $app->user_id);
+            })
+            ->exists();
+
+        if (! $owned) {
+            return [new ManifestValidationError(
+                '/settings/chatbot/id',
+                "No chatbot '{$chatbotId}' belongs to this app's owner. Call list_chatbots and use an id from there — "
+                .'a chatbot from another organization can never be placed on this page.',
+                'chatbot_not_owned',
+            )];
+        }
+
+        return [];
     }
 
     /**

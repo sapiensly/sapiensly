@@ -32,6 +32,7 @@ use App\Services\AiProviderService;
 use App\Services\Analyst\DomainClassifier;
 use App\Services\Builder\BuilderAiService;
 use App\Services\Builder\Integrations\IntegrationAuthoring;
+use App\Services\Context\OrganizationContextResolver;
 use App\Services\Manifest\AppManifestService;
 use App\Services\Manifest\AppScaffolder;
 use App\Services\Manifest\ManifestValidator;
@@ -85,6 +86,7 @@ beforeEach(function () {
         app(TenantStorage::class),
         app(AiDefaults::class),
         app(IntegrationAuthoring::class),
+        app(OrganizationContextResolver::class),
     );
 });
 

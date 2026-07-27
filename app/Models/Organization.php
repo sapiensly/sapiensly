@@ -60,6 +60,16 @@ class Organization extends Model
         return $this->hasOne(OrganizationAiBudget::class);
     }
 
+    /**
+     * The organization Contextbook — the business knowledge every model
+     * interaction in this organization is grounded in. The Brandbook's
+     * counterpart: one says how the organization looks, this one says what it is.
+     */
+    public function aiContext(): HasOne
+    {
+        return $this->hasOne(OrganizationAiContext::class);
+    }
+
     public function users(): HasMany
     {
         return $this->hasMany(User::class);

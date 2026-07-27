@@ -10,6 +10,7 @@ use App\Models\WidgetAttachment;
 use App\Models\WidgetConversation;
 use App\Models\WidgetMessage;
 use App\Models\WidgetSession;
+use App\Services\Chatbots\ConversationEscalator;
 use App\Services\WidgetStreamService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -23,8 +24,11 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
  */
 class ChatController extends Controller
 {
+    use Concerns\ResolvesVisitorConversation;
+
     public function __construct(
-        private WidgetStreamService $streamService
+        private WidgetStreamService $streamService,
+        private ConversationEscalator $escalator,
     ) {}
 
     /**
@@ -106,9 +110,7 @@ class ChatController extends Controller
         /** @var Chatbot $chatbot */
         $chatbot = $request->attributes->get('chatbot');
 
-        $widgetConversation = WidgetConversation::where('chatbot_id', $chatbot->id)
-            ->where('id', $conversation)
-            ->first();
+        $widgetConversation = $this->visitorConversation($request, $chatbot, $conversation);
 
         if (! $widgetConversation) {
             return response()->json([
@@ -146,9 +148,7 @@ class ChatController extends Controller
         /** @var Chatbot $chatbot */
         $chatbot = $request->attributes->get('chatbot');
 
-        $widgetConversation = WidgetConversation::where('chatbot_id', $chatbot->id)
-            ->where('id', $conversation)
-            ->first();
+        $widgetConversation = $this->visitorConversation($request, $chatbot, $conversation);
 
         if (! $widgetConversation) {
             return response()->json([
@@ -192,6 +192,11 @@ class ChatController extends Controller
 
         // Update session activity
         $widgetConversation->session?->update(['last_activity_at' => now()]);
+
+        // If the bot asked for an address so someone could follow up, this is
+        // where the answer arrives. Keeping the promise depends on it landing on
+        // the Contact rather than scrolling past in the transcript.
+        $this->escalator->captureContactDetails($widgetConversation, (string) ($validated['content'] ?? ''));
 
         // Fire any channel.message_received workflows bound to this channel.
         DispatchChannelMessageWorkflows::dispatch(
@@ -238,9 +243,7 @@ class ChatController extends Controller
         /** @var Chatbot $chatbot */
         $chatbot = $request->attributes->get('chatbot');
 
-        $widgetConversation = WidgetConversation::where('chatbot_id', $chatbot->id)
-            ->where('id', $conversation)
-            ->first();
+        $widgetConversation = $this->visitorConversation($request, $chatbot, $conversation);
 
         if (! $widgetConversation) {
             return response()->json([
@@ -249,11 +252,11 @@ class ChatController extends Controller
             ], 404);
         }
 
-        // Get the last user message
-        $lastMessage = $widgetConversation->messages()
-            ->where('role', MessageRole::User)
-            ->latest()
-            ->first();
+        // Getting this wrong made the guard below compare against turn 1 forever:
+        // every turn after the first looked "already answered" and the widget
+        // went silent from the second message on. The ordering that prevents it
+        // now lives on the model.
+        $lastMessage = $widgetConversation->lastUserMessage();
 
         if (! $lastMessage) {
             return response()->json([
@@ -273,6 +276,18 @@ class ChatController extends Controller
                 'error' => 'Already responded',
                 'message' => 'This message has already been answered',
             ], 400);
+        }
+
+        // A person has this conversation — the bot does not get to talk over
+        // them. Checked here rather than inside the stream so no SSE connection,
+        // no provider call and no tokens are spent on a turn that must not
+        // happen. The visitor's message is already stored; it is waiting for a
+        // human, not lost.
+        if (! $widgetConversation->botMayReply()) {
+            return response()->json([
+                'error' => 'Handled by a person',
+                'message' => 'This conversation is being handled by a person',
+            ], 409);
         }
 
         // The AI Bot runs on its Bot Flow roster.

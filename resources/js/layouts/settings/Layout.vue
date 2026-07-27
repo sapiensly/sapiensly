@@ -44,6 +44,10 @@ const sidebarNavItems = computed<NavItem[]>(() => {
             href: '/settings/organization/brand',
         });
         items.push({
+            title: t('settings.nav.context'),
+            href: '/settings/organization/context',
+        });
+        items.push({
             title: t('settings.nav.sso'),
             href: '/settings/sso',
         });

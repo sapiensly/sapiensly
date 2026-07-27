@@ -616,6 +616,42 @@ export function generateStyles(config: AppearanceConfig): string {
             text-decoration: underline;
         }
 
+        /* Resolution prompt — asked once, under an answer. */
+        .sapiensly-resolution {
+            margin: 8px 0 4px;
+            padding: 10px 12px;
+            border-radius: 10px;
+            background: rgba(0, 0, 0, 0.04);
+        }
+
+        .sapiensly-resolution-q {
+            margin: 0 0 8px;
+            font-size: 13px;
+            opacity: 0.75;
+        }
+
+        .sapiensly-resolution-actions {
+            display: flex;
+            gap: 8px;
+        }
+
+        .sapiensly-resolution-btn {
+            flex: 1;
+            padding: 6px 10px;
+            font: inherit;
+            font-size: 13px;
+            cursor: pointer;
+            border-radius: 8px;
+            border: 1px solid var(--sw-primary);
+            background: transparent;
+            color: var(--sw-primary);
+        }
+
+        .sapiensly-resolution-btn:hover {
+            background: var(--sw-primary);
+            color: #fff;
+        }
+
         /* Mobile Responsive */
         @media (max-width: 480px) {
             .sapiensly-window {

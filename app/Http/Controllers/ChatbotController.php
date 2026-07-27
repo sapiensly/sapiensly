@@ -129,7 +129,11 @@ class ChatbotController extends Controller
         $stats = [
             'total_conversations' => $chatbot->conversations()->count(),
             'total_sessions' => $chatbot->sessions()->count(),
-            'avg_rating' => $chatbot->conversations()->whereNotNull('rating')->avg('rating'),
+            // Cast: Postgres returns AVG over a numeric column as a STRING, and
+            // the page calls .toFixed() on it — so the owner's own chatbot page
+            // threw as soon as one visitor rated a conversation, and only then.
+            // Null stays null; the page renders a dash for it.
+            'avg_rating' => $this->floatOrNull($chatbot->conversations()->whereNotNull('rating')->avg('rating')),
             'resolution_rate' => $this->calculateResolutionRate($chatbot),
         ];
 
@@ -240,15 +244,23 @@ class ChatbotController extends Controller
     {
         $this->authorize('view', $chatbot);
 
+        $awaitingOnly = $request->boolean('awaiting_person');
+
         $conversations = $chatbot->conversations()
-            ->with('session:id,visitor_email,visitor_name,last_activity_at')
+            ->with(['session:id,visitor_email,visitor_name,last_activity_at', 'contact:id,profile_name,email'])
             ->withCount('messages')
+            // A conversation that asked for a person is the one the team is
+            // costing money by not reading. It gets to be findable.
+            ->when($awaitingOnly, fn ($query) => $query->whereNotNull('metadata->handoff'))
             ->latest()
-            ->paginate(20);
+            ->paginate(20)
+            ->withQueryString();
 
         return Inertia::render('chatbots/Conversations', [
             'chatbot' => $chatbot,
             'conversations' => $conversations,
+            'awaitingPersonOnly' => $awaitingOnly,
+            'awaitingPersonCount' => $chatbot->conversations()->whereNotNull('metadata->handoff')->count(),
         ]);
     }
 
@@ -262,7 +274,7 @@ class ChatbotController extends Controller
 
         return Inertia::render('chatbots/Conversation', [
             'chatbot' => $chatbot,
-            'conversation' => $conversation->load(['session', 'messages']),
+            'conversation' => $conversation->load(['session', 'messages', 'contact']),
         ]);
     }
 
@@ -283,6 +295,18 @@ class ChatbotController extends Controller
 </script>
 <!-- End Sapiensly Widget -->
 HTML;
+    }
+
+    /**
+     * A database aggregate as the number the frontend's type says it is.
+     *
+     * Postgres hands back AVG/SUM over numeric columns as strings, which survive
+     * JSON encoding as strings and then fail whatever arithmetic the page does
+     * with them — silently correct until the first row exists.
+     */
+    private function floatOrNull(mixed $value): ?float
+    {
+        return $value === null ? null : (float) $value;
     }
 
     private function calculateResolutionRate(Chatbot $chatbot): float

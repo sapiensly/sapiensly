@@ -317,4 +317,16 @@ export interface RuntimePageProps {
     publicSurface?: boolean;
     /** Cloudflare Turnstile site key for the public lead form (null = not configured). */
     turnstileSiteKey?: string | null;
+    /**
+     * The chatbot this landing carries, resolved server-side. Null when it binds
+     * none, or when the bot it named was paused or deleted after publishing —
+     * the page renders either way, just without the bubble.
+     */
+    chatbot?: {
+        chatbot_id: string;
+        token: string;
+        position: 'left' | 'right';
+        greeting: string | null;
+        appearance: Record<string, unknown>;
+    } | null;
 }

@@ -21,6 +21,13 @@ class Agent extends Model
     use HasFactory, HasPrefixedUlid, HasVisibility;
     use UsesPlatformConnection;
 
+    /**
+     * Set only by the evaluation harness — see withKnowledgeBaseIdsInMemory().
+     *
+     * @var array<int, string>|null
+     */
+    protected ?array $evaluationKnowledgeBaseIds = null;
+
     protected $fillable = [
         'user_id',
         'organization_id',
@@ -81,7 +88,25 @@ class Agent extends Model
      */
     public function knowledgeBaseIds(): array
     {
-        return $this->knowledgeBaseLinks()->pluck('knowledge_base_id')->all();
+        return $this->evaluationKnowledgeBaseIds ?? $this->knowledgeBaseLinks()->pluck('knowledge_base_id')->all();
+    }
+
+    /**
+     * Answer "which knowledge bases are attached?" from memory instead of the
+     * link table, for the duration of this instance.
+     *
+     * Only the evaluation harness sets this, and it needs to: retrieval is
+     * skipped entirely for an agent with nothing attached, so evaluating such a
+     * bot graded answers the test material had never reached — a whole run of
+     * numbers about nothing, and the report looked normal. Nothing persists.
+     *
+     * @param  array<int, string>  $ids
+     */
+    public function withKnowledgeBaseIdsInMemory(array $ids): self
+    {
+        $this->evaluationKnowledgeBaseIds = array_values($ids);
+
+        return $this;
     }
 
     /**

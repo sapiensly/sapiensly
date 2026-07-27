@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import InputError from '@/components/InputError.vue';
+import DraftConflicts from '@/components/admin/DraftConflicts.vue';
 import SettingsCard from '@/components/admin/SettingsCard.vue';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -7,6 +8,7 @@ import SettingsLayout from '@/layouts/settings/Layout.vue';
 import { Head, useForm } from '@inertiajs/vue3';
 import {
     Check,
+    Globe,
     ImagePlus,
     Loader2,
     Palette,
@@ -233,6 +235,140 @@ function applyProposal(proposal: PaletteProposal): void {
 }
 
 const RAMP_STOPS = ['100', '300', '500', '700', '900'];
+
+// Read the brand off the organization's own website. The server labels every
+// field: `new` (the brand left it unset — safe to fill) or `conflict` (the brand
+// already says something else). Conflicts are never applied here; they go to the
+// review and wait for the user. Nothing is saved until Save either way.
+interface DiffEntry {
+    field: string;
+    status: string;
+    current: unknown;
+    proposed: unknown;
+}
+
+const siteUrl = ref('');
+const siteReading = ref(false);
+const siteNotes = ref<string[]>([]);
+const siteConflicts = ref<DiffEntry[]>([]);
+
+/**
+ * Assets whose copy-to-storage failed (no object storage configured, the host
+ * went away mid-flow). They stay here rather than vanishing: a field silently
+ * dropped is one the user cannot get back without re-reading the whole site.
+ */
+const siteFailures = ref<{ field: string; value: string; message: string }[]>(
+    [],
+);
+
+const CONFLICT_LABELS = computed<Record<string, string>>(() => ({
+    logo_url: t('settings.brand.logo'),
+    icon_url: t('settings.brand.icon'),
+    accent_color: t('settings.brand.accent'),
+    font: t('settings.brand.font'),
+    theme: t('settings.brand.theme'),
+}));
+
+/**
+ * Copy a remote image onto the tenant's disk before adopting it, so the brand
+ * does not depend on someone else's server staying up. Only ever runs on accept.
+ */
+async function adoptAsset(field: string, url: string): Promise<string | null> {
+    try {
+        const { data } = await axios.post(
+            '/settings/organization/brand/asset/import',
+            { kind: field === 'logo_url' ? 'logo' : 'icon', url },
+        );
+        return data.url;
+    } catch (error) {
+        const message =
+            (error as { response?: { data?: { message?: string } } }).response
+                ?.data?.message ?? t('settings.brand.asset_failed');
+        // Remember it so the user can retry without re-reading the whole site.
+        siteFailures.value = [
+            ...siteFailures.value.filter((f) => f.field !== field),
+            { field, value: url, message },
+        ];
+        toast.error(message);
+        return null;
+    }
+}
+
+/** Returns whether the field actually landed on the form. */
+async function applySiteField(field: string, value: unknown): Promise<boolean> {
+    if (typeof value !== 'string') return false;
+
+    const stored =
+        field === 'logo_url' || field === 'icon_url'
+            ? await adoptAsset(field, value)
+            : value;
+
+    if (stored === null) return false;
+
+    (form as unknown as Record<string, unknown>)[field] = stored;
+    siteFailures.value = siteFailures.value.filter((f) => f.field !== field);
+
+    return true;
+}
+
+async function readSite(): Promise<void> {
+    siteReading.value = true;
+    siteConflicts.value = [];
+    siteNotes.value = [];
+    siteFailures.value = [];
+    try {
+        const { data } = await axios.post(
+            '/settings/organization/brand/from-site',
+            { website: siteUrl.value },
+        );
+
+        siteNotes.value = data.notes ?? [];
+        const diff = (data.diff ?? []) as DiffEntry[];
+
+        for (const entry of diff.filter((e) => e.status === 'new')) {
+            await applySiteField(entry.field, entry.proposed);
+        }
+        siteConflicts.value = diff.filter((e) => e.status === 'conflict');
+
+        if (!diff.length && !siteNotes.value.length) {
+            toast.info(t('settings.brand.from_site_empty'));
+        } else if (siteConflicts.value.length) {
+            toast.success(
+                t('settings.brand.from_site_conflicts', {
+                    count: siteConflicts.value.length,
+                }),
+            );
+        } else {
+            toast.success(t('settings.brand.from_site_applied'));
+        }
+    } catch {
+        toast.error(t('settings.brand.from_site_failed'));
+    } finally {
+        siteReading.value = false;
+    }
+}
+
+async function acceptSiteField(field: string, value: unknown): Promise<void> {
+    // A failed accept keeps its card: the user asked for this value and has to
+    // be able to ask again, rather than watch it disappear.
+    if (await applySiteField(field, value)) {
+        siteConflicts.value = siteConflicts.value.filter(
+            (e) => e.field !== field,
+        );
+    }
+}
+
+async function retryFailure(field: string, value: string): Promise<void> {
+    await applySiteField(field, value);
+}
+
+function dismissFailure(field: string): void {
+    siteFailures.value = siteFailures.value.filter((f) => f.field !== field);
+}
+
+function dismissSiteField(field: string): void {
+    siteConflicts.value = siteConflicts.value.filter((e) => e.field !== field);
+}
 </script>
 
 <template>
@@ -281,6 +417,87 @@ const RAMP_STOPS = ['100', '300', '500', '700', '900'];
                         >
                             {{ t('settings.brand.preview_button') }}
                         </button>
+                    </div>
+                </div>
+            </SettingsCard>
+
+            <!-- Read the brand off the organization's own website. -->
+            <SettingsCard
+                :icon="Globe"
+                :title="t('settings.brand.from_site')"
+                :description="t('settings.brand.from_site_hint')"
+                tint="var(--sp-accent-green)"
+            >
+                <div class="space-y-3">
+                    <div class="flex items-center gap-2">
+                        <Input
+                            v-model="siteUrl"
+                            type="url"
+                            placeholder="https://"
+                        />
+                        <button
+                            type="button"
+                            :disabled="siteReading || !siteUrl"
+                            class="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-xs border border-soft px-3 text-xs text-ink-muted transition-colors hover:bg-surface hover:text-ink disabled:opacity-50"
+                            @click="readSite"
+                        >
+                            <Loader2
+                                v-if="siteReading"
+                                class="size-3.5 animate-spin"
+                            />
+                            <Wand2 v-else class="size-3.5" />
+                            {{ t('settings.brand.from_site_button') }}
+                        </button>
+                    </div>
+
+                    <p
+                        v-for="note in siteNotes"
+                        :key="note"
+                        class="text-xs text-ink-muted"
+                    >
+                        {{ note }}
+                    </p>
+
+                    <DraftConflicts
+                        :entries="siteConflicts"
+                        :labels="CONFLICT_LABELS"
+                        @accept="acceptSiteField"
+                        @dismiss="dismissSiteField"
+                    />
+
+                    <!-- Assets we found but could not copy: kept, not dropped. -->
+                    <div
+                        v-for="failure in siteFailures"
+                        :key="failure.field"
+                        class="space-y-2 rounded-sp-sm border border-soft p-3"
+                    >
+                        <p class="text-xs font-medium text-ink">
+                            {{ CONFLICT_LABELS[failure.field] }}
+                        </p>
+                        <p class="text-xs text-ink-muted">
+                            {{ failure.message }}
+                        </p>
+                        <p class="text-xs break-all text-ink-muted">
+                            {{ failure.value }}
+                        </p>
+                        <div class="flex items-center gap-2">
+                            <button
+                                type="button"
+                                class="h-8 rounded-xs border border-soft px-3 text-xs text-ink-muted transition-colors hover:bg-surface hover:text-ink"
+                                @click="dismissFailure(failure.field)"
+                            >
+                                {{ t('settings.brand.asset_skip') }}
+                            </button>
+                            <button
+                                type="button"
+                                class="h-8 rounded-xs bg-accent-blue px-3 text-xs font-medium text-white transition-opacity hover:opacity-90"
+                                @click="
+                                    retryFailure(failure.field, failure.value)
+                                "
+                            >
+                                {{ t('settings.brand.asset_retry') }}
+                            </button>
+                        </div>
                     </div>
                 </div>
             </SettingsCard>

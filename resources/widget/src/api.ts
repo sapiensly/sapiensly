@@ -208,22 +208,26 @@ export class ApiClient {
     ): () => void {
         const url = `${this.baseUrl}/api/widget/v1/conversations/${conversationId}/stream`;
 
-        const eventSource = new EventSource(url);
         let isComplete = false;
 
-        // For authenticated SSE, we need to use fetch with ReadableStream instead
-        // because EventSource doesn't support custom headers.
-        // Let's use fetch-based SSE.
-
-        eventSource.close();
-
+        // EventSource cannot carry custom headers, so the stream is read with
+        // fetch + ReadableStream instead.
         const controller = new AbortController();
 
+        const headers: Record<string, string> = {
+            Authorization: `Bearer ${this.token}`,
+            Accept: 'text/event-stream',
+        };
+        // The session token proves this conversation is OURS. The API token
+        // proves nothing about identity — it is public in the page source of
+        // every site that embeds the bot, so the server needs the session to
+        // tell one visitor from another.
+        if (this.sessionToken) {
+            headers['X-Session-Token'] = this.sessionToken;
+        }
+
         fetch(url, {
-            headers: {
-                Authorization: `Bearer ${this.token}`,
-                Accept: 'text/event-stream',
-            },
+            headers,
             signal: controller.signal,
         })
             .then(async (response) => {

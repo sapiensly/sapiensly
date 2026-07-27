@@ -12,7 +12,13 @@ import {
 import AppLayoutV2 from '@/layouts/AppLayoutV2.vue';
 import type { Chatbot, PaginatedConversations } from '@/types/chatbot';
 import { Head, Link } from '@inertiajs/vue3';
-import { ChevronLeft, ChevronRight, MessageSquare, Star } from '@lucide/vue';
+import {
+    ChevronLeft,
+    ChevronRight,
+    MessageSquare,
+    Star,
+    UserRound,
+} from '@lucide/vue';
 import { useI18n } from 'vue-i18n';
 
 const { t } = useI18n();
@@ -20,6 +26,8 @@ const { t } = useI18n();
 interface Props {
     chatbot: Chatbot;
     conversations: PaginatedConversations;
+    awaitingPersonOnly: boolean;
+    awaitingPersonCount: number;
 }
 
 defineProps<Props>();
@@ -51,6 +59,35 @@ const formatDate = (date: string) => {
                         "
                     >
                         {{ t('chatbots.conversations.back') }}
+                    </Link>
+                </Button>
+            </div>
+
+            <!--
+                Someone asked the bot for a person. Until a human replies, this
+                is the only place that fact is visible — so it gets a filter of
+                its own rather than a badge buried in a list of forty.
+            -->
+            <div
+                v-if="awaitingPersonCount > 0 || awaitingPersonOnly"
+                class="flex items-center gap-2"
+            >
+                <Button
+                    :variant="awaitingPersonOnly ? 'default' : 'outline'"
+                    size="sm"
+                    as-child
+                >
+                    <Link
+                        :href="
+                            ChatbotController.conversations({
+                                chatbot: chatbot.id,
+                            }).url +
+                            (awaitingPersonOnly ? '' : '?awaiting_person=1')
+                        "
+                    >
+                        <UserRound class="mr-2 h-4 w-4" />
+                        {{ t('chatbots.conversations.awaiting_person') }}
+                        ({{ awaitingPersonCount }})
                     </Link>
                 </Button>
             </div>
@@ -159,6 +196,18 @@ const formatDate = (date: string) => {
                                             conversation.rating
                                         }}</span>
                                     </div>
+
+                                    <!-- Asked for a person -->
+                                    <Badge
+                                        v-if="conversation.metadata?.handoff"
+                                        variant="destructive"
+                                    >
+                                        {{
+                                            t(
+                                                'chatbots.conversations.awaiting_person',
+                                            )
+                                        }}
+                                    </Badge>
 
                                     <!-- Status Badge -->
                                     <Badge

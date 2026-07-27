@@ -31,6 +31,7 @@ class App extends Model
         'icon',
         'color',
         'kind',
+        'chatbot_id',
         'current_version_id',
         'visibility',
     ];
@@ -62,6 +63,17 @@ class App extends Model
     public function currentVersion(): BelongsTo
     {
         return $this->belongsTo(AppVersion::class, 'current_version_id');
+    }
+
+    /**
+     * The chatbot this landing serves as a floating bubble, denormalized from
+     * `settings.chatbot.id`. Null on every other surface. No foreign key backs
+     * the column, so this can resolve to null for a chatbot that has since been
+     * deleted — callers must treat that as "no bubble", not as an error.
+     */
+    public function chatbot(): BelongsTo
+    {
+        return $this->belongsTo(Chatbot::class);
     }
 
     public function versions(): HasMany

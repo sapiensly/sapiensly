@@ -10,6 +10,8 @@ use App\Services\Security\Ssrf\IpRangeMatcher;
 use App\Services\Security\Ssrf\SsrfGuard;
 use App\Services\Security\Ssrf\SystemDnsResolver;
 use App\Services\Tools\SshTunnel;
+use App\Support\Ai\AiUsageSubject;
+use App\Support\Ai\PublicTurnContext;
 use App\Support\Tenancy\TenantCache;
 use App\Support\Tenancy\TenantContext;
 use Illuminate\Cache\RateLimiting\Limit;
@@ -42,6 +44,12 @@ class AppServiceProvider extends ServiceProvider
         // One tenant scope per request/worker, shared by the HTTP middleware,
         // queue middleware and account switching.
         $this->app->singleton(TenantContext::class);
+        // One trust boundary per request, consulted by every LLMService instance
+        // the turn happens to build. See PublicTurnContext.
+        $this->app->singleton(PublicTurnContext::class);
+        // …and one attribution subject, for the same reason: a turn is served by
+        // several LLMService instances and the ledger has to name the same one.
+        $this->app->singleton(AiUsageSubject::class);
 
         // Tenant-scoped cache (the Redis-layer analog to RLS): keys are
         // transparently namespaced by the active tenant scope, so cached

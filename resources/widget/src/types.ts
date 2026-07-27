@@ -19,6 +19,15 @@ export interface AppearanceConfig {
     welcome_message: string;
     placeholder_text: string;
     widget_title: string;
+    /**
+     * The one question that makes the resolution rate mean anything. Asked once
+     * per conversation, right under an answer, as two buttons — not a star
+     * rating in a modal, which almost nobody fills in.
+     */
+    resolution_prompt: string;
+    resolution_yes: string;
+    resolution_no: string;
+    resolution_thanks: string;
 }
 
 export interface BehaviorConfig {
@@ -84,6 +93,16 @@ export interface VisitorInfo {
 export interface WidgetOptions {
     token: string;
     baseUrl?: string;
+    /**
+     * Per-page appearance overrides, merged over whatever the server returns.
+     *
+     * The server config is per CHATBOT; the same bot can run on several
+     * surfaces that each want it to look like they do — a Sapiensly landing
+     * passes its own accent, corner and welcome line here so the bubble reads
+     * as part of that page rather than as a pasted-on control. Nothing here is
+     * persisted: it styles this mount only.
+     */
+    appearance?: Partial<AppearanceConfig>;
 }
 
 /**

@@ -185,7 +185,10 @@ DESC;
             ];
         }
 
-        $validation = $this->validator->validate($draft);
+        // The app goes in so owner-scoped rules (a chatbot binding that names
+        // someone else's bot) fail HERE, while the author can still fix them,
+        // rather than at createVersion.
+        $validation = $this->validator->validate($draft, $this->appModel);
         if (! $validation->valid) {
             return [
                 'ok' => false,

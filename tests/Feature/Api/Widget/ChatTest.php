@@ -39,6 +39,7 @@ describe('conversations', function () {
                 'session_token' => $this->session->session_token,
             ], [
                 'Authorization' => "Bearer {$this->token->token}",
+                'X-Session-Token' => $this->session->session_token,
             ]);
 
             $response->assertCreated()
@@ -59,6 +60,7 @@ describe('conversations', function () {
                 'initial_message' => 'Hello, I need help!',
             ], [
                 'Authorization' => "Bearer {$this->token->token}",
+                'X-Session-Token' => $this->session->session_token,
             ]);
 
             $response->assertCreated()
@@ -84,6 +86,7 @@ describe('conversations', function () {
                 'session_token' => 'invalid-token',
             ], [
                 'Authorization' => "Bearer {$this->token->token}",
+                'X-Session-Token' => $this->session->session_token,
             ]);
 
             $response->assertNotFound();
@@ -111,6 +114,7 @@ describe('conversations', function () {
 
             $response = $this->getJson("/api/widget/v1/conversations/{$conversation->id}/messages", [
                 'Authorization' => "Bearer {$this->token->token}",
+                'X-Session-Token' => $this->session->session_token,
             ]);
 
             $response->assertOk()
@@ -126,6 +130,7 @@ describe('conversations', function () {
         it('returns 404 for non-existent conversation', function () {
             $response = $this->getJson('/api/widget/v1/conversations/non-existent/messages', [
                 'Authorization' => "Bearer {$this->token->token}",
+                'X-Session-Token' => $this->session->session_token,
             ]);
 
             $response->assertNotFound();
@@ -143,6 +148,7 @@ describe('conversations', function () {
                 'content' => 'Hello, this is my message',
             ], [
                 'Authorization' => "Bearer {$this->token->token}",
+                'X-Session-Token' => $this->session->session_token,
             ]);
 
             $response->assertCreated()
@@ -170,6 +176,7 @@ describe('conversations', function () {
                 'content' => '',
             ], [
                 'Authorization' => "Bearer {$this->token->token}",
+                'X-Session-Token' => $this->session->session_token,
             ]);
 
             $response->assertUnprocessable();
@@ -186,6 +193,7 @@ describe('conversations', function () {
                 'content' => 'Hello!',
             ], [
                 'Authorization' => "Bearer {$this->token->token}",
+                'X-Session-Token' => $this->session->session_token,
             ]);
 
             expect($conversation->fresh()->message_count)->toBe(1);

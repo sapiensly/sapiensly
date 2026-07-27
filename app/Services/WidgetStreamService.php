@@ -10,6 +10,10 @@ use App\Models\Conversation;
 use App\Models\WidgetConversation;
 use App\Models\WidgetMessage;
 use App\Services\Ai\AiDefaults;
+use App\Services\Chatbots\ConversationEscalator;
+use App\Support\Ai\AiUsageSubject;
+use App\Support\Ai\PublicTurnContext;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Log;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
@@ -26,6 +30,7 @@ class WidgetStreamService
         private TeamOrchestrationService $orchestrationService,
         private AiDefaults $aiDefaults,
         private ConversationAttachmentService $attachments,
+        private ConversationEscalator $escalator,
     ) {}
 
     /**
@@ -36,9 +41,17 @@ class WidgetStreamService
      */
     private function turnAttachments(WidgetConversation $conversation): array
     {
+        // reorder() before latest(), for the second time in this file: the
+        // messages() relation bakes in an ASCENDING order for the transcript and
+        // a chained latest() only appends to it, so without this "the visitor's
+        // last message" resolves to their FIRST one. Here that meant a file
+        // attached on turn three never reached the model, while turn one's file
+        // was re-sent on every turn forever.
         $lastUser = $conversation->messages()
             ->where('role', MessageRole::User->value)
+            ->reorder()
             ->latest('created_at')
+            ->latest('id')
             ->first();
 
         if ($lastUser === null) {
@@ -69,9 +82,54 @@ class WidgetStreamService
     ): StreamedResponse {
         $startTime = microtime(true);
 
+        // Bind the AI provider credentials to the chatbot's OWNER, exactly as
+        // BindWidgetTenantContext binds their tenant scope. A widget request has
+        // no session user, and InjectAiProviderConfig only runs on the `web`
+        // group and only for an authenticated one — so without this the DB-stored
+        // keys never reach the SDK and every provider call fails auth. Invisible
+        // on installs whose keys sit in the environment, fatal on the ones whose
+        // keys live in `ai_providers`. setContext also attributes the spend to
+        // the owner, which is who is paying for an anonymous visitor's turn.
+        if (($owner = $chatbot->user) !== null) {
+            $this->llmService->setContext($owner);
+        }
+
         // Get conversation messages for context
         $messages = $conversation->messages()->orderBy('created_at')->get();
 
+        // Two things are true of this turn and neither belongs on this service:
+        //
+        //  - it is driven by a STRANGER, so it must not inherit the owner's
+        //    platform tool catalogue, only the tools attached to this bot;
+        //  - it belongs to THIS bot's conversation, so its spend is attributable
+        //    instead of vanishing into the organization's total.
+        //
+        // Both ride on request-scoped contexts because a multi-agent bot answers
+        // through the orchestrator's own LLMService instance, which any flag set
+        // on this one would sail straight past.
+        return app(PublicTurnContext::class)->runPublic(
+            fn () => app(AiUsageSubject::class)->attributedTo(
+                'chatbot',
+                $conversation->id,
+                fn () => $this->answer($chatbot, $conversation, $messages, $startTime),
+            ),
+            $chatbot,
+            $conversation,
+        );
+    }
+
+    /**
+     * Pick how this bot answers and run it: a one-agent roster is direct LLM
+     * chat, more than one goes through orchestration.
+     *
+     * @param  Collection<int, WidgetMessage>  $messages
+     */
+    private function answer(
+        Chatbot $chatbot,
+        WidgetConversation $conversation,
+        $messages,
+        float $startTime,
+    ): StreamedResponse {
         // The AI Bot runs on its Bot Flow roster. A single-agent roster runs as
         // direct LLM chat; a multi-agent roster goes through orchestration.
         $roster = $chatbot->botFlow?->rosterAgents() ?? [];
@@ -123,39 +181,41 @@ class WidgetStreamService
                 $descriptors,
             );
 
-            // Check if agent has active tools
-            if ($agent->tools()->where('status', 'active')->exists()) {
-                // Use tool-enabled chat (non-streaming)
-                $response = $this->llmService->chatWithTools($agent, $messages->all(), attachments: $storedAttachments);
-                $chunks[] = $response->text ?? '';
+            // One path for both bots, with and without tools, because the answer
+            // is built the same way either way: retrieve, put the retrieved text
+            // INTO the prompt, then answer.
+            //
+            // It used to fork, and both forks were ungrounded. The tool branch
+            // never retrieved at all. The other retrieved, kept only the list of
+            // knowledge bases for the "consulted X" chip and the stored metadata,
+            // and dropped `context` on the floor — so the widget paid for the
+            // embedding and the vector search, told the visitor their question
+            // had been researched, and then answered from the bare prompt. Worse
+            // than not searching: it looked grounded.
+            //
+            // Synchronous on purpose: streaming generators do not survive inside
+            // response()->stream(), which is why this path never used the
+            // streaming RAG helper.
+            $result = $this->llmService->chatWithKnowledgeAndTools(
+                $agent,
+                $messages->all(),
+                attachments: $storedAttachments,
+            );
 
-                // Extract tool calls
-                foreach ($response->steps ?? [] as $step) {
-                    foreach ($step->toolCalls ?? [] as $toolCall) {
-                        $toolCalls[] = [
-                            'name' => $toolCall->name ?? 'unknown',
-                            'id' => $toolCall->id ?? null,
-                        ];
-                    }
-                }
-            } else {
-                // Use synchronous chat (streaming generators don't work inside response()->stream())
-                $knowledgeBaseIds = $agent->knowledgeBaseIds();
+            $response = $result['response'];
+            $knowledgeBases = $result['knowledge_bases'];
 
-                if (! empty($knowledgeBaseIds)) {
-                    $lastUserMessage = $messages->last()?->content ?? '';
-                    $retrieval = app(RetrievalService::class)->retrieve(
-                        $lastUserMessage,
-                        $knowledgeBaseIds,
-                        topK: 5,
-                        threshold: 0.5
-                    );
-                    $knowledgeBases = $retrieval['knowledge_bases'] ?? [];
-                }
+            $text = $response->text ?? '';
+            if ($text !== '') {
+                $chunks[] = $text;
+            }
 
-                $fullContent = $this->llmService->chat($agent, $messages->all(), $storedAttachments);
-                if ($fullContent !== '') {
-                    $chunks[] = $fullContent;
+            foreach ($response->steps ?? [] as $step) {
+                foreach ($step->toolCalls ?? [] as $toolCall) {
+                    $toolCalls[] = [
+                        'name' => $toolCall->name ?? 'unknown',
+                        'id' => $toolCall->id ?? null,
+                    ];
                 }
             }
         } catch (\Exception $e) {
@@ -269,16 +329,15 @@ class WidgetStreamService
                     'name' => $event['tool'] ?? 'unknown',
                 ];
             } elseif ($event['type'] === 'flow_human_handoff') {
-                // A human_handoff node fired — flag the conversation for human
-                // takeover so the inbox/analytics can pick it up. The event is
-                // still forwarded to the client to render the escalation notice.
-                $metadata = $conversation->metadata ?? [];
-                $metadata['human_handoff'] = [
-                    'reason' => $event['reason'] ?? null,
-                    'notify' => $event['notify'] ?? true,
-                    'at' => now()->toISOString(),
-                ];
-                $conversation->update(['metadata' => $metadata]);
+                // A human_handoff node fired. This used to write a metadata key
+                // that nothing in the codebase ever read — the visitor was told
+                // help was coming and no one was told anything at all.
+                $this->escalator->escalate(
+                    $chatbot,
+                    $conversation,
+                    reason: $event['reason'] ?? null,
+                    notify: (bool) ($event['notify'] ?? true),
+                );
             }
         }
 
@@ -297,6 +356,57 @@ class WidgetStreamService
     /**
      * Create a streamed SSE response.
      */
+    /**
+     * Store the finished reply and its conversation bookkeeping. Returns the
+     * message, or null when the model produced nothing to store.
+     *
+     * @param  list<string>  $chunks
+     * @param  array<int, array<string, mixed>>  $knowledgeBases
+     * @param  array<int, array<string, mixed>>  $toolCalls
+     */
+    private function persistAssistantMessage(
+        WidgetConversation $conversation,
+        string $model,
+        array $chunks,
+        float $startTime,
+        array $knowledgeBases,
+        array $toolCalls,
+    ): ?WidgetMessage {
+        $fullContent = implode('', $chunks);
+        if ($fullContent === '') {
+            return null;
+        }
+
+        $metadata = [];
+        if (! empty($knowledgeBases)) {
+            $metadata['knowledge_bases'] = $knowledgeBases;
+        }
+        if (! empty($toolCalls)) {
+            $metadata['tool_calls'] = $toolCalls;
+        }
+
+        $responseTimeMs = (int) ((microtime(true) - $startTime) * 1000);
+
+        $message = WidgetMessage::create([
+            'widget_conversation_id' => $conversation->id,
+            'role' => MessageRole::Assistant,
+            'content' => $fullContent,
+            'model' => $model,
+            'response_time_ms' => $responseTimeMs,
+            'metadata' => $metadata !== [] ? $metadata : null,
+        ]);
+
+        $conversation->increment('message_count');
+
+        if (! $conversation->first_response_at) {
+            $conversation->update(['first_response_at' => now()]);
+        }
+
+        $conversation->increment('total_response_time_ms', $responseTimeMs);
+
+        return $message;
+    }
+
     private function createStreamResponse(
         WidgetConversation $conversation,
         string $model,
@@ -307,9 +417,18 @@ class WidgetStreamService
         array $toolCalls = [],
         array $events = []
     ): StreamedResponse {
+        // Persist BEFORE transmitting. The model call already finished and was
+        // already paid for by the time we get here — $chunks is the whole reply.
+        // Saving it inside the streaming callback meant a visitor closing the tab
+        // mid-transmission aborted the script before the write: the tokens were
+        // spent, the answer vanished, and on their next visit the transcript
+        // showed their question with no reply to it.
+        if ($error === null) {
+            $this->persistAssistantMessage($conversation, $model, $chunks, $startTime, $knowledgeBases, $toolCalls);
+        }
+
         return response()->stream(function () use (
-            $conversation, $model, $chunks, $error, $startTime,
-            $knowledgeBases, $toolCalls, $events
+            $chunks, $error, $knowledgeBases, $toolCalls, $events
         ) {
             // Send tool call events first
             foreach ($toolCalls as $toolCall) {
@@ -341,46 +460,13 @@ class WidgetStreamService
                 return;
             }
 
-            // Stream content chunks
-            $fullContent = '';
+            // The `type` is load-bearing, not decoration: the widget dispatches
+            // on `event.type === 'content'`, so an untyped payload is parsed,
+            // matched by nothing and dropped. The reply was still persisted, so
+            // it surfaced on the next page load — which made the bot look like
+            // it only answered after a refresh.
             foreach ($chunks as $chunk) {
-                $fullContent .= $chunk;
-                $this->sendEvent(['content' => $chunk]);
-            }
-
-            // Calculate response time
-            $responseTimeMs = (int) ((microtime(true) - $startTime) * 1000);
-
-            // Save the assistant message
-            if ($fullContent !== '') {
-                $metadata = [];
-                if (! empty($knowledgeBases)) {
-                    $metadata['knowledge_bases'] = $knowledgeBases;
-                }
-                if (! empty($toolCalls)) {
-                    $metadata['tool_calls'] = $toolCalls;
-                }
-
-                $message = WidgetMessage::create([
-                    'widget_conversation_id' => $conversation->id,
-                    'role' => MessageRole::Assistant,
-                    'content' => $fullContent,
-                    'model' => $model,
-                    'response_time_ms' => $responseTimeMs,
-                    'metadata' => ! empty($metadata) ? $metadata : null,
-                ]);
-
-                $conversation->increment('message_count');
-
-                // Update first response time if this is the first assistant message
-                if (! $conversation->first_response_at) {
-                    $conversation->update([
-                        'first_response_at' => now(),
-                    ]);
-                }
-
-                // Accumulate total response time
-                $conversation->increment('total_response_time_ms', $responseTimeMs);
+                $this->sendEvent(['type' => 'content', 'content' => $chunk]);
             }
 
             $this->sendEvent(['type' => 'done']);

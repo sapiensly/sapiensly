@@ -76,6 +76,21 @@ export interface WidgetConversation {
     feedback: string | null;
     is_resolved: boolean;
     is_abandoned: boolean;
+    /** Present once a human_handoff node fired — the conversation asked for a person. */
+    metadata: {
+        handoff?: {
+            at: string;
+            reason: string | null;
+            mode: 'redirect' | 'capture';
+            channel: string | null;
+            resolved_at: string | null;
+        };
+    } | null;
+    contact?: {
+        id: string;
+        profile_name: string | null;
+        email: string | null;
+    } | null;
     first_response_at: string | null;
     total_response_time_ms: number;
     created_at: string;

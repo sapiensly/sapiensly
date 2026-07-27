@@ -5933,6 +5933,24 @@
                     "type": "object",
                     "required": [
                         "type",
+                        "channel_id"
+                    ],
+                    "additionalProperties": false,
+                    "description": "Fires when a bot hands a conversation to a person (a `human_handoff` node with notify on). `channel_id` binds the workflow to a specific channel in your organization. This is how a team gets told: send an email, post to Slack, create a ticket record. Trigger payload: {channel:{id,type,name}, chatbot:{id,name}, conversation_id, reason, mode, contact:{id,name,email,identifier}}.",
+                    "properties": {
+                        "type": {
+                            "const": "conversation.escalated"
+                        },
+                        "channel_id": {
+                            "type": "string",
+                            "maxLength": 64
+                        }
+                    }
+                },
+                {
+                    "type": "object",
+                    "required": [
+                        "type",
                         "integration_id"
                     ],
                     "additionalProperties": false,
@@ -6880,6 +6898,34 @@
                         "landing"
                     ],
                     "description": "Explicit product surface, overriding content-based classification. 'landing' renders a public, chrome-less full-bleed page — no site header/sidebar/footer, so the page brings its own navbar/footer section blocks and each section paints itself edge to edge. Omit to let the app be classified from its blocks (app vs dashboard)."
+                },
+                "chatbot": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                        "id"
+                    ],
+                    "description": "Puts one of the organization's chatbots on this landing as a floating bubble. LANDING SURFACE ONLY, and the chatbot must belong to the same owner as the app — both are enforced by the validator. Reference the chatbot BY ID (list_chatbots); never paste the embed <script> into an html block, which silently does nothing because the page renders that markup without executing scripts. The bubble inherits this page's accent and typography at render time, so it reads as part of the design rather than bolted on. Omit ⇒ no chatbot.",
+                    "properties": {
+                        "id": {
+                            "type": "string",
+                            "pattern": "^chatbot_[A-Za-z0-9]{6,40}$",
+                            "description": "The chatbot's id (chatbot_…), from list_chatbots. Must be active and owned by this app's organization. Note this is NOT a manifest id: it names a row outside the manifest, so it carries the platform's own 'chatbot_' prefix rather than the short in-manifest id shape."
+                        },
+                        "position": {
+                            "enum": [
+                                "left",
+                                "right"
+                            ],
+                            "default": "right",
+                            "description": "Which bottom corner the bubble sits in. Use 'left' when the right corner already carries a CTA the page needs unobstructed."
+                        },
+                        "greeting": {
+                            "type": "string",
+                            "maxLength": 200,
+                            "description": "Opening line the bubble shows before the visitor types. Write it in the page's own voice — it is the first thing a visitor reads from the bot. Omit to use the chatbot's own configured greeting."
+                        }
+                    }
                 },
                 "seo": {
                     "type": "object",

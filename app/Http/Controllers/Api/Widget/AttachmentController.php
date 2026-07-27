@@ -26,6 +26,8 @@ use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
  */
 class AttachmentController extends Controller
 {
+    use Concerns\ResolvesVisitorConversation;
+
     public function __construct(
         private readonly TenantStorage $tenantStorage,
         private readonly ConversationAttachmentService $attachments,
@@ -36,7 +38,7 @@ class AttachmentController extends Controller
         /** @var Chatbot $chatbot */
         $chatbot = $request->attributes->get('chatbot');
 
-        $widgetConversation = $this->resolveConversation($chatbot, $conversation);
+        $widgetConversation = $this->resolveConversation($request, $chatbot, $conversation);
 
         $uploaded = $request->file('file');
         if ($uploaded === null) {
@@ -98,7 +100,7 @@ class AttachmentController extends Controller
         /** @var Chatbot $chatbot */
         $chatbot = $request->attributes->get('chatbot');
 
-        $widgetConversation = $this->resolveConversation($chatbot, $conversation);
+        $widgetConversation = $this->resolveConversation($request, $chatbot, $conversation);
 
         $row = WidgetAttachment::where('widget_conversation_id', $widgetConversation->id)
             ->where('id', $attachment)
@@ -120,11 +122,9 @@ class AttachmentController extends Controller
         );
     }
 
-    private function resolveConversation(Chatbot $chatbot, string $conversation): WidgetConversation
+    private function resolveConversation(Request $request, Chatbot $chatbot, string $conversation): WidgetConversation
     {
-        $widgetConversation = WidgetConversation::where('chatbot_id', $chatbot->id)
-            ->where('id', $conversation)
-            ->first();
+        $widgetConversation = $this->visitorConversation($request, $chatbot, $conversation);
 
         if (! $widgetConversation) {
             throw new NotFoundHttpException('Conversation not found.');

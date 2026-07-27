@@ -13,6 +13,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Support\Str;
 
 class Chatbot extends Model
 {
@@ -128,7 +129,75 @@ class Chatbot extends Model
             $appearance = $organization->brandbook()->applyToChatbotAppearance($appearance, self::getDefaultAppearance());
         }
 
+        // Everything the visitor reads that nobody chose deliberately gets
+        // translated into the organization's own language. The built-in defaults
+        // are English and are written verbatim into `config` when a bot is
+        // created, so left alone an English "Did this answer your question?"
+        // shows up under a Spanish page — on the one prompt whose whole value is
+        // how many people answer it.
+        $appearance = $this->localizeDefaults($appearance);
+
+        // The panel header should say who is answering. The built-in default is
+        // a generic "Support" — nobody's bot is called that. Adopt the bot's own
+        // name whenever the title was never deliberately changed: the same
+        // fill-the-gaps rule the Brandbook uses, so an authored title still wins.
+        $defaultTitle = self::getDefaultAppearance()['widget_title'];
+        $title = $appearance['widget_title'] ?? null;
+        $localizedTitle = __($defaultTitle, [], $this->voiceLocale());
+        if ((! is_string($title) || trim($title) === '' || $title === $defaultTitle || $title === $localizedTitle)
+            && trim((string) $this->name) !== '') {
+            $appearance['widget_title'] = Str::limit(trim($this->name), 40, '');
+        }
+
         return $appearance;
+    }
+
+    /**
+     * Translate every appearance string still sitting at its built-in English
+     * default. A value someone actually chose is never touched — same
+     * fill-the-gaps rule as the Brandbook.
+     *
+     * @param  array<string, mixed>  $appearance
+     * @return array<string, mixed>
+     */
+    private function localizeDefaults(array $appearance): array
+    {
+        $locale = $this->voiceLocale();
+        if ($locale === 'en') {
+            return $appearance;
+        }
+
+        foreach (self::getDefaultAppearance() as $key => $default) {
+            if (! is_string($default) || $default === '') {
+                continue;
+            }
+
+            $current = $appearance[$key] ?? null;
+            if ($current === null || $current === '' || $current === $default) {
+                $appearance[$key] = __($default, [], $locale);
+            }
+        }
+
+        return $appearance;
+    }
+
+    /**
+     * The language this organization speaks to its customers in.
+     *
+     * Taken from the Contextbook, where the organization already declares it
+     * ("Reply in: es-MX") — not from the visitor's browser and not from the
+     * request, which on a widget call belongs to an anonymous stranger. A
+     * support bot speaks its company's language, and the company said which.
+     */
+    private function voiceLocale(): string
+    {
+        $declared = $this->organization?->aiContext?->context()->language;
+
+        if (is_string($declared) && $declared !== '' && $declared !== 'auto') {
+            return strtolower(substr($declared, 0, 2));
+        }
+
+        return strtolower(substr((string) config('app.locale', 'en'), 0, 2));
     }
 
     public function getBehaviorConfig(): array
@@ -182,6 +251,14 @@ class Chatbot extends Model
             'welcome_message' => 'Hello! How can I help you today?',
             'placeholder_text' => 'Type your message...',
             'widget_title' => 'Support',
+            // Asked once per conversation, under an answer. This is the only
+            // thing that ever sets `is_resolved`, and `is_resolved` is what the
+            // resolution rate is computed from — so without it that headline
+            // metric reads 0 forever, however well the bot is doing.
+            'resolution_prompt' => 'Did this answer your question?',
+            'resolution_yes' => 'Yes, thanks',
+            'resolution_no' => 'Not really',
+            'resolution_thanks' => 'Thanks for telling us.',
         ];
     }
 

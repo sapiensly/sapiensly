@@ -137,6 +137,8 @@ class SapiensServer extends Server
         Tools\Account\GetAiSpendTool::class,
         Tools\Account\GetOrganizationBrandTool::class,
         Tools\Account\SetOrganizationBrandTool::class,
+        Tools\Account\GetOrganizationContextTool::class,
+        Tools\Account\SetOrganizationContextTool::class,
         // Build & debug apps.
         Tools\Build\ListAppsTool::class,
         Tools\Build\CreateAppTool::class,

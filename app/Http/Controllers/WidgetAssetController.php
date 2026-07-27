@@ -64,22 +64,38 @@ class WidgetAssetController extends Controller
             ->header('Access-Control-Allow-Headers', '*')
             // Security headers
             ->header('X-Content-Type-Options', 'nosniff')
-            // CDN hints
-            ->header('CDN-Cache-Control', 'public, max-age=31536000')
-            ->header('Cloudflare-CDN-Cache-Control', 'public, max-age=31536000');
+            // CDN hints — same window as the browser, for the same reason: an
+            // edge holding a year-old bundle serves it to EVERY site at once.
+            ->header('CDN-Cache-Control', self::CACHE_CONTROL)
+            ->header('Cloudflare-CDN-Cache-Control', self::CACHE_CONTROL);
     }
 
     /**
-     * Get the appropriate Cache-Control header value.
+     * How long an embedding site may hold this bundle.
+     *
+     * This URL is UNVERSIONED — every embed snippet ever copied points at
+     * `/widget/v1/widget.js` forever — so the cache window is the only thing
+     * deciding when a change actually reaches the sites running it. It used to
+     * be `max-age=31536000, immutable` in production, and `immutable` means the
+     * browser will not even ask whether a newer file exists: a year, per visitor,
+     * with no way to shorten it. A fix to the bundle simply would not arrive.
+     * That is a bad property for a feature and an unacceptable one for a
+     * security fix — this file carries the session token the widget proves
+     * ownership with.
+     *
+     * So: a short window, then revalidate. `stale-while-revalidate` keeps it
+     * fast — the cached copy is served instantly while a fresh one is fetched in
+     * the background — and the ETag above turns the revalidation into a 304 of a
+     * few bytes rather than a re-download of 150 KB.
+     *
+     * The real long-term answer is a content-hashed filename, which needs the
+     * loader snippet to resolve the current build instead of hard-coding a path.
+     * Until then, this is what makes a deploy reach anybody.
      */
+    private const CACHE_CONTROL = 'public, max-age=300, stale-while-revalidate=86400';
+
     private function getCacheControl(): string
     {
-        if (app()->environment('production')) {
-            // 1 year cache in production (rely on ETag for cache busting)
-            return 'public, max-age=31536000, immutable';
-        }
-
-        // 5 minutes in development for easier testing
-        return 'public, max-age=300';
+        return self::CACHE_CONTROL;
     }
 }

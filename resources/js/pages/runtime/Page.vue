@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import AppRenderer from '@/runtime/AppRenderer.vue';
 import BlockBreadcrumb from '@/runtime/blocks/BlockBreadcrumb.vue';
-import RuntimeChatPanel from '@/runtime/RuntimeChatPanel.vue';
 import { manifestFontHrefs } from '@/runtime/fonts';
+import LandingChatbotBubble from '@/runtime/LandingChatbotBubble.vue';
+import RuntimeChatPanel from '@/runtime/RuntimeChatPanel.vue';
 import { runtimeSettingsStyle } from '@/runtime/runtimeStyle';
 import SiteFooter from '@/runtime/SiteFooter.vue';
 import SiteHeader from '@/runtime/SiteHeader.vue';
@@ -130,6 +131,12 @@ const surfaceStyle = computed(() => ({
     '--sp-bleed': '1.25rem',
     ...runtimeSettingsStyle(settings.value),
 }));
+
+// The page's own accent, handed to the chatbot bubble so it belongs to this
+// design rather than to whatever the bot was configured with elsewhere.
+const landingAccent = computed<string | null>(
+    () => (settings.value as { accent?: string }).accent ?? null,
+);
 
 // Chrome layout: a left sidebar (best for many/nested pages) or the top header.
 const useSidebar = computed(
@@ -265,7 +272,11 @@ onMounted(() => {
              constellations) routinely poke past the viewport edge; clip keeps
              them from minting a page-level horizontal scrollbar without
              creating a scroll container (sticky still works). -->
-        <div v-if="isLanding" ref="sectionsEl" class="min-h-screen overflow-x-clip">
+        <div
+            v-if="isLanding"
+            ref="sectionsEl"
+            class="min-h-screen overflow-x-clip"
+        >
             <AppRenderer
                 :blocks="page.blocks"
                 :block-data="liveBlockData"
@@ -274,6 +285,17 @@ onMounted(() => {
                 :locale="locale"
                 :default-currency="defaultCurrency"
                 :theme="theme"
+            />
+
+            <!-- Only on the PUBLISHED page: the preview renders its own inert
+                 bubble, so mounting the real widget here would double it. -->
+            <LandingChatbotBubble
+                v-if="publicSurface && chatbot"
+                mode="live"
+                :token="chatbot.token"
+                :position="chatbot.position"
+                :greeting="chatbot.greeting"
+                :accent="landingAccent"
             />
         </div>
 

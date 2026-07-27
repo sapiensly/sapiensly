@@ -12,6 +12,8 @@ use App\Models\WhatsAppMessage;
 use App\Services\ConversationAttachmentService;
 use App\Services\LLMService;
 use App\Services\TeamOrchestrationService;
+use App\Support\Ai\AiUsageSubject;
+use App\Support\Ai\PublicTurnContext;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Log;
 
@@ -78,9 +80,20 @@ class WhatsAppReplyOrchestrator
         $attachments = $this->turnAttachments($messages);
 
         try {
-            $reply = count($roster) === 1
-                ? $this->runAgent($roster[0], $messages, $attachments)
-                : $this->runBotFlow($flow, $synthetic, $userMessage, $attachments);
+            // Whoever messages this number is a stranger, exactly like a widget
+            // visitor: the turn runs on the agent's own tools and never inherits
+            // the owner's platform catalogue. Marked on the context so the bot
+            // flow path — which orchestrates through its own LLMService — is
+            // covered too. See PublicTurnContext.
+            $reply = app(PublicTurnContext::class)->runPublic(
+                fn () => app(AiUsageSubject::class)->attributedTo(
+                    'whatsapp',
+                    $conversation->id,
+                    fn () => count($roster) === 1
+                        ? $this->runAgent($roster[0], $messages, $attachments)
+                        : $this->runBotFlow($flow, $synthetic, $userMessage, $attachments),
+                ),
+            );
         } catch (\Throwable $e) {
             Log::channel('whatsapp')->error('orchestrator.failed', [
                 'conversation_id' => $conversation->id,

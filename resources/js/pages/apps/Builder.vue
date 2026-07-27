@@ -41,8 +41,9 @@ import {
     type SlashCommand,
 } from '@/lib/builderSlashCommands';
 import AppRenderer from '@/runtime/AppRenderer.vue';
-import { ensureManifestFontLinks } from '@/runtime/fonts';
 import BlockBreadcrumb from '@/runtime/blocks/BlockBreadcrumb.vue';
+import { ensureManifestFontLinks } from '@/runtime/fonts';
+import LandingChatbotBubble from '@/runtime/LandingChatbotBubble.vue';
 import {
     runtimeSettingsStyle,
     type Palette as PaletteVars,
@@ -1887,6 +1888,33 @@ const previewIsLanding = computed(
         (previewSettings.value as { surface?: string }).surface === 'landing' ||
         props.app.kind === 'landing',
 );
+// The chatbot binding the DRAFT declares, so adding it mid-turn shows up in the
+// preview immediately — same reasoning as previewIsLanding reading the draft.
+const previewChatbot = computed(() => {
+    if (!previewIsLanding.value) return null;
+    const binding = (
+        previewSettings.value as {
+            chatbot?: {
+                id?: string;
+                position?: 'left' | 'right';
+                greeting?: string;
+            };
+        }
+    ).chatbot;
+    if (!binding?.id) return null;
+
+    return {
+        position:
+            binding.position === 'left'
+                ? ('left' as const)
+                : ('right' as const),
+        greeting: binding.greeting ?? null,
+    };
+});
+const previewAccent = computed<string | null>(
+    () => (previewSettings.value as { accent?: string }).accent ?? null,
+);
+
 // A landing keeps Schema (its leads object) and Flujos (the conversion loop) —
 // only Access is hidden: app-role machinery a public landing doesn't use. If
 // the app becomes a landing while a now-hidden tab is open, fall back to the
@@ -5498,6 +5526,19 @@ function statusTone(status: Message['status']): string {
                                     :locale="previewLocale"
                                     :default-currency="previewCurrency"
                                     :theme="previewTheme"
+                                />
+
+                                <!-- Inert on purpose: shows the author where the
+                                     bubble lands without opening a session or
+                                     billing a token for a page nobody visited.
+                                     Deliberately absent from the draft-shot pane
+                                     above, so the design director never sees it. -->
+                                <LandingChatbotBubble
+                                    v-if="previewChatbot"
+                                    mode="inert"
+                                    :position="previewChatbot.position"
+                                    :greeting="previewChatbot.greeting"
+                                    :accent="previewAccent"
                                 />
                             </div>
 

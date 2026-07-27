@@ -2,6 +2,7 @@
 
 namespace App\Http\Middleware;
 
+use App\Services\Landing\ChatbotLandingOrigins;
 use Closure;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -15,6 +16,10 @@ use Symfony\Component\HttpFoundation\Response;
  */
 class ValidateWidgetOrigin
 {
+    public function __construct(
+        private readonly ChatbotLandingOrigins $landingOrigins,
+    ) {}
+
     public function handle(Request $request, Closure $next): Response
     {
         // Get the chatbot from the request (set by ValidateWidgetApiToken)
@@ -28,12 +33,19 @@ class ValidateWidgetOrigin
 
         $origin = $request->header('Origin');
 
-        // If no allowed origins configured, allow all
-        $allowedOrigins = $chatbot->allowed_origins ?? [];
+        $configured = $chatbot->allowed_origins ?? [];
 
-        if (empty($allowedOrigins)) {
+        // An empty list still means "allow every origin" — and it must keep
+        // meaning that. Deriving landing origins into an empty list would flip
+        // the bot to allow-only-those and silently lock out every site already
+        // embedding it, which is the same trap as writing them into the column,
+        // just computed at runtime. So the derived origins only ever WIDEN a
+        // list the tenant already chose to restrict.
+        if (empty($configured)) {
             return $next($request);
         }
+
+        $allowedOrigins = array_merge($configured, $this->landingOrigins->for($chatbot->id));
 
         // Check if origin matches any allowed origin
         if ($origin && $this->isOriginAllowed($origin, $allowedOrigins)) {

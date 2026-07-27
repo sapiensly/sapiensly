@@ -40,6 +40,7 @@ describe('feedback', function () {
             'rating' => 5,
         ], [
             'Authorization' => "Bearer {$this->token->token}",
+            'X-Session-Token' => $this->session->session_token,
         ]);
 
         $response->assertOk()
@@ -60,6 +61,7 @@ describe('feedback', function () {
             'feedback' => 'Very helpful!',
         ], [
             'Authorization' => "Bearer {$this->token->token}",
+            'X-Session-Token' => $this->session->session_token,
         ]);
 
         $response->assertOk()
@@ -75,6 +77,7 @@ describe('feedback', function () {
             'is_resolved' => true,
         ], [
             'Authorization' => "Bearer {$this->token->token}",
+            'X-Session-Token' => $this->session->session_token,
         ]);
 
         $response->assertOk()
@@ -90,6 +93,7 @@ describe('feedback', function () {
             'rating' => 6,
         ], [
             'Authorization' => "Bearer {$this->token->token}",
+            'X-Session-Token' => $this->session->session_token,
         ]);
 
         $response->assertUnprocessable();
@@ -100,6 +104,7 @@ describe('feedback', function () {
             'feedback' => 'Great!',
         ], [
             'Authorization' => "Bearer {$this->token->token}",
+            'X-Session-Token' => $this->session->session_token,
         ]);
 
         $response->assertUnprocessable();
@@ -110,6 +115,7 @@ describe('feedback', function () {
             'rating' => 5,
         ], [
             'Authorization' => "Bearer {$this->token->token}",
+            'X-Session-Token' => $this->session->session_token,
         ]);
 
         $response->assertNotFound();
@@ -130,6 +136,7 @@ describe('feedback', function () {
             'rating' => 5,
         ], [
             'Authorization' => "Bearer {$this->token->token}",
+            'X-Session-Token' => $this->session->session_token,
         ]);
 
         $response->assertNotFound();

@@ -161,11 +161,7 @@ class ChatbotPreviewController extends Controller
             ], 403);
         }
 
-        // Get the last user message (reorder to override relationship's default order)
-        $lastMessage = $conversation->messages()
-            ->where('role', MessageRole::User)
-            ->reorder('created_at', 'desc')
-            ->first();
+        $lastMessage = $conversation->lastUserMessage();
 
         if (! $lastMessage) {
             return response()->json([

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\App;
+use App\Services\Landing\LandingChatbot;
 use App\Services\Landing\LandingRuntimeProps;
 use App\Services\Manifest\AppManifestService;
 use Illuminate\Http\Request;
@@ -29,6 +30,7 @@ class PublicLandingController extends Controller
 {
     public function __construct(
         private readonly AppManifestService $manifestService,
+        private readonly LandingChatbot $chatbot,
     ) {}
 
     public function __invoke(Request $request): Response
@@ -41,6 +43,15 @@ class PublicLandingController extends Controller
         // Shared with the signed headless-render route so the shot the design
         // director judges is byte-for-byte the page that ships. publicSurface
         // enables live lead_form submits + the Turnstile key.
-        return Inertia::render('runtime/Page', LandingRuntimeProps::build($app, $manifest, publicSurface: true));
+        return Inertia::render('runtime/Page', [
+            ...LandingRuntimeProps::build($app, $manifest, publicSurface: true),
+            // The chatbot bubble, when this landing binds one. Added HERE and not
+            // inside the shared props on purpose: the headless route feeds the
+            // design director, and a bubble in that shot would be judged as part
+            // of the design. Absent (null) for a landing without a binding, or
+            // whose bot was paused or deleted after publishing — the page still
+            // renders, just without it.
+            'chatbot' => $this->chatbot->forApp($app, $manifest),
+        ]);
     }
 }

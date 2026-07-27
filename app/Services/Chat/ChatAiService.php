@@ -34,6 +34,7 @@ use App\Services\Ai\AiUsageRecorder;
 use App\Services\Ai\OpenRouterClient;
 use App\Services\AiProviderService;
 use App\Services\CloudProviderService;
+use App\Services\Context\OrganizationContextResolver;
 use App\Services\RetrievalService;
 use App\Services\ToolConfigService;
 use App\Services\ToolExecutionService;
@@ -211,6 +212,7 @@ class ChatAiService
     public function __construct(
         private readonly AiProviderService $providers,
         private readonly AiDefaults $aiDefaults,
+        private readonly OrganizationContextResolver $organizationContext,
     ) {}
 
     /**
@@ -446,8 +448,13 @@ class ChatAiService
                 }
             }
 
-            // Ground the chat in the current UTC datetime — a model has no clock.
-            $instructions = CurrentDateTime::promptLine()."\n\n".$instructions;
+            // Ground the chat in the organization's Contextbook and the current
+            // datetime — a model has no clock. Both are stable across turns, so
+            // they belong in the cacheable prefix marked below.
+            $orgContext = $this->organizationContext->forUser($user);
+            $instructions = $orgContext->prepend(
+                CurrentDateTime::systemLine($orgContext->timezone)."\n\n".$instructions,
+            );
 
             $sdkAgent = new ChatAgent(
                 instructions: $instructions,

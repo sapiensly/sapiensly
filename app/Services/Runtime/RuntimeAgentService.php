@@ -16,6 +16,7 @@ use App\Services\Ai\AiUsageRecorder;
 use App\Services\AiProviderService;
 use App\Services\Apps\AppAccessContext;
 use App\Services\Apps\AppAccessResolver;
+use App\Services\Context\OrganizationContextResolver;
 use App\Services\Manifest\AppManifestService;
 use App\Services\Records\AppActionExecutor;
 use App\Support\CurrentDateTime;
@@ -48,6 +49,7 @@ class RuntimeAgentService
         private AutonomyPolicy $autonomy,
         private AppActionExecutor $executor,
         private AppAccessResolver $accessResolver,
+        private OrganizationContextResolver $organizationContext,
     ) {}
 
     public function startConversation(App $app, User $user): RuntimeAgentConversation
@@ -313,10 +315,14 @@ class RuntimeAgentService
         $agent = $manifest['agent'] ?? [];
         $name = $agent['name'] ?? 'Assistant';
         $instructions = trim((string) ($agent['instructions'] ?? ''));
-        $now = CurrentDateTime::promptLine();
+        // The app's end users are the organization's own people or customers, so
+        // this agent speaks in the organization's language and vocabulary.
+        $orgContext = $this->organizationContext->forOrganizationId($app->organization_id);
+        $contextbook = $orgContext->block !== null ? $orgContext->block."\n\n" : '';
+        $now = CurrentDateTime::systemLine($orgContext->timezone);
 
         return <<<PROMPT
-{$now}
+{$contextbook}{$now}
 
 You are {$name}, the assistant embedded in the "{$app->name}" app. You help the people who use this app.
 

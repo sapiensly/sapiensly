@@ -319,8 +319,13 @@ class ChatbotAnalyticsService
 
         $count = 0;
         foreach ($candidates as $conversation) {
-            // Check if last message was from user
-            $lastMessage = $conversation->messages()->latest()->first();
+            // Read the FIRST message here and every quiet conversation gets
+            // marked abandoned, including the ones the bot answered completely —
+            // the first message is always the visitor's, because they open the
+            // conversation. The abandonment figure on the owner's dashboard was
+            // counting successes.
+            $lastMessage = $conversation->lastMessage();
+
             if ($lastMessage && $lastMessage->role->value === 'user') {
                 $conversation->update([
                     'is_abandoned' => true,
