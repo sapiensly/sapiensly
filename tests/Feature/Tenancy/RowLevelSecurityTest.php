@@ -31,18 +31,84 @@ beforeEach(function () {
     ));
     DB::purge('owner_commit');
     DB::purge('tenant_app_real');
-    truncateTenantFixtures();
 });
 
 afterEach(function () {
-    truncateTenantFixtures();
+    deleteRlsFixtures();
 });
 
-function truncateTenantFixtures(): void
+/**
+ * Ids this file committed on `owner_commit`, so cleanup can delete exactly those
+ * rows and nothing else.
+ */
+function rlsFixtures(): object
 {
-    DB::connection('owner_commit')->statement(
-        'truncate tenant.records, tenant.app_user_roles, tenant.knowledge_bases, tenant.chat_agents, tenant.ai_usage_events, platform.apps, platform.organizations, platform.users restart identity cascade'
-    );
+    static $ids;
+
+    return $ids ??= new class
+    {
+        /** @var array<int, int> */
+        public array $users = [];
+
+        /** @var array<int, string> */
+        public array $orgs = [];
+
+        /** @var array<int, string> */
+        public array $apps = [];
+    };
+}
+
+/**
+ * Remove this file's committed fixtures.
+ *
+ * Deliberately NOT `truncate … cascade`, which is what this used to be. TRUNCATE
+ * takes an AccessExclusiveLock on every table it names, so it blocks on — and
+ * deadlocks with — any transaction holding those tables, including the
+ * RefreshDatabase transaction this very test opened on the default connection.
+ * The suite's intermittent red was full of exactly that ("Process N waits for
+ * AccessExclusiveLock … blocked by process M"), and it named platform.users /
+ * organizations / apps, so when it did win the race it deleted rows belonging to
+ * whatever else was mid-run.
+ *
+ * Targeted deletes take row locks only, and touch nothing this file didn't
+ * create. `whereIn` with an empty list compiles to `0 = 1`, so an empty registry
+ * is a no-op rather than a table-wide delete.
+ */
+function deleteRlsFixtures(): void
+{
+    $ids = rlsFixtures();
+    $db = DB::connection('owner_commit');
+
+    $db->table('tenant.app_user_roles')->whereIn('app_id', $ids->apps)->delete();
+
+    foreach (['tenant.records', 'tenant.knowledge_bases', 'tenant.chat_agents', 'tenant.ai_usage_events'] as $table) {
+        $db->table($table)
+            ->whereIn('organization_id', $ids->orgs)
+            ->orWhereIn('user_id', $ids->users)
+            ->delete();
+    }
+    // Personal-mode rows carry a null organization_id and a user_id, so the
+    // clause above catches them; records additionally hang off an app.
+    $db->table('tenant.records')->whereIn('app_id', $ids->apps)->delete();
+
+    $db->table('platform.apps')->whereIn('id', $ids->apps)->delete();
+    $db->table('platform.organizations')->whereIn('id', $ids->orgs)->delete();
+    $db->table('platform.users')->whereIn('id', $ids->users)->delete();
+
+    $ids->users = [];
+    $ids->orgs = [];
+    $ids->apps = [];
+}
+
+function makeRlsOrg(string $name): Organization
+{
+    $org = Organization::on('owner_commit')->create([
+        'name' => $name,
+        'slug' => strtolower($name).'-'.uniqid(),
+    ]);
+    rlsFixtures()->orgs[] = $org->id;
+
+    return $org;
 }
 
 function seedChatAgent(?string $orgId, int $userId): void
@@ -72,20 +138,26 @@ function scopeTenant(?string $orgId, ?int $userId): void
 
 function makeOwner(): User
 {
-    return User::on('owner_commit')->create([
+    $user = User::on('owner_commit')->create([
         'name' => 'Owner', 'email' => uniqid('u').'@example.com', 'password' => 'secret',
     ]);
+    rlsFixtures()->users[] = $user->id;
+
+    return $user;
 }
 
 function makeApp(?string $orgId, int $userId): App
 {
-    return App::on('owner_commit')->create([
+    $app = App::on('owner_commit')->create([
         'user_id' => $userId,
         'organization_id' => $orgId,
         'slug' => 'app-'.uniqid(),
         'name' => 'App',
         'visibility' => $orgId ? Visibility::Organization : Visibility::Private,
     ]);
+    rlsFixtures()->apps[] = $app->id;
+
+    return $app;
 }
 
 function seedRecord(?string $orgId, ?int $userId, string $appId): Record
@@ -122,8 +194,8 @@ function tenantKnowledgeBaseCount(): int
 
 it('only returns rows for the scoped organization', function () {
     $user = makeOwner();
-    $orgA = Organization::on('owner_commit')->create(['name' => 'A', 'slug' => 'a-'.uniqid()]);
-    $orgB = Organization::on('owner_commit')->create(['name' => 'B', 'slug' => 'b-'.uniqid()]);
+    $orgA = makeRlsOrg('A');
+    $orgB = makeRlsOrg('B');
     $appA = makeApp($orgA->id, $user->id);
     $appB = makeApp($orgB->id, $user->id);
 
@@ -140,7 +212,7 @@ it('only returns rows for the scoped organization', function () {
 
 it('is fail-closed when no tenant scope is set', function () {
     $user = makeOwner();
-    $org = Organization::on('owner_commit')->create(['name' => 'O', 'slug' => 'o-'.uniqid()]);
+    $org = makeRlsOrg('O');
     seedRecord($org->id, null, makeApp($org->id, $user->id)->id);
 
     scopeTenant(null, null);
@@ -159,8 +231,8 @@ it('scopes personal-mode rows to the owning user', function () {
 
 it('blocks inserting a row for another tenant (WITH CHECK)', function () {
     $user = makeOwner();
-    $orgA = Organization::on('owner_commit')->create(['name' => 'A', 'slug' => 'a-'.uniqid()]);
-    $orgB = Organization::on('owner_commit')->create(['name' => 'B', 'slug' => 'b-'.uniqid()]);
+    $orgA = makeRlsOrg('A');
+    $orgB = makeRlsOrg('B');
     $appB = makeApp($orgB->id, $user->id);
 
     scopeTenant($orgA->id, null);
@@ -175,7 +247,7 @@ it('blocks inserting a row for another tenant (WITH CHECK)', function () {
 
 it('auto-fills the tenant key from the session context on insert', function () {
     $user = makeOwner();
-    $orgA = Organization::on('owner_commit')->create(['name' => 'A', 'slug' => 'a-'.uniqid()]);
+    $orgA = makeRlsOrg('A');
     $appA = makeApp($orgA->id, $user->id);
 
     scopeTenant($orgA->id, null);
@@ -188,8 +260,11 @@ it('auto-fills the tenant key from the session context on insert', function () {
         'data' => ['k' => 'v'],
     ]);
 
+    // Read back as the owner (RLS off) scoped to THIS app: the only assertion in
+    // the file that bypasses the tenant role, so it is the only one that would
+    // have read a leftover row from an earlier test rather than its own.
     expect(tenantRecordCount())->toBe(1)
-        ->and(DB::connection('owner_commit')->table('tenant.records')->value('organization_id'))
+        ->and(DB::connection('owner_commit')->table('tenant.records')->where('app_id', $appA->id)->value('organization_id'))
         ->toBe($orgA->id);
 });
 
@@ -198,8 +273,8 @@ it('isolates knowledge_bases by organization under the real tenant role', functi
     // reading it through the real tenant_app role only works if it now lives in
     // `tenant`, and the row-level isolation matches the rest of the tenant data.
     $user = makeOwner();
-    $orgA = Organization::on('owner_commit')->create(['name' => 'A', 'slug' => 'a-'.uniqid()]);
-    $orgB = Organization::on('owner_commit')->create(['name' => 'B', 'slug' => 'b-'.uniqid()]);
+    $orgA = makeRlsOrg('A');
+    $orgB = makeRlsOrg('B');
 
     seedKnowledgeBase($orgA->id, $user->id);
     seedKnowledgeBase($orgA->id, $user->id);
@@ -217,8 +292,8 @@ it('isolates knowledge_bases by organization under the real tenant role', functi
 
 it('isolates chat_agents by tenant under the real tenant role', function () {
     $userA = makeOwner();
-    $orgA = Organization::on('owner_commit')->create(['name' => 'A', 'slug' => 'a-'.uniqid()]);
-    $orgB = Organization::on('owner_commit')->create(['name' => 'B', 'slug' => 'b-'.uniqid()]);
+    $orgA = makeRlsOrg('A');
+    $orgB = makeRlsOrg('B');
 
     seedChatAgent($orgA->id, $userA->id);
     seedChatAgent($orgA->id, $userA->id);
@@ -241,7 +316,7 @@ it('lets the tenant role insert AI usage events (sequence grant)', function () {
     // fails with "permission denied for sequence" — silently, since the recorder
     // swallows its errors, leaving both spend dashboards empty.
     $user = makeOwner();
-    $org = Organization::on('owner_commit')->create(['name' => 'A', 'slug' => 'a-'.uniqid()]);
+    $org = makeRlsOrg('A');
 
     scopeTenant($org->id, $user->id);
 
@@ -301,8 +376,8 @@ function tenantAppUserRoleCount(): int
 
 it('isolates app_user_roles by organization', function () {
     $owner = makeOwner();
-    $orgA = Organization::on('owner_commit')->create(['name' => 'A', 'slug' => 'a-'.uniqid()]);
-    $orgB = Organization::on('owner_commit')->create(['name' => 'B', 'slug' => 'b-'.uniqid()]);
+    $orgA = makeRlsOrg('A');
+    $orgB = makeRlsOrg('B');
     $appA = makeApp($orgA->id, $owner->id);
     $appB = makeApp($orgB->id, $owner->id);
     $member = makeOwner();
@@ -320,7 +395,7 @@ it('isolates app_user_roles by organization', function () {
 
 it('is fail-closed for app_user_roles when no tenant scope is set', function () {
     $owner = makeOwner();
-    $org = Organization::on('owner_commit')->create(['name' => 'O', 'slug' => 'o-'.uniqid()]);
+    $org = makeRlsOrg('O');
     seedAppUserRole($org->id, null, makeApp($org->id, $owner->id)->id, $owner->id);
 
     scopeTenant(null, null);
