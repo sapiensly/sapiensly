@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Ai\BuilderAgent;
+use App\Enums\AppKind;
 use App\Jobs\ResolveStoppedBuildJob;
 use App\Jobs\RunBuilderAiJob;
 use App\Models\App;
@@ -696,7 +697,10 @@ class AppBuilderController extends Controller
             'source' => ['required', 'string', 'in:image,url,html'],
             'image' => ['nullable', 'file', 'mimes:png,jpg,jpeg,webp,gif', 'max:5120'],
             'url' => ['nullable', 'string', 'url', 'max:2048'],
-            'html' => ['nullable', 'string', 'max:200000'],
+            // A standalone export (Claude Design, Framer, a saved page) runs to
+            // hundreds of KB — far past what anyone pastes, hence html_file.
+            'html' => ['nullable', 'string', 'max:2000000'],
+            'html_file' => ['nullable', 'file', 'mimetypes:text/html,text/plain', 'max:5120'],
             'business_context' => ['nullable', 'string', 'max:1000'],
         ]);
 
@@ -711,6 +715,8 @@ class AppBuilderController extends Controller
         $extractedDescription = null;
         $extractedText = null;
         $extractedHtml = null;
+        $extractedCss = null;
+        $extractedIsLanding = false;
         $sourceLabel = null;
 
         if ($data['source'] === 'image') {
@@ -734,6 +740,8 @@ class AppBuilderController extends Controller
             $extractedDescription = $parsed['description'];
             $extractedText = $parsed['text'];
             $extractedHtml = $parsed['cleaned_html'];
+            $extractedCss = $parsed['stylesheet'];
+            $extractedIsLanding = $parsed['is_landing'];
             $sourceLabel = 'URL ('.($parsed['source_url'] ?? $data['url']).')';
 
             if ($parsed['image_url'] !== null) {
@@ -744,15 +752,24 @@ class AppBuilderController extends Controller
                 }
             }
         } else { // html
-            if (empty($data['html'])) {
-                throw new HttpException(422, 'HTML content is required when source=html.');
+            $htmlFilename = null;
+            $rawHtml = (string) ($data['html'] ?? '');
+            if ($request->hasFile('html_file')) {
+                $upload = $request->file('html_file');
+                $htmlFilename = $upload->getClientOriginalName();
+                $rawHtml = (string) file_get_contents($upload->getRealPath());
             }
-            $parsed = $this->wireframes->fromHtml($data['html']);
+            if (trim($rawHtml) === '') {
+                throw new HttpException(422, 'HTML content or a file is required when source=html.');
+            }
+            $parsed = $this->wireframes->fromHtml($rawHtml);
             $extractedTitle = $parsed['title'];
             $extractedDescription = $parsed['description'];
             $extractedText = $parsed['text'];
             $extractedHtml = $parsed['cleaned_html'];
-            $sourceLabel = 'pasted HTML';
+            $extractedCss = $parsed['stylesheet'];
+            $extractedIsLanding = $parsed['is_landing'];
+            $sourceLabel = $htmlFilename !== null ? 'uploaded HTML ('.$htmlFilename.')' : 'pasted HTML';
         }
 
         // Persist the attachment on S3 (if we got one). Resolving the disk
@@ -774,15 +791,34 @@ class AppBuilderController extends Controller
         }
 
         $businessContext = trim((string) ($data['business_context'] ?? ''));
-        $userText = $this->buildWireframePrompt(
-            sourceLabel: (string) $sourceLabel,
-            businessContext: $businessContext,
-            extractedTitle: $extractedTitle,
-            extractedDescription: $extractedDescription,
-            extractedText: $extractedText,
-            extractedHtml: $extractedHtml,
-            hasImage: $attachmentBytes !== null,
-        );
+
+        // A designed page and an app mockup want OPPOSITE manifests, and the
+        // app framing below asks for exactly the blocks ManifestValidator
+        // rejects on a landing surface. Decide from the artifact (a
+        // self-contained styled document is something a designer authored) or
+        // from the app already being a landing — never from the model's mood.
+        $isLanding = $app->kind === AppKind::Landing || $extractedIsLanding;
+
+        $userText = $isLanding
+            ? $this->buildLandingImportPrompt(
+                sourceLabel: (string) $sourceLabel,
+                businessContext: $businessContext,
+                extractedTitle: $extractedTitle,
+                extractedDescription: $extractedDescription,
+                extractedText: $extractedText,
+                extractedHtml: $extractedHtml,
+                extractedCss: $extractedCss,
+                hasImage: $attachmentBytes !== null,
+            )
+            : $this->buildWireframePrompt(
+                sourceLabel: (string) $sourceLabel,
+                businessContext: $businessContext,
+                extractedTitle: $extractedTitle,
+                extractedDescription: $extractedDescription,
+                extractedText: $extractedText,
+                extractedHtml: $extractedHtml,
+                hasImage: $attachmentBytes !== null,
+            );
 
         BuilderMessage::create([
             'conversation_id' => $conversation->id,
@@ -801,7 +837,17 @@ class AppBuilderController extends Controller
             'status' => 'streaming',
         ]);
 
-        RunBuilderAiJob::dispatch($placeholder->id, $userText, $attachmentPath, $attachmentDisk, isLanding: BuilderAiService::isLandingTurn($conversation->app, $userText));
+        // The artifact's own verdict has to reach the job: the landing prompt
+        // below never says "landing" in the words LandingIntent looks for, so
+        // relying on the text alone would leave an imported landing on the app
+        // model with the design gate switched off.
+        RunBuilderAiJob::dispatch(
+            $placeholder->id,
+            $userText,
+            $attachmentPath,
+            $attachmentDisk,
+            isLanding: $isLanding || BuilderAiService::isLandingTurn($conversation->app, $userText),
+        );
 
         return response()->json([
             'conversation_id' => $conversation->id,
@@ -872,6 +918,84 @@ class AppBuilderController extends Controller
         $lines[] = '3) Para cada página, propón los bloques (table, form, chart, kanban, stat, card_grid, tabs, etc.) que mejor reproduzcan el layout. Mapea elementos semánticos del HTML al block más cercano: <table> → table, <form> → form, <nav>/sidebar → tabs o split_view, secciones repetidas con tarjetas → card_grid, KPIs grandes → stat o metric_grid. Si ves clases como bg-*, text-*, rounded-*, p-*, m-* etc., úsalas para decidir variantes y agrupaciones, pero no inventes campos que no aparecen en el HTML/imagen.';
         $lines[] = '';
         $lines[] = 'Empieza por lo más foundational: primero los objetos con propose_change, luego páginas + bloques en turnos siguientes. Si el wireframe es genérico (un CRM, un tracker, etc.) y mi contexto es escaso, pregúntame de qué se trata mi negocio antes de inventar nombres de campo.';
+
+        return implode("\n", $lines);
+    }
+
+    /**
+     * Compose the message for importing a DESIGNED PAGE. Deliberately the
+     * opposite brief to buildWireframePrompt(): that one abstracts a mockup
+     * into objects and data blocks, this one reproduces a page that already
+     * exists. The distinction is enforced downstream — the generic marketing
+     * blocks it warns against are rejected outright on a landing surface.
+     */
+    private function buildLandingImportPrompt(
+        string $sourceLabel,
+        string $businessContext,
+        ?string $extractedTitle,
+        ?string $extractedDescription,
+        ?string $extractedText,
+        ?string $extractedHtml,
+        ?string $extractedCss,
+        bool $hasImage,
+    ): string {
+        $lines = [];
+        $lines[] = 'Te adjunto una página web ya diseñada. Quiero que la reconstruyas como una LANDING de Sapiensly, lo más fiel posible al original.';
+        $lines[] = '';
+        $lines[] = 'Fuente: '.$sourceLabel.'.';
+        if ($hasImage) {
+            $lines[] = 'Adjunto también una imagen de la página; úsala para juzgar el resultado visual.';
+        }
+        if ($businessContext !== '') {
+            $lines[] = '';
+            $lines[] = 'Contexto de mi negocio:';
+            $lines[] = $businessContext;
+        }
+        if ($extractedTitle || $extractedDescription) {
+            $lines[] = '';
+            $lines[] = 'Metadatos de la página (úsalos para settings.seo):';
+            if ($extractedTitle) {
+                $lines[] = 'Título: '.$extractedTitle;
+            }
+            if ($extractedDescription) {
+                $lines[] = 'Descripción: '.$extractedDescription;
+            }
+        }
+        if ($extractedCss) {
+            // The stylesheet is the design: palette, type scale, spacing,
+            // motion. Handing it over is what separates "reproduce this page"
+            // from "invent a page that has the same sections".
+            $lines[] = '';
+            $lines[] = 'CSS ORIGINAL de la página. Esta es la fuente de verdad del diseño (paleta, escala tipográfica, espaciados, animaciones). Adáptalo a settings.custom_css conservando los valores reales:';
+            $lines[] = '```css';
+            $lines[] = $extractedCss;
+            $lines[] = '```';
+        }
+        if ($extractedHtml) {
+            $lines[] = '';
+            $lines[] = 'HTML ORIGINAL de la página (sin <style>/<script>, que van aparte). Reprodúcelo sección por sección:';
+            $lines[] = '```html';
+            $lines[] = $extractedHtml;
+            $lines[] = '```';
+        } elseif ($extractedText) {
+            $lines[] = '';
+            $lines[] = 'Texto visible de la página:';
+            $lines[] = $extractedText;
+        }
+        $lines[] = '';
+        $lines[] = 'Cómo reconstruirla:';
+        $lines[] = '1) settings.surface="landing" y settings.seo con los metadatos de arriba. Llama primero a get_organization_brand: si la Brandbook tiene contenido, respétala (acento y logo) aunque el original use otra paleta.';
+        $lines[] = '2) Una sección del original = UN bloque `html` con tus propias clases. NUNCA uses los bloques genéricos (hero, feature_grid, cta, testimonials, pricing, faq, stat_band): el validador los rechaza en una landing.';
+        $lines[] = '3) Todo el estilo va en settings.custom_css, partiendo del CSS original. Escríbelo por partes con {op:"append", path:"/settings/custom_css"} — nunca un replace gigante. Recuerda el presupuesto de 60.000 caracteres y que las variables CSS van en TU propia clase envolvente, no en :root/body.';
+        $lines[] = '4) Conserva el TEXTO literal del original (titulares, copy, precios, nombres). No lo reescribas ni lo "mejores": es una reconstrucción, no un rediseño.';
+        $lines[] = '5) Tipografía: si el original usa una familia que no está en el catálogo self-hosted, decláratela en settings.fonts (máx. 4). Nunca @import.';
+        $lines[] = '';
+        $lines[] = 'Lo que NO se puede portar tal cual (dilo explícitamente en tu resumen en vez de fingir que funciona):';
+        $lines[] = '- No hay JavaScript: <script>, style inline y handlers se eliminan al guardar. Cualquier interactividad (selector de idioma, cambio de tema, tabs, carruseles, paneles) no sobrevive. Un acordeón/FAQ sí se puede con <details>/<summary>. Para el resto, congela el estado por defecto y avísame — no dejes botones muertos que no hacen nada.';
+        $lines[] = '- Las animaciones de scroll se rehacen con data-sp-reveal / data-sp-sequence / data-sp-motion, no con JS.';
+        $lines[] = '- Si el original tiene un formulario (waitlist, contacto), reconstrúyelo como objeto de leads + bloque `lead_form`, colocado con <div data-sp-slot="lead_form"></div> dentro de la sección donde va, y estilado en custom_css para que combine con el resto.';
+        $lines[] = '';
+        $lines[] = 'Trabaja por turnos: primero la estructura de la página con sus secciones, luego el CSS por partes, luego el formulario. Al final llama a critique_landing_design y itera hasta ship:true.';
 
         return implode("\n", $lines);
     }

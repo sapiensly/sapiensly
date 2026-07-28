@@ -26,8 +26,15 @@ const html = ref('');
 const file = ref<File | null>(null);
 const filePreviewUrl = ref<string | null>(null);
 const fileInput = ref<HTMLInputElement | null>(null);
+const htmlFile = ref<File | null>(null);
+const htmlFileInput = ref<HTMLInputElement | null>(null);
 const submitting = ref(false);
 const errorText = ref<string | null>(null);
+
+const htmlFileSize = computed(() => {
+    const bytes = htmlFile.value?.size ?? 0;
+    return bytes >= 1024 * 1024 ? `${(bytes / 1024 / 1024).toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1024))} KB`;
+});
 
 // Reset every time the dialog re-opens so a previous attempt doesn't leak
 // into the next one. Watching `open` directly so we react both on open AND
@@ -42,6 +49,7 @@ watch(
                 filePreviewUrl.value = null;
             }
             file.value = null;
+            htmlFile.value = null;
             url.value = '';
             html.value = '';
             businessContext.value = '';
@@ -84,6 +92,27 @@ function acceptFile(picked: File) {
     filePreviewUrl.value = URL.createObjectURL(picked);
 }
 
+function pickHtmlFile() {
+    htmlFileInput.value?.click();
+}
+
+function onHtmlFileChange(event: Event) {
+    const target = event.target as HTMLInputElement;
+    const picked = target.files?.[0] ?? null;
+    target.value = '';
+    if (!picked) return;
+    if (picked.size > MAX_BYTES) {
+        errorText.value = t('apps.builder.attachment_too_large');
+        return;
+    }
+    errorText.value = null;
+    htmlFile.value = picked;
+}
+
+function clearHtmlFile() {
+    htmlFile.value = null;
+}
+
 function clearFile() {
     if (filePreviewUrl.value) {
         URL.revokeObjectURL(filePreviewUrl.value);
@@ -104,7 +133,7 @@ const submitDisabled = computed(() => {
     if (submitting.value) return true;
     if (tab.value === 'image') return file.value === null;
     if (tab.value === 'url') return url.value.trim() === '';
-    if (tab.value === 'html') return html.value.trim() === '';
+    if (tab.value === 'html') return htmlFile.value === null && html.value.trim() === '';
     return true;
 });
 
@@ -127,7 +156,11 @@ async function submit() {
     } else if (tab.value === 'url') {
         form.append('url', url.value.trim());
     } else if (tab.value === 'html') {
-        form.append('html', html.value);
+        if (htmlFile.value) {
+            form.append('html_file', htmlFile.value);
+        } else {
+            form.append('html', html.value);
+        }
     }
 
     try {
@@ -254,7 +287,31 @@ const tabs: { id: SourceTab; labelKey: string; icon: typeof Upload }[] = [
                 <!-- HTML tab -->
                 <div v-else class="space-y-2">
                     <p class="text-xs text-ink-muted">{{ t('apps.builder.wireframe.html_hint') }}</p>
+
+                    <!-- A standalone export runs to hundreds of KB, which is
+                         nobody's idea of a paste. File first, textarea after. -->
+                    <div v-if="htmlFile" class="flex items-center justify-between gap-2 rounded-md border border-medium bg-surface px-3 py-2">
+                        <span class="truncate font-mono text-[11px] text-ink">{{ htmlFile.name }}</span>
+                        <div class="flex shrink-0 items-center gap-2">
+                            <span class="text-[11px] text-ink-subtle">{{ htmlFileSize }}</span>
+                            <button type="button" @click="clearHtmlFile" class="text-ink-muted transition-colors hover:text-ink">
+                                <X class="size-3.5" />
+                            </button>
+                        </div>
+                    </div>
+                    <button
+                        v-else
+                        type="button"
+                        @click="pickHtmlFile"
+                        class="flex w-full items-center justify-center gap-1.5 rounded-md border border-dashed border-medium bg-surface px-3 py-3 text-xs text-ink-muted transition-colors hover:bg-surface-hover"
+                    >
+                        <Upload class="size-3.5" />
+                        {{ t('apps.builder.wireframe.html_pick_file') }}
+                    </button>
+                    <input ref="htmlFileInput" type="file" accept=".html,.htm,text/html" class="hidden" @change="onHtmlFileChange" />
+
                     <textarea
+                        v-if="!htmlFile"
                         v-model="html"
                         :placeholder="t('apps.builder.wireframe.html_placeholder')"
                         rows="6"

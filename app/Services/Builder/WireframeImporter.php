@@ -5,6 +5,7 @@ namespace App\Services\Builder;
 use App\Services\Security\Ssrf\SafeHttpClient;
 use App\Services\Security\Ssrf\SsrfBlockedException;
 use App\Services\Security\Ssrf\SsrfGuard;
+use App\Support\Landing\LandingArtifact;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\RequestException;
 use Illuminate\Support\Facades\Log;
@@ -30,8 +31,12 @@ use Symfony\Component\DomCrawler\Crawler;
  */
 class WireframeImporter
 {
-    /** Cap on HTML response size to keep parsing cheap and tokens manageable. */
-    private const MAX_HTML_BYTES = 512 * 1024;
+    /**
+     * Cap on HTML response size. Generous because truncation happens BEFORE
+     * parsing: cutting a standalone export mid-document costs the whole tail
+     * (footer, closing sections, and any stylesheet declared late).
+     */
+    private const MAX_HTML_BYTES = 2 * 1024 * 1024;
 
     /** Cap on extracted text length passed back to the AI. */
     private const MAX_EXTRACTED_TEXT = 8000;
@@ -43,13 +48,23 @@ class WireframeImporter
      */
     private const MAX_CLEANED_HTML = 30000;
 
+    /**
+     * A landing import is held to a different standard: the goal is to
+     * REPRODUCE the page, not to infer an app from it, so the model needs the
+     * markup it is copying rather than a representative sample of it.
+     */
+    private const MAX_CLEANED_HTML_LANDING = 80000;
+
+    /** Matches the landing custom_css budget — more would not survive the save. */
+    private const MAX_STYLESHEET = 60000;
+
     public function __construct(
         private SsrfGuard $ssrf,
         private SafeHttpClient $safeHttp,
     ) {}
 
     /**
-     * @return array{image_url: ?string, title: ?string, description: ?string, text: ?string, cleaned_html: ?string, source_url: ?string}
+     * @return array{image_url: ?string, title: ?string, description: ?string, text: ?string, cleaned_html: ?string, stylesheet: ?string, is_landing: bool, source_url: ?string}
      */
     public function fromUrl(string $url): array
     {
@@ -91,6 +106,8 @@ class WireframeImporter
                 'description' => null,
                 'text' => null,
                 'cleaned_html' => null,
+                'stylesheet' => null,
+                'is_landing' => false,
                 'source_url' => $url,
             ];
         }
@@ -105,7 +122,7 @@ class WireframeImporter
     }
 
     /**
-     * @return array{image_url: ?string, title: ?string, description: ?string, text: ?string, cleaned_html: ?string, source_url: ?string}
+     * @return array{image_url: ?string, title: ?string, description: ?string, text: ?string, cleaned_html: ?string, stylesheet: ?string, is_landing: bool, source_url: ?string}
      */
     public function fromHtml(string $html): array
     {
@@ -113,10 +130,15 @@ class WireframeImporter
     }
 
     /**
-     * @return array{image_url: ?string, title: ?string, description: ?string, text: ?string, cleaned_html: ?string, source_url: ?string}
+     * @return array{image_url: ?string, title: ?string, description: ?string, text: ?string, cleaned_html: ?string, stylesheet: ?string, is_landing: bool, source_url: ?string}
      */
     private function extract(string $html, ?string $baseUrl): array
     {
+        // Decide what KIND of artifact this is before touching it: a designed
+        // page and an app wireframe want different evidence out of the same
+        // parse (see LandingArtifact).
+        $isLanding = LandingArtifact::isLandingHtml($html);
+
         $crawler = new Crawler($html);
 
         $meta = fn (string $selector): ?string => $this->firstAttr($crawler, $selector, 'content');
@@ -179,9 +201,10 @@ class WireframeImporter
             // so we keep the budget for real markup.
             $serialized = preg_replace('/\s+/', ' ', $serialized) ?? $serialized;
             $serialized = trim($serialized);
+            $budget = $isLanding ? self::MAX_CLEANED_HTML_LANDING : self::MAX_CLEANED_HTML;
             if ($serialized !== '') {
-                $cleanedHtml = strlen($serialized) > self::MAX_CLEANED_HTML
-                    ? substr($serialized, 0, self::MAX_CLEANED_HTML).'…'
+                $cleanedHtml = strlen($serialized) > $budget
+                    ? substr($serialized, 0, $budget).'…'
                     : $serialized;
             }
         }
@@ -192,8 +215,39 @@ class WireframeImporter
             'description' => $description,
             'text' => $text,
             'cleaned_html' => $cleanedHtml,
+            // stripNoise() drops <style> along with the rest of the noise, which
+            // is right when inferring an app's STRUCTURE from a mockup and wrong
+            // when reproducing a design: there the stylesheet IS the artifact —
+            // palette, type scale, spacing, motion. Hand it over separately so
+            // the model rebuilds the look instead of inventing one.
+            'stylesheet' => $isLanding ? $this->extractStylesheet($html) : null,
+            'is_landing' => $isLanding,
             'source_url' => $baseUrl,
         ];
+    }
+
+    /**
+     * Concatenate every <style> block in document order, stripped of comments
+     * and collapsed, capped at the landing custom_css budget.
+     */
+    private function extractStylesheet(string $html): ?string
+    {
+        if (preg_match_all('/<style\b[^>]*>(.*?)<\/style>/is', $html, $m) < 1) {
+            return null;
+        }
+
+        $css = implode("\n", $m[1]);
+        $css = preg_replace('!/\*.*?\*/!s', '', $css) ?? $css;
+        $css = preg_replace('/\n\s*\n+/', "\n", $css) ?? $css;
+        $css = trim($css);
+
+        if ($css === '') {
+            return null;
+        }
+
+        return strlen($css) > self::MAX_STYLESHEET
+            ? substr($css, 0, self::MAX_STYLESHEET).'…'
+            : $css;
     }
 
     /**

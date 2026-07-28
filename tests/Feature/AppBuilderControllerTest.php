@@ -1814,3 +1814,147 @@ it('a hero title cannot be emptied — the schema requires a headline', function
             'changes' => ['title' => ''],
         ])->assertStatus(422);
 });
+
+/**
+ * A standalone designed page (a Claude Design export, a saved one-pager) must
+ * take the LANDING path, not the app-wireframe path — the two briefs ask for
+ * opposite manifests, and the app one asks for blocks the validator rejects on
+ * a landing surface.
+ */
+function designedLandingExport(): string
+{
+    return '<!doctype html><html><head><title>Sapiensly — Agentes que ejecutan</title>'
+        .'<meta property="og:description" content="Squad digital que resuelve tickets." />'
+        .'<style>'.str_repeat('.hero{display:grid;gap:2rem;color:#0059ff;font-family:Fraunces,serif}', 30).'</style>'
+        .'<script>console.log("noise")</script>'
+        .'</head><body>'
+        .'<section class="hero"><h1>Agentes que ejecutan</h1></section>'
+        .'<section class="pricing"><h2>Precios</h2><p>Desde $49/mes</p></section>'
+        .'<form class="waitlist"><input type="email" /></form>'
+        .'<footer>faq</footer></body></html>';
+}
+
+it('wireframe-import routes a designed page to the landing brief', function () {
+    Queue::fake();
+
+    $conv = BuilderConversation::create([
+        'app_id' => $this->testApp->id,
+        'user_id' => $this->user->id,
+        'status' => 'active',
+    ]);
+
+    $this->actingAs($this->user)
+        ->post("/apps/{$this->testApp->id}/builder/wireframe-import", [
+            'conversation_id' => $conv->id,
+            'source' => 'html',
+            'html' => designedLandingExport(),
+        ])
+        ->assertOk();
+
+    $userMsg = BuilderMessage::query()
+        ->where('conversation_id', $conv->id)
+        ->where('role', 'user')
+        ->latest('created_at')
+        ->first();
+
+    expect($userMsg->content)
+        // The landing brief, not the app one.
+        ->toContain('LANDING de Sapiensly')
+        ->and($userMsg->content)->not->toContain('manifest de Sapiensly Apps')
+        ->and($userMsg->content)->not->toContain('propón los objetos')
+        // The stylesheet is the design — it has to reach the model.
+        ->and($userMsg->content)->toContain('```css')
+        ->and($userMsg->content)->toContain('#0059ff')
+        ->and($userMsg->content)->toContain('Fraunces')
+        // And the generic-block trap must be named explicitly.
+        ->and($userMsg->content)->toContain('NUNCA uses los bloques genéricos')
+        // Noise still stripped.
+        ->and($userMsg->content)->not->toContain('console.log');
+
+    // Without this the import runs on the app model with the design gate off.
+    Queue::assertPushed(RunBuilderAiJob::class, fn ($job) => $job->isLanding === true);
+});
+
+it('wireframe-import keeps an app mockup on the app brief', function () {
+    Queue::fake();
+
+    $conv = BuilderConversation::create([
+        'app_id' => $this->testApp->id,
+        'user_id' => $this->user->id,
+        'status' => 'active',
+    ]);
+
+    $html = '<!doctype html><html><head><title>CRM Lite</title><style>.cell{padding:4px}</style></head>'
+        .'<body><div class="sidebar-nav">Menu</div><table><thead><tr><th>Cliente</th></tr></thead>'
+        .'<tbody><tr><td>ACME</td></tr></tbody></table><div class="pagination">1 2</div></body></html>';
+
+    $this->actingAs($this->user)
+        ->post("/apps/{$this->testApp->id}/builder/wireframe-import", [
+            'conversation_id' => $conv->id,
+            'source' => 'html',
+            'html' => $html,
+        ])
+        ->assertOk();
+
+    $userMsg = BuilderMessage::query()
+        ->where('conversation_id', $conv->id)
+        ->where('role', 'user')
+        ->latest('created_at')
+        ->first();
+
+    expect($userMsg->content)->toContain('manifest de Sapiensly Apps')
+        ->and($userMsg->content)->not->toContain('LANDING de Sapiensly')
+        ->and($userMsg->content)->not->toContain('```css');
+
+    Queue::assertPushed(RunBuilderAiJob::class, fn ($job) => $job->isLanding === false);
+});
+
+it('wireframe-import accepts a standalone .html file upload', function () {
+    Queue::fake();
+
+    $conv = BuilderConversation::create([
+        'app_id' => $this->testApp->id,
+        'user_id' => $this->user->id,
+        'status' => 'active',
+    ]);
+
+    // The real flow: the user downloads the export and uploads the file —
+    // hundreds of KB is far past what anyone pastes into a textarea.
+    $file = UploadedFile::fake()->createWithContent('Sapiensly Landing.html', designedLandingExport());
+
+    $this->actingAs($this->user)
+        ->post("/apps/{$this->testApp->id}/builder/wireframe-import", [
+            'conversation_id' => $conv->id,
+            'source' => 'html',
+            'html_file' => $file,
+        ])
+        ->assertOk();
+
+    $userMsg = BuilderMessage::query()
+        ->where('conversation_id', $conv->id)
+        ->where('role', 'user')
+        ->latest('created_at')
+        ->first();
+
+    expect($userMsg->content)->toContain('LANDING de Sapiensly')
+        ->and($userMsg->content)->toContain('Sapiensly Landing.html')
+        ->and($userMsg->content)->toContain('#0059ff');
+
+    Queue::assertPushed(RunBuilderAiJob::class, fn ($job) => $job->isLanding === true);
+});
+
+it('wireframe-import rejects an html source with neither text nor file', function () {
+    $conv = BuilderConversation::create([
+        'app_id' => $this->testApp->id,
+        'user_id' => $this->user->id,
+        'status' => 'active',
+    ]);
+
+    $this->actingAs($this->user)
+        ->post("/apps/{$this->testApp->id}/builder/wireframe-import", [
+            'conversation_id' => $conv->id,
+            'source' => 'html',
+            'html' => '   ',
+        ])
+        ->assertStatus(422);
+});
