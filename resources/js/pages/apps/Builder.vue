@@ -3652,7 +3652,7 @@ function statusTone(status: Message['status']): string {
         full-bleed
     >
         <div
-            class="flex min-h-0 flex-1 flex-col gap-4 px-3 py-4 transition-[padding-right] duration-300 ease-out sm:px-7 sm:py-5"
+            class="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-3 py-4 transition-[padding-right] duration-300 ease-out sm:px-7 sm:py-5 lg:overflow-visible"
             :style="drawerOpen ? { paddingRight: '340px' } : undefined"
         >
             <header class="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
@@ -4578,11 +4578,18 @@ function statusTone(status: Message['status']): string {
                                         <button
                                             v-if="m.status === 'applied'"
                                             type="button"
-                                            class="inline-flex items-center gap-1 rounded-pill border border-medium bg-surface px-2.5 py-1 text-[11px] text-ink transition-colors hover:border-strong hover:bg-surface-hover"
+                                            :title="t('apps.builder.revert')"
+                                            :aria-label="t('apps.builder.revert')"
+                                            class="inline-flex items-center gap-1 rounded-pill border border-medium bg-surface px-2 py-1 text-[11px] text-ink transition-colors hover:border-strong hover:bg-surface-hover sm:px-2.5"
                                             @click="revertMessage(m)"
                                         >
                                             <RotateCcw class="size-3" />
-                                            {{ t('apps.builder.revert') }}
+                                            <!-- Icon-only on a phone: with the
+                                                 label this button rode over the
+                                                 "applied" badge beside it. -->
+                                            <span class="hidden sm:inline">{{
+                                                t('apps.builder.revert')
+                                            }}</span>
                                         </button>
                                         <button
                                             type="button"

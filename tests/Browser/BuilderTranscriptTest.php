@@ -105,3 +105,68 @@ it('leaves a short snippet inline', function () {
         ->assertScript('function () { return document.querySelector("details") ? "collapsed" : "inline"; }', 'inline')
         ->assertSee('.hero{color:#0096FF}');
 });
+
+it('lets a phone scroll down to the preview', function () {
+    // AppLayoutV2 only gives <main> overflow-y-auto when NOT full-bleed, and the
+    // builder is full-bleed inside an h-screen overflow-hidden shell. Adding
+    // min-heights to the stacked panes made the content taller than the viewport
+    // with nothing able to scroll it: the live preview was simply unreachable.
+    $this->seed(RolesAndPermissionsSeeder::class);
+    $appId = transcriptAppWithPayload();
+
+    $reachable = <<<'JS'
+    function () {
+        const scroller = [...document.querySelectorAll('div')]
+            .find(d => d.scrollHeight > d.clientHeight + 40 && ['auto','scroll'].includes(getComputedStyle(d).overflowY) && d.querySelector('section'));
+        if (!scroller) return 'nothing scrolls';
+        scroller.scrollTop = scroller.scrollHeight;
+        // The work pane is the second stacked section; reaching the bottom must
+        // actually bring it into the viewport.
+        const panes = [...document.querySelectorAll('section')].filter(s => s.className.includes('bg-navy'));
+        if (panes.length < 2) return 'panes=' + panes.length;
+        const box = panes[1].getBoundingClientRect();
+        return box.top < window.innerHeight ? 'reachable' : 'still below the fold';
+    }
+    JS;
+
+    visit("/apps/{$appId}/builder")->on()->iPhone15()
+        ->assertNoJavaScriptErrors()
+        ->assertScript($reachable, 'reachable');
+});
+
+it('drops the revert label on a phone and keeps it on desktop', function () {
+    // Badge + button + "view patch" in one row: with its label the revert button
+    // rode over the "applied" badge next to it (reported with a screenshot).
+    $this->seed(RolesAndPermissionsSeeder::class);
+    $user = mcpMember($org = mcpOrg());
+    $this->actingAs($user);
+
+    $app = App::factory()->create(['user_id' => $user->id, 'organization_id' => $org->id]);
+    app(AppManifestService::class)->createVersion($app, [
+        'schema_version' => '1.0.0',
+        'id' => $app->id, 'slug' => 'reverted', 'name' => 'Reverted', 'version' => 1,
+        'objects' => [], 'pages' => [],
+        'permissions' => ['roles' => [['id' => 'rol_'.strtolower((string) Str::ulid()), 'slug' => 'admin', 'name' => 'Admin']]],
+    ], $user);
+    $conv = BuilderConversation::create([
+        'app_id' => $app->id, 'user_id' => $user->id, 'organization_id' => $org->id, 'status' => 'active',
+    ]);
+    BuilderMessage::create([
+        'conversation_id' => $conv->id, 'role' => 'assistant', 'status' => 'applied',
+        'content' => 'Listo.', 'change_summary' => 'Añadí el hero',
+        'proposed_patch' => [['op' => 'replace', 'path' => '/name', 'value' => 'Reverted']],
+    ]);
+
+    // Icon-only, but still named for anyone not looking at it.
+    $label = <<<'JS'
+    function () {
+        const b = [...document.querySelectorAll('button')].find(x => (x.getAttribute('aria-label') || '').match(/Deshacer|Revert|Undo/i));
+        if (!b) return 'no button';
+        const span = b.querySelector('span');
+        return span && span.getBoundingClientRect().width > 0 ? 'labelled' : 'icon-only';
+    }
+    JS;
+
+    visit("/apps/{$app->id}/builder")->on()->iPhone15()->assertScript($label, 'icon-only');
+    visit("/apps/{$app->id}/builder")->on()->macbookAir()->assertScript($label, 'labelled');
+});
