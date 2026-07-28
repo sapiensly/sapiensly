@@ -5,12 +5,17 @@ import CommandPalette from '@/components/app-v2/CommandPalette.vue';
 import ImpersonationBanner from '@/components/app-v2/ImpersonationBanner.vue';
 import Sidebar from '@/components/app-v2/Sidebar.vue';
 import Topbar from '@/components/app-v2/Topbar.vue';
+import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet';
+import { useIsDesktop } from '@/composables/useIsDesktop';
 import { useLocaleSync } from '@/composables/useLocale';
 import type { AppPageProps } from '@/types';
-import { usePage } from '@inertiajs/vue3';
-import { computed, ref } from 'vue';
+import { router, usePage } from '@inertiajs/vue3';
+import { computed, onUnmounted, ref, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
 
 useLocaleSync();
+
+const { t } = useI18n();
 
 interface Props {
     title: string;
@@ -64,11 +69,38 @@ function onMainScroll(event: Event) {
     scrolled.value = (event.target as HTMLElement).scrollTop > 0;
 }
 
+// Below `lg` the sidebar column is not rendered, so the same affordance has to
+// mean something else: open the off-canvas drawer instead of collapsing a
+// column that isn't there. Pages that hide the topbar and drive the sidebar
+// from their own header get this behaviour for free via the slot prop.
+const isDesktop = useIsDesktop();
+const mobileNavOpen = ref(false);
+
 function toggleSidebar() {
+    if (!isDesktop.value) {
+        mobileNavOpen.value = !mobileNavOpen.value;
+        return;
+    }
+
     sidebarCollapsed.value = !sidebarCollapsed.value;
     const open = !sidebarCollapsed.value;
     document.cookie = `sidebar_state=${open}; path=/; max-age=${60 * 60 * 24 * 7}`;
 }
+
+// Navigating from inside the drawer must dismiss it — Inertia swaps the page
+// component without unmounting the persistent layout, so nothing else would.
+const stopNavigateListener = router.on('navigate', () => {
+    mobileNavOpen.value = false;
+});
+onUnmounted(() => stopNavigateListener());
+
+// Widening past `lg` reveals the real sidebar; leaving the drawer mounted would
+// strand its overlay over the page.
+watch(isDesktop, (desktop) => {
+    if (desktop) {
+        mobileNavOpen.value = false;
+    }
+});
 
 function openPalette() {
     if (paletteRef.value) paletteRef.value.open = true;
@@ -85,6 +117,25 @@ function openPalette() {
             :data-bg="bg"
         >
             <Sidebar :collapsed="sidebarCollapsed" class="hidden lg:flex" />
+
+            <!--
+              Same Sidebar, off-canvas, for viewports below `lg`. Rendering the
+              one component keeps a single nav definition — a second mobile-only
+              menu would drift out of sync the first time a section is added.
+              It always renders expanded: a 64px icon rail behind an overlay
+              would be a worse target than the labels it hides.
+            -->
+            <Sheet v-model:open="mobileNavOpen">
+                <SheetContent
+                    side="left"
+                    class="sp-mobile-nav w-60 max-w-[85vw] gap-0 border-0 p-0"
+                >
+                    <SheetTitle class="sr-only">
+                        {{ t('app_v2.sidebar.mobile_nav_title') }}
+                    </SheetTitle>
+                    <Sidebar :collapsed="false" />
+                </SheetContent>
+            </Sheet>
 
             <div class="sp-app-content flex min-w-0 flex-1 flex-col">
                 <!--
@@ -121,7 +172,7 @@ function openPalette() {
                     </div>
                     <div
                         v-else
-                        class="mx-auto w-full max-w-[1440px] px-7 py-[22px]"
+                        class="mx-auto w-full max-w-[1440px] px-4 py-4 sm:px-7 sm:py-[22px]"
                     >
                         <slot
                             :open-palette="openPalette"

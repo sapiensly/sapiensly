@@ -187,6 +187,24 @@
 }
 
 /* -----------------------------------------------------------------------
+ * Mobile navigation drawer (below `lg`).
+ *
+ * The drawer renders the same Sidebar, but through a portal at <body>, so
+ * two things the shell normally provides are missing: the gradient surface
+ * the transparent `.sp-glass-sidebar` shows through, and the Poppins family
+ * inherited from `.sp-app-shell` (the same reason `.sp-admin-menu` pins it).
+ * Give it an opaque surface of its own — over a dimmed page, transparency
+ * would let content read through the nav.
+ * ----------------------------------------------------------------------- */
+
+.sp-mobile-nav {
+    background: var(--sp-bg-primary);
+    border-right: 1px solid var(--sp-border-soft);
+    color: var(--sp-text-primary);
+    font-family: 'Poppins', 'Instrument Sans', system-ui, sans-serif;
+}
+
+/* -----------------------------------------------------------------------
  * Admin-v2 popover / menu skin.
  *
  * Shadcn's dropdown primitives read from the neutral `--background`,
