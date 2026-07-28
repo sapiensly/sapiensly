@@ -9,16 +9,20 @@ use App\Enums\ToolType;
 use App\Enums\Visibility;
 use App\Models\Agent;
 use App\Models\App;
+use App\Models\Channel;
 use App\Models\Chat;
 use App\Models\Chatbot;
 use App\Models\Document;
 use App\Models\Integration;
+use App\Models\IntegrationExecution;
 use App\Models\KnowledgeBase;
 use App\Models\McpAccessToken;
 use App\Models\Organization;
 use App\Models\OrganizationMembership;
 use App\Models\Tool;
 use App\Models\User;
+use App\Models\WhatsAppConnection;
+use App\Models\WhatsAppConversation;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Str;
 use Tests\TestCase;
@@ -168,7 +172,30 @@ function seedTenantContent(Organization $org, User $user): array
             'file_path' => 'documents/'.Str::random(12).'.pdf',
             'file_size' => 2_400_000,
         ]);
+
+        // Executions hang off an integration and drive its history screen.
+        IntegrationExecution::factory()->create([
+            'integration_id' => $created['integration']->id,
+            'organization_id' => $org->id,
+            'user_id' => $user->id,
+            'url' => 'https://api.example.com/v1/'.Str::slug($name).'/reconciliation-batches',
+        ]);
     }
+
+    // WhatsApp hangs off a Channel, so it is built once rather than per name.
+    $channel = Channel::factory()->whatsapp()->create([
+        'user_id' => $user->id,
+        'organization_id' => $org->id,
+        'visibility' => Visibility::Organization,
+        'name' => 'EMEA Customer Support — WhatsApp Business',
+    ]);
+    $created['whatsappConnection'] = WhatsAppConnection::factory()->create([
+        'channel_id' => $channel->id,
+    ]);
+    $created['whatsappConversation'] = WhatsAppConversation::factory()->create([
+        'channel_id' => $channel->id,
+        'title' => 'Refund request — order 48812-EMEA',
+    ]);
 
     return $created;
 }

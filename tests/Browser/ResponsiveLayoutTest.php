@@ -237,7 +237,9 @@ function detailRoutes(array $seeded): array
         'agent' => "/agents/{$seeded['agent']->id}",
         'agent edit' => "/agents/{$seeded['agent']->id}/edit",
         'app' => "/apps/{$seeded['app']->id}",
-        'app access' => "/apps/{$seeded['app']->id}/access",
+        // No `/apps/{app}/access`: AppAccessController::index returns JSON, not
+        // an Inertia screen. It was in this list and passing as a 404 until the
+        // guard above went in.
         'tool' => "/tools/{$seeded['tool']->id}",
         'tool edit' => "/tools/{$seeded['tool']->id}/edit",
         'chatbot' => "/chatbots/{$seeded['chatbot']->id}",
@@ -252,6 +254,13 @@ function detailRoutes(array $seeded): array
         'integration edit' => "/system/integrations/{$seeded['integration']->id}/edit",
         'integration executions' => "/system/integrations/{$seeded['integration']->id}/executions",
         'chat' => "/chat/{$seeded['chat']->id}",
+        'whatsapp connection' => "/system/whatsapp/{$seeded['whatsappConnection']->id}",
+        'whatsapp analytics' => "/system/whatsapp/{$seeded['whatsappConnection']->id}/analytics",
+        'whatsapp templates' => "/system/whatsapp/{$seeded['whatsappConnection']->id}/templates",
+        'whatsapp edit' => "/system/whatsapp/{$seeded['whatsappConnection']->id}/edit",
+        // Literal `index` segment — `/system/whatsapp/inbox` is a 404.
+        'whatsapp inbox' => '/system/whatsapp/inbox/index',
+        'whatsapp conversation' => "/system/whatsapp/inbox/{$seeded['whatsappConversation']->id}",
     ];
 }
 
@@ -264,7 +273,20 @@ it('never clips content on detail screens', function (string $device) {
     $failures = [];
 
     foreach (detailRoutes($seeded) as $label => $url) {
-        $offender = visit($url)->on()->{$device}()->script(NO_CLIPPED_CONTENT);
+        $page = visit($url)->on()->{$device}();
+
+        // A 404 is trivially responsive, so a mistyped URL would sail through
+        // this sweep looking like coverage. `/system/whatsapp/inbox` did
+        // exactly that until the real route turned out to end in `/index`.
+        $heading = $page->script("(document.querySelector('h1') || {}).innerText || ''");
+
+        if (str_contains((string) $heading, '404')) {
+            $failures[] = "{$label} ({$url}): renders a 404, not the screen";
+
+            continue;
+        }
+
+        $offender = $page->script(NO_CLIPPED_CONTENT);
 
         if ($offender !== '') {
             $failures[] = "{$label} ({$url}): {$offender}";
