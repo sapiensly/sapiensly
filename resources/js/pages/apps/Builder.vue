@@ -2801,6 +2801,50 @@ const dayTimeFmt = new Intl.DateTimeFormat(undefined, {
     hour: '2-digit',
     minute: '2-digit',
 });
+/**
+ * A user turn split into prose and fenced code blocks.
+ *
+ * An import prompt carries the page it is reproducing — up to 80 KB of rendered
+ * DOM and 60 KB of CSS — and the transcript rendered every byte of it. The
+ * content is worth keeping (it IS the prompt the model answered, and the model
+ * reads it back from here on later turns), so this changes only how it is SHOWN:
+ * the payload collapses behind its own size.
+ */
+type MessageSegment =
+    | { kind: 'text'; text: string }
+    | { kind: 'code'; lang: string; code: string };
+
+/** Below this a block is a snippet, not a payload — leave it inline. */
+const COLLAPSE_CODE_OVER = 400;
+
+function messageSegments(content: string): MessageSegment[] {
+    const out: MessageSegment[] = [];
+    const fence = /```([a-zA-Z0-9_-]*)\n?([\s\S]*?)```/g;
+    let last = 0;
+    let match: RegExpExecArray | null;
+
+    while ((match = fence.exec(content)) !== null) {
+        if (match.index > last) {
+            out.push({ kind: 'text', text: content.slice(last, match.index) });
+        }
+        out.push({ kind: 'code', lang: match[1] || 'code', code: match[2] });
+        last = fence.lastIndex;
+    }
+    if (last < content.length) {
+        out.push({ kind: 'text', text: content.slice(last) });
+    }
+    return out;
+}
+
+function codeBlockLabel(seg: { lang: string; code: string }): string {
+    const bytes = new Blob([seg.code]).size;
+    const size =
+        bytes >= 1024 * 1024
+            ? `${(bytes / 1024 / 1024).toFixed(1)} MB`
+            : `${Math.max(1, Math.round(bytes / 1024))} KB`;
+    return `${seg.lang.toUpperCase()} · ${size}`;
+}
+
 function messageTime(m: Message): string | null {
     if (!m.created_at) {
         return null;
@@ -4261,7 +4305,49 @@ function statusTone(status: Message['status']): string {
                                         loading="lazy"
                                     />
                                 </a>
-                                <div v-if="m.content">{{ m.content }}</div>
+                                <div v-if="m.content" class="space-y-2">
+                                    <template
+                                        v-for="(seg, i) in messageSegments(
+                                            m.content,
+                                        )"
+                                        :key="i"
+                                    >
+                                        <div
+                                            v-if="
+                                                seg.kind === 'text' &&
+                                                seg.text.trim()
+                                            "
+                                        >
+                                            {{ seg.text.trim() }}
+                                        </div>
+                                        <!-- An import prompt's payload: shown by
+                                             size, opened on demand. Native
+                                             <details> — no state, no JS. -->
+                                        <details
+                                            v-else-if="
+                                                seg.kind === 'code' &&
+                                                seg.code.length >
+                                                    COLLAPSE_CODE_OVER
+                                            "
+                                            class="rounded-sp-sm border border-soft bg-navy/40"
+                                        >
+                                            <summary
+                                                class="cursor-pointer px-2 py-1 text-[11px] tracking-wider text-ink-muted uppercase select-none"
+                                            >
+                                                {{ codeBlockLabel(seg) }}
+                                            </summary>
+                                            <pre
+                                                class="max-h-72 overflow-auto px-2 pb-2 font-mono text-[11px] leading-relaxed whitespace-pre"
+                                                >{{ seg.code }}</pre
+                                            >
+                                        </details>
+                                        <pre
+                                            v-else-if="seg.kind === 'code'"
+                                            class="overflow-x-auto rounded-sp-sm bg-navy/40 px-2 py-1 font-mono text-[11px] whitespace-pre"
+                                            >{{ seg.code }}</pre
+                                        >
+                                    </template>
+                                </div>
                                 <span v-else-if="!m.attachment_url">…</span>
                                 <div
                                     v-if="messageTime(m)"
