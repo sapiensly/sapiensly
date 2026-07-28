@@ -134,8 +134,13 @@ function mcpToken(Organization $org, User $user, array $attrs = []): string
  * Names are deliberately long and realistic. Short `fake()->words(2)` names
  * fit anywhere; what actually breaks a 390px layout is a title that wants
  * more room than the column has.
+ *
+ * Returns one representative of each type so the detail-screen sweep can
+ * build its URLs.
+ *
+ * @return array<string, mixed>
  */
-function seedTenantContent(Organization $org, User $user): void
+function seedTenantContent(Organization $org, User $user): array
 {
     $owned = ['user_id' => $user->id, 'organization_id' => $org->id, 'visibility' => Visibility::Organization];
 
@@ -145,16 +150,18 @@ function seedTenantContent(Organization $org, User $user): void
         'Warehouse Inventory Reconciliation Assistant',
     ];
 
-    foreach ($longNames as $name) {
-        Agent::factory()->create($owned + ['name' => $name, 'status' => AgentStatus::Active]);
-        Tool::factory()->create($owned + ['name' => $name, 'type' => ToolType::RestApi]);
-        Chatbot::factory()->create($owned + ['name' => $name, 'status' => ChatbotStatus::Active]);
-        KnowledgeBase::factory()->create($owned + ['name' => $name]);
-        Integration::factory()->create($owned + ['name' => $name]);
-        App::factory()->create($owned + ['name' => $name]);
-        Chat::factory()->create($owned + ['title' => $name, 'last_message_at' => now()]);
+    $created = [];
 
-        Document::create($owned + [
+    foreach ($longNames as $name) {
+        $created['agent'] = Agent::factory()->create($owned + ['name' => $name, 'status' => AgentStatus::Active]);
+        $created['tool'] = Tool::factory()->create($owned + ['name' => $name, 'type' => ToolType::RestApi]);
+        $created['chatbot'] = Chatbot::factory()->create($owned + ['name' => $name, 'status' => ChatbotStatus::Active]);
+        $created['knowledgeBase'] = KnowledgeBase::factory()->create($owned + ['name' => $name]);
+        $created['integration'] = Integration::factory()->create($owned + ['name' => $name]);
+        $created['app'] = App::factory()->create($owned + ['name' => $name]);
+        $created['chat'] = Chat::factory()->create($owned + ['title' => $name, 'last_message_at' => now()]);
+
+        $created['document'] = Document::create($owned + [
             'name' => $name.'.pdf',
             'type' => DocumentType::Pdf,
             'original_filename' => $name.'.pdf',
@@ -162,6 +169,8 @@ function seedTenantContent(Organization $org, User $user): void
             'file_size' => 2_400_000,
         ]);
     }
+
+    return $created;
 }
 
 /** @return array<string, mixed> */

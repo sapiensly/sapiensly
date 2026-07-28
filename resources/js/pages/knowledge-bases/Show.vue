@@ -430,7 +430,7 @@ onBeforeUnmount(() => {
 
     <AppLayoutV2 :title="t('app_v2.nav.knowledge_base')">
         <div class="mx-auto max-w-4xl space-y-6">
-            <div class="flex items-start justify-between">
+            <div class="flex flex-col items-start justify-between gap-3 sm:flex-row sm:gap-4">
                 <div>
                     <div class="mb-2 flex items-center gap-3">
                         <h1
@@ -453,7 +453,7 @@ onBeforeUnmount(() => {
                         {{ knowledgeBase.description }}
                     </p>
                 </div>
-                <div class="flex gap-2">
+                <div class="flex flex-wrap gap-2 lg:flex-nowrap">
                     <Button variant="outline" as-child>
                         <Link
                             :href="
@@ -518,7 +518,7 @@ onBeforeUnmount(() => {
                         </CardDescription>
                     </CardHeader>
                     <CardContent class="space-y-3">
-                        <div class="flex gap-2">
+                        <div class="flex flex-wrap gap-2 lg:flex-nowrap">
                             <Textarea
                                 v-model="askQuery"
                                 rows="2"

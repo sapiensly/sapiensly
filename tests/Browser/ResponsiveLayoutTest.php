@@ -218,6 +218,64 @@ it('never scrolls sideways inside the app shell', function (string $route, strin
 
 /*
 |--------------------------------------------------------------------------
+| Detail screens
+|--------------------------------------------------------------------------
+|
+| The densest surfaces in the product — metadata panels, tab strips, side
+| panels — and the ones the list sweep can't reach because their URLs need a
+| record. Built from the seeded entities so they always exist.
+|
+| The canvas builders (app builder, bot-flow editors) are deliberately absent:
+| three-pane editors are desktop work by agreement, not screens to squeeze.
+|
+*/
+
+/** @return array<string, string> route label => URL */
+function detailRoutes(array $seeded): array
+{
+    return [
+        'agent' => "/agents/{$seeded['agent']->id}",
+        'agent edit' => "/agents/{$seeded['agent']->id}/edit",
+        'app' => "/apps/{$seeded['app']->id}",
+        'app access' => "/apps/{$seeded['app']->id}/access",
+        'tool' => "/tools/{$seeded['tool']->id}",
+        'tool edit' => "/tools/{$seeded['tool']->id}/edit",
+        'chatbot' => "/chatbots/{$seeded['chatbot']->id}",
+        'chatbot edit' => "/chatbots/{$seeded['chatbot']->id}/edit",
+        'chatbot analytics' => "/chatbots/{$seeded['chatbot']->id}/analytics",
+        'chatbot conversations' => "/chatbots/{$seeded['chatbot']->id}/conversations",
+        'chatbot embed' => "/chatbots/{$seeded['chatbot']->id}/embed",
+        'knowledge base' => "/knowledge-bases/{$seeded['knowledgeBase']->id}",
+        'knowledge base edit' => "/knowledge-bases/{$seeded['knowledgeBase']->id}/edit",
+        'document' => "/documents/{$seeded['document']->id}",
+        'integration' => "/system/integrations/{$seeded['integration']->id}",
+        'integration edit' => "/system/integrations/{$seeded['integration']->id}/edit",
+        'integration executions' => "/system/integrations/{$seeded['integration']->id}/executions",
+        'chat' => "/chat/{$seeded['chat']->id}",
+    ];
+}
+
+it('never clips content on detail screens', function (string $device) {
+    $this->seed(RolesAndPermissionsSeeder::class);
+    $user = mcpMember($org = mcpOrg());
+    $this->actingAs($user);
+    $seeded = seedTenantContent($org, $user);
+
+    $failures = [];
+
+    foreach (detailRoutes($seeded) as $label => $url) {
+        $offender = visit($url)->on()->{$device}()->script(NO_CLIPPED_CONTENT);
+
+        if ($offender !== '') {
+            $failures[] = "{$label} ({$url}): {$offender}";
+        }
+    }
+
+    expect($failures)->toBe([]);
+})->with('viewports');
+
+/*
+|--------------------------------------------------------------------------
 | The shell's navigation
 |--------------------------------------------------------------------------
 |

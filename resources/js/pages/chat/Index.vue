@@ -665,7 +665,10 @@ function retry() {
                 />
             </div>
 
-            <div class="flex min-h-0 flex-1 flex-col">
+            <!-- `min-w-0`: without it the pane keeps `min-width: auto` and
+                 refuses to shrink below the composer's intrinsic width, so on
+                 a phone the conversation ran past the right edge. -->
+            <div class="flex min-h-0 min-w-0 flex-1 flex-col">
                 <Topbar
                     :title="activeTitle || t('app_v2.nav.chat')"
                     :sidebar-collapsed="sidebarCollapsed"
