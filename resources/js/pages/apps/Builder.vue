@@ -4247,8 +4247,14 @@ function statusTone(status: Message['status']): string {
                             @pick="onPickStep"
                         />
 
+                        <!-- The empty state, and only while the pane is
+                             genuinely empty. `messages` stays [] until the POST
+                             that starts the first turn comes back, so between
+                             clicking a suggestion and the placeholder arriving
+                             the card sat there offering suggestions while the
+                             status bar already read "working". -->
                         <div
-                            v-if="messages.length === 0"
+                            v-if="messages.length === 0 && !isBusy && !aiIsThinking"
                             class="rounded-sp-sm border border-dashed border-soft bg-surface p-5"
                         >
                             <div
