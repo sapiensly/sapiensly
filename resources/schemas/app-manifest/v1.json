@@ -6969,10 +6969,20 @@
                             "maxLength": 2000,
                             "description": "Optional logo image URL."
                         },
+                        "logo_dark": {
+                            "type": "string",
+                            "maxLength": 2000,
+                            "description": "Optional logo variant for DARK surfaces (a light-ink logo for dark backgrounds). The runtime picks it by the active theme and falls back to `logo` when unset. Inherited from the org Brandbook's dark logo."
+                        },
                         "icon": {
                             "type": "string",
                             "maxLength": 2000,
                             "description": "Optional square brand icon shown when the sidebar layout is collapsed — an emoji, a named icon, or an image URL. Inherited from the org Brandbook's icon when unset."
+                        },
+                        "icon_dark": {
+                            "type": "string",
+                            "maxLength": 2000,
+                            "description": "Optional square brand icon variant for DARK surfaces. Falls back to `icon` when unset. Inherited from the org Brandbook's dark icon."
                         },
                         "header_bg": {
                             "type": "string",
