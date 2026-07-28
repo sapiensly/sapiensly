@@ -1948,6 +1948,9 @@ it('wireframe-import accepts a standalone .html file upload', function () {
             'conversation_id' => $conv->id,
             'source' => 'html',
             'html_file' => $file,
+            // What the chat composer forwards when the user types alongside the
+            // file — the only channel their words have on this path.
+            'business_context' => 'Reconstruye esta landing tal cual.',
         ])
         ->assertOk();
 
@@ -1959,7 +1962,8 @@ it('wireframe-import accepts a standalone .html file upload', function () {
 
     expect($userMsg->content)->toContain('LANDING de Sapiensly')
         ->and($userMsg->content)->toContain('Sapiensly Landing.html')
-        ->and($userMsg->content)->toContain('#0059ff');
+        ->and($userMsg->content)->toContain('#0059ff')
+        ->and($userMsg->content)->toContain('Reconstruye esta landing tal cual.');
 
     Queue::assertPushed(RunBuilderAiJob::class, fn ($job) => $job->isLanding === true);
 });

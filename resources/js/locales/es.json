@@ -720,6 +720,7 @@
     "apps.builder.attach_image": "Adjuntar imagen",
     "apps.builder.attachment_invalid_type": "Solo se aceptan imágenes PNG, JPG, WebP o GIF.",
     "apps.builder.attachment_too_large": "La imagen es muy grande (máximo 5 MB).",
+    "apps.builder.attach_html_hint": "se reconstruirá como landing",
     "apps.builder.attachment_default_message": "Revisa la imagen adjunta.",
     "apps.builder.drop_to_attach": "Suelta la imagen para adjuntarla",
     "apps.builder.remove_attachment": "Quitar imagen",

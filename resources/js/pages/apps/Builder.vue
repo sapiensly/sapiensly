@@ -116,6 +116,7 @@ import {
     Paperclip,
     Play,
     Plus,
+    FileCode2,
     Repeat2,
     Rocket,
     RotateCcw,
@@ -1376,6 +1377,22 @@ const isDraggingOver = ref(false);
 const ATTACHMENT_MAX_BYTES = 5 * 1024 * 1024; // 5 MB — matches the controller cap.
 const ATTACHMENT_MIMES = ['image/png', 'image/jpeg', 'image/webp', 'image/gif'];
 
+/**
+ * An .html file dropped on the composer is a page to rebuild, not a chat
+ * attachment: /messages only takes images, and a design export can be megabytes
+ * of bundle that only the import pipeline knows how to unpack (see
+ * BundledDesign + ImportedPageRenderer). `send()` routes those to
+ * /wireframe-import instead of duplicating any of that here.
+ *
+ * Matched by extension as well as MIME: a file dragged from the OS often
+ * arrives with an empty `type`.
+ */
+function isHtmlFile(file: File): boolean {
+    return (
+        file.type === 'text/html' || /\.html?$/i.test(file.name)
+    );
+}
+
 function setAttachment(file: File | null) {
     // Clean up the previous blob URL so we don't leak between selections.
     if (attachedPreviewUrl.value) {
@@ -1383,7 +1400,9 @@ function setAttachment(file: File | null) {
         attachedPreviewUrl.value = null;
     }
     attachedFile.value = file;
-    if (file) {
+    // Only images get a blob preview; an .html file would render as a broken
+    // thumbnail, so the composer shows its filename instead.
+    if (file && !isHtmlFile(file)) {
         attachedPreviewUrl.value = URL.createObjectURL(file);
     }
 }
@@ -1412,7 +1431,7 @@ function clearAttachment() {
  * otherwise surfaces a friendly error.
  */
 function acceptIncomingFile(file: File): boolean {
-    if (!ATTACHMENT_MIMES.includes(file.type)) {
+    if (!ATTACHMENT_MIMES.includes(file.type) && !isHtmlFile(file)) {
         errorText.value = t('apps.builder.attachment_invalid_type');
         return false;
     }
@@ -2841,7 +2860,26 @@ async function send() {
         // `attachment` upload validation kicks in; plain JSON otherwise to
         // keep the common case lightweight.
         let response;
-        if (stagedFile) {
+        if (stagedFile && isHtmlFile(stagedFile)) {
+            // A page to rebuild. Same endpoint the import dialog uses, so the
+            // bundle unpacking, the headless render and the landing brief all
+            // come for free; whatever the user typed rides along as context.
+            const form = new FormData();
+            form.append('conversation_id', conversationId.value);
+            form.append('source', 'html');
+            form.append('html_file', stagedFile);
+            if (text) form.append('business_context', text.slice(0, 1000));
+            response = await axios.post(
+                `/apps/${props.app.id}/builder/wireframe-import`,
+                form,
+                {
+                    headers: { 'Content-Type': 'multipart/form-data' },
+                    // The headless render of a client-side bundle runs before
+                    // this returns — far longer than a normal turn's 30s.
+                    timeout: 150_000,
+                },
+            );
+        } else if (stagedFile) {
             const form = new FormData();
             form.append('conversation_id', conversationId.value);
             form.append('message', messageText);
@@ -4482,18 +4520,32 @@ function statusTone(status: Message['status']): string {
                              the user sees exactly what'll be sent with the next
                              turn and can drop it before hitting Send. -->
                         <div
-                            v-if="attachedPreviewUrl"
+                            v-if="attachedFile"
                             class="mb-2 flex items-center gap-2 rounded-sp-sm border border-soft bg-surface p-2"
                         >
                             <img
+                                v-if="attachedPreviewUrl"
                                 :src="attachedPreviewUrl"
                                 :alt="t('apps.builder.attach_image')"
                                 class="size-12 rounded object-cover"
                             />
+                            <!-- An .html file has no thumbnail; say what will
+                                 happen to it instead of showing a broken image. -->
+                            <div
+                                v-else
+                                class="flex size-12 shrink-0 items-center justify-center rounded bg-surface-hover"
+                            >
+                                <FileCode2 class="size-5 text-accent-blue" />
+                            </div>
                             <span
                                 class="flex-1 truncate text-[11px] text-ink-muted"
                             >
                                 {{ attachedFile?.name }}
+                                <em
+                                    v-if="attachedFile && isHtmlFile(attachedFile)"
+                                    class="not-italic text-ink-subtle"
+                                    >— {{ t('apps.builder.attach_html_hint') }}</em
+                                >
                             </span>
                             <button
                                 type="button"
@@ -4573,7 +4625,7 @@ function statusTone(status: Message['status']): string {
                             <input
                                 ref="fileInput"
                                 type="file"
-                                accept="image/png,image/jpeg,image/webp,image/gif"
+                                accept="image/png,image/jpeg,image/webp,image/gif,.html,.htm,text/html"
                                 class="hidden"
                                 @change="onAttachmentChange"
                             />
