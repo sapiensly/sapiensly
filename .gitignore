@@ -38,3 +38,6 @@ AGENTS.md
 .junie/
 .cursor/skills/
 boost.json
+
+# Pest browser-test artifacts (failure screenshots, visual-diff output)
+/tests/Browser/Screenshots

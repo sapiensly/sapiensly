@@ -26,6 +26,16 @@ pest()->extend(TestCase::class)
     ->in('Feature');
 
 /*
+ * Real-browser tests. Tagged `browser` so the default suite skips them —
+ * they need a Playwright browser and a served app, which not every machine
+ * or CI lane has. Run them explicitly with `--group=browser`.
+ */
+pest()->extend(TestCase::class)
+    ->use(RefreshDatabase::class)
+    ->group('browser')
+    ->in('Browser');
+
+/*
 |--------------------------------------------------------------------------
 | Expectations
 |--------------------------------------------------------------------------

@@ -11,7 +11,17 @@
         <testsuite name="Feature">
             <directory>tests/Feature</directory>
         </testsuite>
+        <!-- Real-browser tests (Playwright). Opt-in: they are excluded from the
+             default run because they need a browser binary and a served app. -->
+        <testsuite name="Browser">
+            <directory>tests/Browser</directory>
+        </testsuite>
     </testsuites>
+    <groups>
+        <exclude>
+            <group>browser</group>
+        </exclude>
+    </groups>
     <source>
         <include>
             <directory>app</directory>
