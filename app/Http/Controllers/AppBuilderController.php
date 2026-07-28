@@ -806,6 +806,10 @@ class AppBuilderController extends Controller
 
         $businessContext = trim((string) ($data['business_context'] ?? ''));
 
+        // An import never passes through sendMessage, so nothing had ever named
+        // the app: every imported landing shipped as "Nueva app".
+        $this->nameAppFromImport($app, $extractedTitle, $businessContext);
+
         // A designed page and an app mockup want OPPOSITE manifests, and the
         // app framing below asks for exactly the blocks ManifestValidator
         // rejects on a landing surface. Decide from the artifact (a
@@ -869,6 +873,9 @@ class AppBuilderController extends Controller
             'messages' => $conversation->refresh()->messages->map(fn (BuilderMessage $m) => $this->messageDto($m))->all(),
             'latest_message_id' => $placeholder->id,
             'streaming' => true,
+            // The import may have just named the app — same key sendMessage
+            // returns, so the Builder header and slug update without a reload.
+            'app' => $this->appSummary($app->refresh()),
         ]);
     }
 
@@ -2443,6 +2450,58 @@ class AppBuilderController extends Controller
      * Builder header and runtime slug update immediately. No-op once the app has
      * a real name (renamed here before, or set by the user).
      */
+    /**
+     * Name a still-unnamed app from an IMPORT, which never goes through
+     * sendMessage and so never reached nameAppFromFirstPrompt — every imported
+     * landing stayed "Nueva app", slugged nueva_app, nueva_app_2, …
+     *
+     * The import prompt is a page of instructions, so naming from it would yield
+     * "Reconstruye esta landing". The page's own <title> is the right source and
+     * needs no model call: it is what the original calls itself. A title is
+     * usually "Brand — the tagline", so the brand half is taken when it stands on
+     * its own; otherwise the whole title, bounded by AppNaming.
+     */
+    private function nameAppFromImport(App $app, ?string $title, string $businessContext): void
+    {
+        if ($app->name !== AppNaming::UNTITLED) {
+            return;
+        }
+
+        $name = $this->nameFromPageTitle($title);
+
+        if ($name === null) {
+            // No usable title (a screenshot, a fragment): fall back to whatever
+            // the user typed, through the normal namer.
+            if (trim($businessContext) !== '') {
+                $this->nameAppFromFirstPrompt($app, $businessContext);
+            }
+
+            return;
+        }
+
+        $app->name = $name;
+        $app->slug = AppNaming::uniqueSlug($name, $app->organization_id);
+        $app->save();
+    }
+
+    /**
+     * The site name out of a <title>. "Sapiensly — AI agents that do the work."
+     * → "Sapiensly". Falls back to the whole (bounded) title when the leading
+     * segment is too short to be a name on its own.
+     */
+    private function nameFromPageTitle(?string $title): ?string
+    {
+        $title = trim((string) $title);
+        if ($title === '') {
+            return null;
+        }
+
+        $lead = trim((string) preg_split('/\s+[—–|·:]\s+/u', $title, 2)[0]);
+        $candidate = mb_strlen($lead) >= 3 ? $lead : $title;
+
+        return AppNaming::nameFromPrompt(rtrim($candidate, ' .!,-—–|·'));
+    }
+
     private function nameAppFromFirstPrompt(App $app, string $prompt): void
     {
         if ($app->name !== AppNaming::UNTITLED) {

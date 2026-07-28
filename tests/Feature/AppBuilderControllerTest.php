@@ -13,6 +13,7 @@ use App\Services\Apps\AppNamer;
 use App\Services\Builder\BuilderAiService;
 use App\Services\Builder\ImportedPageRenderer;
 use App\Services\Manifest\AppManifestService;
+use App\Support\Apps\AppNaming;
 use App\Support\Branding\ColorPalette;
 use App\Support\Builder\FineTuneStyles;
 use Illuminate\Http\UploadedFile;
@@ -1982,4 +1983,76 @@ it('wireframe-import rejects an html source with neither text nor file', functio
             'html' => '   ',
         ])
         ->assertStatus(422);
+});
+
+it('names an imported landing from the original page title', function () {
+    Queue::fake();
+    stubPageRenderer();
+
+    $conv = BuilderConversation::create([
+        'app_id' => $this->testApp->id,
+        'user_id' => $this->user->id,
+        'status' => 'active',
+    ]);
+
+    // An import never passes through sendMessage, so nothing named the app —
+    // every imported landing shipped as "Nueva app" / nueva_app_2 / …
+    $this->testApp->update(['name' => AppNaming::UNTITLED]);
+
+    $response = $this->actingAs($this->user)
+        ->post("/apps/{$this->testApp->id}/builder/wireframe-import", [
+            'conversation_id' => $conv->id,
+            'source' => 'html',
+            'html' => designedLandingExport(),
+        ])
+        ->assertOk();
+
+    // "Sapiensly — Agentes que ejecutan" → the brand half.
+    expect($this->testApp->fresh()->name)->toBe('Sapiensly')
+        ->and($this->testApp->fresh()->slug)->toStartWith('sapiensly')
+        // Returned too, so the Builder header updates without a reload.
+        ->and($response->json('app.name'))->toBe('Sapiensly');
+});
+
+it('leaves an already-named app alone on import', function () {
+    Queue::fake();
+    stubPageRenderer();
+
+    $conv = BuilderConversation::create([
+        'app_id' => $this->testApp->id,
+        'user_id' => $this->user->id,
+        'status' => 'active',
+    ]);
+    $this->testApp->update(['name' => 'Mi landing de siempre']);
+
+    $this->actingAs($this->user)
+        ->post("/apps/{$this->testApp->id}/builder/wireframe-import", [
+            'conversation_id' => $conv->id,
+            'source' => 'html',
+            'html' => designedLandingExport(),
+        ])->assertOk();
+
+    expect($this->testApp->fresh()->name)->toBe('Mi landing de siempre');
+});
+
+it('falls back to the typed context when the import has no title', function () {
+    Queue::fake();
+    stubPageRenderer();
+
+    $conv = BuilderConversation::create([
+        'app_id' => $this->testApp->id,
+        'user_id' => $this->user->id,
+        'status' => 'active',
+    ]);
+    $this->testApp->update(['name' => AppNaming::UNTITLED]);
+
+    $this->actingAs($this->user)
+        ->post("/apps/{$this->testApp->id}/builder/wireframe-import", [
+            'conversation_id' => $conv->id,
+            'source' => 'html',
+            'html' => '<section class="hero"><h1>Hola</h1></section>',
+            'business_context' => 'Vivero de plantas de interior en CDMX',
+        ])->assertOk();
+
+    expect($this->testApp->fresh()->name)->not->toBe(AppNaming::UNTITLED);
 });

@@ -13,7 +13,14 @@ const props = defineProps<{
 
 const emit = defineEmits<{
     (e: 'update:open', value: boolean): void;
-    (e: 'imported', payload: { messages: unknown[]; latest_message_id: string }): void;
+    (
+        e: 'imported',
+        payload: {
+            messages: unknown[];
+            latest_message_id: string;
+            app?: Record<string, unknown>;
+        },
+    ): void;
 }>();
 
 const { t } = useI18n();
@@ -169,10 +176,10 @@ async function submit() {
             form,
             {
                 headers: { 'Content-Type': 'multipart/form-data' },
-                // URL scrape + image download can take a moment; generous
-                // ceiling so the modal doesn't bail before the backend
-                // finishes assembling the message.
-                timeout: 45_000,
+                // URL scrape, image download — and for a client-rendered page,
+                // a full headless render — all happen before this returns. Same
+                // ceiling the chat composer uses for an .html drop.
+                timeout: 150_000,
             },
         );
         emit('imported', data);

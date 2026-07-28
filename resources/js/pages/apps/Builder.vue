@@ -1359,8 +1359,12 @@ function onComposerKeydown(event: KeyboardEvent) {
 function onWireframeImported(payload: {
     messages: unknown[];
     latest_message_id?: string;
+    app?: Parameters<typeof applyAppMeta>[0];
 }) {
     messages.value = payload.messages as Message[];
+    // An import names a still-unnamed app from the page's own <title>, so the
+    // header and slug must refresh here too — not only on the chat path.
+    applyAppMeta(payload.app);
 }
 type ViewMode = 'preview' | 'schema' | 'workflows' | 'access' | 'manifest';
 const viewMode = ref<ViewMode>('preview');
