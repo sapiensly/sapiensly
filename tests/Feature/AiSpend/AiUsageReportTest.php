@@ -88,49 +88,55 @@ it('flags models that have usage but no catalog price as unpriced', function () 
         ->and($models['claude-priced'])->not->toHaveKey('unpriced');
 });
 
-it('splits each service by the artifact the spend was made on', function () {
+it('groups by the artifact first, then by the services it used', function () {
     $user = User::factory()->create();
     $app = App::factory()->create(['name' => 'Order Desk']);
     $chat = Chat::create(['user_id' => $user->id, 'title' => 'Pricing questions']);
 
     // App-shaped spend names itself through app_id; everything else through the
-    // polymorphic subject.
+    // polymorphic subject. One app, two services — the question "what did this
+    // app cost me" must be answerable in one row, not split across two cards.
     spendEvent(['module' => 'builder', 'cost' => 2.0, 'app_id' => $app->id]);
+    spendEvent(['module' => 'landing_director', 'cost' => 0.5, 'app_id' => $app->id]);
     spendEvent(['module' => 'chat', 'cost' => 1.0, 'subject_type' => 'chat', 'subject_id' => $chat->id]);
-    spendEvent(['module' => 'chat', 'cost' => 0.5, 'subject_type' => 'chat', 'subject_id' => $chat->id]);
+    spendEvent(['module' => 'chat', 'cost' => 0.25, 'subject_type' => 'chat', 'subject_id' => $chat->id]);
 
-    $services = collect(app(AiUsageReport::class)->forCurrentOrg(30)['by_service'])->keyBy('service');
+    $artifacts = collect(app(AiUsageReport::class)->forCurrentOrg(30)['by_artifact']);
 
-    expect($services['Apps']['artifacts'])->toBe([[
-        'name' => 'Order Desk', 'kind' => 'App', 'type' => 'app', 'id' => $app->id,
-        'cost' => 2.0, 'calls' => 1, 'input_tokens' => 1000, 'output_tokens' => 500,
-    ]])
-        // Two calls on one chat roll up into a single line.
-        ->and($services['Chat']['artifacts'])->toHaveCount(1)
-        ->and($services['Chat']['artifacts'][0]['name'])->toBe('Pricing questions')
-        ->and($services['Chat']['artifacts'][0]['cost'])->toBe(1.5)
-        ->and($services['Chat']['artifacts'][0]['calls'])->toBe(2);
+    expect($artifacts)->toHaveCount(2);
+
+    $orderDesk = $artifacts->firstWhere('id', $app->id);
+    expect($orderDesk)->toMatchArray([
+        'name' => 'Order Desk', 'kind' => 'App', 'type' => 'app', 'cost' => 2.5, 'calls' => 2,
+    ])
+        ->and(collect($orderDesk['services'])->pluck('cost', 'service')->all())
+        ->toBe(['Apps' => 2.0, 'Landing Director' => 0.5]);
+
+    // Two calls on one chat roll up into a single row, and the biggest spender
+    // is listed first.
+    expect($artifacts->first()['id'])->toBe($app->id)
+        ->and($artifacts->last())->toMatchArray(['name' => 'Pricing questions', 'cost' => 1.25, 'calls' => 2]);
 });
 
 it('keeps untagged spend on its own line instead of dropping it', function () {
     spendEvent(['module' => 'debate', 'cost' => 3.0]); // no app_id, no subject
 
-    $services = collect(app(AiUsageReport::class)->forCurrentOrg(30)['by_service'])->keyBy('service');
+    $r = app(AiUsageReport::class)->forCurrentOrg(30);
 
-    // The service total has to keep adding up, so the row survives — unnamed.
-    expect($services['Debate']['cost'])->toBe(3.0)
-        ->and($services['Debate']['artifacts'])->toBe([[
-            'name' => null, 'kind' => null, 'type' => null, 'id' => null,
-            'cost' => 3.0, 'calls' => 1, 'input_tokens' => 1000, 'output_tokens' => 500,
+    // The totals have to keep adding up, so the row survives — unnamed.
+    expect($r['by_artifact'])->toHaveCount(1)
+        ->and($r['by_artifact'][0])->toMatchArray([
+            'name' => null, 'kind' => null, 'type' => null, 'id' => null, 'cost' => 3.0, 'calls' => 1,
+        ])
+        ->and($r['by_artifact'][0]['services'])->toBe([[
+            'service' => 'Debate', 'cost' => 3.0, 'calls' => 1, 'input_tokens' => 1000, 'output_tokens' => 500,
         ]]);
 });
 
 it('names an artifact that no longer exists by its bare id', function () {
     spendEvent(['module' => 'chat', 'cost' => 1.0, 'subject_type' => 'chat', 'subject_id' => 'chat_gone']);
 
-    $services = collect(app(AiUsageReport::class)->forCurrentOrg(30)['by_service'])->keyBy('service');
-
-    expect($services['Chat']['artifacts'][0])
+    expect(app(AiUsageReport::class)->forCurrentOrg(30)['by_artifact'][0])
         ->toMatchArray(['name' => null, 'kind' => 'Chat', 'type' => 'chat', 'id' => 'chat_gone', 'cost' => 1.0]);
 });
 
@@ -185,6 +191,17 @@ it('buckets today by the hour', function () {
         // Both events land in the 09:00 bucket, summed.
         ->and($r['series']['system'][9])->toBe(1.5)
         ->and($r['series']['system'][8])->toBe(0.0);
+});
+
+it('leaves the artifact grouping off the cross-org views', function () {
+    // Names resolve through the tenant models, which are RLS-scoped to the
+    // caller — a sysadmin reading another org would get blanks, so the section
+    // is absent rather than empty.
+    systemLedgerEvent(['cost' => 1.0]);
+
+    expect(app(AiUsageReport::class)->platformWide(30))->not->toHaveKey('by_artifact')
+        ->and(app(AiUsageReport::class)->forOrganization('org_aaaaaaaaaaaa', 30))->not->toHaveKey('by_artifact')
+        ->and(app(AiUsageReport::class)->forCurrentOrg(30))->toHaveKey('by_artifact');
 });
 
 it('windows the platform-wide and single-org views by period too', function () {

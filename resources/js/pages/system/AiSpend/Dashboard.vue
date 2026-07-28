@@ -25,6 +25,14 @@ interface ModelRow {
     output_tokens: number;
 }
 
+interface ServiceSlice {
+    service: string;
+    cost: number;
+    calls: number;
+    input_tokens: number;
+    output_tokens: number;
+}
+
 /** What the spend was made on: an app, a chatbot, a deck, a knowledge base… */
 interface ArtifactRow {
     name: string | null;
@@ -35,16 +43,11 @@ interface ArtifactRow {
     calls: number;
     input_tokens: number;
     output_tokens: number;
+    services: ServiceSlice[];
 }
 
-interface ServiceRow {
-    service: string;
-    cost: number;
-    calls: number;
-    input_tokens: number;
-    output_tokens: number;
+interface ServiceRow extends ServiceSlice {
     models: ModelRow[];
-    artifacts?: ArtifactRow[];
 }
 
 interface Period {
@@ -61,6 +64,7 @@ interface Report {
     by_source: { own: number; system: number };
     by_model: ModelRow[];
     by_service: ServiceRow[];
+    by_artifact?: ArtifactRow[];
     series: { labels: string[]; own: number[]; system: number[] };
 }
 
@@ -354,10 +358,15 @@ function artifactCaption(a: ArtifactRow): string | null {
                 </form>
             </section>
 
-            <!-- Spend by service, split either by model or by what it was spent on -->
+            <!--
+              The same rows, two ways round: by service with a per-model split,
+              or by the artifact the money was spent on with a per-service one.
+            -->
             <section class="rounded-sp-sm border border-soft bg-navy p-5">
                 <header class="mb-3 flex flex-wrap items-center justify-between gap-3">
-                    <h2 class="text-sm font-medium text-ink">Spend by service</h2>
+                    <h2 class="text-sm font-medium text-ink">
+                        {{ serviceBreakdown === 'models' ? 'Spend by service' : 'Spend by artifact' }}
+                    </h2>
                     <div class="inline-flex items-center rounded-pill border border-medium bg-surface p-0.5">
                         <button
                             v-for="mode in (['models', 'artifacts'] as const)"
@@ -378,7 +387,9 @@ function artifactCaption(a: ArtifactRow): string | null {
                 <p v-if="report.by_service.length === 0" class="text-xs text-ink-muted">
                     No AI usage recorded in this period yet.
                 </p>
-                <div v-else class="flex flex-col gap-3">
+
+                <!-- by service → models -->
+                <div v-else-if="serviceBreakdown === 'models'" class="flex flex-col gap-3">
                     <div
                         v-for="s in report.by_service"
                         :key="s.service"
@@ -391,7 +402,7 @@ function artifactCaption(a: ArtifactRow): string | null {
                                 <span class="ml-2 text-xs text-ink-subtle">{{ num(s.calls) }} calls</span>
                             </div>
                         </header>
-                        <ul v-if="serviceBreakdown === 'models'" class="mt-2 divide-y divide-soft/40">
+                        <ul class="mt-2 divide-y divide-soft/40">
                             <li
                                 v-for="m in s.models"
                                 :key="m.model"
@@ -404,24 +415,41 @@ function artifactCaption(a: ArtifactRow): string | null {
                                 </span>
                             </li>
                         </ul>
-                        <ul v-else class="mt-2 divide-y divide-soft/40">
+                    </div>
+                </div>
+
+                <!-- by artifact → services -->
+                <div v-else class="flex flex-col gap-3">
+                    <div
+                        v-for="a in report.by_artifact ?? []"
+                        :key="`${a.type}:${a.id}`"
+                        class="rounded-sp-sm border border-soft/60 bg-surface/40 p-4"
+                    >
+                        <header class="flex items-baseline justify-between gap-3">
+                            <div class="min-w-0">
+                                <h3 class="truncate text-sm font-medium text-ink">{{ artifactName(a) }}</h3>
+                                <p
+                                    v-if="artifactCaption(a)"
+                                    class="truncate font-mono text-[10px] text-ink-subtle"
+                                >
+                                    {{ artifactCaption(a) }}
+                                </p>
+                            </div>
+                            <div class="shrink-0 text-right">
+                                <span class="text-sm font-semibold text-ink">{{ money(a.cost) }}</span>
+                                <span class="ml-2 text-xs text-ink-subtle">{{ num(a.calls) }} calls</span>
+                            </div>
+                        </header>
+                        <ul class="mt-2 divide-y divide-soft/40">
                             <li
-                                v-for="a in s.artifacts ?? []"
-                                :key="`${a.type}:${a.id}`"
-                                class="flex items-center justify-between gap-3 py-1.5 text-xs"
+                                v-for="s in a.services"
+                                :key="s.service"
+                                class="flex items-center justify-between py-1.5 text-xs"
                             >
-                                <span class="min-w-0">
-                                    <span class="block truncate text-ink-muted">{{ artifactName(a) }}</span>
-                                    <span
-                                        v-if="artifactCaption(a)"
-                                        class="block truncate font-mono text-[10px] text-ink-subtle"
-                                    >
-                                        {{ artifactCaption(a) }}
-                                    </span>
-                                </span>
-                                <span class="flex shrink-0 items-center gap-3">
-                                    <span class="text-ink-subtle">{{ num(a.input_tokens + a.output_tokens) }} tok</span>
-                                    <span class="w-16 text-right font-medium text-ink">{{ money(a.cost) }}</span>
+                                <span class="text-ink-muted">{{ s.service }}</span>
+                                <span class="flex items-center gap-3">
+                                    <span class="text-ink-subtle">{{ num(s.input_tokens + s.output_tokens) }} tok</span>
+                                    <span class="w-16 text-right font-medium text-ink">{{ money(s.cost) }}</span>
                                 </span>
                             </li>
                         </ul>

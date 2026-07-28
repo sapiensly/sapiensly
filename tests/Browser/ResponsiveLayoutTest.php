@@ -1,7 +1,7 @@
 <?php
 
 use App\Models\AiUsageEvent;
-use App\Models\Chat;
+use App\Models\App;
 use App\Models\User;
 use Database\Seeders\RolesAndPermissionsSeeder;
 use Illuminate\Support\Facades\Hash;
@@ -402,36 +402,54 @@ it('scrolls the spend table on a phone instead of crushing its columns', functio
         ->assertNoJavaScriptErrors();
 });
 
-it('swaps the spend-by-service list between models and artifacts', function () {
+it('swaps the spend panel between services-by-model and artifacts-by-service', function () {
     $this->seed(RolesAndPermissionsSeeder::class);
     $user = mcpMember($org = mcpOrg());
     $this->actingAs($user);
 
-    $chat = Chat::create(['user_id' => $user->id, 'organization_id' => $org->id, 'title' => 'Refund policy']);
-
-    AiUsageEvent::create([
-        'organization_id' => $org->id,
+    // One app that spent through TWO services. Grouped by service it shows up
+    // twice and its real cost is a mental sum; grouped by artifact it is one
+    // card that answers "what did this app cost me".
+    $app = App::factory()->create([
         'user_id' => $user->id,
-        'module' => 'chat',
-        'driver' => 'anthropic',
-        'model' => 'anthropic/claude-opus-5-20260514',
-        'source' => 'system',
-        'subject_type' => 'chat',
-        'subject_id' => $chat->id,
-        'input_tokens' => 1000,
-        'output_tokens' => 500,
-        'cost' => 1.25,
+        'organization_id' => $org->id,
+        'name' => 'Order Desk',
     ]);
+    foreach ([['builder', 0.75], ['landing_director', 0.25]] as [$module, $cost]) {
+        AiUsageEvent::create([
+            'organization_id' => $org->id,
+            'user_id' => $user->id,
+            'module' => $module,
+            'driver' => 'anthropic',
+            'model' => 'anthropic/claude-opus-5-20260514',
+            'source' => 'system',
+            'app_id' => $app->id,
+            'input_tokens' => 1000,
+            'output_tokens' => 500,
+            'cost' => $cost,
+        ]);
+    }
 
     visit('/system/ai-spend')
         // Models is the default reading: which model burned the money.
+        ->assertSee('Spend by service')
         ->assertSee('anthropic/claude-opus-5-20260514')
-        ->assertDontSee('Refund policy')
-        // Artifacts is the other one: what the money was spent on, named, with
-        // its id underneath.
+        ->assertDontSee('Order Desk')
+        // Artifacts is the other one: the app named once, its id underneath,
+        // and the two services it spent through listed inside it.
         ->click('button:has-text("artifacts")')
-        ->assertSee('Refund policy')
-        ->assertSee($chat->id)
+        ->assertSee('Spend by artifact')
+        ->assertSee('Order Desk')
+        ->assertSee($app->id)
+        ->assertSee('$1.00')
+        ->assertScript(
+            <<<'JS'
+            function () {
+                return [...document.querySelectorAll('h3')].filter((h) => h.textContent.trim() === 'Order Desk').length;
+            }
+            JS,
+            1,
+        )
         ->assertNoJavaScriptErrors();
 });
 

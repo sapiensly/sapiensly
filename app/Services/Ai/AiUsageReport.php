@@ -222,54 +222,68 @@ class AiUsageReport
 
         $byModel = collect($modelBreakdown($rows))->take(15)->all();
 
-        // Names for every artifact in the window, resolved once up front: the
-        // per-service breakdowns below would otherwise re-query per group.
-        // Duplicates are fine — resolve() dedupes before it queries.
-        $names = $withArtifacts ? SpendArtifact::resolve(
-            $rows->map(fn ($r) => $this->artifactKeyFor($r))->filter()->all(),
-        ) : [];
-
-        $artifactBreakdown = fn (Collection $g) => collect($g)
-            ->groupBy(fn ($r) => ($k = $this->artifactKeyFor($r)) === null ? '' : $k[0].':'.$k[1])
-            ->map(function (Collection $ag, string $key) use ($names) {
-                [$type, $id] = $key === '' ? [null, null] : explode(':', $key, 2);
-
-                return [
-                    // An id with no row behind it still gets a line: spend that
-                    // outlived its artifact is spend, and dropping it would make
-                    // the service total stop adding up.
-                    'name' => $names[$key]['name'] ?? null,
-                    'kind' => $names[$key]['kind'] ?? ($type === null ? null : SpendArtifact::kindFor($type)),
-                    'type' => $type,
-                    'id' => $id,
-                    'cost' => round((float) $ag->sum('cost'), 4),
-                    'calls' => $ag->count(),
-                    'input_tokens' => (int) $ag->sum('input_tokens'),
-                    'output_tokens' => (int) $ag->sum('output_tokens'),
-                ];
-            })
+        $serviceBreakdown = fn (Collection $g) => collect($g)
+            ->groupBy(fn ($r) => $this->serviceFor($r->module ?? null))
+            ->map(fn (Collection $sg, string $service) => [
+                'service' => $service,
+                'cost' => round((float) $sg->sum('cost'), 4),
+                'calls' => $sg->count(),
+                'input_tokens' => (int) $sg->sum('input_tokens'),
+                'output_tokens' => (int) $sg->sum('output_tokens'),
+            ])
             ->sortByDesc('cost')
             ->values()
             ->all();
 
         // Spend grouped by service (Chat, Apps, …), each with its own per-model
-        // breakdown so the dashboard can show "Chat $X: model A $z, model B $y",
-        // and — where the ledger knows it — the same split per artifact.
+        // breakdown so the dashboard can show "Chat $X: model A $z, model B $y".
         $byService = $rows->groupBy(fn ($r) => $this->serviceFor($r->module ?? null))
-            ->map(fn ($g, $service) => array_filter([
+            ->map(fn ($g, $service) => [
                 'service' => $service,
                 'cost' => round((float) $g->sum('cost'), 4),
                 'calls' => $g->count(),
                 'input_tokens' => (int) $g->sum('input_tokens'),
                 'output_tokens' => (int) $g->sum('output_tokens'),
                 'models' => $modelBreakdown($g),
-                'artifacts' => $withArtifacts ? $artifactBreakdown($g) : null,
-            ], fn ($v) => $v !== null))
+            ])
             ->sortByDesc('cost')
             ->values()
             ->all();
 
-        return [
+        // The same rows read the other way round: what the money was spent ON,
+        // each artifact broken down by the services it used. Artifact first,
+        // because "what did this app cost me" is the question — nesting it the
+        // other way splits one app's cost across several service cards.
+        $names = $withArtifacts ? SpendArtifact::resolve(
+            // Duplicates are fine — resolve() dedupes before it queries.
+            $rows->map(fn ($r) => $this->artifactKeyFor($r))->filter()->all(),
+        ) : [];
+
+        $byArtifact = ! $withArtifacts ? null : $rows
+            ->groupBy(fn ($r) => ($k = $this->artifactKeyFor($r)) === null ? '' : $k[0].':'.$k[1])
+            ->map(function (Collection $g, string $key) use ($names, $serviceBreakdown) {
+                [$type, $id] = $key === '' ? [null, null] : explode(':', $key, 2);
+
+                return [
+                    // An id with no row behind it still gets a line: spend that
+                    // outlived its artifact is spend, and dropping it would make
+                    // the totals stop adding up.
+                    'name' => $names[$key]['name'] ?? null,
+                    'kind' => $names[$key]['kind'] ?? ($type === null ? null : SpendArtifact::kindFor($type)),
+                    'type' => $type,
+                    'id' => $id,
+                    'cost' => round((float) $g->sum('cost'), 4),
+                    'calls' => $g->count(),
+                    'input_tokens' => (int) $g->sum('input_tokens'),
+                    'output_tokens' => (int) $g->sum('output_tokens'),
+                    'services' => $serviceBreakdown($g),
+                ];
+            })
+            ->sortByDesc('cost')
+            ->values()
+            ->all();
+
+        return array_filter([
             'range_days' => $period->days(),
             'period' => $period->toArray(),
             'totals' => [
@@ -284,12 +298,14 @@ class AiUsageReport
             ],
             'by_model' => $byModel,
             'by_service' => $byService,
+            'by_artifact' => $byArtifact,
             'series' => [
                 'labels' => $labels,
                 'own' => $ownSeries,
                 'system' => $systemSeries,
             ],
-        ];
+            // Only `by_artifact` is optional; every other key is always present.
+        ], fn ($v) => $v !== null);
     }
 
     /**
