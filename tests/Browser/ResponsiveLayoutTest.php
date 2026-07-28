@@ -401,6 +401,29 @@ it('scrolls the spend table on a phone instead of crushing its columns', functio
         ->assertNoJavaScriptErrors();
 });
 
+it('scrolls the spend period picker on a phone instead of spilling it', function () {
+    $this->seed(RolesAndPermissionsSeeder::class);
+    $this->actingAs(mcpMember(mcpOrg()));
+
+    // Six windows (today / week / month / 7d / 30d / 90d) do not fit a phone in
+    // one row, so the pill group has to scroll inside its own container.
+    visit('/system/ai-spend')->on()->iPhone15()
+        ->assertSee('Today')
+        ->assertSee('Week')
+        ->assertSee('Month')
+        ->assertSee('90d')
+        ->assertScript(NO_CLIPPED_CONTENT, '')
+        ->assertScript(<<<'JS'
+            function () {
+                const links = [...document.querySelectorAll('a[href*="ai-spend?period="]')];
+                if (links.length !== 6) return false;
+                const scroller = links[0].parentElement.parentElement;
+                return ['auto', 'scroll'].includes(getComputedStyle(scroller).overflowX);
+            }
+            JS)
+        ->assertNoJavaScriptErrors();
+});
+
 it('keeps the chat send button on screen under a long model name', function () {
     $this->seed(RolesAndPermissionsSeeder::class);
     $user = mcpMember($org = mcpOrg());

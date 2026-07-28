@@ -182,6 +182,16 @@ it('get_ai_spend returns the report for an owner and is denied to a member', fun
         ->assertOk()
         ->assertSee('range_days');
 
+    // Named calendar windows, alongside the legacy rolling `days`.
+    SapiensServer::actingAs($owner)
+        ->tool(GetAiSpendTool::class, ['period' => 'month'])
+        ->assertOk()
+        ->assertSee('"key":"month"');
+
+    SapiensServer::actingAs($owner)
+        ->tool(GetAiSpendTool::class, ['period' => 'last-decade'])
+        ->assertHasErrors();
+
     SapiensServer::actingAs($member)
         ->tool(GetAiSpendTool::class, [])
         ->assertHasErrors();

@@ -13,6 +13,8 @@ interface Budget {
     platform_system_cap: number | null;
     alert_threshold_pct: number;
     enforcement_enabled: boolean;
+    /** Budget-month-to-date spend — independent of the period picker. */
+    period_to_date: { since: string; own: number; system: number };
 }
 
 interface ModelRow {
@@ -32,8 +34,16 @@ interface ServiceRow {
     models: ModelRow[];
 }
 
+interface Period {
+    key: string;
+    label: string;
+    granularity: 'hour' | 'day';
+    since: string;
+}
+
 interface Report {
     range_days: number;
+    period: Period;
     totals: { cost: number; calls: number; input_tokens: number; output_tokens: number };
     by_source: { own: number; system: number };
     by_model: ModelRow[];
@@ -43,12 +53,11 @@ interface Report {
 
 const props = defineProps<{
     scope: { type: string; name: string };
-    days: number;
+    period: Period;
+    periods: { key: string; label: string; short: string }[];
     report: Report;
     budget: Budget | null;
 }>();
-
-const ranges = [7, 30, 90];
 
 const budgetForm = useForm({
     system_monthly_budget: props.budget?.system_monthly_budget ?? null,
@@ -64,8 +73,11 @@ const systemLimit = computed<number | null>(() => {
     );
     return candidates.length ? Math.min(...candidates) : null;
 });
+// A monthly budget is measured against the budget month, never against the
+// picked window — otherwise "Today" would read as 2% of the cap and look safe.
+const systemSpentThisBudgetPeriod = computed(() => props.budget?.period_to_date.system ?? 0);
 const systemUsagePct = computed(() =>
-    systemLimit.value ? Math.min(100, Math.round((props.report.by_source.system / systemLimit.value) * 100)) : null,
+    systemLimit.value ? Math.min(100, Math.round((systemSpentThisBudgetPeriod.value / systemLimit.value) * 100)) : null,
 );
 
 function saveBudget(): void {
@@ -92,6 +104,17 @@ const chartSeries = computed(() => [
 const scopeLabel = computed(() =>
     props.scope.type === 'organization' ? `Organization · ${props.scope.name}` : `Personal · ${props.scope.name}`,
 );
+
+function periodHref(key: string): string {
+    return `/system/ai-spend?period=${key}`;
+}
+
+/** A single-day window is charted hourly, so the heading has to follow. */
+const seriesHeading = computed(() => (props.period.granularity === 'hour' ? 'Hourly spend' : 'Daily spend'));
+
+function shortDate(iso: string): string {
+    return new Date(`${iso}T00:00:00`).toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
+}
 </script>
 
 <template>
@@ -105,21 +128,29 @@ const scopeLabel = computed(() =>
           dropped below `sm` and left to the layout; `sm` and up is unchanged.
         -->
         <div class="flex flex-col gap-6 px-0 py-4 sm:p-6">
-            <PageHeader title="AI Spend" :description="`${scopeLabel} · last ${days} days`">
+            <PageHeader title="AI Spend" :description="`${scopeLabel} · ${period.label.toLowerCase()}`">
                 <template #actions>
-                    <div class="inline-flex items-center rounded-pill border border-medium bg-surface p-0.5">
-                        <Link
-                            v-for="r in ranges"
-                            :key="r"
-                            :href="`/system/ai-spend?days=${r}`"
-                            preserve-scroll
-                            :class="[
-                                'rounded-pill px-3 py-1 text-xs transition-colors',
-                                r === days ? 'bg-accent-blue/15 text-accent-blue' : 'text-ink-muted hover:text-ink',
-                            ]"
-                        >
-                            {{ r }}d
-                        </Link>
+                    <!--
+                      Six windows do not fit a phone in one row, and wrapping a
+                      pill group splits its border in half. Scroll it instead —
+                      the same treatment the models table below already gets.
+                    -->
+                    <div class="-mx-1 max-w-full overflow-x-auto px-1">
+                        <div class="inline-flex w-max items-center rounded-pill border border-medium bg-surface p-0.5">
+                            <Link
+                                v-for="p in periods"
+                                :key="p.key"
+                                :href="periodHref(p.key)"
+                                preserve-scroll
+                                :title="p.label"
+                                :class="[
+                                    'whitespace-nowrap rounded-pill px-3 py-1 text-xs transition-colors',
+                                    p.key === period.key ? 'bg-accent-blue/15 text-accent-blue' : 'text-ink-muted hover:text-ink',
+                                ]"
+                            >
+                                {{ p.short }}
+                            </Link>
+                        </div>
                     </div>
                 </template>
             </PageHeader>
@@ -159,10 +190,10 @@ const scopeLabel = computed(() =>
                 />
             </section>
 
-            <!-- Daily spend chart -->
+            <!-- Spend chart: daily, or hourly for a single-day window -->
             <section class="rounded-sp-sm border border-soft bg-navy p-5">
                 <header class="mb-3 flex items-center justify-between">
-                    <h2 class="text-sm font-medium text-ink">Daily spend</h2>
+                    <h2 class="text-sm font-medium text-ink">{{ seriesHeading }}</h2>
                     <div class="flex items-center gap-4 text-xs text-ink-muted">
                         <span class="inline-flex items-center gap-1.5">
                             <span class="size-2 rounded-full" style="background: var(--sp-accent-blue)" /> System
@@ -183,10 +214,12 @@ const scopeLabel = computed(() =>
                     (BYOK) models are capped only if you set a limit.
                 </p>
 
-                <div v-if="systemLimit !== null" class="mb-4">
-                    <div class="mb-1 flex justify-between text-xs text-ink-muted">
-                        <span>System spend this period</span>
-                        <span>{{ money(report.by_source.system) }} / {{ money(systemLimit) }} ({{ systemUsagePct }}%)</span>
+                <div v-if="systemLimit !== null && budget" class="mb-4">
+                    <div class="mb-1 flex justify-between gap-3 text-xs text-ink-muted">
+                        <span>System spend since {{ shortDate(budget.period_to_date.since) }}</span>
+                        <span class="whitespace-nowrap">
+                            {{ money(systemSpentThisBudgetPeriod) }} / {{ money(systemLimit) }} ({{ systemUsagePct }}%)
+                        </span>
                     </div>
                     <div class="h-2 overflow-hidden rounded-full bg-surface">
                         <div

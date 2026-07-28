@@ -5,6 +5,7 @@ use App\Models\AiUsageEvent;
 use App\Models\Organization;
 use App\Models\SystemAiUsageEvent;
 use App\Services\Ai\AiUsageReport;
+use App\Support\Ai\SpendPeriod;
 
 /**
  * Org-level AI spend, phase 1 — the dashboard read model. Shapes recorded events
@@ -82,6 +83,61 @@ it('flags models that have usage but no catalog price as unpriced', function () 
     $models = collect($r['by_model'])->keyBy('model');
     expect($models['claude-mystery']['unpriced'])->toBeTrue()
         ->and($models['claude-priced'])->not->toHaveKey('unpriced');
+});
+
+it('windows a calendar period to its boundary, not N days back', function () {
+    // On the 3rd, "this month" is three days — so the 30th of last month is out
+    // even though a rolling 30-day window would include it.
+    $this->travelTo('2026-06-30 12:00:00');
+    spendEvent(['cost' => 1.0]);
+    $this->travelTo('2026-07-02 12:00:00');
+    spendEvent(['cost' => 2.0]);
+    $this->travelTo('2026-07-03 12:00:00');
+
+    $month = app(AiUsageReport::class)->forCurrentOrg(SpendPeriod::fromKey('month'));
+    $rolling = app(AiUsageReport::class)->forCurrentOrg(SpendPeriod::fromKey('30d'));
+
+    expect($month['totals']['cost'])->toBe(2.0)
+        ->and($month['range_days'])->toBe(3)
+        ->and($month['series']['labels'])->toHaveCount(3)
+        ->and($month['period']['key'])->toBe('month')
+        // The same events over a rolling 30 days do include June.
+        ->and($rolling['totals']['cost'])->toBe(3.0);
+});
+
+it('buckets today by the hour', function () {
+    // Yesterday must not leak into a today window.
+    $this->travelTo('2026-07-14 09:20:00');
+    spendEvent(['cost' => 9.0]);
+    $this->travelTo('2026-07-15 09:20:00');
+    spendEvent(['cost' => 1.0]);
+    $this->travelTo('2026-07-15 09:45:00');
+    spendEvent(['cost' => 0.5]);
+    $this->travelTo('2026-07-15 15:00:00');
+
+    $r = app(AiUsageReport::class)->forCurrentOrg(SpendPeriod::fromKey('today'));
+
+    expect($r['totals']['cost'])->toBe(1.5)
+        ->and($r['period']['granularity'])->toBe('hour')
+        ->and($r['series']['labels'])->toHaveCount(24)
+        // Both events land in the 09:00 bucket, summed.
+        ->and($r['series']['system'][9])->toBe(1.5)
+        ->and($r['series']['system'][8])->toBe(0.0);
+});
+
+it('windows the platform-wide and single-org views by period too', function () {
+    $this->travelTo('2026-07-01 08:00:00');
+    systemLedgerEvent(['cost' => 7.0]);
+    $this->travelTo('2026-07-15 08:00:00');
+    systemLedgerEvent(['cost' => 4.0]);
+    $this->travelTo('2026-07-15 15:00:00');
+
+    $today = app(AiUsageReport::class)->platformWide(SpendPeriod::fromKey('today'));
+    $org = app(AiUsageReport::class)->forOrganization('org_aaaaaaaaaaaa', SpendPeriod::fromKey('today'));
+
+    expect($today['totals']['cost'])->toBe(4.0)
+        ->and($today['series']['system'][8])->toBe(4.0)
+        ->and($org['totals']['cost'])->toBe(4.0);
 });
 
 function systemLedgerEvent(array $attrs = []): SystemAiUsageEvent

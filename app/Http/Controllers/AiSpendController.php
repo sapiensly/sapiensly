@@ -4,7 +4,9 @@ namespace App\Http\Controllers;
 
 use App\Models\Organization;
 use App\Models\OrganizationAiBudget;
+use App\Services\Ai\AiSpendGuard;
 use App\Services\Ai\AiUsageReport;
+use App\Support\Ai\SpendPeriod;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
@@ -18,16 +20,16 @@ use Inertia\Response;
  */
 class AiSpendController extends Controller
 {
-    public function __construct(private readonly AiUsageReport $report) {}
+    public function __construct(
+        private readonly AiUsageReport $report,
+        private readonly AiSpendGuard $guard,
+    ) {}
 
     public function index(Request $request): Response
     {
         $user = $request->user();
 
-        $days = (int) ($request->integer('days') ?: 30);
-        if (! in_array($days, [7, 30, 90], true)) {
-            $days = 30;
-        }
+        $period = SpendPeriod::fromRequest($request);
 
         $budget = null;
         if ($user->organization_id !== null) {
@@ -41,14 +43,18 @@ class AiSpendController extends Controller
 
         return Inertia::render('system/AiSpend/Dashboard', [
             'scope' => $scope,
-            'days' => $days,
-            'report' => $this->report->forCurrentOrg($days),
+            'period' => $period->toArray(),
+            'periods' => SpendPeriod::options(),
+            'report' => $this->report->forCurrentOrg($period),
             'budget' => $budget ? [
                 'system_monthly_budget' => $budget->system_monthly_budget,
                 'own_monthly_budget' => $budget->own_monthly_budget,
                 'platform_system_cap' => $budget->platform_system_cap,
                 'alert_threshold_pct' => $budget->alert_threshold_pct,
                 'enforcement_enabled' => $budget->enforcement_enabled,
+                // The meter tracks the budget's own reset-day month, not the
+                // period picker — a budget is monthly whatever the chart shows.
+                'period_to_date' => $this->guard->periodToDate($budget->reset_day),
             ] : null,
         ]);
     }

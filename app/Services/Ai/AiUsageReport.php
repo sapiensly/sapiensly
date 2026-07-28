@@ -4,6 +4,7 @@ namespace App\Services\Ai;
 
 use App\Models\AiUsageEvent;
 use App\Models\Organization;
+use App\Support\Ai\SpendPeriod;
 use App\Support\Tenancy\Schemas;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
@@ -18,20 +19,21 @@ use Illuminate\Support\Facades\DB;
 class AiUsageReport
 {
     /**
-     * Spend for the current tenant (RLS-scoped) over the last $days days.
+     * Spend for the current tenant (RLS-scoped) over the given window. Accepts a
+     * legacy day count as well as a period.
      *
      * @return array<string, mixed>
      */
-    public function forCurrentOrg(int $days = 30): array
+    public function forCurrentOrg(SpendPeriod|int $period = 30): array
     {
-        $since = Carbon::today()->subDays($days - 1);
+        $period = SpendPeriod::resolve($period);
 
         $rows = AiUsageEvent::query()
-            ->where('created_at', '>=', $since)
-            ->selectRaw('date(created_at) as d, source, module, model, cost, input_tokens, output_tokens')
+            ->where('created_at', '>=', $period->since)
+            ->selectRaw($period->bucketColumn().', source, module, model, cost, input_tokens, output_tokens')
             ->get();
 
-        return $this->shape($rows, $since, $days);
+        return $this->shape($rows, $period);
     }
 
     /**
@@ -45,24 +47,25 @@ class AiUsageReport
      *
      * @return array<string, mixed>
      */
-    public function platformWide(int $days = 30): array
+    public function platformWide(SpendPeriod|int $period = 30): array
     {
-        $since = Carbon::today()->subDays($days - 1);
+        $period = SpendPeriod::resolve($period);
+        $bucket = $period->bucketColumn();
 
         $ownRows = DB::connection('pgsql')->table(Schemas::qualify('ai_usage_events'))
             ->where('source', 'own')
-            ->where('created_at', '>=', $since)
-            ->selectRaw("date(created_at) as d, 'own' as source, module, model, organization_id, cost, input_tokens, output_tokens")
+            ->where('created_at', '>=', $period->since)
+            ->selectRaw($bucket.", 'own' as source, module, model, organization_id, cost, input_tokens, output_tokens")
             ->get();
 
         $systemRows = DB::connection('pgsql')->table('platform.system_ai_usage_events')
-            ->where('created_at', '>=', $since)
-            ->selectRaw("date(created_at) as d, 'system' as source, module, model, organization_id, cost, input_tokens, output_tokens")
+            ->where('created_at', '>=', $period->since)
+            ->selectRaw($bucket.", 'system' as source, module, model, organization_id, cost, input_tokens, output_tokens")
             ->get();
 
         $rows = $ownRows->concat($systemRows);
 
-        $report = $this->shape($rows, $since, $days);
+        $report = $this->shape($rows, $period);
 
         // Top organizations by spend (system spend is what the platform pays).
         $byOrg = collect($rows)
@@ -100,24 +103,25 @@ class AiUsageReport
      *
      * @return array<string, mixed>
      */
-    public function forOrganization(string $organizationId, int $days = 30): array
+    public function forOrganization(string $organizationId, SpendPeriod|int $period = 30): array
     {
-        $since = Carbon::today()->subDays($days - 1);
+        $period = SpendPeriod::resolve($period);
+        $bucket = $period->bucketColumn();
 
         $ownRows = DB::connection('pgsql')->table(Schemas::qualify('ai_usage_events'))
             ->where('organization_id', $organizationId)
             ->where('source', 'own')
-            ->where('created_at', '>=', $since)
-            ->selectRaw("date(created_at) as d, 'own' as source, module, model, cost, input_tokens, output_tokens")
+            ->where('created_at', '>=', $period->since)
+            ->selectRaw($bucket.", 'own' as source, module, model, cost, input_tokens, output_tokens")
             ->get();
 
         $systemRows = DB::connection('pgsql')->table('platform.system_ai_usage_events')
             ->where('organization_id', $organizationId)
-            ->where('created_at', '>=', $since)
-            ->selectRaw("date(created_at) as d, 'system' as source, module, model, cost, input_tokens, output_tokens")
+            ->where('created_at', '>=', $period->since)
+            ->selectRaw($bucket.", 'system' as source, module, model, cost, input_tokens, output_tokens")
             ->get();
 
-        return $this->shape($ownRows->concat($systemRows), $since, $days);
+        return $this->shape($ownRows->concat($systemRows), $period);
     }
 
     /**
@@ -172,29 +176,27 @@ class AiUsageReport
     }
 
     /**
-     * Shared shaping of a flat row set into totals + breakdowns + a daily series.
+     * Shared shaping of a flat row set into totals + breakdowns + a cost series.
      *
      * @param  Collection<int, object>  $rows
      * @return array<string, mixed>
      */
-    private function shape($rows, Carbon $since, int $days): array
+    private function shape($rows, SpendPeriod $period): array
     {
         $rows = collect($rows);
 
         $bySource = fn (string $source) => round((float) $rows->where('source', $source)->sum('cost'), 4);
 
-        // Daily cost series split by source, zero-filled across the window so the
-        // chart has a point per day.
-        $byDay = $rows->groupBy('d');
-        $labels = [];
+        // Cost series split by source, zero-filled across the window so the chart
+        // has a point per bucket (a day, or an hour for a single-day period).
+        $byBucket = $rows->groupBy('d');
+        $labels = $period->bucketLabels();
         $ownSeries = [];
         $systemSeries = [];
-        for ($i = 0; $i < $days; $i++) {
-            $day = $since->copy()->addDays($i)->toDateString();
-            $labels[] = $day;
-            $dayRows = $byDay->get($day) ?? collect();
-            $ownSeries[] = round((float) collect($dayRows)->where('source', 'own')->sum('cost'), 4);
-            $systemSeries[] = round((float) collect($dayRows)->where('source', 'system')->sum('cost'), 4);
+        foreach ($labels as $label) {
+            $bucketRows = collect($byBucket->get($label) ?? []);
+            $ownSeries[] = round((float) $bucketRows->where('source', 'own')->sum('cost'), 4);
+            $systemSeries[] = round((float) $bucketRows->where('source', 'system')->sum('cost'), 4);
         }
 
         // A model with usage but no catalog price silently meters at $0 —
@@ -232,7 +234,8 @@ class AiUsageReport
             ->all();
 
         return [
-            'range_days' => $days,
+            'range_days' => $period->days(),
+            'period' => $period->toArray(),
             'totals' => [
                 'cost' => round((float) $rows->sum('cost'), 4),
                 'calls' => $rows->count(),

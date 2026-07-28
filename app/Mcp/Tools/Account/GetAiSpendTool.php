@@ -6,12 +6,13 @@ use App\Mcp\Tools\SapiensTool;
 use App\Models\Organization;
 use App\Models\User;
 use App\Services\Ai\AiUsageReport;
+use App\Support\Ai\SpendPeriod;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Laravel\Mcp\Request;
 use Laravel\Mcp\Response;
 use Laravel\Mcp\Server\Attributes\Description;
 
-#[Description("The organization's AI spend over the last 7/30/90 days: total cost, calls and tokens, the own-key vs platform-key split, a per-model breakdown, a per-service breakdown (Chat, Apps, … each with its own per-model split), a daily cost series, and the configured budgets/caps. Owner-only.")]
+#[Description("The organization's AI spend over a window — today, this week, this month, or the last 7/30/90 days: total cost, calls and tokens, the own-key vs platform-key split, a per-model breakdown, a per-service breakdown (Chat, Apps, … each with its own per-model split), a cost series (hourly for today, otherwise daily), and the configured budgets/caps. Owner-only.")]
 class GetAiSpendTool extends SapiensTool
 {
     // No ability gate; owner-gated below to match the web AI Spend dashboard.
@@ -19,9 +20,13 @@ class GetAiSpendTool extends SapiensTool
     public function handle(Request $request): Response
     {
         $validated = $request->validate([
+            'period' => ['sometimes', 'string', 'in:'.implode(',', SpendPeriod::keys())],
             'days' => ['sometimes', 'integer', 'in:7,30,90'],
         ]);
-        $days = $validated['days'] ?? 30;
+
+        $period = isset($validated['period'])
+            ? SpendPeriod::fromKey($validated['period'])
+            : SpendPeriod::rolling($validated['days'] ?? 30);
 
         /** @var User $user */
         $user = $request->user();
@@ -37,7 +42,7 @@ class GetAiSpendTool extends SapiensTool
 
         // RLS scopes the report to the bound organization (the request set the
         // tenant context), mirroring the org-facing AI Spend dashboard.
-        $report = app(AiUsageReport::class)->forCurrentOrg($days);
+        $report = app(AiUsageReport::class)->forCurrentOrg($period);
 
         $budget = $org->aiBudget;
         $report['budget'] = $budget === null ? null : [
@@ -57,7 +62,9 @@ class GetAiSpendTool extends SapiensTool
     public function schema(JsonSchema $schema): array
     {
         return [
-            'days' => $schema->integer()->enum([7, 30, 90])->description('Window in days (7, 30 or 90; default 30).'),
+            'period' => $schema->string()->enum(SpendPeriod::keys())
+                ->description("Window: 'today', 'week' (this week), 'month' (this month), or '7d'/'30d'/'90d'. Default '30d'."),
+            'days' => $schema->integer()->enum([7, 30, 90])->description('Legacy rolling window in days; prefer `period`.'),
         ];
     }
 }

@@ -2,7 +2,9 @@
 
 use App\Enums\MembershipRole;
 use App\Enums\MembershipStatus;
+use App\Models\AiUsageEvent;
 use App\Models\Organization;
+use App\Models\OrganizationAiBudget;
 use App\Models\OrganizationMembership;
 use App\Models\User;
 use Database\Seeders\RolesAndPermissionsSeeder;
@@ -40,6 +42,75 @@ it('shows the dashboard to an active org owner', function () {
         ->assertOk()
         ->assertInertia(fn ($page) => $page->component('system/AiSpend/Dashboard')
             ->where('scope.type', 'organization'));
+});
+
+it('offers the calendar periods and honours the picked one', function () {
+    [, $owner] = orgMember(MembershipRole::Owner->value);
+
+    $this->actingAs($owner)
+        ->get('/system/ai-spend?period=today')
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->where('period.key', 'today')
+            ->where('period.granularity', 'hour')
+            ->where('report.period.key', 'today')
+            ->where('periods.0.key', 'today')
+            ->where('periods.1.key', 'week')
+            ->where('periods.2.key', 'month'));
+});
+
+it('falls back to the default window for a stale or bogus period', function () {
+    [, $owner] = orgMember(MembershipRole::Owner->value);
+
+    $this->actingAs($owner)
+        ->get('/system/ai-spend?period=since-forever')
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page->where('period.key', '30d'));
+});
+
+it('still resolves a legacy days link', function () {
+    [, $owner] = orgMember(MembershipRole::Owner->value);
+
+    $this->actingAs($owner)
+        ->get('/system/ai-spend?days=7')
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page->where('period.key', '7d'));
+});
+
+it('measures the budget meter against the budget month, not the picked period', function () {
+    [$org, $owner] = orgMember(MembershipRole::Owner->value);
+    OrganizationAiBudget::create([
+        'organization_id' => $org->id,
+        'system_monthly_budget' => 100,
+        'alert_threshold_pct' => 80,
+        'enforcement_enabled' => true,
+        'reset_day' => 1,
+    ]);
+
+    $this->travelTo('2026-07-02 10:00:00');
+    AiUsageEvent::create([
+        'organization_id' => $org->id,
+        'module' => 'chat',
+        'driver' => 'anthropic',
+        'model' => 'claude-test',
+        'source' => 'system',
+        'input_tokens' => 10,
+        'output_tokens' => 10,
+        'cost' => 12.5,
+        'estimated' => false,
+        'status' => 'success',
+    ]);
+    $this->travelTo('2026-07-20 10:00:00');
+
+    // The 2nd is outside a "today" window, but it IS inside the budget month —
+    // the meter has to keep showing it or the cap reads as untouched.
+    $this->actingAs($owner)
+        ->get('/system/ai-spend?period=today')
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->where('report.by_source.system', 0)
+            ->where('budget.period_to_date.system', 12.5)
+            ->where('budget.period_to_date.since', '2026-07-01'));
 });
 
 it('forbids a non-owner member', function () {

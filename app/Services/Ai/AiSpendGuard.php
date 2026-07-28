@@ -52,6 +52,23 @@ class AiSpendGuard
     }
 
     /**
+     * Budget-period-to-date spend per source for the current tenant — the same
+     * figures enforcement compares against. The spend dashboard reads these for
+     * its budget meter so the bar tracks the budget's own reset-day month, not
+     * whatever window the period picker happens to be showing.
+     *
+     * @return array{since: string, own: float, system: float}
+     */
+    public function periodToDate(int $resetDay): array
+    {
+        return [
+            'since' => $this->periodStart($resetDay)->toDateString(),
+            'own' => $this->currentSpend('own', $resetDay) ?? 0.0,
+            'system' => $this->currentSpend('system', $resetDay) ?? 0.0,
+        ];
+    }
+
+    /**
      * Period-to-date spend for a source for the current tenant (RLS-scoped),
      * memoed per org. Returns null on any failure so the caller fails open.
      */
