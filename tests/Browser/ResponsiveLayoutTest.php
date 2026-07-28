@@ -4,6 +4,8 @@ use App\Enums\DocumentType;
 use App\Enums\Visibility;
 use App\Models\AiUsageEvent;
 use App\Models\App;
+use App\Models\BuilderConversation;
+use App\Models\BuilderMessage;
 use App\Models\Chatbot;
 use App\Models\Document;
 use App\Models\User;
@@ -728,4 +730,84 @@ it('keeps the bot-flow toolbar on screen and says the canvas is desktop-only', f
             'function () { const n = document.querySelector(\'[role="status"]\'); return n && n.getBoundingClientRect().width > 0 ? "shown" : "missing"; }',
             'shown',
         );
+});
+
+/**
+ * The builder WITH CONTENT. The sweep above certifies an empty one, and a
+ * phone photo showed that is not the same thing: with a real transcript the
+ * chat pane collapsed to two lines and an import prompt's markup ran off both
+ * edges — while every check here stayed green.
+ *
+ * Neither is caught by NO_CLIPPED_CONTENT: the transcript lives in an
+ * `overflow-y-auto` scroller, and CSS computes the other axis to `auto` too, so
+ * `inScroller` waves everything inside the chat through. These assert the two
+ * things that actually broke.
+ */
+function builderWithTranscript(): string
+{
+    $user = mcpMember($org = mcpOrg());
+    test()->actingAs($user);
+
+    $app = App::factory()->create(['user_id' => $user->id, 'organization_id' => $org->id, 'name' => 'Nueva app']);
+    app(AppManifestService::class)->createVersion($app, [
+        'schema_version' => '1.0.0',
+        'id' => $app->id, 'slug' => 'landing', 'name' => 'Nueva app', 'version' => 1,
+        'objects' => [],
+        'pages' => [[
+            'id' => 'pag_'.strtolower((string) Str::ulid()),
+            'slug' => 'home', 'name' => 'Home', 'path' => '/',
+            'blocks' => [[
+                'id' => 'blk_'.strtolower((string) Str::ulid()),
+                'type' => 'html',
+                'content' => '<section class="hero"><h1>Build your first agent — free</h1></section>',
+            ]],
+        ]],
+        'permissions' => ['roles' => [['id' => 'rol_'.strtolower((string) Str::ulid()), 'slug' => 'admin', 'name' => 'Admin']]],
+        'settings' => ['surface' => 'landing', 'custom_css' => '.hero{padding:4rem 2rem;background:#00031C;color:#fff}'],
+    ], $user);
+
+    $conv = BuilderConversation::create([
+        'app_id' => $app->id, 'user_id' => $user->id, 'organization_id' => $org->id, 'status' => 'active',
+    ]);
+
+    // The shape that broke it: an import prompt carrying rendered markup, whose
+    // attribute strings have no spaces to wrap at.
+    BuilderMessage::create([
+        'conversation_id' => $conv->id, 'role' => 'user', 'status' => 'none',
+        'content' => 'Reconstruye esta landing: <div style="color:var(--sp-accent-blue)">'
+            .'<svg width="15" height="15" viewBox="0 0 24 24" stroke="currentColor" stroke-linecap="round">'
+            .'<path d="M3 17l5-5 4 4 8-9"></path></svg></div>',
+    ]);
+    BuilderMessage::create([
+        'conversation_id' => $conv->id, 'role' => 'assistant', 'status' => 'none',
+        'content' => 'Listo. `--sp-accent-blue: #0096FF` y un `<svg width="15" viewBox="0 0 24 24">` queRompeElAnchoSiNadieLoParte.',
+    ]);
+
+    return $app->id;
+}
+
+it('gives the stacked panes a usable height on a phone', function () {
+    $this->seed(RolesAndPermissionsSeeder::class);
+    $appId = builderWithTranscript();
+
+    // Measured in the broken state: stacked under the preview, with the composer
+    // taking its share, the transcript settled at 119px — present, useless.
+    //
+    // Asserted as the CSS floor rather than a settled height: the panes are flex
+    // children whose measured size keeps moving while the preview loads, so a
+    // height assertion passes or fails depending on when it runs. The min-height
+    // is the thing that was actually added, and it is stable.
+    $paneFloors = <<<'JS'
+    function () {
+        const px = (el) => parseInt(getComputedStyle(el).minHeight, 10) || 0;
+        const panes = [...document.querySelectorAll('section')]
+            .filter(s => s.className.includes('rounded-sp-sm') && s.className.includes('bg-navy'));
+        if (panes.length < 2) return 'panes=' + panes.length;
+        return panes.every(p => px(p) >= 300) ? 'floored' : 'collapsible';
+    }
+    JS;
+
+    visit("/apps/{$appId}/builder")->on()->iPhone15()
+        ->assertNoJavaScriptErrors()
+        ->assertScript($paneFloors, 'floored');
 });

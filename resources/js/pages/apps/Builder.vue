@@ -4130,6 +4130,7 @@ function statusTone(status: Message['status']): string {
                     v-show="fullscreenPanel !== 'work' && !leftPanelHidden"
                     :class="[
                         'relative flex min-h-0 flex-col rounded-sp-sm border border-soft bg-navy',
+                        'min-h-[32rem] lg:min-h-0',
                         ...fullscreenClassFor('chat'),
                     ]"
                     @dragover="onDragOver"
@@ -4241,7 +4242,7 @@ function statusTone(status: Message['status']): string {
                         >
                             <div
                                 v-if="m.role === 'user'"
-                                class="ml-8 space-y-2 rounded-sp-sm bg-accent-blue/10 px-3 py-2 text-sm whitespace-pre-wrap text-ink"
+                                class="ml-8 space-y-2 rounded-sp-sm bg-accent-blue/10 px-3 py-2 text-sm break-words whitespace-pre-wrap text-ink"
                             >
                                 <!-- Inline image preview when the user attached one
                                      with this turn. Capped at ~10rem so a tall portrait
@@ -4276,7 +4277,7 @@ function statusTone(status: Message['status']): string {
                             </div>
                             <div
                                 v-else
-                                class="builder-md mr-8 rounded-sp-sm border border-soft bg-surface px-3 py-2 text-sm text-ink"
+                                class="builder-md mr-8 rounded-sp-sm border border-soft bg-surface px-3 py-2 text-sm break-words text-ink"
                             >
                                 <!-- Live activity trail: what the model did this
                                      turn (each tool it called) + what it's doing
@@ -4900,6 +4901,10 @@ function statusTone(status: Message['status']): string {
                     v-show="fullscreenPanel !== 'chat'"
                     :class="[
                         'flex min-h-0 flex-col rounded-sp-sm border border-soft bg-navy',
+                        // Same floor as the chat pane: stacked on a phone, a
+                        // preview squeezed to a couple of centimetres shows
+                        // nothing useful.
+                        'min-h-[26rem] lg:min-h-0',
                         ...fullscreenClassFor('work'),
                     ]"
                 >
