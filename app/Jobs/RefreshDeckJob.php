@@ -90,7 +90,7 @@ class RefreshDeckJob implements ShouldQueue
         $summary = null;
         $narrativeOn = (bool) (($deck->metadata['refresh']['narrative'] ?? true));
         if ($narrativeOn && $latest !== null) {
-            $result = $narrator->narrate((array) $latest->data_digest, $digest, $manifest, $owner);
+            $result = $narrator->narrate((array) $latest->data_digest, $digest, $manifest, $owner, $deck);
             $summary = $result['summary'];
 
             if ($result['operations'] !== []) {

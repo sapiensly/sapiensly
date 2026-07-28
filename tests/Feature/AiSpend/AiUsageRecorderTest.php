@@ -3,6 +3,7 @@
 use App\Models\AiCatalogModel;
 use App\Models\AiProvider;
 use App\Models\AiUsageEvent;
+use App\Models\Chat;
 use App\Models\Organization;
 use App\Models\SystemAiUsageEvent;
 use App\Models\User;
@@ -213,4 +214,32 @@ it('leaves the subject null for a call with no app (chat)', function () {
     $event = AiUsageEvent::query()->firstOrFail();
     expect($event->app_id)->toBeNull()
         ->and($event->conversation_id)->toBeNull();
+});
+
+it('tags the artifact a non-app call was spent on, in both ledgers', function () {
+    $user = User::factory()->create();
+    $chat = Chat::create(['user_id' => $user->id, 'title' => 'Pricing questions']);
+
+    app(AiUsageRecorder::class)->record(
+        'chat', 'claude-test', $user, null, new Usage(promptTokens: 1000),
+        subject: $chat,
+    );
+
+    foreach ([AiUsageEvent::query()->firstOrFail(), SystemAiUsageEvent::query()->firstOrFail()] as $row) {
+        expect($row->subject_type)->toBe('chat')
+            ->and($row->subject_id)->toBe($chat->id)
+            // A chat is not an App, and saying it is would corrupt per-build cost.
+            ->and($row->app_id)->toBeNull();
+    }
+});
+
+it('records an unrecognised subject as unattributed rather than a dead slug', function () {
+    app(AiUsageRecorder::class)->record(
+        'chat', 'claude-test', User::factory()->create(), null, new Usage(promptTokens: 10),
+        subject: Organization::create(['name' => 'Not an artifact']),
+    );
+
+    $event = AiUsageEvent::query()->firstOrFail();
+    expect($event->subject_type)->toBeNull()
+        ->and($event->subject_id)->toBeNull();
 });

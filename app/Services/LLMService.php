@@ -67,9 +67,9 @@ class LLMService
         $user = $this->contextUser ?? $agent->user;
 
         // A channel serving a conversation says so, and the spend becomes
-        // attributable: per conversation directly, and per chatbot by joining
-        // the conversation. Turns with no such subject keep the caller's own
-        // label and record no conversation, exactly as before.
+        // attributable: to the conversation, and to the bot that owns it.
+        // Turns with no such subject keep the caller's own label and bill the
+        // agent that ran them, which is the artifact a person recognises.
         $subject = app(AiUsageSubject::class);
 
         app(AiUsageRecorder::class)->record(
@@ -79,6 +79,7 @@ class LLMService
             $user?->organization_id ?? $agent->organization_id,
             $usage,
             conversationId: $subject->conversationId(),
+            subject: $subject->artifact() ?? $agent,
         );
     }
 

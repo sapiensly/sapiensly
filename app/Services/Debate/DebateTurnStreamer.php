@@ -104,6 +104,7 @@ class DebateTurnStreamer
 
             app(AiUsageRecorder::class)->record(
                 'debate', $model, $user, $user?->organization_id, $stream->usage ?? null,
+                subject: $debate,
             );
 
             $turn->update([

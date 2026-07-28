@@ -111,6 +111,7 @@ class WidgetStreamService
             fn () => app(AiUsageSubject::class)->attributedTo(
                 'chatbot',
                 $conversation->id,
+                $chatbot,
                 fn () => $this->answer($chatbot, $conversation, $messages, $startTime),
             ),
             $chatbot,

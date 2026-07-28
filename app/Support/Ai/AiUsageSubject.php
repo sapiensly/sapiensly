@@ -3,6 +3,7 @@
 namespace App\Support\Ai;
 
 use Closure;
+use Illuminate\Database\Eloquent\Model;
 
 /**
  * What the model calls of the current turn should be billed to.
@@ -27,6 +28,8 @@ class AiUsageSubject
 
     private ?string $conversationId = null;
 
+    private ?Model $artifact = null;
+
     /** The module this turn bills to, or null to leave the caller's own label. */
     public function module(): ?string
     {
@@ -40,26 +43,40 @@ class AiUsageSubject
     }
 
     /**
-     * Run work billed to a channel and a conversation.
+     * The artifact this turn's spend belongs to — the bot, not the agent that
+     * happened to answer for it. Without this the dashboard could only name a
+     * chatbot by joining its conversation, and only for the two channels that
+     * write one.
+     */
+    public function artifact(): ?Model
+    {
+        return $this->artifact;
+    }
+
+    /**
+     * Run work billed to a channel, a conversation and the artifact serving it.
      *
      * @template T
      *
      * @param  Closure(): T  $work
      * @return T
      */
-    public function attributedTo(string $module, ?string $conversationId, Closure $work): mixed
+    public function attributedTo(string $module, ?string $conversationId, ?Model $artifact, Closure $work): mixed
     {
         $previousModule = $this->module;
         $previousConversation = $this->conversationId;
+        $previousArtifact = $this->artifact;
 
         $this->module = $module;
         $this->conversationId = $conversationId;
+        $this->artifact = $artifact;
 
         try {
             return $work();
         } finally {
             $this->module = $previousModule;
             $this->conversationId = $previousConversation;
+            $this->artifact = $previousArtifact;
         }
     }
 }

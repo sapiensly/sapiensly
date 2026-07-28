@@ -83,7 +83,11 @@ it('bills a widget turn to its channel and its conversation', function () {
     $event = DB::connection('tenant')->table('ai_usage_events')->latest('id')->first();
 
     expect($event->module)->toBe('chatbot')
-        ->and($event->conversation_id)->toBe($conversation);
+        ->and($event->conversation_id)->toBe($conversation)
+        // And to the bot itself, so naming it is a read of the row rather than
+        // a join — the agent that answered is an implementation detail.
+        ->and($event->subject_type)->toBe('chatbot')
+        ->and($event->subject_id)->toBe($this->chatbot->id);
 });
 
 /**
@@ -116,7 +120,10 @@ it('leaves a turn with no channel subject labelled as before', function () {
     $event = DB::connection('tenant')->table('ai_usage_events')->latest('id')->first();
 
     expect($event->module)->toBe('agent')
-        ->and($event->conversation_id)->toBeNull();
+        ->and($event->conversation_id)->toBeNull()
+        // No channel subject, so the spend bills to the agent that ran it.
+        ->and($event->subject_type)->toBe('agent')
+        ->and($event->subject_id)->toBe($this->agent->id);
 });
 
 /**
@@ -127,8 +134,9 @@ it('leaves a turn with no channel subject labelled as before', function () {
 it('lets the subject go when the turn ends', function () {
     $subject = app(AiUsageSubject::class);
 
-    $subject->attributedTo('chatbot', 'conv_1', fn () => null);
+    $subject->attributedTo('chatbot', 'conv_1', $this->chatbot, fn () => null);
 
     expect($subject->module())->toBeNull()
-        ->and($subject->conversationId())->toBeNull();
+        ->and($subject->conversationId())->toBeNull()
+        ->and($subject->artifact())->toBeNull();
 });

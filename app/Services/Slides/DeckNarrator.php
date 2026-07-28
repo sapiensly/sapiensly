@@ -3,6 +3,7 @@
 namespace App\Services\Slides;
 
 use App\Ai\BuilderAgent;
+use App\Models\Document;
 use App\Models\User;
 use App\Services\Ai\AiDefaults;
 use App\Services\Ai\AiSpendGuard;
@@ -56,7 +57,7 @@ class DeckNarrator
      * @param  array<string, mixed>  $manifest
      * @return array{summary: string|null, operations: list<array<string, mixed>>}
      */
-    public function narrate(array $oldDigest, array $newDigest, array $manifest, User $owner): array
+    public function narrate(array $oldDigest, array $newDigest, array $manifest, User $owner, ?Document $deck = null): array
     {
         try {
             $model = $this->aiDefaults->model('builder');
@@ -81,7 +82,10 @@ class DeckNarrator
                 timeout: (int) config('ai.request_timeout', 180),
             );
 
-            app(AiUsageRecorder::class)->record('builder', $model, $owner, $owner->organization_id, $response->usage ?? null);
+            app(AiUsageRecorder::class)->record(
+                'builder', $model, $owner, $owner->organization_id, $response->usage ?? null,
+                subject: $deck,
+            );
 
             $decoded = $this->extractJson((string) $response);
             if (! is_array($decoded)) {

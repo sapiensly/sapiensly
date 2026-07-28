@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\AiUsageEvent;
+use App\Models\Chat;
 use App\Models\User;
 use Database\Seeders\RolesAndPermissionsSeeder;
 use Illuminate\Support\Facades\Hash;
@@ -398,6 +399,39 @@ it('scrolls the spend table on a phone instead of crushing its columns', functio
                     && ['auto', 'scroll'].includes(getComputedStyle(scroller).overflowX);
             }
             JS)
+        ->assertNoJavaScriptErrors();
+});
+
+it('swaps the spend-by-service list between models and artifacts', function () {
+    $this->seed(RolesAndPermissionsSeeder::class);
+    $user = mcpMember($org = mcpOrg());
+    $this->actingAs($user);
+
+    $chat = Chat::create(['user_id' => $user->id, 'organization_id' => $org->id, 'title' => 'Refund policy']);
+
+    AiUsageEvent::create([
+        'organization_id' => $org->id,
+        'user_id' => $user->id,
+        'module' => 'chat',
+        'driver' => 'anthropic',
+        'model' => 'anthropic/claude-opus-5-20260514',
+        'source' => 'system',
+        'subject_type' => 'chat',
+        'subject_id' => $chat->id,
+        'input_tokens' => 1000,
+        'output_tokens' => 500,
+        'cost' => 1.25,
+    ]);
+
+    visit('/system/ai-spend')
+        // Models is the default reading: which model burned the money.
+        ->assertSee('anthropic/claude-opus-5-20260514')
+        ->assertDontSee('Refund policy')
+        // Artifacts is the other one: what the money was spent on, named, with
+        // its id underneath.
+        ->click('button:has-text("artifacts")')
+        ->assertSee('Refund policy')
+        ->assertSee($chat->id)
         ->assertNoJavaScriptErrors();
 });
 

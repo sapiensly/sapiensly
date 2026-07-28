@@ -285,6 +285,7 @@ class ProcessDocumentForKnowledgeBase implements ShouldQueue
                 (string) $plan->engine,
                 $plan->profile->pages,
                 $this->resolveOwner($document),
+                $document,
             );
 
             return ['text' => $result['text'], 'method' => 'ocr', 'pages' => $result['pages'], 'ocr_cost' => $result['cost']];

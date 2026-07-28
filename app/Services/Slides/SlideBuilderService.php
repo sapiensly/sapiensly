@@ -113,6 +113,7 @@ class SlideBuilderService
 
             app(AiUsageRecorder::class)->record(
                 'builder', $resolvedModel, $user, $user->organization_id, $stream->usage ?? null,
+                subject: $deck,
             );
 
             $content = trim($buffer) !== '' ? $buffer : 'Done.';

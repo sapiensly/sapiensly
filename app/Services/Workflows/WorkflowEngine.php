@@ -268,7 +268,7 @@ class WorkflowEngine
             'record.aggregate' => $this->handleRecordAggregate($step, $context, $app, $manifest),
             'branch' => $this->handleBranch($step, $context, $app, $manifest, $user, $run),
             'foreach' => $this->handleForeach($step, $context, $app, $manifest, $user, $run),
-            'ai.complete' => $this->handleAiComplete($step, $context, $user),
+            'ai.complete' => $this->handleAiComplete($step, $context, $app, $user),
             'agent.invoke' => $this->handleAgentInvoke($step, $context, $app, $user),
             'http.request' => $this->handleHttpRequest($step, $context),
             'connector.call' => $this->handleConnectorCall($step, $context, $app, $user),
@@ -281,7 +281,7 @@ class WorkflowEngine
      * @param  array<string, mixed>  $context
      * @return array{text: string, model: string}
      */
-    private function handleAiComplete(array $step, array $context, ?User $user): array
+    private function handleAiComplete(array $step, array $context, App $app, ?User $user): array
     {
         $systemPrompt = isset($step['system_prompt'])
             ? (string) $this->expressions->resolve((string) $step['system_prompt'], $context)
@@ -315,6 +315,7 @@ class WorkflowEngine
 
         app(AiUsageRecorder::class)->record(
             'workflow', $model, $user, $user?->organization_id, $response->usage ?? null,
+            appId: $app->id,
         );
 
         return [

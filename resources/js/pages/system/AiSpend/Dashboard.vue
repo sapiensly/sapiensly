@@ -5,7 +5,7 @@ import PageHeader from '@/components/app-v2/PageHeader.vue';
 import AppLayoutV2 from '@/layouts/AppLayoutV2.vue';
 import { Head, Link, useForm } from '@inertiajs/vue3';
 import { Coins, Cpu, Layers, Sparkles } from '@lucide/vue';
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
 
 interface Budget {
     system_monthly_budget: number | null;
@@ -25,6 +25,18 @@ interface ModelRow {
     output_tokens: number;
 }
 
+/** What the spend was made on: an app, a chatbot, a deck, a knowledge base… */
+interface ArtifactRow {
+    name: string | null;
+    kind: string | null;
+    type: string | null;
+    id: string | null;
+    cost: number;
+    calls: number;
+    input_tokens: number;
+    output_tokens: number;
+}
+
 interface ServiceRow {
     service: string;
     cost: number;
@@ -32,6 +44,7 @@ interface ServiceRow {
     input_tokens: number;
     output_tokens: number;
     models: ModelRow[];
+    artifacts?: ArtifactRow[];
 }
 
 interface Period {
@@ -114,6 +127,24 @@ const seriesHeading = computed(() => (props.period.granularity === 'hour' ? 'Hou
 
 function shortDate(iso: string): string {
     return new Date(`${iso}T00:00:00`).toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
+}
+
+// "What models did we spend on" and "what did we spend them on" are two
+// readings of the same rows, so they share a card and swap the list.
+const serviceBreakdown = ref<'models' | 'artifacts'>('models');
+
+/**
+ * An artifact whose row is gone keeps its line — the spend is real and the
+ * service total has to keep adding up — so it falls back to the bare id, and
+ * spend the ledger could not attribute at all says so plainly.
+ */
+function artifactName(a: ArtifactRow): string {
+    return a.name ?? a.id ?? 'Not attributed';
+}
+function artifactCaption(a: ArtifactRow): string | null {
+    if (a.id === null) return 'Recorded before this spend could be named';
+    if (a.name === null) return a.kind ? `${a.kind} · no longer exists` : null;
+    return a.kind ? `${a.kind} · ${a.id}` : a.id;
 }
 </script>
 
@@ -282,9 +313,27 @@ function shortDate(iso: string): string {
                 </form>
             </section>
 
-            <!-- Spend by service (each with its own per-model breakdown) -->
+            <!-- Spend by service, split either by model or by what it was spent on -->
             <section class="rounded-sp-sm border border-soft bg-navy p-5">
-                <h2 class="mb-3 text-sm font-medium text-ink">Spend by service</h2>
+                <header class="mb-3 flex flex-wrap items-center justify-between gap-3">
+                    <h2 class="text-sm font-medium text-ink">Spend by service</h2>
+                    <div class="inline-flex items-center rounded-pill border border-medium bg-surface p-0.5">
+                        <button
+                            v-for="mode in (['models', 'artifacts'] as const)"
+                            :key="mode"
+                            type="button"
+                            class="rounded-pill px-3 py-1 text-xs capitalize transition-colors"
+                            :class="
+                                serviceBreakdown === mode
+                                    ? 'bg-accent-blue/15 text-accent-blue'
+                                    : 'text-ink-muted hover:text-ink'
+                            "
+                            @click="serviceBreakdown = mode"
+                        >
+                            {{ mode }}
+                        </button>
+                    </div>
+                </header>
                 <p v-if="report.by_service.length === 0" class="text-xs text-ink-muted">
                     No AI usage recorded in this period yet.
                 </p>
@@ -301,7 +350,7 @@ function shortDate(iso: string): string {
                                 <span class="ml-2 text-xs text-ink-subtle">{{ num(s.calls) }} calls</span>
                             </div>
                         </header>
-                        <ul class="mt-2 divide-y divide-soft/40">
+                        <ul v-if="serviceBreakdown === 'models'" class="mt-2 divide-y divide-soft/40">
                             <li
                                 v-for="m in s.models"
                                 :key="m.model"
@@ -311,6 +360,27 @@ function shortDate(iso: string): string {
                                 <span class="flex items-center gap-3">
                                     <span class="text-ink-subtle">{{ num(m.input_tokens + m.output_tokens) }} tok</span>
                                     <span class="w-16 text-right font-medium text-ink">{{ money(m.cost) }}</span>
+                                </span>
+                            </li>
+                        </ul>
+                        <ul v-else class="mt-2 divide-y divide-soft/40">
+                            <li
+                                v-for="a in s.artifacts ?? []"
+                                :key="`${a.type}:${a.id}`"
+                                class="flex items-center justify-between gap-3 py-1.5 text-xs"
+                            >
+                                <span class="min-w-0">
+                                    <span class="block truncate text-ink-muted">{{ artifactName(a) }}</span>
+                                    <span
+                                        v-if="artifactCaption(a)"
+                                        class="block truncate font-mono text-[10px] text-ink-subtle"
+                                    >
+                                        {{ artifactCaption(a) }}
+                                    </span>
+                                </span>
+                                <span class="flex shrink-0 items-center gap-3">
+                                    <span class="text-ink-subtle">{{ num(a.input_tokens + a.output_tokens) }} tok</span>
+                                    <span class="w-16 text-right font-medium text-ink">{{ money(a.cost) }}</span>
                                 </span>
                             </li>
                         </ul>

@@ -123,6 +123,8 @@ it('grounds a workflow ai.complete step in the Contextbook', function () {
         $engine,
         ['type' => 'ai.complete', 'system_prompt' => 'Summarize the ticket.', 'user_prompt' => 'Ticket 1'],
         [],
+        // The step runs inside an app, and its spend bills to that app.
+        App::factory()->create(['user_id' => $this->user->id, 'organization_id' => $this->org->id]),
         $this->user,
     );
 

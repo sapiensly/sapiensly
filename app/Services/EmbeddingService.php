@@ -21,6 +21,9 @@ class EmbeddingService
     /** The owner this embedding service acts for, for spend attribution (may be null). */
     private ?User $owner;
 
+    /** The knowledge base being embedded, when there is one — the artifact the spend belongs to. */
+    private ?KnowledgeBase $knowledgeBase = null;
+
     public function __construct(?string $provider = null, ?string $model = null, ?User $user = null)
     {
         $this->owner = $user;
@@ -63,11 +66,14 @@ class EmbeddingService
         $config = $knowledgeBase->config ?? [];
         $user = $knowledgeBase->user;
 
-        return new self(
+        $service = new self(
             $config['embedding_provider'] ?? null,
             $config['embedding_model'] ?? null,
             $user,
         );
+        $service->knowledgeBase = $knowledgeBase;
+
+        return $service;
     }
 
     /**
@@ -110,6 +116,7 @@ class EmbeddingService
             $this->owner?->organization_id,
             new Usage(promptTokens: $estimatedTokens),
             estimated: true,
+            subject: $this->knowledgeBase,
         );
 
         return $response->embeddings;

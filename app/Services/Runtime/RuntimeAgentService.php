@@ -149,6 +149,7 @@ class RuntimeAgentService
 
             app(AiUsageRecorder::class)->record(
                 'runtime_agent', $resolvedModel, $conversation->user, $app->organization_id, $stream->usage ?? null,
+                appId: $app->id, conversationId: $conversation->id,
             );
 
             $outcome = $this->finalizeProposals($app, $manifest, $proposals, $conversation->user, $access);

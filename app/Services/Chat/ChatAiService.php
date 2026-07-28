@@ -678,6 +678,7 @@ class ChatAiService
 
             app(AiUsageRecorder::class)->record(
                 'chat', $resolvedModel, $chat->user, $chat->user?->organization_id, $stream->usage ?? null,
+                subject: $chat,
             );
 
             return $placeholder;

@@ -2,8 +2,11 @@
 
 use App\Models\AiCatalogModel;
 use App\Models\AiUsageEvent;
+use App\Models\App;
+use App\Models\Chat;
 use App\Models\Organization;
 use App\Models\SystemAiUsageEvent;
+use App\Models\User;
 use App\Services\Ai\AiUsageReport;
 use App\Support\Ai\SpendPeriod;
 
@@ -83,6 +86,65 @@ it('flags models that have usage but no catalog price as unpriced', function () 
     $models = collect($r['by_model'])->keyBy('model');
     expect($models['claude-mystery']['unpriced'])->toBeTrue()
         ->and($models['claude-priced'])->not->toHaveKey('unpriced');
+});
+
+it('splits each service by the artifact the spend was made on', function () {
+    $user = User::factory()->create();
+    $app = App::factory()->create(['name' => 'Order Desk']);
+    $chat = Chat::create(['user_id' => $user->id, 'title' => 'Pricing questions']);
+
+    // App-shaped spend names itself through app_id; everything else through the
+    // polymorphic subject.
+    spendEvent(['module' => 'builder', 'cost' => 2.0, 'app_id' => $app->id]);
+    spendEvent(['module' => 'chat', 'cost' => 1.0, 'subject_type' => 'chat', 'subject_id' => $chat->id]);
+    spendEvent(['module' => 'chat', 'cost' => 0.5, 'subject_type' => 'chat', 'subject_id' => $chat->id]);
+
+    $services = collect(app(AiUsageReport::class)->forCurrentOrg(30)['by_service'])->keyBy('service');
+
+    expect($services['Apps']['artifacts'])->toBe([[
+        'name' => 'Order Desk', 'kind' => 'App', 'type' => 'app', 'id' => $app->id,
+        'cost' => 2.0, 'calls' => 1, 'input_tokens' => 1000, 'output_tokens' => 500,
+    ]])
+        // Two calls on one chat roll up into a single line.
+        ->and($services['Chat']['artifacts'])->toHaveCount(1)
+        ->and($services['Chat']['artifacts'][0]['name'])->toBe('Pricing questions')
+        ->and($services['Chat']['artifacts'][0]['cost'])->toBe(1.5)
+        ->and($services['Chat']['artifacts'][0]['calls'])->toBe(2);
+});
+
+it('keeps untagged spend on its own line instead of dropping it', function () {
+    spendEvent(['module' => 'debate', 'cost' => 3.0]); // no app_id, no subject
+
+    $services = collect(app(AiUsageReport::class)->forCurrentOrg(30)['by_service'])->keyBy('service');
+
+    // The service total has to keep adding up, so the row survives — unnamed.
+    expect($services['Debate']['cost'])->toBe(3.0)
+        ->and($services['Debate']['artifacts'])->toBe([[
+            'name' => null, 'kind' => null, 'type' => null, 'id' => null,
+            'cost' => 3.0, 'calls' => 1, 'input_tokens' => 1000, 'output_tokens' => 500,
+        ]]);
+});
+
+it('names an artifact that no longer exists by its bare id', function () {
+    spendEvent(['module' => 'chat', 'cost' => 1.0, 'subject_type' => 'chat', 'subject_id' => 'chat_gone']);
+
+    $services = collect(app(AiUsageReport::class)->forCurrentOrg(30)['by_service'])->keyBy('service');
+
+    expect($services['Chat']['artifacts'][0])
+        ->toMatchArray(['name' => null, 'kind' => 'Chat', 'type' => 'chat', 'id' => 'chat_gone', 'cost' => 1.0]);
+});
+
+it('gives every module in use a deliberate service name', function () {
+    // The fallback renders the raw internal slug, which is how `express`,
+    // `chatbot` and `whatsapp` once surfaced as service names in the UI.
+    foreach (['express', 'chatbot', 'whatsapp'] as $module) {
+        spendEvent(['module' => $module, 'cost' => 1.0]);
+    }
+
+    $names = collect(app(AiUsageReport::class)->forCurrentOrg(30)['by_service'])->pluck('service');
+
+    expect($names)->toContain('Apps', 'Chatbots', 'WhatsApp')
+        ->and($names)->not->toContain('Express', 'Chatbot', 'Whatsapp');
 });
 
 it('windows a calendar period to its boundary, not N days back', function () {

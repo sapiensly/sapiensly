@@ -89,6 +89,7 @@ class WhatsAppReplyOrchestrator
                 fn () => app(AiUsageSubject::class)->attributedTo(
                     'whatsapp',
                     $conversation->id,
+                    $conversation->channel,
                     fn () => count($roster) === 1
                         ? $this->runAgent($roster[0], $messages, $attachments)
                         : $this->runBotFlow($flow, $synthetic, $userMessage, $attachments),

@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\Document;
 use App\Models\User;
 use App\Services\Ai\AiPricing;
 use App\Services\Ai\AiUsageRecorder;
@@ -30,7 +31,7 @@ class OcrExtractionService
      * @param  string  $bytes  the raw PDF bytes (already read from its tenant/BYODB disk)
      * @return array{text: string, cost: float, engine: string, pages: int}
      */
-    public function extract(string $bytes, string $filename, string $engine, int $pages, User $owner): array
+    public function extract(string $bytes, string $filename, string $engine, int $pages, User $owner, ?Document $document = null): array
     {
         if (! $this->openRouter->isConfiguredFor($owner)) {
             throw new RuntimeException('OCR requires an OpenRouter API key, which is not configured.');
@@ -62,6 +63,7 @@ class OcrExtractionService
             $owner->organization_id,
             new Usage,
             cost: $cost,
+            subject: $document,
         );
 
         return ['text' => $text, 'cost' => $cost, 'engine' => $engine, 'pages' => $pages];

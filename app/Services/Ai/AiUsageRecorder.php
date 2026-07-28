@@ -5,6 +5,8 @@ namespace App\Services\Ai;
 use App\Models\AiUsageEvent;
 use App\Models\SystemAiUsageEvent;
 use App\Models\User;
+use App\Support\Ai\SpendArtifact;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Log;
 use Laravel\Ai\Responses\Data\Usage;
 
@@ -40,17 +42,24 @@ class AiUsageRecorder
         ?float $cost = null,
         ?string $appId = null,
         ?string $conversationId = null,
+        ?Model $subject = null,
     ): void {
         try {
             $usage ??= new Usage;
             $source = $this->sources->source($model, $user);
 
             $attributes = [
+                // Which artifact the spend belongs to, when it is NOT an App: a
+                // chat, a chatbot, a deck, a knowledge base. App-shaped spend
+                // says so through `app_id` instead — one fact, one column, and
+                // overloading app_id here would corrupt the per-build reads.
+                // Null for a subject the registry doesn't recognise.
+                ...(SpendArtifact::of($subject) ?? ['subject_type' => null, 'subject_id' => null]),
                 'organization_id' => $organizationId ?? $user?->organization_id,
                 'user_id' => $user?->id,
                 'module' => $module,
-                // Which build this call served — null for calls with no app
-                // subject (chat, embeddings, standalone agents).
+                // Which build this call served, and the App it bills to — null
+                // for calls with no app subject (chat, embeddings, decks).
                 'app_id' => $appId,
                 'conversation_id' => $conversationId,
                 'driver' => $this->sources->driver($model),

@@ -4,6 +4,7 @@ namespace App\Services\Ai;
 
 use App\Models\AiUsageEvent;
 use App\Models\Organization;
+use App\Support\Ai\SpendArtifact;
 use App\Support\Ai\SpendPeriod;
 use App\Support\Tenancy\Schemas;
 use Illuminate\Support\Carbon;
@@ -30,10 +31,13 @@ class AiUsageReport
 
         $rows = AiUsageEvent::query()
             ->where('created_at', '>=', $period->since)
-            ->selectRaw($period->bucketColumn().', source, module, model, cost, input_tokens, output_tokens')
+            ->selectRaw($period->bucketColumn().', source, module, model, cost, input_tokens, output_tokens, app_id, subject_type, subject_id')
             ->get();
 
-        return $this->shape($rows, $period);
+        // Only the org-facing report names artifacts: resolving a name goes
+        // through the tenant models, which are RLS-scoped to the caller — so the
+        // cross-org reads below would come back blank anyway.
+        return $this->shape($rows, $period, withArtifacts: true);
     }
 
     /**
@@ -181,7 +185,7 @@ class AiUsageReport
      * @param  Collection<int, object>  $rows
      * @return array<string, mixed>
      */
-    private function shape($rows, SpendPeriod $period): array
+    private function shape($rows, SpendPeriod $period, bool $withArtifacts = false): array
     {
         $rows = collect($rows);
 
@@ -218,17 +222,49 @@ class AiUsageReport
 
         $byModel = collect($modelBreakdown($rows))->take(15)->all();
 
+        // Names for every artifact in the window, resolved once up front: the
+        // per-service breakdowns below would otherwise re-query per group.
+        // Duplicates are fine — resolve() dedupes before it queries.
+        $names = $withArtifacts ? SpendArtifact::resolve(
+            $rows->map(fn ($r) => $this->artifactKeyFor($r))->filter()->all(),
+        ) : [];
+
+        $artifactBreakdown = fn (Collection $g) => collect($g)
+            ->groupBy(fn ($r) => ($k = $this->artifactKeyFor($r)) === null ? '' : $k[0].':'.$k[1])
+            ->map(function (Collection $ag, string $key) use ($names) {
+                [$type, $id] = $key === '' ? [null, null] : explode(':', $key, 2);
+
+                return [
+                    // An id with no row behind it still gets a line: spend that
+                    // outlived its artifact is spend, and dropping it would make
+                    // the service total stop adding up.
+                    'name' => $names[$key]['name'] ?? null,
+                    'kind' => $names[$key]['kind'] ?? ($type === null ? null : SpendArtifact::kindFor($type)),
+                    'type' => $type,
+                    'id' => $id,
+                    'cost' => round((float) $ag->sum('cost'), 4),
+                    'calls' => $ag->count(),
+                    'input_tokens' => (int) $ag->sum('input_tokens'),
+                    'output_tokens' => (int) $ag->sum('output_tokens'),
+                ];
+            })
+            ->sortByDesc('cost')
+            ->values()
+            ->all();
+
         // Spend grouped by service (Chat, Apps, …), each with its own per-model
-        // breakdown so the dashboard can show "Chat $X: model A $z, model B $y".
+        // breakdown so the dashboard can show "Chat $X: model A $z, model B $y",
+        // and — where the ledger knows it — the same split per artifact.
         $byService = $rows->groupBy(fn ($r) => $this->serviceFor($r->module ?? null))
-            ->map(fn ($g, $service) => [
+            ->map(fn ($g, $service) => array_filter([
                 'service' => $service,
                 'cost' => round((float) $g->sum('cost'), 4),
                 'calls' => $g->count(),
                 'input_tokens' => (int) $g->sum('input_tokens'),
                 'output_tokens' => (int) $g->sum('output_tokens'),
                 'models' => $modelBreakdown($g),
-            ])
+                'artifacts' => $withArtifacts ? $artifactBreakdown($g) : null,
+            ], fn ($v) => $v !== null))
             ->sortByDesc('cost')
             ->values()
             ->all();
@@ -257,17 +293,46 @@ class AiUsageReport
     }
 
     /**
+     * The artifact a row is attributed to, as a (type, id) pair.
+     *
+     * App-shaped spend says so through `app_id`, everything else through the
+     * polymorphic subject — see {@see App\Services\Ai\AiUsageRecorder}. Reading
+     * app_id here is also what lets rows written before the subject column
+     * existed still name their build.
+     *
+     * @return array{0: string, 1: string}|null
+     */
+    private function artifactKeyFor(object $row): ?array
+    {
+        $type = $row->subject_type ?? null;
+        $id = $row->subject_id ?? null;
+
+        if (($type === null || $id === null) && ($row->app_id ?? null) !== null) {
+            return ['app', (string) $row->app_id];
+        }
+
+        return ($type === null || $id === null) ? null : [(string) $type, (string) $id];
+    }
+
+    /**
      * Map a recorded `module` to the user-facing service bucket shown on the
      * spend dashboard. Related modules (app builder, runtime agents, workflows)
      * roll up into a single "Apps" line.
+     *
+     * Every module in use needs a case here: the fallback exists for a module
+     * shipped after this map, and it renders the raw internal slug — which is
+     * how `express`, `chatbot` and `whatsapp` came to show up in the UI as
+     * "Express", "Chatbot" and "Whatsapp".
      */
     private function serviceFor(?string $module): string
     {
         return match ($module) {
             'chat' => 'Chat',
-            'builder', 'runtime_agent', 'workflow' => 'Apps',
+            'builder', 'runtime_agent', 'workflow', 'express' => 'Apps',
             'landing_director' => 'Landing Director',
             'agent' => 'Agents',
+            'chatbot' => 'Chatbots',
+            'whatsapp' => 'WhatsApp',
             'debate' => 'Debate',
             'embeddings', 'document_ocr' => 'Knowledge',
             null, '' => 'Other',
