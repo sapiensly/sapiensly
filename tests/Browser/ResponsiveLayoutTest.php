@@ -1,5 +1,6 @@
 <?php
 
+use App\Models\AiUsageEvent;
 use Database\Seeders\RolesAndPermissionsSeeder;
 
 /*
@@ -52,10 +53,47 @@ it('never scrolls sideways on auth screens', function (string $route, string $de
         ->assertScript(NO_HORIZONTAL_OVERFLOW);
 })->with('auth screens')->with('viewports');
 
+/**
+ * Every parameter-free page the admin-v2 shell serves. The phone width is
+ * where layouts fail, so the whole surface is swept at 390 rather than a
+ * hand-picked sample — the point is to find the screens nobody thought to
+ * check.
+ */
 dataset('shell screens', [
     '/apps',
     '/agents',
+    '/agents/create',
+    '/chat',
+    '/chatbots',
+    '/chatbots/create',
+    '/dashboard',
+    '/debates',
+    '/documents',
+    '/documents/create',
+    '/knowledge-bases',
+    '/knowledge-bases/create',
+    '/playground',
+    '/playground/benchmarks',
+    '/playground/history',
+    '/settings/profile',
+    '/settings/appearance',
+    '/settings/organization',
+    '/settings/organization/brand',
+    '/settings/organization/context',
+    '/settings/sso',
+    '/slides',
+    '/system/ai-providers',
+    '/system/ai-providers/create',
+    '/system/ai-spend',
+    '/system/cloud-providers',
+    '/system/integrations',
+    '/system/integrations/create',
+    '/system/integrations/templates',
+    '/system/mcp',
+    '/system/whatsapp',
+    '/system/whatsapp/create',
     '/tools',
+    '/tools/create',
 ]);
 
 it('never scrolls sideways inside the app shell', function (string $route, string $device) {
@@ -120,6 +158,55 @@ it('closes the drawer when navigating, leaving no overlay behind', function () {
         // A stranded dialog overlay leaves the body unclickable — the failure
         // mode that makes a page look fine and respond to nothing.
         ->assertScript("getComputedStyle(document.body).pointerEvents === 'auto'")
+        ->assertNoJavaScriptErrors();
+});
+
+/*
+|--------------------------------------------------------------------------
+| Screens with data in them
+|--------------------------------------------------------------------------
+|
+| The sweeps above visit a fresh tenant, so most screens render their empty
+| state — and an empty state is responsive by construction. Anything with a
+| table or a list has to be asserted with rows actually in it, or the check
+| is theatre.
+|
+*/
+
+it('scrolls the spend table on a phone instead of crushing its columns', function () {
+    $this->seed(RolesAndPermissionsSeeder::class);
+    $user = mcpMember($org = mcpOrg());
+    $this->actingAs($user);
+
+    // Long, realistic model identifiers — the reason the column needs room.
+    // The org dashboard reads raw events, not the daily rollup.
+    foreach (['anthropic/claude-opus-5-20260514', 'openai/gpt-5-turbo-preview'] as $model) {
+        AiUsageEvent::create([
+            'organization_id' => $org->id,
+            'user_id' => $user->id,
+            'module' => 'chat',
+            'driver' => 'anthropic',
+            'model' => $model,
+            'source' => 'system',
+            'input_tokens' => 4_500_000,
+            'output_tokens' => 900_000,
+            'cost' => 123.45,
+        ]);
+    }
+
+    visit('/system/ai-spend')->on()->iPhone15()
+        ->assertSee('anthropic/claude-opus-5-20260514')
+        // The page itself must still not scroll sideways...
+        ->assertScript(NO_HORIZONTAL_OVERFLOW)
+        // ...while the table keeps its readable width inside a scroller.
+        ->assertScript(<<<'JS'
+            function () {
+                const table = document.querySelector('table');
+                const scroller = table.parentElement;
+                return table.getBoundingClientRect().width >= 420
+                    && ['auto', 'scroll'].includes(getComputedStyle(scroller).overflowX);
+            }
+            JS)
         ->assertNoJavaScriptErrors();
 });
 

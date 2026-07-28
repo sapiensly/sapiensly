@@ -285,7 +285,14 @@ const scopeLabel = computed(() =>
                 <p v-if="report.by_model.length === 0" class="text-xs text-ink-muted">
                     No AI usage recorded in this period yet.
                 </p>
-                <table v-else class="w-full text-sm">
+                <!--
+                  Four numeric columns do not fit a phone: at 390px the model
+                  name gets crushed to a couple of characters. Scroll the table
+                  instead of shrinking it — same treatment as the benchmark
+                  table in playground/BenchmarkResults.vue.
+                -->
+                <div v-else class="-mx-1 overflow-x-auto px-1">
+                <table class="w-full min-w-[420px] text-sm">
                     <thead>
                         <tr class="border-b border-soft text-left text-xs uppercase tracking-wide text-ink-subtle">
                             <th class="py-2 font-medium">Model</th>
@@ -303,6 +310,7 @@ const scopeLabel = computed(() =>
                         </tr>
                     </tbody>
                 </table>
+                </div>
             </section>
         </div>
     </AppLayoutV2>
