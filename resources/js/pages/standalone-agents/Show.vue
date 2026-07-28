@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import * as AgentController from '@/actions/App/Http/Controllers/AgentController';
 import * as ToolController from '@/actions/App/Http/Controllers/ToolController';
+import PageHeader from '@/components/app-v2/PageHeader.vue';
 import HeadingSmall from '@/components/HeadingSmall.vue';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -122,12 +123,12 @@ const configDisplay = computed(() => {
 
     <AppLayoutV2 :title="t('app_v2.nav.agents')">
         <div class="mx-auto max-w-4xl space-y-6">
-            <div class="flex flex-col items-start justify-between gap-3 sm:flex-row sm:gap-4">
-                <div>
-                    <div class="mb-2 flex items-center gap-3">
+            <PageHeader :description="agent.description" wrap-actions>
+                <template #title>
+                    <div class="flex min-w-0 flex-wrap items-center gap-3">
                         <component
                             :is="agentIcon(agent.type)"
-                            class="h-6 w-6 text-ink-muted"
+                            class="h-6 w-6 shrink-0 text-ink-muted"
                         />
                         <h1
                             class="text-[22px] leading-tight font-semibold text-ink"
@@ -138,11 +139,8 @@ const configDisplay = computed(() => {
                             {{ agent.status }}
                         </Badge>
                     </div>
-                    <p v-if="agent.description" class="text-xs text-ink-muted">
-                        {{ agent.description }}
-                    </p>
-                </div>
-                <div class="flex flex-wrap gap-2 lg:flex-nowrap">
+                </template>
+                <template #actions>
                     <Button variant="outline" @click="duplicateAgent">
                         <Copy class="mr-2 h-4 w-4" />
                         {{ t('common.duplicate') }}
@@ -191,8 +189,8 @@ const configDisplay = computed(() => {
                             </DialogFooter>
                         </DialogContent>
                     </Dialog>
-                </div>
-            </div>
+                </template>
+            </PageHeader>
 
             <div class="space-y-8">
                 <Card>

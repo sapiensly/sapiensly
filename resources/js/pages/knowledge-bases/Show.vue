@@ -4,6 +4,7 @@ import * as KnowledgeBaseDocumentController from '@/actions/App/Http/Controllers
 import DocumentSelectorDialog from '@/components/documents/DocumentSelectorDialog.vue';
 import DocumentUploadDialog from '@/components/documents/DocumentUploadDialog.vue';
 import HeadingSmall from '@/components/HeadingSmall.vue';
+import PageHeader from '@/components/app-v2/PageHeader.vue';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -430,9 +431,9 @@ onBeforeUnmount(() => {
 
     <AppLayoutV2 :title="t('app_v2.nav.knowledge_base')">
         <div class="mx-auto max-w-4xl space-y-6">
-            <div class="flex flex-col items-start justify-between gap-3 sm:flex-row sm:gap-4">
-                <div>
-                    <div class="mb-2 flex items-center gap-3">
+            <PageHeader :description="knowledgeBase.description" wrap-actions>
+                <template #title>
+                    <div class="flex min-w-0 flex-wrap items-center gap-3">
                         <h1
                             class="text-[22px] leading-tight font-semibold text-ink"
                         >
@@ -446,14 +447,8 @@ onBeforeUnmount(() => {
                             {{ currentKbStatus }}
                         </Badge>
                     </div>
-                    <p
-                        v-if="knowledgeBase.description"
-                        class="text-xs text-ink-muted"
-                    >
-                        {{ knowledgeBase.description }}
-                    </p>
-                </div>
-                <div class="flex flex-wrap gap-2 lg:flex-nowrap">
+                </template>
+                <template #actions>
                     <Button variant="outline" as-child>
                         <Link
                             :href="
@@ -500,8 +495,8 @@ onBeforeUnmount(() => {
                             </DialogFooter>
                         </DialogContent>
                     </Dialog>
-                </div>
-            </div>
+                </template>
+            </PageHeader>
 
             <div class="space-y-8">
                 <!-- Ask your KB: single-KB QA for testing/debugging retrieval -->

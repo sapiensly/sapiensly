@@ -3,6 +3,7 @@ import * as BotFlowController from '@/actions/App/Http/Controllers/BotFlowContro
 import * as ChatbotAnalyticsController from '@/actions/App/Http/Controllers/ChatbotAnalyticsController';
 import * as ChatbotController from '@/actions/App/Http/Controllers/ChatbotController';
 import HeadingSmall from '@/components/HeadingSmall.vue';
+import PageHeader from '@/components/app-v2/PageHeader.vue';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -85,22 +86,16 @@ const formatDate = (date: string) => {
 
     <AppLayoutV2 :title="t('app_v2.nav.chatbots')">
         <div class="mx-auto max-w-4xl space-y-6">
-                <div class="flex flex-col items-start justify-between gap-3 sm:flex-row sm:gap-4">
-                    <div>
-                        <div class="mb-2 flex items-center gap-3">
+                <PageHeader :description="chatbot.description" wrap-actions>
+                    <template #title>
+                        <div class="flex min-w-0 flex-wrap items-center gap-3">
                             <h1 class="text-[22px] font-semibold leading-tight text-ink">{{ chatbot.name }}</h1>
                             <Badge :variant="statusVariant(chatbot.status)">
                                 {{ chatbot.status }}
                             </Badge>
                         </div>
-                        <p
-                            v-if="chatbot.description"
-                            class="text-xs text-ink-muted"
-                        >
-                            {{ chatbot.description }}
-                        </p>
-                    </div>
-                    <div class="flex flex-wrap gap-2 lg:flex-nowrap">
+                    </template>
+                    <template #actions>
                         <Button variant="outline" as-child>
                             <Link
                                 :href="
@@ -196,8 +191,8 @@ const formatDate = (date: string) => {
                                 </DialogFooter>
                             </DialogContent>
                         </Dialog>
-                    </div>
-                </div>
+                    </template>
+                </PageHeader>
 
                 <!-- Stats Cards -->
                 <div class="mb-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
