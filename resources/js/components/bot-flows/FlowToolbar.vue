@@ -42,7 +42,7 @@ const statusTint = computed(() => {
 </script>
 
 <template>
-    <div class="sp-glass flex h-14 shrink-0 items-center gap-3 border-b border-soft px-4">
+    <div class="sp-glass flex shrink-0 flex-wrap items-center gap-x-3 gap-y-2 border-b border-soft px-3 py-2 sm:h-14 sm:flex-nowrap sm:px-4 sm:py-0">
         <Link
             :href="props.backUrl"
             class="flex size-8 items-center justify-center rounded-xs text-ink-muted transition-colors hover:bg-surface hover:text-ink"
@@ -104,11 +104,11 @@ const statusTint = computed(() => {
         >
             <Power v-if="props.status !== 'active'" class="size-3.5" />
             <PowerOff v-else class="size-3.5" />
-            {{
+            <span class="hidden sm:inline">{{
                 props.status === 'active'
                     ? t('botFlows.toolbar.deactivate')
                     : t('botFlows.toolbar.activate')
-            }}
+            }}</span>
         </button>
 
         <!-- Save button: only in create mode -->

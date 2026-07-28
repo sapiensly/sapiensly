@@ -1,7 +1,11 @@
 <?php
 
+use App\Enums\DocumentType;
+use App\Enums\Visibility;
 use App\Models\AiUsageEvent;
 use App\Models\App;
+use App\Models\Chatbot;
+use App\Models\Document;
 use App\Models\User;
 use App\Services\Manifest\AppManifestService;
 use Database\Seeders\RolesAndPermissionsSeeder;
@@ -649,4 +653,79 @@ it('hides the fine-tune toggle on a phone and keeps it on desktop', function () 
 
     visit("/apps/{$app->id}/builder")->on()->iPhone15()
         ->assertScript($visible, 'hidden');
+});
+
+/**
+ * The deck builder. Its slide reordering has toolbar buttons as well as the
+ * thumbnail drag, so unlike the two canvases it has no pointer-only path — it
+ * is fully in scope. At 390 its topbar and slide toolbar ran to 524px.
+ */
+it('never scrolls sideways in the deck builder', function (string $device) {
+    $this->seed(RolesAndPermissionsSeeder::class);
+    $user = mcpMember($org = mcpOrg());
+    $this->actingAs($user);
+
+    $deck = Document::create([
+        'user_id' => $user->id,
+        'organization_id' => $org->id,
+        'name' => 'Quarterly Business Review — EMEA Operations',
+        'keywords' => [],
+        'type' => DocumentType::Deck,
+        'body' => json_encode([
+            'schema_version' => '1.0.0',
+            'theme' => 'executive',
+            'slides' => [['id' => 'sld_1', 'layout' => 'title', 'title' => 'Quarterly Business Review']],
+        ]),
+        'visibility' => Visibility::Organization,
+        'metadata' => ['theme' => 'executive', 'slide_count' => 1],
+    ]);
+
+    visit("/slides/{$deck->id}/builder")->on()->{$device}()
+        ->assertNoJavaScriptErrors()
+        ->assertScript(NO_CLIPPED_CONTENT, '');
+})->with('viewports');
+
+/**
+ * The bot-flow editor stays desktop-only, and that is the honest answer rather
+ * than a gap: it IS a node canvas end to end — take that away and nothing
+ * useful is left, unlike the app builder where chat and preview survive.
+ *
+ * So what is asserted here is the CHROME (its toolbar used to run 9px past a
+ * phone) and the notice. The canvas itself is deliberately not measured: VueFlow
+ * draws edges past its own bounds and clips them with overflow-hidden, which is
+ * how a pannable canvas works — the page never scrolls sideways.
+ */
+it('keeps the bot-flow toolbar on screen and says the canvas is desktop-only', function () {
+    $this->seed(RolesAndPermissionsSeeder::class);
+    $user = mcpMember($org = mcpOrg());
+    $this->actingAs($user);
+
+    $bot = Chatbot::factory()->create([
+        'user_id' => $user->id,
+        'organization_id' => $org->id,
+        'name' => 'Soporte Nivel 2 — Reembolsos y Garantías',
+    ]);
+
+    $toolbarFits = <<<'JS'
+    function () {
+        const vw = document.documentElement.clientWidth;
+        const bar = document.querySelector('.sp-glass');
+        if (!bar) return 'no toolbar';
+        for (const el of bar.querySelectorAll('*')) {
+            const r = el.getBoundingClientRect();
+            if (r.width && r.right > vw + 1) return `${el.tagName} right=${Math.round(r.right)}`;
+        }
+        return '';
+    }
+    JS;
+
+    visit("/chatbots/{$bot->id}/flow/edit")->on()->iPhone15()
+        ->assertNoJavaScriptErrors()
+        ->assertScript($toolbarFits, '')
+        // The notice is the point: it is not offered as a phone tool. Asserted
+        // by role, not by copy, so it survives a locale or a reword.
+        ->assertScript(
+            'function () { const n = document.querySelector(\'[role="status"]\'); return n && n.getBoundingClientRect().width > 0 ? "shown" : "missing"; }',
+            'shown',
+        );
 });

@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import * as DocumentController from '@/actions/App/Http/Controllers/DocumentController';
 import * as SlidesController from '@/actions/App/Http/Controllers/SlidesController';
-import DesktopOnlyNotice from '@/components/app-v2/DesktopOnlyNotice.vue';
 import DeckSlide from '@/components/slides/DeckSlide.vue';
 import SlideInspector from '@/components/slides/SlideInspector.vue';
 import echo from '@/echo';
@@ -478,7 +477,7 @@ async function shareDeck() {
     <div class="relative flex h-screen flex-col bg-navy-deep text-ink">
         <!-- Topbar -->
         <header
-            class="flex h-14 shrink-0 items-center gap-3 border-b border-soft px-4"
+            class="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-2 border-b border-soft px-3 py-2 sm:h-14 sm:flex-nowrap sm:px-4 sm:py-0"
         >
             <Link
                 :href="DocumentController.index().url"
@@ -633,12 +632,11 @@ async function shareDeck() {
             </a>
         </header>
 
-        <DesktopOnlyNotice />
 
-        <div class="flex min-h-0 flex-1">
+        <div class="flex min-h-0 flex-1 flex-col lg:flex-row">
             <!-- Left: AI chat -->
             <aside
-                class="flex w-[380px] shrink-0 flex-col border-r border-soft"
+                class="flex min-h-0 w-full flex-col border-b border-soft lg:w-[380px] lg:shrink-0 lg:border-r lg:border-b-0"
             >
                 <div
                     ref="chatScroller"
@@ -705,9 +703,9 @@ async function shareDeck() {
             <main class="flex min-w-0 flex-1 flex-col">
                 <!-- Slide toolbar -->
                 <div
-                    class="flex h-11 shrink-0 items-center gap-1 border-b border-soft px-3"
+                    class="flex h-11 shrink-0 items-center gap-1 overflow-x-auto border-b border-soft px-3"
                 >
-                    <span class="mr-2 text-xs text-ink-subtle">
+                    <span class="mr-2 hidden shrink-0 text-xs text-ink-subtle sm:inline">
                         {{
                             t('slides.builder.slide_of', {
                                 n: selected + 1,
