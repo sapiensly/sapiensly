@@ -170,9 +170,14 @@ function openPalette() {
                             :sidebar-collapsed="sidebarCollapsed"
                         />
                     </div>
+                    <!--
+                      A phone has no width to spare, so the gutter is 12px:
+                      enough to keep cards off the glass edge, small enough that
+                      they get the screen. `sm` and up is unchanged.
+                    -->
                     <div
                         v-else
-                        class="mx-auto w-full max-w-[1440px] px-4 py-4 sm:px-7 sm:py-[22px]"
+                        class="mx-auto w-full max-w-[1440px] px-3 py-4 sm:px-7 sm:py-[22px]"
                     >
                         <slot
                             :open-palette="openPalette"

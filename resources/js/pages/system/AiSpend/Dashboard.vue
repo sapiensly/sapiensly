@@ -98,7 +98,13 @@ const scopeLabel = computed(() =>
     <Head title="AI Spend" />
 
     <AppLayoutV2 title="AI Spend">
-        <div class="flex flex-col gap-6 p-6">
+        <!--
+          The layout already pads the content area. This page added `p-6` on
+          top of it, so on a phone the cards sat behind 40px of gutter per side
+          — the only page in the app that doubled up. Horizontal padding is
+          dropped below `sm` and left to the layout; `sm` and up is unchanged.
+        -->
+        <div class="flex flex-col gap-6 px-0 py-4 sm:p-6">
             <PageHeader title="AI Spend" :description="`${scopeLabel} · last ${days} days`">
                 <template #actions>
                     <div class="inline-flex items-center rounded-pill border border-medium bg-surface p-0.5">
