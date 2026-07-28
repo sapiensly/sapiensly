@@ -11,6 +11,7 @@ use App\Models\Record;
 use App\Models\User;
 use App\Services\Apps\AppNamer;
 use App\Services\Builder\BuilderAiService;
+use App\Services\Builder\ImportedPageRenderer;
 use App\Services\Manifest\AppManifestService;
 use App\Support\Branding\ColorPalette;
 use App\Support\Builder\FineTuneStyles;
@@ -1821,6 +1822,23 @@ it('a hero title cannot be emptied — the schema requires a headline', function
  * opposite manifests, and the app one asks for blocks the validator rejects on
  * a landing surface.
  */
+/**
+ * Keep headless Chrome out of the suite. The importer renders any page that
+ * looks client-rendered, and these fixtures do (little text, a script tag) —
+ * without this the three tests below quietly spend ninety seconds launching a
+ * browser to render a fixture whose markup they already know.
+ */
+function stubPageRenderer(): void
+{
+    app()->bind(ImportedPageRenderer::class, fn () => new class extends ImportedPageRenderer
+    {
+        public function render(string $html): ?array
+        {
+            return null;
+        }
+    });
+}
+
 function designedLandingExport(): string
 {
     return '<!doctype html><html><head><title>Sapiensly — Agentes que ejecutan</title>'
@@ -1836,6 +1854,7 @@ function designedLandingExport(): string
 
 it('wireframe-import routes a designed page to the landing brief', function () {
     Queue::fake();
+    stubPageRenderer();
 
     $conv = BuilderConversation::create([
         'app_id' => $this->testApp->id,
@@ -1877,6 +1896,7 @@ it('wireframe-import routes a designed page to the landing brief', function () {
 
 it('wireframe-import keeps an app mockup on the app brief', function () {
     Queue::fake();
+    stubPageRenderer();
 
     $conv = BuilderConversation::create([
         'app_id' => $this->testApp->id,
@@ -1911,6 +1931,7 @@ it('wireframe-import keeps an app mockup on the app brief', function () {
 
 it('wireframe-import accepts a standalone .html file upload', function () {
     Queue::fake();
+    stubPageRenderer();
 
     $conv = BuilderConversation::create([
         'app_id' => $this->testApp->id,

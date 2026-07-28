@@ -5,6 +5,7 @@ namespace App\Services\Builder;
 use App\Services\Security\Ssrf\SafeHttpClient;
 use App\Services\Security\Ssrf\SsrfBlockedException;
 use App\Services\Security\Ssrf\SsrfGuard;
+use App\Support\Landing\BundledDesign;
 use App\Support\Landing\LandingArtifact;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\RequestException;
@@ -32,11 +33,13 @@ use Symfony\Component\DomCrawler\Crawler;
 class WireframeImporter
 {
     /**
-     * Cap on HTML response size. Generous because truncation happens BEFORE
-     * parsing: cutting a standalone export mid-document costs the whole tail
-     * (footer, closing sections, and any stylesheet declared late).
+     * Cap on HTML input size, above the 5 MB upload limit so a legitimate file
+     * is never cut. Truncation happens BEFORE anything is parsed, and a partial
+     * document is worse than a big one: a self-extracting bundle keeps its
+     * template past the 3 MB mark, so a tighter cap silently threw the design
+     * away and left the loader shell behind — observed on a real 3.47 MB export.
      */
-    private const MAX_HTML_BYTES = 2 * 1024 * 1024;
+    private const MAX_HTML_BYTES = 8 * 1024 * 1024;
 
     /** Cap on extracted text length passed back to the AI. */
     private const MAX_EXTRACTED_TEXT = 8000;
@@ -61,10 +64,11 @@ class WireframeImporter
     public function __construct(
         private SsrfGuard $ssrf,
         private SafeHttpClient $safeHttp,
+        private ImportedPageRenderer $renderer,
     ) {}
 
     /**
-     * @return array{image_url: ?string, title: ?string, description: ?string, text: ?string, cleaned_html: ?string, stylesheet: ?string, is_landing: bool, source_url: ?string}
+     * @return array{image_url: ?string, title: ?string, description: ?string, text: ?string, cleaned_html: ?string, screenshot_path: ?string, fonts: array<int, string>, stylesheet: ?string, is_landing: bool, source_url: ?string}
      */
     public function fromUrl(string $url): array
     {
@@ -106,6 +110,8 @@ class WireframeImporter
                 'description' => null,
                 'text' => null,
                 'cleaned_html' => null,
+                'screenshot_path' => null,
+                'fonts' => [],
                 'stylesheet' => null,
                 'is_landing' => false,
                 'source_url' => $url,
@@ -122,7 +128,7 @@ class WireframeImporter
     }
 
     /**
-     * @return array{image_url: ?string, title: ?string, description: ?string, text: ?string, cleaned_html: ?string, stylesheet: ?string, is_landing: bool, source_url: ?string}
+     * @return array{image_url: ?string, title: ?string, description: ?string, text: ?string, cleaned_html: ?string, screenshot_path: ?string, fonts: array<int, string>, stylesheet: ?string, is_landing: bool, source_url: ?string}
      */
     public function fromHtml(string $html): array
     {
@@ -130,16 +136,23 @@ class WireframeImporter
     }
 
     /**
-     * @return array{image_url: ?string, title: ?string, description: ?string, text: ?string, cleaned_html: ?string, stylesheet: ?string, is_landing: bool, source_url: ?string}
+     * @return array{image_url: ?string, title: ?string, description: ?string, text: ?string, cleaned_html: ?string, screenshot_path: ?string, fonts: array<int, string>, stylesheet: ?string, is_landing: bool, source_url: ?string}
      */
     private function extract(string $html, ?string $baseUrl): array
     {
-        // Decide what KIND of artifact this is before touching it: a designed
-        // page and an app wireframe want different evidence out of the same
-        // parse (see LandingArtifact).
-        $isLanding = LandingArtifact::isLandingHtml($html);
+        // A self-extracting bundle has no page in it — the loader shell would
+        // parse as "This page requires JavaScript to display". Recover the real
+        // document (head, SEO, design tokens) and parse THAT instead; the markup
+        // comes from a headless render further down, the only place it exists.
+        $bundle = BundledDesign::isBundle($html) ? BundledDesign::unpack($html) : null;
+        $parseTarget = $bundle['document'] ?? $html;
 
-        $crawler = new Crawler($html);
+        // Decide what KIND of artifact this is: a designed page and an app
+        // wireframe want different evidence out of the same parse (see
+        // LandingArtifact). A design bundle is a designed page by construction.
+        $isLanding = $bundle !== null || LandingArtifact::isLandingHtml($html);
+
+        $crawler = new Crawler($parseTarget);
 
         $meta = fn (string $selector): ?string => $this->firstAttr($crawler, $selector, 'content');
 
@@ -209,21 +222,49 @@ class WireframeImporter
             }
         }
 
+        // Client-rendered documents have no markup until their JavaScript runs.
+        // A bundle always needs the render; so does any landing whose static body
+        // came back nearly empty while the document is full of scripts — that is
+        // an SPA, and parsing it statically yields a mount point.
+        $screenshotPath = null;
+        if ($bundle !== null || ($isLanding && $this->looksClientRendered($html, $text))) {
+            $rendered = $this->renderer->render($html);
+            if ($rendered !== null) {
+                $cleanedHtml = $rendered['html'];
+                $screenshotPath = $rendered['screenshot_path'];
+            }
+        }
+
         return [
             'image_url' => $imageUrl,
             'title' => $title,
             'description' => $description,
             'text' => $text,
             'cleaned_html' => $cleanedHtml,
+            'screenshot_path' => $screenshotPath,
+            'fonts' => $bundle['fonts'] ?? [],
             // stripNoise() drops <style> along with the rest of the noise, which
             // is right when inferring an app's STRUCTURE from a mockup and wrong
             // when reproducing a design: there the stylesheet IS the artifact —
             // palette, type scale, spacing, motion. Hand it over separately so
             // the model rebuilds the look instead of inventing one.
-            'stylesheet' => $isLanding ? $this->extractStylesheet($html) : null,
+            'stylesheet' => $bundle !== null
+                ? $bundle['stylesheet']
+                : ($isLanding ? $this->extractStylesheet($html) : null),
             'is_landing' => $isLanding,
             'source_url' => $baseUrl,
         ];
+    }
+
+    /**
+     * A document that builds itself in the browser: scripts present, but the
+     * static parse recovered barely any text. Parsing that yields a mount point
+     * and whatever the loader says while it works.
+     */
+    private function looksClientRendered(string $html, ?string $text): bool
+    {
+        return mb_strlen(trim((string) $text)) < 400
+            && preg_match('/<script\b/i', $html) === 1;
     }
 
     /**

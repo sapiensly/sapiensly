@@ -23,6 +23,7 @@ use App\Services\Builder\BuilderAiService;
 use App\Services\Builder\BuilderCancellation;
 use App\Services\Builder\BuildPlan;
 use App\Services\Builder\ChartRecommender;
+use App\Services\Builder\ImportedPageRenderer;
 use App\Services\Builder\WireframeImporter;
 use App\Services\Express\ExpressIntentRouter;
 use App\Services\Express\ExpressLauncher;
@@ -69,6 +70,7 @@ class AppBuilderController extends Controller
         private RecordQueryService $records,
         private TenantStorage $tenantStorage,
         private WireframeImporter $wireframes,
+        private ImportedPageRenderer $pageRenderer,
         private AiProviderService $aiProviders,
         private AppAccessResolver $accessResolver,
         private BlockVisibilityFilter $visibility,
@@ -717,6 +719,7 @@ class AppBuilderController extends Controller
         $extractedHtml = null;
         $extractedCss = null;
         $extractedIsLanding = false;
+        $extractedFonts = [];
         $sourceLabel = null;
 
         if ($data['source'] === 'image') {
@@ -769,7 +772,18 @@ class AppBuilderController extends Controller
             $extractedHtml = $parsed['cleaned_html'];
             $extractedCss = $parsed['stylesheet'];
             $extractedIsLanding = $parsed['is_landing'];
+            $extractedFonts = $parsed['fonts'];
             $sourceLabel = $htmlFilename !== null ? 'uploaded HTML ('.$htmlFilename.')' : 'pasted HTML';
+
+            // A client-rendered document was rendered headlessly to recover its
+            // markup; the same pass produced a picture of it. Promote that to the
+            // message attachment so the model — and the design director grading
+            // the rebuild — can SEE the page instead of only reading its DOM.
+            if ($parsed['screenshot_path'] !== null) {
+                $attachmentBytes = (string) file_get_contents($parsed['screenshot_path']);
+                $attachmentMime = 'image/jpeg';
+                $this->pageRenderer->cleanup($parsed['screenshot_path']);
+            }
         }
 
         // Persist the attachment on S3 (if we got one). Resolving the disk
@@ -808,6 +822,7 @@ class AppBuilderController extends Controller
                 extractedText: $extractedText,
                 extractedHtml: $extractedHtml,
                 extractedCss: $extractedCss,
+                extractedFonts: $extractedFonts,
                 hasImage: $attachmentBytes !== null,
             )
             : $this->buildWireframePrompt(
@@ -937,6 +952,7 @@ class AppBuilderController extends Controller
         ?string $extractedText,
         ?string $extractedHtml,
         ?string $extractedCss,
+        array $extractedFonts,
         bool $hasImage,
     ): string {
         $lines = [];
@@ -944,7 +960,11 @@ class AppBuilderController extends Controller
         $lines[] = '';
         $lines[] = 'Fuente: '.$sourceLabel.'.';
         if ($hasImage) {
-            $lines[] = 'Adjunto también una imagen de la página; úsala para juzgar el resultado visual.';
+            $lines[] = 'Adjunto una captura de la página original; es tu referencia visual — compárala con lo que construyas.';
+        }
+        if ($extractedFonts !== []) {
+            $lines[] = '';
+            $lines[] = 'Tipografías del original: '.implode(', ', $extractedFonts).'. Si no están en el catálogo self-hosted, decláralas en settings.fonts (máx. 4); si no se pueden cargar, elige del catálogo la más parecida y dime cuál sustituiste.';
         }
         if ($businessContext !== '') {
             $lines[] = '';
@@ -973,7 +993,7 @@ class AppBuilderController extends Controller
         }
         if ($extractedHtml) {
             $lines[] = '';
-            $lines[] = 'HTML ORIGINAL de la página (sin <style>/<script>, que van aparte). Reprodúcelo sección por sección:';
+            $lines[] = 'HTML de la página YA RENDERIZADA (el DOM real, con sus estilos en línea). Reprodúcelo sección por sección — es lo que hay que copiar:';
             $lines[] = '```html';
             $lines[] = $extractedHtml;
             $lines[] = '```';

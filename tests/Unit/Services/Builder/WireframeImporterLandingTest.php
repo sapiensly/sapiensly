@@ -1,5 +1,6 @@
 <?php
 
+use App\Services\Builder\ImportedPageRenderer;
 use App\Services\Builder\WireframeImporter;
 use Tests\TestCase;
 
@@ -82,4 +83,71 @@ it('returns the new keys for a fragment paste too', function () {
 
     expect($parsed)->toHaveKeys(['stylesheet', 'is_landing'])
         ->and($parsed['is_landing'])->toBeFalse();
+});
+
+/**
+ * A self-extracting bundle carries no page: the loader shell parses as "This
+ * page requires JavaScript to display". The importer must take its evidence
+ * from the recovered template plus a headless render, never from the shell.
+ *
+ * The renderer is faked — a unit test must not launch Chrome — but the contract
+ * it stands in for is exercised end-to-end against the real file elsewhere.
+ */
+function fakeRenderer(?array $result): void
+{
+    app()->bind(ImportedPageRenderer::class, fn () => new class($result) extends ImportedPageRenderer
+    {
+        public function __construct(private ?array $result) {}
+
+        public function render(string $html): ?array
+        {
+            return $this->result;
+        }
+    });
+}
+
+it('takes a bundle design from the template, not the loader shell', function () {
+    fakeRenderer(['html' => '<header>SAPIENSLY</header><section class="hero"><h1>AI agents</h1></section>', 'screenshot_path' => null]);
+
+    $parsed = app(WireframeImporter::class)->fromHtml(bundleFixture());
+
+    expect($parsed['is_landing'])->toBeTrue()
+        ->and($parsed['title'])->toBe('Sapiensly — AI agents that do the work.')
+        // The design system, not `#__bundler_loading`.
+        ->and($parsed['stylesheet'])->toContain('--sp-bg-primary: #00031C')
+        ->and($parsed['stylesheet'])->not->toContain('__bundler_loading')
+        ->and($parsed['fonts'])->toBe(['Poppins', 'Montserrat'])
+        // The markup comes from the render — the only place it exists.
+        ->and($parsed['cleaned_html'])->toContain('AI agents')
+        ->and($parsed['cleaned_html'])->not->toContain('requires JavaScript');
+});
+
+it('surfaces the render screenshot so the model can see the page', function () {
+    fakeRenderer(['html' => '<h1>hola</h1>', 'screenshot_path' => '/tmp/shot.jpg']);
+
+    expect(app(WireframeImporter::class)->fromHtml(bundleFixture())['screenshot_path'])
+        ->toBe('/tmp/shot.jpg');
+});
+
+it('degrades to static extraction when the render fails', function () {
+    fakeRenderer(null);
+
+    $parsed = app(WireframeImporter::class)->fromHtml(bundleFixture());
+
+    // No markup to be had, but the design system and SEO still came through —
+    // a failed render must not cost what static extraction already recovered.
+    expect($parsed['is_landing'])->toBeTrue()
+        ->and($parsed['stylesheet'])->toContain('--sp-accent-blue')
+        ->and($parsed['title'])->toBe('Sapiensly — AI agents that do the work.');
+});
+
+it('does not render a static page that parsed fine', function () {
+    // A real designed page needs no browser; spending one would be pure latency.
+    fakeRenderer(['html' => 'SHOULD NOT BE USED', 'screenshot_path' => null]);
+
+    $parsed = app(WireframeImporter::class)->fromHtml(
+        designedPage().str_repeat('<p>Texto real y suficiente para no parecer una SPA vacía.</p>', 20)
+    );
+
+    expect($parsed['cleaned_html'])->not->toContain('SHOULD NOT BE USED');
 });
