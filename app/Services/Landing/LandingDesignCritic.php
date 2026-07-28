@@ -474,11 +474,135 @@ class LandingDesignCritic
         // --sp-font-main and then overridden by a later declaration of the same
         // property — two fonts paid for, neither rendered, and the original's
         // typography lost in the process.
+        // A class the markup uses and the stylesheet never defines is a section
+        // rendering as raw stacked blocks. Observed on a real rebuild: the model
+        // wrote the responsive OVERRIDES for its grids and never the base rules,
+        // so `surfaces-grid`, `cf-split`, `kb-split`, `usecase-split`,
+        // `council-captions` and `how-grid` only existed inside @media — the
+        // bento, the split panels and the comparison table all collapsed to
+        // vertical text above the breakpoint, and the gate shipped it.
+        $classes = $this->unstyledClasses($html, $css);
+        if ($classes['unstyled'] !== []) {
+            $must[] = 'These classes are used in your html and have NO rule in custom_css, so those elements render unstyled: '
+                .implode(', ', array_map(fn (string $c): string => '.'.$c, $classes['unstyled']))
+                .'. Style them, or drop them from the markup.';
+        }
+        if ($classes['media_only'] !== []) {
+            $must[] = 'These classes are ONLY defined inside an @media block, so they have no layout at the default width — a grid that exists below a breakpoint and nowhere else: '
+                .implode(', ', array_map(fn (string $c): string => '.'.$c, $classes['media_only']))
+                .'. Add the base rule, then let the media query override it.';
+        }
+
         foreach ($this->unusedFonts($css, $declaredFonts) as $family) {
             $tells[] = "settings.fonts loads '{$family}' but nothing renders in it — either use it (a later declaration of the same custom property overrides an earlier one, so check which one wins) or drop it from settings.fonts; as it stands the visitor downloads a webfont for nothing.";
         }
 
         return ['must_fix' => $must, 'tells' => $tells];
+    }
+
+    /**
+     * Classes the markup uses that the stylesheet doesn't actually deliver.
+     *
+     * Two failures, both of which render as unstyled stacked blocks:
+     *  - `unstyled`: no rule anywhere.
+     *  - `media_only`: the only rule sits inside an @media, so the element has
+     *    no layout until the viewport happens to match it.
+     *
+     * @return array{unstyled: list<string>, media_only: list<string>}
+     */
+    private function unstyledClasses(string $html, string $css): array
+    {
+        $empty = ['unstyled' => [], 'media_only' => []];
+        if (trim($html) === '' || trim($css) === '') {
+            return $empty;
+        }
+
+        preg_match_all('/class="([^"]*)"/i', $html, $matches);
+        $used = [];
+        foreach ($matches[1] as $attribute) {
+            foreach (preg_split('/\s+/', trim($attribute)) ?: [] as $class) {
+                if ($class !== '') {
+                    $used[$class] = true;
+                }
+            }
+        }
+        if ($used === []) {
+            return $empty;
+        }
+
+        $defined = $this->classSelectorsIn($css);
+        $base = $this->classSelectorsIn($this->withoutMediaBlocks($css));
+
+        $unstyled = [];
+        $mediaOnly = [];
+        foreach (array_keys($used) as $class) {
+            if (! isset($defined[$class])) {
+                $unstyled[] = $class;
+            } elseif (! isset($base[$class])) {
+                $mediaOnly[] = $class;
+            }
+        }
+
+        // Name enough to act on without turning the verdict into a wall.
+        return [
+            'unstyled' => array_slice($unstyled, 0, 8),
+            'media_only' => array_slice($mediaOnly, 0, 8),
+        ];
+    }
+
+    /**
+     * @return array<string, true>
+     */
+    private function classSelectorsIn(string $css): array
+    {
+        // Selectors only: a `.` inside a value (a decimal, a data URI) would
+        // otherwise register as a class that is defined everywhere.
+        $selectors = preg_replace('/\{[^{}]*\}/', '{}', $css) ?? $css;
+
+        preg_match_all('/\.([a-zA-Z_][\w-]*)/', $selectors, $found);
+
+        return array_fill_keys($found[1] ?? [], true);
+    }
+
+    /**
+     * The stylesheet with every @media block removed, so what remains is what
+     * applies at any width. Brace-counted rather than regexed: a media query
+     * holds nested rules, and a lazy match would stop at the first `}`.
+     */
+    private function withoutMediaBlocks(string $css): string
+    {
+        $out = '';
+        $length = strlen($css);
+        $i = 0;
+
+        while ($i < $length) {
+            $at = stripos($css, '@media', $i);
+            if ($at === false) {
+                return $out.substr($css, $i);
+            }
+
+            $out .= substr($css, $i, $at - $i);
+
+            $brace = strpos($css, '{', $at);
+            if ($brace === false) {
+                return $out;
+            }
+
+            $depth = 0;
+            for ($j = $brace; $j < $length; $j++) {
+                if ($css[$j] === '{') {
+                    $depth++;
+                } elseif ($css[$j] === '}') {
+                    $depth--;
+                    if ($depth === 0) {
+                        break;
+                    }
+                }
+            }
+            $i = min($j + 1, $length);
+        }
+
+        return $out;
     }
 
     /**

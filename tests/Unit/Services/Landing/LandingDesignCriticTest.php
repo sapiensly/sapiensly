@@ -382,3 +382,73 @@ it('ships a faithful rebuild that a vanguard score would have rejected', functio
         ->and($replica['direction'])->toContain('make the hero asymmetric')
         ->and($replica['mode'])->toBe('replicate');
 });
+
+/*
+ * Classes the markup uses that the stylesheet never delivers. Both shapes below
+ * came off a real rebuild that the gate shipped looking like stacked plain text.
+ */
+
+it('blocks a class the markup uses and the css never defines', function () {
+    $html = '<section class="lp-section"><div class="compare-row"><div>Zapier</div></div></section>';
+    $css = RICH_CSS.'.lp-section{padding:6rem 0}';
+
+    $r = designCritic()->deterministicTells($html, $css);
+
+    expect(implode(' ', $r['must_fix']))->toContain('.compare-row')
+        ->and(implode(' ', $r['must_fix']))->toContain('NO rule in custom_css')
+        // The one that IS styled must not be named.
+        ->and(implode(' ', $r['must_fix']))->not->toContain('.lp-section,');
+});
+
+it('blocks a grid whose only rule lives inside a media query', function () {
+    // The exact failure: the model wrote the responsive override and never the
+    // base rule, so the bento had no layout above the breakpoint.
+    $html = '<section class="lp-section"><div class="surfaces-grid"><div>Apps</div></div></section>';
+    $css = RICH_CSS.'.lp-section{padding:6rem 0}'
+        .'@media(max-width:900px){.lp .surfaces-grid{grid-template-columns:1fr 1fr!important}}';
+
+    $r = designCritic()->deterministicTells($html, $css);
+
+    expect(implode(' ', $r['must_fix']))->toContain('.surfaces-grid')
+        ->and(implode(' ', $r['must_fix']))->toContain('ONLY defined inside an @media');
+});
+
+it('accepts a class with a base rule that a media query then overrides', function () {
+    $html = '<section class="lp-section"><div class="surfaces-grid"><div>Apps</div></div></section>';
+    $css = RICH_CSS.'.lp-section{padding:6rem 0}.lp .surfaces-grid{display:grid;grid-template-columns:repeat(4,1fr)}'
+        .'@media(max-width:900px){.lp .surfaces-grid{grid-template-columns:1fr 1fr}}';
+
+    $r = designCritic()->deterministicTells($html, $css);
+
+    expect(implode(' ', $r['must_fix']))->not->toContain('surfaces-grid');
+});
+
+it('counts a class named only in a compound selector as styled', function () {
+    $html = '<div class="price-card"><span class="tag">Most popular</span></div>';
+    $css = RICH_CSS.'.lp .price-card{border-radius:20px}.lp .price-card .tag{position:absolute}';
+
+    $r = designCritic()->deterministicTells($html, $css);
+
+    expect(implode(' ', $r['must_fix']))->not->toContain('.tag');
+});
+
+it('does not mistake a decimal in a css value for a class', function () {
+    // `.5rem` and a data URI would otherwise register every "class" as defined.
+    $html = '<div class="never-styled">x</div>';
+    $css = RICH_CSS.'.lp{padding:.5rem;background:url(data:image/png;base64,iVBORw0KGgo.never-styled)}';
+
+    $r = designCritic()->deterministicTells($html, $css);
+
+    expect(implode(' ', $r['must_fix']))->toContain('.never-styled');
+});
+
+it('handles nested rules inside a media block without eating the rest', function () {
+    // Brace-counted removal: a lazy regex would stop at the first `}` and treat
+    // everything after the media query as if it were still inside it.
+    $html = '<div class="after-media">x</div>';
+    $css = RICH_CSS.'@media(max-width:900px){.lp .a{color:red}.lp .b{color:blue}}.lp .after-media{display:grid}';
+
+    $r = designCritic()->deterministicTells($html, $css);
+
+    expect(implode(' ', $r['must_fix']))->not->toContain('after-media');
+});
