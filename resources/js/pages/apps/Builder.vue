@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import * as AppController from '@/actions/App/Http/Controllers/AppController';
+import DesktopOnlyNotice from '@/components/app-v2/DesktopOnlyNotice.vue';
 import AppAccessPanel from '@/components/apps/AppAccessPanel.vue';
 import BuildPlanCard from '@/components/apps/BuildPlanCard.vue';
 import LayersExplorer from '@/components/apps/LayersExplorer.vue';
@@ -3557,6 +3558,8 @@ function statusTone(status: Message['status']): string {
         :title="`${t('apps.builder.title')} · ${appMeta.name}`"
         full-bleed
     >
+        <DesktopOnlyNotice />
+
         <div
             class="flex min-h-0 flex-1 flex-col gap-4 px-7 py-5 transition-[padding-right] duration-300 ease-out"
             :style="drawerOpen ? { paddingRight: '340px' } : undefined"

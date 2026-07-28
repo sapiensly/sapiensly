@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import * as DocumentController from '@/actions/App/Http/Controllers/DocumentController';
 import * as SlidesController from '@/actions/App/Http/Controllers/SlidesController';
+import DesktopOnlyNotice from '@/components/app-v2/DesktopOnlyNotice.vue';
 import DeckSlide from '@/components/slides/DeckSlide.vue';
 import SlideInspector from '@/components/slides/SlideInspector.vue';
 import echo from '@/echo';
@@ -631,6 +632,8 @@ async function shareDeck() {
                 {{ t('slides.builder.present') }}
             </a>
         </header>
+
+        <DesktopOnlyNotice />
 
         <div class="flex min-h-0 flex-1">
             <!-- Left: AI chat -->

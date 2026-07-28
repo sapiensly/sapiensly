@@ -3063,5 +3063,6 @@
     "apps.builder.analyst.field_mapping": "Field mapping",
     "apps.builder.analyst.mapping_field": "Field",
     "apps.builder.analyst.mapping_source": "Source field",
-    "apps.builder.analyst.close": "Close"
+    "apps.builder.analyst.close": "Close",
+    "builder.desktop_only": "This builder is designed for a desktop screen. On a small one the canvas and side panels are cramped, and some controls need a pointer."
 }

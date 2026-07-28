@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import * as BotFlowController from '@/actions/App/Http/Controllers/BotFlowController';
 import * as ChatbotController from '@/actions/App/Http/Controllers/ChatbotController';
+import DesktopOnlyNotice from '@/components/app-v2/DesktopOnlyNotice.vue';
 import BotFlowAssistant from '@/components/bot-flows/BotFlowAssistant.vue';
 import FlowNodePalette from '@/components/bot-flows/FlowNodePalette.vue';
 import FlowNodePanel from '@/components/bot-flows/FlowNodePanel.vue';
@@ -317,6 +318,8 @@ const backUrl = props.backUrl ?? ChatbotController.index().url;
         force-collapsed-on-mount
     >
         <div class="flex min-h-0 flex-1 flex-col">
+            <DesktopOnlyNotice />
+
             <FlowToolbar
                 :back-url="backUrl"
                 :name="flowName"

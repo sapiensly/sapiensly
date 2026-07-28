@@ -3063,5 +3063,6 @@
     "apps.builder.analyst.field_mapping": "Mapeo de campos",
     "apps.builder.analyst.mapping_field": "Campo",
     "apps.builder.analyst.mapping_source": "Campo de origen",
-    "apps.builder.analyst.close": "Cerrar"
+    "apps.builder.analyst.close": "Cerrar",
+    "builder.desktop_only": "Este editor está pensado para pantalla de escritorio. En una pantalla pequeña el lienzo y los paneles quedan apretados, y algunos controles necesitan puntero."
 }
