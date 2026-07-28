@@ -69,7 +69,7 @@ class WireframeImporter
     ) {}
 
     /**
-     * @return array{image_url: ?string, title: ?string, description: ?string, text: ?string, cleaned_html: ?string, screenshot_path: ?string, fonts: array<int, string>, motion: ?string, stylesheet: ?string, is_landing: bool, source_url: ?string}
+     * @return array{image_url: ?string, title: ?string, description: ?string, text: ?string, cleaned_html: ?string, screenshot_path: ?string, fonts: array<int, string>, motion: ?string, element_styles: ?string, stylesheet: ?string, is_landing: bool, source_url: ?string}
      */
     public function fromUrl(string $url): array
     {
@@ -114,6 +114,7 @@ class WireframeImporter
                 'screenshot_path' => null,
                 'fonts' => [],
                 'motion' => null,
+                'element_styles' => null,
                 'stylesheet' => null,
                 'is_landing' => false,
                 'source_url' => $url,
@@ -130,7 +131,7 @@ class WireframeImporter
     }
 
     /**
-     * @return array{image_url: ?string, title: ?string, description: ?string, text: ?string, cleaned_html: ?string, screenshot_path: ?string, fonts: array<int, string>, motion: ?string, stylesheet: ?string, is_landing: bool, source_url: ?string}
+     * @return array{image_url: ?string, title: ?string, description: ?string, text: ?string, cleaned_html: ?string, screenshot_path: ?string, fonts: array<int, string>, motion: ?string, element_styles: ?string, stylesheet: ?string, is_landing: bool, source_url: ?string}
      */
     public function fromHtml(string $html): array
     {
@@ -138,7 +139,7 @@ class WireframeImporter
     }
 
     /**
-     * @return array{image_url: ?string, title: ?string, description: ?string, text: ?string, cleaned_html: ?string, screenshot_path: ?string, fonts: array<int, string>, motion: ?string, stylesheet: ?string, is_landing: bool, source_url: ?string}
+     * @return array{image_url: ?string, title: ?string, description: ?string, text: ?string, cleaned_html: ?string, screenshot_path: ?string, fonts: array<int, string>, motion: ?string, element_styles: ?string, stylesheet: ?string, is_landing: bool, source_url: ?string}
      */
     private function extract(string $html, ?string $baseUrl): array
     {
@@ -229,11 +230,13 @@ class WireframeImporter
         // came back nearly empty while the document is full of scripts — that is
         // an SPA, and parsing it statically yields a mount point.
         $screenshotPath = null;
+        $hoistedStyles = null;
         if ($bundle !== null || ($isLanding && $this->looksClientRendered($html, $text))) {
             $rendered = $this->renderer->render($html);
             if ($rendered !== null) {
                 $cleanedHtml = $rendered['html'];
                 $screenshotPath = $rendered['screenshot_path'];
+                $hoistedStyles = $rendered['styles'];
             }
         }
 
@@ -247,6 +250,10 @@ class WireframeImporter
             'fonts' => $bundle['fonts'] ?? [],
             // The rendered DOM is one frame; the movement lives in the sources.
             'motion' => $bundle !== null ? BundledMotion::brief($html) : null,
+            // The page's own per-element styles, already deduplicated into
+            // rules. Separate from the design system: one is the vocabulary,
+            // this is how each element actually uses it.
+            'element_styles' => $hoistedStyles,
             // stripNoise() drops <style> along with the rest of the noise, which
             // is right when inferring an app's STRUCTURE from a mockup and wrong
             // when reproducing a design: there the stylesheet IS the artifact —

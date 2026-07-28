@@ -251,7 +251,7 @@ final class BundledMotion
             // behaviour, so the callback is what decides which this is.
             $callback = explode('return () =>', $context)[0];
             if (preg_match('/isIntersecting/', $callback) === 1 && preg_match('/disconnect\(\)/', $callback) === 1) {
-                $out['reveal'] = 'Reveal al hacer scroll, una sola vez por elemento: usa `data-sp-reveal` en cada sección (y `data-sp-reveal-delay` para escalonar).';
+                $out['reveal'] = 'Reveal al hacer scroll, una sola vez por elemento. El HTML de arriba YA trae `data-sp-reveal` en los elementos que el original oculta en reposo: consérvalos (y añade `data-sp-reveal-delay` si quieres escalonarlos).';
 
                 continue;
             }

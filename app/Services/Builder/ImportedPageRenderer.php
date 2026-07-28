@@ -29,11 +29,18 @@ class ImportedPageRenderer
     /** Client-rendered bundles transpile in-browser; they need real time. */
     public int $timeoutSeconds = 45;
 
-    /** Cap on the returned markup — a landing brief can't spend more than this. */
+    /**
+     * Cap on the returned markup. Higher than it was: hoisting the inline styles
+     * out (see page-renderer.mjs) shrinks the DOM enough that a real page now
+     * fits, where before the tail arrived truncated.
+     */
     private const MAX_HTML = 120000;
 
+    /** The hoisted rules, bounded like everything else we forward. */
+    private const MAX_STYLES = 60000;
+
     /**
-     * @return array{html: string, screenshot_path: ?string}|null Null when nothing rendered.
+     * @return array{html: string, styles: ?string, screenshot_path: ?string}|null Null when nothing rendered.
      */
     public function render(string $html): ?array
     {
@@ -65,8 +72,14 @@ class ImportedPageRenderer
                 return null;
             }
 
+            $styles = is_array($decoded) ? trim((string) ($decoded['styles'] ?? '')) : '';
+
             return [
                 'html' => $this->trim($rendered),
+                // The page's own inline styles, hoisted into rules the model can
+                // transcribe instead of re-deriving from 500 style attributes
+                // the sanitiser strips anyway.
+                'styles' => $styles === '' ? null : mb_substr($styles, 0, self::MAX_STYLES),
                 'screenshot_path' => is_file($shotPath) ? $shotPath : null,
             ];
         } catch (\Throwable $e) {

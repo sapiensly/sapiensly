@@ -131,7 +131,7 @@ function fakeRenderer(?array $result): void
 }
 
 it('takes a bundle design from the template, not the loader shell', function () {
-    fakeRenderer(['html' => '<header>SAPIENSLY</header><section class="hero"><h1>AI agents</h1></section>', 'screenshot_path' => null]);
+    fakeRenderer(['html' => '<header class="x1">SAPIENSLY</header><section class="hero"><h1>AI agents</h1></section>', 'styles' => '.x1{color:#fff}', 'screenshot_path' => null]);
 
     $parsed = app(WireframeImporter::class)->fromHtml(importerBundleFixture());
 
@@ -147,7 +147,7 @@ it('takes a bundle design from the template, not the loader shell', function () 
 });
 
 it('surfaces the render screenshot so the model can see the page', function () {
-    fakeRenderer(['html' => '<h1>hola</h1>', 'screenshot_path' => '/tmp/shot.jpg']);
+    fakeRenderer(['html' => '<h1>hola</h1>', 'styles' => null, 'screenshot_path' => '/tmp/shot.jpg']);
 
     expect(app(WireframeImporter::class)->fromHtml(importerBundleFixture())['screenshot_path'])
         ->toBe('/tmp/shot.jpg');
@@ -167,11 +167,36 @@ it('degrades to static extraction when the render fails', function () {
 
 it('does not render a static page that parsed fine', function () {
     // A real designed page needs no browser; spending one would be pure latency.
-    fakeRenderer(['html' => 'SHOULD NOT BE USED', 'screenshot_path' => null]);
+    fakeRenderer(['html' => 'SHOULD NOT BE USED', 'styles' => null, 'screenshot_path' => null]);
 
     $parsed = app(WireframeImporter::class)->fromHtml(
         designedPage().str_repeat('<p>Texto real y suficiente para no parecer una SPA vacía.</p>', 20)
     );
 
     expect($parsed['cleaned_html'])->not->toContain('SHOULD NOT BE USED');
+});
+
+it('carries the hoisted element styles through to the caller', function () {
+    // The renderer pulls `style=` attributes into deduplicated rules; without
+    // forwarding them the model is back to re-deriving a stylesheet from
+    // attributes the sanitiser strips anyway.
+    fakeRenderer([
+        'html' => '<section class="hero x1"><h1>AI agents</h1></section>',
+        'styles' => ".x1{padding:6rem 0;background:#00031C}\n.x2{color:#8890A6}",
+        'screenshot_path' => null,
+    ]);
+
+    $parsed = app(WireframeImporter::class)->fromHtml(importerBundleFixture());
+
+    expect($parsed['element_styles'])->toContain('.x1{padding:6rem 0;background:#00031C}')
+        ->and($parsed['element_styles'])->toContain('.x2{color:#8890A6}')
+        // The design system stays its own field — vocabulary vs usage.
+        ->and($parsed['stylesheet'])->toContain('--sp-bg-primary');
+});
+
+it('reports no element styles when the render produced none', function () {
+    fakeRenderer(['html' => '<h1>hola</h1>', 'styles' => null, 'screenshot_path' => null]);
+
+    expect(app(WireframeImporter::class)->fromHtml(importerBundleFixture())['element_styles'])
+        ->toBeNull();
 });

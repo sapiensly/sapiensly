@@ -721,6 +721,7 @@ class AppBuilderController extends Controller
         $extractedIsLanding = false;
         $extractedFonts = [];
         $extractedMotion = null;
+        $extractedElementStyles = null;
         $sourceLabel = null;
 
         if ($data['source'] === 'image') {
@@ -775,6 +776,7 @@ class AppBuilderController extends Controller
             $extractedIsLanding = $parsed['is_landing'];
             $extractedFonts = $parsed['fonts'];
             $extractedMotion = $parsed['motion'];
+            $extractedElementStyles = $parsed['element_styles'];
             $sourceLabel = $htmlFilename !== null ? 'uploaded HTML ('.$htmlFilename.')' : 'pasted HTML';
 
             // A client-rendered document was rendered headlessly to recover its
@@ -830,6 +832,7 @@ class AppBuilderController extends Controller
                 extractedCss: $extractedCss,
                 extractedFonts: $extractedFonts,
                 extractedMotion: $extractedMotion,
+                extractedElementStyles: $extractedElementStyles,
                 hasImage: $attachmentBytes !== null,
             )
             : $this->buildWireframePrompt(
@@ -964,6 +967,7 @@ class AppBuilderController extends Controller
         ?string $extractedCss,
         array $extractedFonts,
         ?string $extractedMotion,
+        ?string $extractedElementStyles,
         bool $hasImage,
     ): string {
         $lines = [];
@@ -1002,9 +1006,16 @@ class AppBuilderController extends Controller
             $lines[] = $extractedCss;
             $lines[] = '```';
         }
+        if ($extractedElementStyles !== null) {
+            $lines[] = '';
+            $lines[] = 'ESTILOS POR ELEMENTO del original. En el original iban como atributos `style=` (que se eliminan al guardar); aquí ya están sacados a reglas y deduplicados, y las clases `.x1`, `.x2`… del HTML de abajo apuntan a ellas. Tradúcelas a tus propias clases con nombre — no las copies con estos nombres:';
+            $lines[] = '```css';
+            $lines[] = $extractedElementStyles;
+            $lines[] = '```';
+        }
         if ($extractedHtml) {
             $lines[] = '';
-            $lines[] = 'HTML de la página YA RENDERIZADA (el DOM real, con sus estilos en línea). Reprodúcelo sección por sección — es lo que hay que copiar:';
+            $lines[] = 'HTML de la página YA RENDERIZADA (el DOM real). Reprodúcelo sección por sección — es lo que hay que copiar. Dos cosas ya vienen resueltas: las clases `.x1`, `.x2`… apuntan a las reglas de arriba, y los `data-sp-reveal` marcan los elementos que en el original aparecen al hacer scroll (se detectaron en reposo, antes de mover la página) — CONSÉRVALOS donde están en vez de decidir tú cuáles animan:';
             $lines[] = '```html';
             $lines[] = $extractedHtml;
             $lines[] = '```';

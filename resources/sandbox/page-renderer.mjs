@@ -58,6 +58,29 @@ try {
         )
         .catch(() => {});
 
+    // AT REST, before anything is scrolled into view: whatever is transparent
+    // right now is what the page reveals as you go down it. Mark those elements
+    // with the platform's own hook, so the DOM handed to the model already
+    // carries `data-sp-reveal` on exactly the elements the original revealed —
+    // instead of the model inferring, from a frame where everything is visible,
+    // that nothing moves.
+    //
+    // Taken here rather than by rendering the page a second time and diffing:
+    // same information, half the work, and no risk of the two runs disagreeing.
+    const revealed = await page.evaluate(() => {
+        let marked = 0;
+        for (const el of document.querySelectorAll('*')) {
+            const style = getComputedStyle(el);
+            if (parseFloat(style.opacity) !== 0) continue;
+            // Content, not a closed menu or a zero-box placeholder.
+            const box = el.getBoundingClientRect();
+            if (box.height < 20 || box.width < 20) continue;
+            el.setAttribute('data-sp-reveal', '');
+            marked++;
+        }
+        return marked;
+    });
+
     // Reveal-on-scroll sections start at opacity:0 and are shown by an
     // IntersectionObserver, which never fires in a fullPage capture because the
     // viewport never moves. Without this the DOM comes back complete while the
@@ -92,8 +115,9 @@ try {
         await settle(200);
     });
 
-    const html = await page.evaluate(() => document.body?.innerHTML ?? '');
-
+    // The picture first: hoisting strips every `style=`, and the page has no
+    // stylesheet to replace them with, so a capture taken afterwards is of an
+    // unstyled document.
     if (screenshotPath) {
         try {
             await page.screenshot({ path: screenshotPath, type: 'jpeg', quality: 72, fullPage: true });
@@ -102,7 +126,45 @@ try {
         }
     }
 
-    process.stdout.write(JSON.stringify({ html }));
+    // Hoist inline styles into deduplicated rules.
+    //
+    // A React export puts its look in `style=` attributes — 577 of them on the
+    // page this was built for. The landing sanitiser strips every one, so as
+    // markup they are dead on arrival: the model has to READ them out of the
+    // prompt and re-derive a stylesheet. Converting them here turns that into
+    // transcription, and collapses the repeats (every row of a list carries the
+    // same declaration) so the DOM we hand over shrinks at the same time.
+    const styles = await page.evaluate(() => {
+        const rules = new Map();
+        let n = 0;
+
+        for (const el of document.querySelectorAll('[style]')) {
+            // `!important` here is ours: the straggler pass above is the only
+            // thing that writes it. Keeping it would hand the model a rule that
+            // pins opacity on, which is our capture trick, not the design.
+            const css = (el.getAttribute('style') || '')
+                .split(';')
+                .filter((d) => d.trim() && !d.includes('!important'))
+                .join(';')
+                .trim()
+                .replace(/\s+/g, ' ');
+            el.removeAttribute('style');
+            if (!css) continue;
+
+            let name = rules.get(css);
+            if (!name) {
+                name = `x${++n}`;
+                rules.set(css, name);
+            }
+            el.classList.add(name);
+        }
+
+        return [...rules].map(([css, name]) => `.${name}{${css}}`).join('\n');
+    });
+
+    const html = await page.evaluate(() => document.body?.innerHTML ?? '');
+
+    process.stdout.write(JSON.stringify({ html, styles, revealed }));
 } catch (error) {
     process.stderr.write(String(error?.message ?? error));
     process.exit(1);
