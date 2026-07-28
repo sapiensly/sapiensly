@@ -46,7 +46,7 @@ const { t } = useI18n();
 
 <template>
     <div
-        class="flex items-start justify-between gap-3 rounded-sp-sm border border-soft bg-navy p-5 transition-colors hover:border-accent-blue/30"
+        class="flex min-w-0 items-start justify-between gap-3 rounded-sp-sm border border-soft bg-navy p-5 transition-colors hover:border-accent-blue/30"
     >
         <Link
             :href="`/system/integrations/${integration.id}`"

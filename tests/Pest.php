@@ -1,10 +1,23 @@
 <?php
 
+use App\Enums\AgentStatus;
+use App\Enums\ChatbotStatus;
+use App\Enums\DocumentType;
 use App\Enums\MembershipRole;
 use App\Enums\MembershipStatus;
+use App\Enums\ToolType;
+use App\Enums\Visibility;
+use App\Models\Agent;
+use App\Models\App;
+use App\Models\Chat;
+use App\Models\Chatbot;
+use App\Models\Document;
+use App\Models\Integration;
+use App\Models\KnowledgeBase;
 use App\Models\McpAccessToken;
 use App\Models\Organization;
 use App\Models\OrganizationMembership;
+use App\Models\Tool;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Str;
@@ -108,6 +121,47 @@ function mcpToken(Organization $org, User $user, array $attrs = []): string
     ], $attrs));
 
     return $plain;
+}
+
+/**
+ * Fills a tenant with enough content that the list screens render ROWS rather
+ * than their empty state.
+ *
+ * Written for the responsive browser sweep, where an empty tenant makes every
+ * check vacuous: an empty state is responsive by construction, so a green
+ * sweep over one proves nothing about the screen with data in it.
+ *
+ * Names are deliberately long and realistic. Short `fake()->words(2)` names
+ * fit anywhere; what actually breaks a 390px layout is a title that wants
+ * more room than the column has.
+ */
+function seedTenantContent(Organization $org, User $user): void
+{
+    $owned = ['user_id' => $user->id, 'organization_id' => $org->id, 'visibility' => Visibility::Organization];
+
+    $longNames = [
+        'Customer Onboarding & Verification Workflow (EMEA)',
+        'Refund Eligibility Checker — Tier 2 Escalations',
+        'Warehouse Inventory Reconciliation Assistant',
+    ];
+
+    foreach ($longNames as $name) {
+        Agent::factory()->create($owned + ['name' => $name, 'status' => AgentStatus::Active]);
+        Tool::factory()->create($owned + ['name' => $name, 'type' => ToolType::RestApi]);
+        Chatbot::factory()->create($owned + ['name' => $name, 'status' => ChatbotStatus::Active]);
+        KnowledgeBase::factory()->create($owned + ['name' => $name]);
+        Integration::factory()->create($owned + ['name' => $name]);
+        App::factory()->create($owned + ['name' => $name]);
+        Chat::factory()->create($owned + ['title' => $name, 'last_message_at' => now()]);
+
+        Document::create($owned + [
+            'name' => $name.'.pdf',
+            'type' => DocumentType::Pdf,
+            'original_filename' => $name.'.pdf',
+            'file_path' => 'documents/'.Str::random(12).'.pdf',
+            'file_size' => 2_400_000,
+        ]);
+    }
 }
 
 /** @return array<string, mixed> */

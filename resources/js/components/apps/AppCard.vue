@@ -95,9 +95,9 @@ const versionPill = computed<PillStyle>(() => {
 </script>
 
 <template>
-    <Link :href="AppController.show(app.id).url" class="block">
+    <Link :href="AppController.show(app.id).url" class="block min-w-0">
         <article
-            class="group flex h-full flex-col gap-3 rounded-sp-sm border border-soft bg-navy p-5 transition-colors hover:border-accent-blue/40"
+            class="group flex h-full min-w-0 flex-col gap-3 rounded-sp-sm border border-soft bg-navy p-5 transition-colors hover:border-accent-blue/40"
         >
             <header class="flex items-start justify-between gap-3">
                 <div class="flex min-w-0 items-start gap-3">

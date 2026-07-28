@@ -24,14 +24,46 @@ use Database\Seeders\RolesAndPermissionsSeeder;
 */
 
 /**
- * A page wider than its own viewport is what produces a sideways scroll.
- * Reported as the offending width so a failure names the number, not just
- * "false is not true".
+ * Content that runs past the right edge of the viewport.
+ *
+ * NOT `scrollWidth > clientWidth`: the shell's root is `overflow-hidden`
+ * (AppLayoutV2), so anything that spills is silently CLIPPED instead of
+ * making the document scroll. That check passes on a page whose buttons and
+ * cards are sliced off — which is exactly what it did before this was
+ * rewritten. Measuring each element's right edge against the viewport is what
+ * actually catches it.
+ *
+ * Skipped: absolutely/fixed-positioned decoration (glows deliberately clipped
+ * by overflow-hidden) and anything inside a real horizontal scroller, which
+ * is a legitimate way to present a wide table.
+ *
+ * Returns the offender so a failure names it instead of saying "false".
  */
-const NO_HORIZONTAL_OVERFLOW = <<<'JS'
+const NO_CLIPPED_CONTENT = <<<'JS'
 function () {
-    const el = document.documentElement;
-    return el.scrollWidth <= el.clientWidth;
+    const vw = document.documentElement.clientWidth;
+    // Stops at <main>: the shell's scroll container is `overflow-y-auto`, and
+    // CSS computes the other axis to `auto` whenever one axis is not visible.
+    // Walking past it would treat EVERY element as "inside a scroller" and
+    // wave the whole page through — which is what it did at first.
+    const inScroller = (el) => {
+        for (let p = el.parentElement; p && p.tagName !== 'MAIN' && p !== document.body; p = p.parentElement) {
+            const ox = getComputedStyle(p).overflowX;
+            if (ox === 'auto' || ox === 'scroll') return true;
+        }
+        return false;
+    };
+    for (const el of document.querySelectorAll('body *')) {
+        const cs = getComputedStyle(el);
+        if (cs.position === 'absolute' || cs.position === 'fixed') continue;
+        if (cs.display === 'none' || cs.visibility === 'hidden' || cs.pointerEvents === 'none') continue;
+        const r = el.getBoundingClientRect();
+        if (r.width === 0 || r.height === 0) continue;
+        if (r.right > vw + 1 && !inScroller(el)) {
+            return `${el.tagName}.${(el.className || '').toString().slice(0, 70)} right=${Math.round(r.right)} vw=${vw}`;
+        }
+    }
+    return '';
 }
 JS;
 
@@ -50,7 +82,7 @@ dataset('auth screens', [
 it('never scrolls sideways on auth screens', function (string $route, string $device) {
     visit($route)->on()->{$device}()
         ->assertNoJavaScriptErrors()
-        ->assertScript(NO_HORIZONTAL_OVERFLOW);
+        ->assertScript(NO_CLIPPED_CONTENT, '');
 })->with('auth screens')->with('viewports');
 
 /**
@@ -96,13 +128,43 @@ dataset('shell screens', [
     '/tools/create',
 ]);
 
+/**
+ * Guards the sweep below. If seeding ever stops producing visible rows —
+ * a renamed column, a visibility rule, a factory change — the sweep would go
+ * back to certifying empty states and stay green while testing nothing.
+ * This is the canary for that.
+ */
+it('renders seeded rows on the list screens', function (string $route) {
+    $this->seed(RolesAndPermissionsSeeder::class);
+    $user = mcpMember($org = mcpOrg());
+    $this->actingAs($user);
+    seedTenantContent($org, $user);
+
+    visit($route)->on()->macbookAir()
+        ->assertSee('Warehouse Inventory Reconciliation Assistant');
+})->with([
+    '/agents',
+    '/tools',
+    '/chatbots',
+    '/knowledge-bases',
+    '/apps',
+    '/documents',
+    '/system/integrations',
+    '/chat',
+]);
+
 it('never scrolls sideways inside the app shell', function (string $route, string $device) {
     $this->seed(RolesAndPermissionsSeeder::class);
-    $this->actingAs(mcpMember(mcpOrg()));
+    $user = mcpMember($org = mcpOrg());
+    $this->actingAs($user);
+
+    // With rows in them — an empty list is responsive by construction and
+    // would make this sweep pass without testing anything.
+    seedTenantContent($org, $user);
 
     visit($route)->on()->{$device}()
         ->assertNoJavaScriptErrors()
-        ->assertScript(NO_HORIZONTAL_OVERFLOW);
+        ->assertScript(NO_CLIPPED_CONTENT, '');
 })->with('shell screens')->with('viewports');
 
 /*
@@ -196,8 +258,8 @@ it('scrolls the spend table on a phone instead of crushing its columns', functio
 
     visit('/system/ai-spend')->on()->iPhone15()
         ->assertSee('anthropic/claude-opus-5-20260514')
-        // The page itself must still not scroll sideways...
-        ->assertScript(NO_HORIZONTAL_OVERFLOW)
+        // The page itself must still not spill past the viewport...
+        ->assertScript(NO_CLIPPED_CONTENT, '')
         // ...while the table keeps its readable width inside a scroller.
         ->assertScript(<<<'JS'
             function () {

@@ -81,14 +81,14 @@ function tintFor(status: string) {
                 <div
                     v-for="chatbot in chatbots.data"
                     :key="chatbot.id"
-                    class="flex flex-col rounded-sp-sm border border-soft bg-navy p-5 transition-colors hover:border-accent-blue/30"
+                    class="flex min-w-0 flex-col rounded-sp-sm border border-soft bg-navy p-5 transition-colors hover:border-accent-blue/30"
                 >
                     <Link
                         :href="ChatbotController.show({ chatbot: chatbot.id }).url"
                         class="flex-1"
                     >
                         <div class="flex items-start justify-between gap-3">
-                            <div class="flex items-start gap-3">
+                            <div class="flex min-w-0 items-start gap-3">
                                 <div
                                     class="flex size-9 shrink-0 items-center justify-center rounded-xs bg-accent-blue/10 text-accent-blue"
                                 >

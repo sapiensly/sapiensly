@@ -202,10 +202,10 @@ const totalTools = computed(() =>
                     v-for="tool in tools.data"
                     :key="tool.id"
                     :href="ToolController.show({ tool: tool.id }).url"
-                    class="flex flex-col rounded-sp-sm border border-soft bg-navy p-5 transition-colors hover:border-accent-blue/30"
+                    class="flex min-w-0 flex-col rounded-sp-sm border border-soft bg-navy p-5 transition-colors hover:border-accent-blue/30"
                 >
                     <div class="flex items-start justify-between gap-3">
-                        <div class="flex items-start gap-3">
+                        <div class="flex min-w-0 items-start gap-3">
                             <div
                                 class="flex size-9 shrink-0 items-center justify-center rounded-xs"
                                 :style="{

@@ -15,8 +15,17 @@ defineProps<Props>();
 </script>
 
 <template>
-    <header class="flex items-start justify-between gap-4">
-        <div class="space-y-1">
+    <!--
+      A title plus two action buttons does not fit a phone on one line, and the
+      actions being `shrink-0` meant they ran off the right edge — clipped by
+      the shell's `overflow-hidden` rather than scrollable, so they were simply
+      unreachable. Below `sm` the header stacks and the actions wrap; from `sm`
+      up it is the original single row.
+    -->
+    <header
+        class="flex flex-col items-start justify-between gap-3 sm:flex-row sm:gap-4"
+    >
+        <div class="min-w-0 space-y-1">
             <h1 class="text-[22px] font-semibold leading-tight text-ink">
                 {{ title }}
             </h1>
@@ -25,7 +34,10 @@ defineProps<Props>();
             </p>
         </div>
 
-        <div v-if="$slots.actions" class="flex shrink-0 items-center gap-2">
+        <div
+            v-if="$slots.actions"
+            class="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:shrink-0 sm:flex-nowrap"
+        >
             <slot name="actions" />
         </div>
     </header>
