@@ -75,6 +75,27 @@ it('reads period from a request, honouring legacy days links', function () {
         ->and(SpendPeriod::fromRequest(Request::create('/system/ai-spend'))->key)->toBe('30d');
 });
 
+it('states the concrete window it resolved to, and the zone it cut it in', function () {
+    // "This month" is a promise; the dates are what a reader checks against an
+    // invoice. The zone matters because the buckets are cut on the app's clock:
+    // an hourly chart labelled "09:00" with no zone is wrong for most readers.
+    expect(SpendPeriod::fromKey('month')->toArray())->toMatchArray([
+        'from' => '2026-07-01',
+        'to' => '2026-07-15',
+        'timezone' => 'UTC',
+    ]);
+
+    // A single-day window says one date, not a range of one.
+    $today = SpendPeriod::fromKey('today')->toArray();
+    expect($today['from'])->toBe($today['to'])->toBe('2026-07-15');
+
+    // And a window that straddles a boundary still ends today.
+    expect(SpendPeriod::fromKey('90d')->toArray())->toMatchArray([
+        'from' => '2026-04-17',
+        'to' => '2026-07-15',
+    ]);
+});
+
 it('offers every window in the picker and keys match', function () {
     expect(SpendPeriod::keys())->toBe(['today', 'week', 'month', '7d', '30d', '90d']);
 

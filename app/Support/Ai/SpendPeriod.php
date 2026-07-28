@@ -21,13 +21,18 @@ final class SpendPeriod
     /** @var list<int> */
     private const ROLLING_DAYS = [7, 30, 90];
 
+    /** The last day of every window is today; only the start moves. */
+    public readonly Carbon $until;
+
     private function __construct(
         public readonly string $key,
         public readonly string $label,
         public readonly Carbon $since,
         public readonly int $buckets,
         public readonly bool $hourly,
-    ) {}
+    ) {
+        $this->until = Carbon::today();
+    }
 
     /**
      * Normalise whatever a caller has: an already-built period, a period key, or
@@ -164,7 +169,7 @@ final class SpendPeriod
     }
 
     /**
-     * @return array{key: string, label: string, granularity: string, since: string}
+     * @return array{key: string, label: string, granularity: string, since: string, from: string, to: string, timezone: string}
      */
     public function toArray(): array
     {
@@ -173,6 +178,13 @@ final class SpendPeriod
             'label' => $this->label,
             'granularity' => $this->granularity(),
             'since' => $this->since->toDateTimeString(),
+            // The concrete window, for a dashboard to state rather than imply.
+            'from' => $this->since->toDateString(),
+            'to' => $this->until->toDateString(),
+            // Buckets are cut on the application's clock, not the reader's. An
+            // hourly chart labelled "09:00" with no zone reads as local time and
+            // is wrong for everyone outside it.
+            'timezone' => $this->since->format('T'),
         ];
     }
 

@@ -55,6 +55,10 @@ interface Period {
     label: string;
     granularity: 'hour' | 'day';
     since: string;
+    from: string;
+    to: string;
+    /** The zone the buckets were cut in — the app's, never the reader's. */
+    timezone: string;
 }
 
 interface Report {
@@ -168,6 +172,27 @@ function shortDate(iso: string): string {
     return new Date(`${iso}T00:00:00`).toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
 }
 
+/**
+ * The window the picker actually resolved to. "Last 30 days" is a promise;
+ * this is the dates, so a reader can check it against an invoice — and the
+ * zone, because the buckets are cut on the app's clock, not the reader's.
+ */
+const rangeCaption = computed(() => {
+    const { from, to, timezone } = props.period;
+    const span = from === to ? longDate(from) : `${longDate(from)} – ${longDate(to)}`;
+    return `${span} · ${timezone}`;
+});
+
+/** Years only when the window straddles one, so the common case stays short. */
+function longDate(iso: string): string {
+    const sameYear = props.period.from.slice(0, 4) === props.period.to.slice(0, 4);
+    return new Date(`${iso}T00:00:00`).toLocaleDateString(undefined, {
+        day: 'numeric',
+        month: 'short',
+        ...(sameYear ? {} : { year: 'numeric' }),
+    });
+}
+
 // "What models did we spend on" and "what did we spend them on" are two
 // readings of the same rows, so they share a card and swap the list.
 const serviceBreakdown = ref<'models' | 'artifacts'>('models');
@@ -198,29 +223,37 @@ function artifactCaption(a: ArtifactRow): string | null {
           dropped below `sm` and left to the layout; `sm` and up is unchanged.
         -->
         <div class="flex flex-col gap-6 px-0 py-4 sm:p-6">
-            <PageHeader title="AI Spend" :description="`${scopeLabel} · ${period.label.toLowerCase()}`">
+            <!-- The window is stated once, under the picker, with real dates. -->
+            <PageHeader title="AI Spend" :description="scopeLabel">
                 <template #actions>
                     <!--
                       Six windows do not fit a phone in one row, and wrapping a
                       pill group splits its border in half. Scroll it instead —
                       the same treatment the models table below already gets.
                     -->
-                    <div class="-mx-1 max-w-full overflow-x-auto px-1">
-                        <div class="inline-flex w-max items-center rounded-pill border border-medium bg-surface p-0.5">
-                            <Link
-                                v-for="p in periods"
-                                :key="p.key"
-                                :href="periodHref(p.key)"
-                                preserve-scroll
-                                :title="p.label"
-                                :class="[
-                                    'whitespace-nowrap rounded-pill px-3 py-1 text-xs transition-colors',
-                                    p.key === period.key ? 'bg-accent-blue/15 text-accent-blue' : 'text-ink-muted hover:text-ink',
-                                ]"
+                    <div class="flex flex-col items-end gap-1">
+                        <div class="-mx-1 max-w-full overflow-x-auto px-1">
+                            <div
+                                class="inline-flex w-max items-center rounded-pill border border-medium bg-surface p-0.5"
                             >
-                                {{ p.short }}
-                            </Link>
+                                <Link
+                                    v-for="p in periods"
+                                    :key="p.key"
+                                    :href="periodHref(p.key)"
+                                    preserve-scroll
+                                    :title="p.label"
+                                    :class="[
+                                        'whitespace-nowrap rounded-pill px-3 py-1 text-xs transition-colors',
+                                        p.key === period.key
+                                            ? 'bg-accent-blue/15 text-accent-blue'
+                                            : 'text-ink-muted hover:text-ink',
+                                    ]"
+                                >
+                                    {{ p.short }}
+                                </Link>
+                            </div>
                         </div>
+                        <p class="px-1 text-right text-[11px] tabular-nums text-ink-subtle">{{ rangeCaption }}</p>
                     </div>
                 </template>
             </PageHeader>

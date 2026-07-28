@@ -52,6 +52,21 @@ it('scales both axes of the spend chart to the data', function () {
         ->assertNoJavaScriptErrors();
 });
 
+it('states the window the picker resolved to, in the zone it was cut in', function () {
+    $this->seed(RolesAndPermissionsSeeder::class);
+    $this->actingAs(mcpMember(mcpOrg()));
+    $this->travelTo('2026-07-28 12:00:00');
+
+    // "Last 7 days" is a phrase; the dates under the picker are the fact, and
+    // the zone is what stops an hourly reading being wrong for most readers.
+    visit('/system/ai-spend?period=7d')
+        ->assertSee('Jul 22 – Jul 28 · UTC')
+        // A single-day window says one date, not a range of one.
+        ->click('a[href*="period=today"]')
+        ->assertSee('Jul 28 · UTC')
+        ->assertNoJavaScriptErrors();
+});
+
 it('reads out a data point on hover', function () {
     $this->seed(RolesAndPermissionsSeeder::class);
     $user = mcpMember($org = mcpOrg());
