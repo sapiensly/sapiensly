@@ -1,7 +1,9 @@
 <?php
 
 use App\Models\AiUsageEvent;
+use App\Models\User;
 use Database\Seeders\RolesAndPermissionsSeeder;
+use Illuminate\Support\Facades\Hash;
 
 /*
 |--------------------------------------------------------------------------
@@ -73,10 +75,13 @@ dataset('viewports', [
     'desktop (1440)' => 'macbookAir',
 ]);
 
+/** The auth screens a guest can reach directly. */
 dataset('auth screens', [
     '/login',
     '/register',
     '/forgot-password',
+    // Any token renders the form; Fortify only validates it on submit.
+    '/reset-password/2f6c9a1e-token',
 ]);
 
 it('never scrolls sideways on auth screens', function (string $route, string $device) {
@@ -84,6 +89,50 @@ it('never scrolls sideways on auth screens', function (string $route, string $de
         ->assertNoJavaScriptErrors()
         ->assertScript(NO_CLIPPED_CONTENT, '');
 })->with('auth screens')->with('viewports');
+
+/*
+ * The remaining three auth screens are unreachable as a guest — each needs a
+ * specific session state, so they get the setup rather than being quietly
+ * dropped from the sweep.
+ */
+
+it('never scrolls sideways on the email verification notice', function (string $device) {
+    $this->actingAs(User::factory()->unverified()->create());
+
+    visit('/email/verify')->on()->{$device}()
+        ->assertNoJavaScriptErrors()
+        ->assertScript(NO_CLIPPED_CONTENT, '');
+})->with('viewports');
+
+it('never scrolls sideways on the password confirmation screen', function (string $device) {
+    $this->actingAs(User::factory()->create());
+
+    visit('/user/confirm-password')->on()->{$device}()
+        ->assertNoJavaScriptErrors()
+        ->assertScript(NO_CLIPPED_CONTENT, '');
+})->with('viewports');
+
+it('never scrolls sideways on the two-factor challenge', function (string $device) {
+    // Reached only by logging in as a user with 2FA confirmed — Fortify puts
+    // the pending id in the session, so it cannot be visited directly.
+    $user = User::factory()->create([
+        'email' => 'two-factor@example.com',
+        'password' => Hash::make('password'),
+        'two_factor_secret' => encrypt('JBSWY3DPEHPK3PXP'),
+        'two_factor_recovery_codes' => encrypt(json_encode(['aaaa-bbbb'])),
+        'two_factor_confirmed_at' => now(),
+    ]);
+
+    visit('/login')->on()->{$device}()
+        ->fill('email', $user->email)
+        ->fill('password', 'password')
+        // By selector, not by label: "Log in" is both the card heading and the
+        // button, and the text locator resolves to the heading.
+        ->click('button[type="submit"]')
+        ->assertPathIs('/two-factor-challenge')
+        ->assertNoJavaScriptErrors()
+        ->assertScript(NO_CLIPPED_CONTENT, '');
+})->with('viewports');
 
 /**
  * Every parameter-free page the admin-v2 shell serves. The phone width is
