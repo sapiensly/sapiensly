@@ -377,7 +377,14 @@ defineExpose({ focus });
             </p>
 
             <div class="flex items-center justify-between gap-2 px-1 pt-0.5">
-                <div class="flex items-center gap-0.5">
+                <!--
+                  `min-w-0`: without it this group keeps `min-width: auto` and
+                  claims the model label's full width, so the send button — the
+                  one control that must always be reachable — was the thing that
+                  got pushed off the edge. A long label like
+                  "DeepSeek: DeepSeek V4 Pro" is enough to trigger it on a phone.
+                -->
+                <div class="flex min-w-0 items-center gap-0.5">
                     <button
                         type="button"
                         :title="t('chat.attach')"
@@ -414,9 +421,11 @@ defineExpose({ focus });
                                     v-else
                                     class="size-3.5 text-accent-blue"
                                 />
-                                <span class="max-w-[200px] truncate">{{
-                                    pickerLabel
-                                }}</span>
+                                <span
+                                    data-testid="chat-model-label"
+                                    class="max-w-[200px] truncate"
+                                    >{{ pickerLabel }}</span
+                                >
                                 <ChevronDown class="size-3.5 opacity-50" />
                             </button>
                         </DropdownMenuTrigger>
@@ -583,7 +592,7 @@ defineExpose({ focus });
                     v-if="busy"
                     type="button"
                     :title="t('chat.composer.stop')"
-                    class="inline-flex size-8 items-center justify-center rounded-full bg-accent-blue text-white transition-colors hover:bg-accent-blue-hover"
+                    class="inline-flex size-8 shrink-0 items-center justify-center rounded-full bg-accent-blue text-white transition-colors hover:bg-accent-blue-hover"
                     @click="emit('stop')"
                 >
                     <Square class="size-3 fill-current" />
@@ -591,9 +600,10 @@ defineExpose({ focus });
                 <button
                     v-else
                     type="button"
+                    data-testid="chat-send"
                     :disabled="!canSubmit"
                     :title="t('chat.composer.send')"
-                    class="inline-flex size-8 items-center justify-center rounded-full bg-accent-blue text-white transition-all hover:bg-accent-blue-hover disabled:cursor-not-allowed disabled:bg-medium disabled:text-ink-subtle"
+                    class="inline-flex size-8 shrink-0 items-center justify-center rounded-full bg-accent-blue text-white transition-all hover:bg-accent-blue-hover disabled:cursor-not-allowed disabled:bg-medium disabled:text-ink-subtle"
                     @click="submit"
                 >
                     <ArrowUp class="size-[18px]" :stroke-width="2.5" />

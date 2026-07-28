@@ -401,6 +401,48 @@ it('scrolls the spend table on a phone instead of crushing its columns', functio
         ->assertNoJavaScriptErrors();
 });
 
+it('keeps the chat send button on screen under a long model name', function () {
+    $this->seed(RolesAndPermissionsSeeder::class);
+    $user = mcpMember($org = mcpOrg());
+    $this->actingAs($user);
+    $seeded = seedTenantContent($org, $user);
+
+    // The label is widened in the DOM rather than seeded: it comes from the
+    // server's model list, and the bug is a layout rule, not a data one. A
+    // real label like "DeepSeek: DeepSeek V4 Pro" is enough to trigger it.
+    //
+    // Send is the one control in this row that must never be lost — before the
+    // fix it was pushed to 397px in a 390px viewport and simply disappeared.
+    $page = visit("/chat/{$seeded['chat']->id}")->on()->iPhone15();
+
+    // Wait for the composer to mount before measuring — without this the script
+    // ran against a half-rendered page and the test passed or failed depending
+    // on machine load.
+    $page->assertPresent('[data-testid="chat-send"]');
+
+    $result = $page->script(<<<'JS'
+        (function () {
+            const label = document.querySelector('[data-testid="chat-model-label"]');
+            if (!label) return 'model picker label not found';
+
+            label.textContent = 'DeepSeek: DeepSeek V4 Pro Extended Reasoning';
+
+            // By test id, not by shape: `button.size-8.rounded-full` matches
+            // other buttons on the page, and selecting one of those made an
+            // earlier version of this test pass without the fix.
+            const send = document.querySelector('[data-testid="chat-send"]');
+            if (!send) return 'send button not found';
+
+            const right = send.getBoundingClientRect().right;
+            const vw = document.documentElement.clientWidth;
+
+            return right <= vw + 1 ? '' : `send button at ${Math.round(right)}, viewport ${vw}`;
+        })()
+        JS);
+
+    expect($result)->toBe('');
+});
+
 it('keeps the persistent sidebar column at lg and above', function () {
     $this->seed(RolesAndPermissionsSeeder::class);
     $this->actingAs(mcpMember(mcpOrg()));
