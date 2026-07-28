@@ -6,6 +6,7 @@ use App\Services\Security\Ssrf\SafeHttpClient;
 use App\Services\Security\Ssrf\SsrfBlockedException;
 use App\Services\Security\Ssrf\SsrfGuard;
 use App\Support\Landing\BundledDesign;
+use App\Support\Landing\BundledMotion;
 use App\Support\Landing\LandingArtifact;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\RequestException;
@@ -68,7 +69,7 @@ class WireframeImporter
     ) {}
 
     /**
-     * @return array{image_url: ?string, title: ?string, description: ?string, text: ?string, cleaned_html: ?string, screenshot_path: ?string, fonts: array<int, string>, stylesheet: ?string, is_landing: bool, source_url: ?string}
+     * @return array{image_url: ?string, title: ?string, description: ?string, text: ?string, cleaned_html: ?string, screenshot_path: ?string, fonts: array<int, string>, motion: ?string, stylesheet: ?string, is_landing: bool, source_url: ?string}
      */
     public function fromUrl(string $url): array
     {
@@ -112,6 +113,7 @@ class WireframeImporter
                 'cleaned_html' => null,
                 'screenshot_path' => null,
                 'fonts' => [],
+                'motion' => null,
                 'stylesheet' => null,
                 'is_landing' => false,
                 'source_url' => $url,
@@ -128,7 +130,7 @@ class WireframeImporter
     }
 
     /**
-     * @return array{image_url: ?string, title: ?string, description: ?string, text: ?string, cleaned_html: ?string, screenshot_path: ?string, fonts: array<int, string>, stylesheet: ?string, is_landing: bool, source_url: ?string}
+     * @return array{image_url: ?string, title: ?string, description: ?string, text: ?string, cleaned_html: ?string, screenshot_path: ?string, fonts: array<int, string>, motion: ?string, stylesheet: ?string, is_landing: bool, source_url: ?string}
      */
     public function fromHtml(string $html): array
     {
@@ -136,7 +138,7 @@ class WireframeImporter
     }
 
     /**
-     * @return array{image_url: ?string, title: ?string, description: ?string, text: ?string, cleaned_html: ?string, screenshot_path: ?string, fonts: array<int, string>, stylesheet: ?string, is_landing: bool, source_url: ?string}
+     * @return array{image_url: ?string, title: ?string, description: ?string, text: ?string, cleaned_html: ?string, screenshot_path: ?string, fonts: array<int, string>, motion: ?string, stylesheet: ?string, is_landing: bool, source_url: ?string}
      */
     private function extract(string $html, ?string $baseUrl): array
     {
@@ -243,6 +245,8 @@ class WireframeImporter
             'cleaned_html' => $cleanedHtml,
             'screenshot_path' => $screenshotPath,
             'fonts' => $bundle['fonts'] ?? [],
+            // The rendered DOM is one frame; the movement lives in the sources.
+            'motion' => $bundle !== null ? BundledMotion::brief($html) : null,
             // stripNoise() drops <style> along with the rest of the noise, which
             // is right when inferring an app's STRUCTURE from a mockup and wrong
             // when reproducing a design: there the stylesheet IS the artifact —

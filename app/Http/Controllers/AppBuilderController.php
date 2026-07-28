@@ -720,6 +720,7 @@ class AppBuilderController extends Controller
         $extractedCss = null;
         $extractedIsLanding = false;
         $extractedFonts = [];
+        $extractedMotion = null;
         $sourceLabel = null;
 
         if ($data['source'] === 'image') {
@@ -773,6 +774,7 @@ class AppBuilderController extends Controller
             $extractedCss = $parsed['stylesheet'];
             $extractedIsLanding = $parsed['is_landing'];
             $extractedFonts = $parsed['fonts'];
+            $extractedMotion = $parsed['motion'];
             $sourceLabel = $htmlFilename !== null ? 'uploaded HTML ('.$htmlFilename.')' : 'pasted HTML';
 
             // A client-rendered document was rendered headlessly to recover its
@@ -827,6 +829,7 @@ class AppBuilderController extends Controller
                 extractedHtml: $extractedHtml,
                 extractedCss: $extractedCss,
                 extractedFonts: $extractedFonts,
+                extractedMotion: $extractedMotion,
                 hasImage: $attachmentBytes !== null,
             )
             : $this->buildWireframePrompt(
@@ -960,6 +963,7 @@ class AppBuilderController extends Controller
         ?string $extractedHtml,
         ?string $extractedCss,
         array $extractedFonts,
+        ?string $extractedMotion,
         bool $hasImage,
     ): string {
         $lines = [];
@@ -1008,6 +1012,10 @@ class AppBuilderController extends Controller
             $lines[] = '';
             $lines[] = 'Texto visible de la página:';
             $lines[] = $extractedText;
+        }
+        if ($extractedMotion !== null) {
+            $lines[] = '';
+            $lines[] = $extractedMotion;
         }
         $lines[] = '';
         $lines[] = 'Cómo reconstruirla:';
