@@ -125,6 +125,41 @@ function periodHref(key: string): string {
 /** A single-day window is charted hourly, so the heading has to follow. */
 const seriesHeading = computed(() => (props.period.granularity === 'hour' ? 'Hourly spend' : 'Daily spend'));
 
+/**
+ * Bucket labels come back as 'YYYY-MM-DD HH:00' or 'YYYY-MM-DD'. The axis only
+ * has room for the part that varies within the window.
+ */
+const chartLabels = computed(() =>
+    props.report.series.labels.map((label) => {
+        if (props.period.granularity === 'hour') return label.slice(11);
+        return new Date(`${label}T00:00:00`).toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
+    }),
+);
+
+/** The tooltip has room for the whole bucket — "15 Jul, 09:00", not just "09:00". */
+const chartTooltipLabels = computed(() =>
+    props.report.series.labels.map((label) => {
+        const day = new Date(`${label.slice(0, 10)}T00:00:00`).toLocaleDateString(undefined, {
+            day: 'numeric',
+            month: 'short',
+        });
+        return props.period.granularity === 'hour' ? `${day}, ${label.slice(11)}` : day;
+    }),
+);
+
+/**
+ * Axis money, not table money: `money()` pads sub-dollar values to four
+ * decimals, which turns a tick into "$0.1500" and crowds the column.
+ */
+function axisMoney(n: number): string {
+    if (n === 0) return '$0';
+    if (n >= 10) return '$' + n.toFixed(0);
+    // Fixed two decimals down to a cent so the ticks line up as a column:
+    // trimming zeros put "$1.20" next to "$0.9".
+    if (n >= 0.01) return '$' + n.toFixed(2);
+    return '$' + parseFloat(n.toFixed(4)).toString();
+}
+
 function shortDate(iso: string): string {
     return new Date(`${iso}T00:00:00`).toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
 }
@@ -234,7 +269,13 @@ function artifactCaption(a: ArtifactRow): string | null {
                         </span>
                     </div>
                 </header>
-                <BigChart :series="chartSeries" :height="220" />
+                <BigChart
+                    :series="chartSeries"
+                    :height="220"
+                    :labels="chartLabels"
+                    :tooltip-labels="chartTooltipLabels"
+                    :format-value="axisMoney"
+                />
             </section>
 
             <!-- Budget (organization scope only) -->

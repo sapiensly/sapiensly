@@ -47,6 +47,22 @@ function num(n: number): string {
     return new Intl.NumberFormat().format(n);
 }
 
+/** Axis money: `money()` pads sub-dollar values to four decimals, which crowds the tick column. */
+function axisMoney(n: number): string {
+    if (n === 0) return '$0';
+    if (n >= 10) return '$' + n.toFixed(0);
+    // Fixed two decimals down to a cent so the ticks line up as a column:
+    // trimming zeros put "$1.20" next to "$0.9".
+    if (n >= 0.01) return '$' + n.toFixed(2);
+    return '$' + parseFloat(n.toFixed(4)).toString();
+}
+
+const chartLabels = computed(() =>
+    props.report.series.labels.map((d) =>
+        new Date(`${d}T00:00:00`).toLocaleDateString(undefined, { day: 'numeric', month: 'short' }),
+    ),
+);
+
 const chartSeries = computed(() => [
     { label: 'System', tint: 'var(--sp-accent-blue)', points: props.report.series.system },
     { label: 'Own (BYOK)', tint: 'var(--sp-spectrum-magenta)', points: props.report.series.own },
@@ -121,7 +137,7 @@ const chartSeries = computed(() => [
 
             <section class="rounded-sp-sm border border-soft bg-navy p-5">
                 <h2 class="mb-3 text-sm font-medium text-ink">Daily spend (system vs own)</h2>
-                <BigChart :series="chartSeries" :height="220" />
+                <BigChart :series="chartSeries" :height="220" :labels="chartLabels" :format-value="axisMoney" />
             </section>
 
             <!-- Spend by service (each with its own per-model breakdown) -->
