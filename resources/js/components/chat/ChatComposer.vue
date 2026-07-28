@@ -388,7 +388,7 @@ defineExpose({ focus });
                     <button
                         type="button"
                         :title="t('chat.attach')"
-                        class="inline-flex size-8 items-center justify-center rounded-full text-ink-muted transition-colors hover:bg-white/10 hover:text-ink disabled:opacity-40"
+                        class="inline-flex size-8 shrink-0 items-center justify-center rounded-full text-ink-muted transition-colors hover:bg-white/10 hover:text-ink disabled:opacity-40"
                         :disabled="uploading"
                         @click="pickFiles"
                     >
@@ -411,7 +411,7 @@ defineExpose({ focus });
                         <DropdownMenuTrigger as-child>
                             <button
                                 type="button"
-                                class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1.5 text-[13px] font-medium text-ink-muted transition-colors hover:bg-white/10 hover:text-ink"
+                                class="inline-flex min-w-0 items-center gap-1.5 rounded-full px-2.5 py-1.5 text-[13px] font-medium text-ink-muted transition-colors hover:bg-white/10 hover:text-ink"
                             >
                                 <Bot
                                     v-if="selectedAgent"
@@ -511,7 +511,7 @@ defineExpose({ focus });
                         "
                         :aria-pressed="searchActive"
                         :class="[
-                            'inline-flex items-center gap-1.5 rounded-full px-2.5 py-1.5 text-[13px] font-medium transition-colors disabled:cursor-not-allowed disabled:hover:bg-transparent',
+                            'inline-flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1.5 text-[13px] font-medium transition-colors disabled:cursor-not-allowed disabled:hover:bg-transparent',
                             selectedAgent ? 'disabled:opacity-100' : '',
                             searchActive
                                 ? 'bg-accent-blue/15 text-accent-blue'

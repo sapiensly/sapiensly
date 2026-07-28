@@ -433,10 +433,31 @@ it('keeps the chat send button on screen under a long model name', function () {
             const send = document.querySelector('[data-testid="chat-send"]');
             if (!send) return 'send button not found';
 
-            const right = send.getBoundingClientRect().right;
+            const sendBox = send.getBoundingClientRect();
             const vw = document.documentElement.clientWidth;
 
-            return right <= vw + 1 ? '' : `send button at ${Math.round(right)}, viewport ${vw}`;
+            if (sendBox.right > vw + 1) {
+                return `send button at ${Math.round(sendBox.right)}, viewport ${vw}`;
+            }
+
+            // Fitting is not enough: the first fix let the left group shrink
+            // while its children kept their size, so they spilled out of it and
+            // sat ON TOP of the send button. Nothing in the row may overlap it.
+            for (const el of document.querySelectorAll('button, span, svg')) {
+                if (el === send || send.contains(el)) continue;
+
+                const b = el.getBoundingClientRect();
+                if (b.width === 0 || b.height === 0) continue;
+
+                const overlaps = b.left < sendBox.right && b.right > sendBox.left
+                    && b.top < sendBox.bottom && b.bottom > sendBox.top;
+
+                if (overlaps) {
+                    return `${el.tagName}.${(el.className || '').toString().slice(0, 40)} overlaps the send button`;
+                }
+            }
+
+            return '';
         })()
         JS);
 
