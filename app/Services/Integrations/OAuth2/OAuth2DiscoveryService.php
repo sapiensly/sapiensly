@@ -10,6 +10,8 @@ use Illuminate\Support\Str;
  * Turns a single URL into a complete OAuth 2.0 Authorization Code config by
  * following the discovery chain MCP servers expose:
  *
+ *   0. The resource's own 401 challenge — `WWW-Authenticate` names where its
+ *      metadata really lives (RFC 9728 §5.1) and which scopes it accepts.
  *   1. Protected Resource Metadata (RFC 9728) — find the authorization server.
  *   2. Authorization Server Metadata (RFC 8414 / OpenID Discovery) — find the
  *      authorize, token and (optional) dynamic registration endpoints.
@@ -54,7 +56,13 @@ class OAuth2DiscoveryService
             throw new \RuntimeException(__('Could not find the authorize and token endpoints for this server.'));
         }
 
-        $scope = $this->defaultScope($metadata);
+        // The RESOURCE decides which scopes reach it (RFC 9728 §2 scopes_supported,
+        // or the scope hint on its 401 challenge); the authorization server's own
+        // scopes_supported is a superset across every resource it fronts. Prefer
+        // the resource's answer — one shared AS (api.anthropic.com) fronts many
+        // MCP servers, and its catch-all metadata omits the per-resource scopes
+        // entirely, which would mint a token that the resource then rejects.
+        $scope = $discovered['scope'] !== '' ? $discovered['scope'] : $this->defaultScope($metadata);
         $pkce = $this->supportsPkce($metadata);
 
         $authConfig = [
@@ -99,19 +107,93 @@ class OAuth2DiscoveryService
      * to treating the resource origin as the issuer when no Protected Resource
      * Metadata document is published.
      *
-     * @return array{issuer: string, is_mcp: bool}
+     * @return array{issuer: string, is_mcp: bool, scope: string}
      */
     private function discoverAuthorizationServer(string $resourceUrl): array
     {
-        foreach ($this->protectedResourceCandidates($resourceUrl) as $candidate) {
+        $challenge = $this->probeUnauthorized($resourceUrl);
+
+        // RFC 9728 §5.1: the 401's `resource_metadata` parameter is the
+        // AUTHORITATIVE location of the metadata document — the well-known
+        // candidates below are only a guess for servers that omit the header.
+        // Real deployments publish it off that guess (Anthropic serves
+        // /v1/design/.well-known/oauth-protected-resource — the well-known
+        // segment as a path SUFFIX, which RFC 8414's prefix form never finds).
+        $candidates = $this->protectedResourceCandidates($resourceUrl);
+        if ($challenge['resource_metadata'] !== null) {
+            array_unshift($candidates, $challenge['resource_metadata']);
+        }
+
+        foreach ($candidates as $candidate) {
             $metadata = $this->fetchJson($candidate);
             $servers = $metadata['authorization_servers'] ?? null;
             if (is_array($servers) && ! empty($servers[0])) {
-                return ['issuer' => rtrim((string) $servers[0], '/'), 'is_mcp' => true];
+                $scopes = $metadata['scopes_supported'] ?? null;
+
+                return [
+                    'issuer' => rtrim((string) $servers[0], '/'),
+                    'is_mcp' => true,
+                    'scope' => is_array($scopes) && $scopes !== []
+                        ? implode(' ', array_map('strval', $scopes))
+                        : $challenge['scope'],
+                ];
             }
         }
 
-        return ['issuer' => $this->origin($resourceUrl), 'is_mcp' => false];
+        return ['issuer' => $this->origin($resourceUrl), 'is_mcp' => false, 'scope' => $challenge['scope']];
+    }
+
+    /**
+     * Ask the resource for its 401 challenge and parse the `WWW-Authenticate`
+     * header. MCP's Streamable HTTP transport answers GET with 405, so the probe
+     * must POST; an empty object is rejected by the auth layer before any
+     * handler runs, so this creates no session and has no side effects.
+     *
+     * The returned metadata URL is attacker-influenced input (a remote header),
+     * so it is confined to the resource's own origin — a server may not point
+     * discovery at a host it doesn't control. SsrfGuard still applies on fetch.
+     *
+     * @return array{resource_metadata: ?string, scope: string}
+     */
+    private function probeUnauthorized(string $resourceUrl): array
+    {
+        $none = ['resource_metadata' => null, 'scope' => ''];
+
+        try {
+            $this->ssrfGuard->assertHostAllowed($resourceUrl);
+        } catch (\RuntimeException) {
+            return $none;
+        }
+
+        try {
+            $response = Http::timeout(self::TIMEOUT_SECONDS)
+                ->withHeaders(['Accept' => 'application/json, text/event-stream'])
+                ->post($resourceUrl, new \stdClass);
+        } catch (\Throwable) {
+            return $none;
+        }
+
+        if ($response->status() !== 401) {
+            return $none;
+        }
+
+        $header = (string) $response->header('WWW-Authenticate');
+        if ($header === '') {
+            return $none;
+        }
+
+        $scope = preg_match('/\bscope="([^"]*)"/i', $header, $m) ? trim($m[1]) : '';
+
+        if (! preg_match('/\bresource_metadata="([^"]+)"/i', $header, $m)) {
+            return ['resource_metadata' => null, 'scope' => $scope];
+        }
+
+        $url = trim($m[1]);
+
+        return [
+            'resource_metadata' => $this->origin($url) === $this->origin($resourceUrl) ? $url : null,
+            'scope' => $scope,
+        ];
     }
 
     /**
@@ -123,9 +205,24 @@ class OAuth2DiscoveryService
     {
         foreach ($this->metadataCandidates($issuer) as $candidate) {
             $metadata = $this->fetchJson($candidate);
-            if (is_array($metadata) && ! empty($metadata['token_endpoint'])) {
-                return $metadata;
+            if (! is_array($metadata) || empty($metadata['token_endpoint'])) {
+                continue;
             }
+
+            // RFC 8414 §3.3: the document's `issuer` MUST match the issuer it
+            // was fetched for. Without this check a shared host's catch-all
+            // metadata is accepted for ANY resource on it — api.anthropic.com
+            // serves a document at the origin whose issuer is
+            // ".../mcp/gdrive", which would silently configure the wrong
+            // authorization server for every other MCP server on that host.
+            // Absent `issuer` stays permissive: servers that predate RFC 8414
+            // omit it, and rejecting them would break working integrations.
+            $declared = $metadata['issuer'] ?? null;
+            if (is_string($declared) && $declared !== '' && rtrim($declared, '/') !== rtrim($issuer, '/')) {
+                continue;
+            }
+
+            return $metadata;
         }
 
         throw new \RuntimeException(__('No OAuth 2.0 metadata found at this URL. The server may not support discovery — enter the endpoints manually.'));
