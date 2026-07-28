@@ -3,8 +3,10 @@
 use App\Models\AiUsageEvent;
 use App\Models\App;
 use App\Models\User;
+use App\Services\Manifest\AppManifestService;
 use Database\Seeders\RolesAndPermissionsSeeder;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Str;
 
 /*
 |--------------------------------------------------------------------------
@@ -551,4 +553,100 @@ it('keeps the persistent sidebar column at lg and above', function () {
         // on a first visit even though the nav is fully there.
         ->assertPresent('aside.sp-glass-sidebar a[href="/knowledge-bases"]')
         ->assertNoJavaScriptErrors();
+});
+
+/**
+ * The app builder. It used to be exempt (DesktopOnlyNotice said so out loud),
+ * and at 390 its header ran to 776px — the five labelled view tabs alone were
+ * 699. It is in scope now; only its fine-tune canvas stays a desktop tool, and
+ * that mode's toggle is hidden below `lg` rather than left to fail silently.
+ */
+it('never scrolls sideways in the app builder', function (string $device) {
+    $this->seed(RolesAndPermissionsSeeder::class);
+    $user = mcpMember($org = mcpOrg());
+    $this->actingAs($user);
+
+    $app = App::factory()->create([
+        'user_id' => $user->id,
+        'organization_id' => $org->id,
+        // A long name is the realistic case and the one that pushed the header.
+        'name' => 'Refund Eligibility Checker — Tier 2 Escalations',
+    ]);
+    app(AppManifestService::class)->createVersion($app, [
+        'schema_version' => '1.0.0',
+        'id' => $app->id,
+        'slug' => 'refunds',
+        'name' => $app->name,
+        'version' => 1,
+        'objects' => [[
+            'id' => 'obj_'.strtolower((string) Str::ulid()),
+            'slug' => 'reembolsos',
+            'name' => 'Reembolso',
+            'fields' => [[
+                'id' => 'fld_'.strtolower((string) Str::ulid()),
+                'slug' => 'cliente', 'name' => 'Cliente', 'type' => 'string',
+            ]],
+        ]],
+        'pages' => [],
+        'permissions' => ['roles' => [['id' => 'rol_'.strtolower((string) Str::ulid()), 'slug' => 'admin', 'name' => 'Admin']]],
+    ], $user);
+
+    visit("/apps/{$app->id}/builder")->on()->{$device}()
+        ->assertNoJavaScriptErrors()
+        ->assertScript(NO_CLIPPED_CONTENT, '');
+})->with('viewports');
+
+it('does not offer the workflow editor on a phone', function () {
+    $this->seed(RolesAndPermissionsSeeder::class);
+    $user = mcpMember($org = mcpOrg());
+    $this->actingAs($user);
+
+    $app = App::factory()->create(['user_id' => $user->id, 'organization_id' => $org->id]);
+    app(AppManifestService::class)->createVersion($app, [
+        'schema_version' => '1.0.0',
+        'id' => $app->id, 'slug' => 'flows', 'name' => 'Flows', 'version' => 1,
+        'objects' => [], 'pages' => [],
+        'permissions' => ['roles' => [['id' => 'rol_'.strtolower((string) Str::ulid()), 'slug' => 'admin', 'name' => 'Admin']]],
+    ], $user);
+
+    // A node canvas needs a pointer; the tab is withdrawn rather than left to
+    // open something unusable.
+    $tabCount = <<<'JS'
+    function () {
+        return String([...document.querySelectorAll('button')]
+            .filter(b => /Workflows|Flujos/i.test(b.textContent || ''))
+            .filter(b => b.getBoundingClientRect().width > 0).length);
+    }
+    JS;
+
+    visit("/apps/{$app->id}/builder")->on()->iPhone15()->assertScript($tabCount, '0');
+    visit("/apps/{$app->id}/builder")->on()->macbookAir()->assertScript($tabCount, '1');
+});
+
+it('hides the fine-tune toggle on a phone and keeps it on desktop', function () {
+    $this->seed(RolesAndPermissionsSeeder::class);
+    $user = mcpMember($org = mcpOrg());
+    $this->actingAs($user);
+
+    $app = App::factory()->create(['user_id' => $user->id, 'organization_id' => $org->id]);
+    app(AppManifestService::class)->createVersion($app, [
+        'schema_version' => '1.0.0',
+        'id' => $app->id, 'slug' => 'tuning', 'name' => 'Tuning', 'version' => 1,
+        'objects' => [], 'pages' => [],
+        'permissions' => ['roles' => [['id' => 'rol_'.strtolower((string) Str::ulid()), 'slug' => 'admin', 'name' => 'Admin']]],
+        'settings' => ['surface' => 'landing'],
+    ], $user);
+
+    // Fine-tune IS the drag-and-drop canvas: offering it on a touch screen
+    // would be offering something that cannot work.
+    $visible = <<<'JS'
+    function () {
+        const el = [...document.querySelectorAll('button')].find(b => /Ajuste|Fine|Manual/i.test(b.textContent || ''));
+        if (!el) return 'absent';
+        return el.getBoundingClientRect().width > 0 ? 'visible' : 'hidden';
+    }
+    JS;
+
+    visit("/apps/{$app->id}/builder")->on()->iPhone15()
+        ->assertScript($visible, 'hidden');
 });

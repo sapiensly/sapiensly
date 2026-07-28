@@ -3066,5 +3066,7 @@
     "apps.builder.analyst.mapping_field": "Campo",
     "apps.builder.analyst.mapping_source": "Campo de origen",
     "apps.builder.analyst.close": "Cerrar",
-    "builder.desktop_only": "Este editor está pensado para pantalla de escritorio. En una pantalla pequeña el lienzo y los paneles quedan apretados, y algunos controles necesitan puntero."
+    "builder.desktop_only": "Este editor está pensado para pantalla de escritorio. En una pantalla pequeña el lienzo y los paneles quedan apretados, y algunos controles necesitan puntero.",
+    "builder.desktop_only_finetune": "El ajuste fino es un lienzo de arrastrar y soltar: necesita puntero y una pantalla más ancha. El builder por chat sí funciona aquí — vuelve a él, o abre esta app en escritorio para ajustar.",
+    "builder.desktop_only_workflows": "El editor de workflows es un lienzo de nodos: necesita puntero y una pantalla más ancha. Abre esta app en escritorio para editarlos; el resto del builder sí funciona aquí."
 }

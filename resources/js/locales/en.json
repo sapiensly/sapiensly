@@ -3066,5 +3066,7 @@
     "apps.builder.analyst.mapping_field": "Field",
     "apps.builder.analyst.mapping_source": "Source field",
     "apps.builder.analyst.close": "Close",
-    "builder.desktop_only": "This builder is designed for a desktop screen. On a small one the canvas and side panels are cramped, and some controls need a pointer."
+    "builder.desktop_only": "This builder is designed for a desktop screen. On a small one the canvas and side panels are cramped, and some controls need a pointer.",
+    "builder.desktop_only_finetune": "Fine-tune is a drag-and-drop canvas and needs a pointer and a wider screen. The chat builder works here — switch back to it, or open this app on a desktop to fine-tune.",
+    "builder.desktop_only_workflows": "The workflow editor is a node canvas — it needs a pointer and a wider screen. Open this app on a desktop to edit workflows; everything else in the builder works here."
 }

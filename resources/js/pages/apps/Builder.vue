@@ -1959,7 +1959,14 @@ const viewTabs = computed(() => {
         },
         { id: 'manifest', label: t('apps.builder.tab_manifest'), icon: Code },
     ];
-    return previewIsLanding.value ? all.filter((m) => m.id !== 'access') : all;
+    const tabs = previewIsLanding.value
+        ? all.filter((m) => m.id !== 'access')
+        : all;
+
+    // The workflow editor is a node canvas: it needs a pointer and room, so it
+    // is not offered below lg. A session already in it keeps it (with the
+    // notice on the pane) rather than being yanked somewhere else mid-edit.
+    return isLargeScreen.value ? tabs : tabs.filter((m) => m.id !== 'workflows');
 });
 watch(previewIsLanding, (landing) => {
     if (landing && !viewTabs.value.some((m) => m.id === viewMode.value)) {
@@ -3600,13 +3607,11 @@ function statusTone(status: Message['status']): string {
         :title="`${t('apps.builder.title')} · ${appMeta.name}`"
         full-bleed
     >
-        <DesktopOnlyNotice />
-
         <div
-            class="flex min-h-0 flex-1 flex-col gap-4 px-7 py-5 transition-[padding-right] duration-300 ease-out"
+            class="flex min-h-0 flex-1 flex-col gap-4 px-3 py-4 transition-[padding-right] duration-300 ease-out sm:px-7 sm:py-5"
             :style="drawerOpen ? { paddingRight: '340px' } : undefined"
         >
-            <header class="flex items-center justify-between gap-4">
+            <header class="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
                 <div class="flex min-w-0 items-center gap-3">
                     <button
                         type="button"
@@ -3649,7 +3654,7 @@ function statusTone(status: Message['status']): string {
                     </div>
                 </div>
 
-                <div class="flex items-center gap-2">
+                <div class="flex flex-wrap items-center justify-end gap-2">
                     <!-- Dashboard toolbar: palette source + panel mode + Run. -->
                     <template v-if="app.kind === 'dashboard'">
                         <DropdownMenu>
@@ -3822,14 +3827,17 @@ function statusTone(status: Message['status']): string {
                             type="button"
                             @click="viewMode = m.id"
                             :class="[
-                                'inline-flex items-center gap-1.5 rounded-pill px-3 py-1 text-xs transition-colors',
+                                'inline-flex items-center gap-1.5 rounded-pill px-2.5 py-1 text-xs transition-colors sm:px-3',
                                 viewMode === m.id
                                     ? 'bg-accent-blue/15 text-accent-blue'
                                     : 'text-ink-muted hover:text-ink',
                             ]"
                         >
                             <component :is="m.icon" class="size-3.5" />
-                            {{ m.label }}
+                            <!-- Five labelled tabs need 699px; the icons alone
+                                 need ~170. The label returns as soon as there
+                                 is room for it. -->
+                            <span class="hidden sm:inline">{{ m.label }}</span>
                         </button>
                     </div>
 
@@ -3839,9 +3847,14 @@ function statusTone(status: Message['status']): string {
                     <template v-if="previewIsLanding">
                         <!-- Fine-tuning: flip between the AI builder (chat) and
                              manual click-and-edit on the landing sections. -->
+                        <!-- Hidden below lg: fine-tune IS the drag-and-drop
+                             canvas, and a finger on a 390px viewport cannot
+                             work it. The rest of the builder is responsive; this
+                             one mode stays a desktop tool, and says so (see the
+                             notice on the pane) if a session lands in it anyway. -->
                         <div
                             v-if="viewMode === 'preview'"
-                            class="inline-flex items-center rounded-pill border border-medium bg-surface p-0.5"
+                            class="hidden items-center rounded-pill border border-medium bg-surface p-0.5 lg:inline-flex"
                         >
                             <button
                                 v-for="m in [
@@ -3875,7 +3888,7 @@ function statusTone(status: Message['status']): string {
                         </div>
                         <span
                             v-if="viewMode === 'preview'"
-                            class="h-5 w-px bg-current opacity-15"
+                            class="hidden h-5 w-px bg-current opacity-15 lg:inline-block"
                         />
                         <template v-if="landingPublicSlug">
                             <a
@@ -4083,6 +4096,14 @@ function statusTone(status: Message['status']): string {
                         ...fullscreenClassFor('chat'),
                     ]"
                 >
+                    <!-- The toggle that gets here is hidden below lg, but a
+                         session already in fine-tune (or a desktop window
+                         resized down) still lands on this pane. Say what it is
+                         rather than leave a drag surface that won't respond. -->
+                    <DesktopOnlyNotice
+                        message-key="builder.desktop_only_finetune"
+                        class="rounded-t-sp-sm"
+                    />
                     <div
                         class="flex items-center gap-2 border-b border-soft px-4 py-3"
                     >
@@ -5730,6 +5751,15 @@ function statusTone(status: Message['status']): string {
                         :app-id="app.id"
                         class="min-h-0 flex-1"
                     />
+
+                    <div
+                        v-else-if="viewMode === 'workflows' && !isLargeScreen"
+                        class="min-h-0 flex-1 overflow-y-auto"
+                    >
+                        <DesktopOnlyNotice
+                            message-key="builder.desktop_only_workflows"
+                        />
+                    </div>
 
                     <AppWorkflowsTab
                         v-else-if="viewMode === 'workflows'"

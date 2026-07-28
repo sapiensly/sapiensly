@@ -10,9 +10,17 @@
  *
  * It does not block the editor. Someone who wants to look around, or make a
  * small text edit on a tablet, still can.
+ *
+ * `messageKey` lets a caller scope the notice. The app builder is responsive
+ * now, so it no longer shows this page-wide — only over its fine-tune canvas,
+ * with copy that names that mode instead of condemning the whole editor.
  */
 import { MonitorSmartphone } from '@lucide/vue';
 import { useI18n } from 'vue-i18n';
+
+withDefaults(defineProps<{ messageKey?: string }>(), {
+    messageKey: 'builder.desktop_only',
+});
 
 const { t } = useI18n();
 </script>
@@ -24,7 +32,7 @@ const { t } = useI18n();
     >
         <MonitorSmartphone class="mt-px size-4 shrink-0 text-ink-muted" />
         <p class="text-xs leading-relaxed text-ink-muted">
-            {{ t('builder.desktop_only') }}
+            {{ t(messageKey) }}
         </p>
     </div>
 </template>
