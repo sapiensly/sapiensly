@@ -182,3 +182,35 @@ it('failed() leaves an already-completed turn untouched', function () {
 
     expect($message->fresh()->status)->toBe('applied');
 });
+
+it('failed() bills a timed-out turn that ALSO banked a checkpoint', function () {
+    // The real shape of the unattributed turn, and the one case the two tests
+    // above never combined: a long turn that ran many round-trips (so it has a
+    // usage snapshot) AND checkpointed work (so failed() takes the banking
+    // path and returns early). Billing must survive that early return.
+    $message = BuilderMessage::create([
+        'conversation_id' => $this->conversation->id,
+        'role' => 'assistant',
+        'status' => 'streaming',
+        'content' => '',
+        'usage' => usage_snapshot(),
+        'proposed_patch' => [['op' => 'replace', 'path' => '/name', 'value' => 'Outbound Calls']],
+        'change_summary' => 'created the app',
+    ]);
+
+    (new RunBuilderAiJob($message->id, 'crea una app'))->failed(new RuntimeException('timed out'));
+
+    $fresh = $message->fresh();
+
+    // The progress is banked …
+    expect($fresh->status)->toBe('applied')
+        ->and($fresh->applied_version_id)->not->toBeNull();
+
+    // … and the spend that produced it is in the ledger, tagged to the build.
+    $event = AiUsageEvent::where('app_id', $this->testApp->id)->where('module', 'builder')->first();
+    expect($event)->not->toBeNull()
+        ->and($event->input_tokens)->toBe(1200)
+        ->and($event->conversation_id)->toBe($this->conversation->id)
+        // And the snapshot stays flipped, so a later failed() cannot re-bill it.
+        ->and($fresh->usage['recorded'])->toBeTrue();
+});

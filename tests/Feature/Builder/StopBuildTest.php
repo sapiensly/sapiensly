@@ -2,6 +2,7 @@
 
 use App\Jobs\ResolveStoppedBuildJob;
 use App\Jobs\RunBuilderAiJob;
+use App\Models\AiUsageEvent;
 use App\Models\App;
 use App\Models\BuilderConversation;
 use App\Models\BuilderMessage;
@@ -161,4 +162,54 @@ it('rejects stopping a conversation the caller does not own', function () {
     $this->actingAs($other)
         ->postJson("/apps/{$this->testApp->id}/builder/stop", ['conversation_id' => $this->conv->id])
         ->assertStatus(403);
+});
+
+it('resolver bills the dead turn it closes, so a stopped build keeps its cost', function () {
+    // Three places close a dead turn and only RunBuilderAiJob::failed() used to
+    // pay for it. A hard-killed worker never reaches failed(), so a build
+    // stopped here lost the tokens it had already spent — get_build_cost
+    // reported the app cheaper than it was, and flagged the turn as
+    // unattributed without being able to recover it.
+    $placeholder = BuilderMessage::create([
+        'conversation_id' => $this->conv->id,
+        'role' => 'assistant',
+        'status' => 'streaming',
+        'content' => 'Añadí el hero…',
+        'usage' => [
+            'model' => 'anthropic/claude-opus-5',
+            'prompt_tokens' => 1200,
+            'completion_tokens' => 340,
+            'cache_read_input_tokens' => 800,
+            'recorded' => false,
+        ],
+    ]);
+
+    (new ResolveStoppedBuildJob($this->conv->id, $placeholder->id))->handle();
+
+    $event = AiUsageEvent::query()
+        ->where('app_id', $this->testApp->id)->where('module', 'builder')->first();
+
+    expect($event)->not->toBeNull()
+        ->and($event->model)->toBe('anthropic/claude-opus-5')
+        ->and($event->input_tokens)->toBe(1200)
+        ->and($event->output_tokens)->toBe(340)
+        ->and($event->conversation_id)->toBe($this->conv->id)
+        // Flipped, so the reaper can't bill the same turn a second time.
+        ->and($placeholder->fresh()->usage['recorded'])->toBeTrue()
+        // And it still did its actual job.
+        ->and($placeholder->fresh()->status)->toBe('none');
+});
+
+it('resolver does not re-bill a turn whose usage was already recorded', function () {
+    $placeholder = BuilderMessage::create([
+        'conversation_id' => $this->conv->id,
+        'role' => 'assistant',
+        'status' => 'streaming',
+        'content' => '',
+        'usage' => ['model' => 'anthropic/claude-opus-5', 'prompt_tokens' => 10, 'recorded' => true],
+    ]);
+
+    (new ResolveStoppedBuildJob($this->conv->id, $placeholder->id))->handle();
+
+    expect(AiUsageEvent::query()->where('module', 'builder')->count())->toBe(0);
 });

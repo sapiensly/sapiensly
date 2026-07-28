@@ -4,6 +4,7 @@ namespace App\Jobs;
 
 use App\Events\Builder\BuilderStreamComplete;
 use App\Models\BuilderMessage;
+use App\Services\Ai\StreamUsageBiller;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Queue\Attributes\Queue;
@@ -42,6 +43,12 @@ class ResolveStoppedBuildJob implements ShouldQueue
         if ($placeholder === null || ! in_array($placeholder->status, ['streaming', 'pending'], true)) {
             return; // a live turn finalized it within the grace window — nothing to do
         }
+
+        // This turn's worker is dead, so RunBuilderAiJob::failed() will never run
+        // and nothing else will pay for the tokens it already spent. Bill before
+        // closing it — a stopped build used to disappear from get_build_cost.
+        // Idempotent: a live turn that finalized first left recorded:true.
+        app(StreamUsageBiller::class)->bill($placeholder);
 
         $stop = '⏹ Build detenido por el usuario. El progreso ya aplicado se conserva.';
         $hasNarration = trim((string) $placeholder->content) !== '';

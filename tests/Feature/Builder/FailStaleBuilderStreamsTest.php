@@ -1,6 +1,7 @@
 <?php
 
 use App\Events\Builder\BuilderStreamComplete;
+use App\Models\AiUsageEvent;
 use App\Models\App;
 use App\Models\BuilderConversation;
 use App\Models\BuilderMessage;
@@ -141,4 +142,39 @@ it('writes the interruption note in the app owner\'s language', function () {
 
     expect($stale->fresh()->status)->toBe('error')
         ->and($stale->fresh()->content)->toContain('interrump');
+});
+
+it('bills the stale turn it reaps, so a hard-killed build keeps its cost', function () {
+    // The reaper closes turns whose worker died without ever reaching
+    // RunBuilderAiJob::failed() — the one path that used to pay for them. Left
+    // unbilled, those tokens never reach the ledger and get_build_cost reports
+    // the build cheaper than it was.
+    $m = staleBuilderMessage($this->conv, 'streaming');
+    $m->usage = [
+        'model' => 'anthropic/claude-opus-5',
+        'prompt_tokens' => 900,
+        'completion_tokens' => 120,
+        'recorded' => false,
+    ];
+    $m->save();
+
+    $this->artisan('builder:fail-stale-streams')->assertSuccessful();
+
+    $event = AiUsageEvent::query()
+        ->where('app_id', $this->testApp->id)->where('module', 'builder')->first();
+
+    expect($event)->not->toBeNull()
+        ->and($event->input_tokens)->toBe(900)
+        ->and($event->output_tokens)->toBe(120)
+        ->and($m->fresh()->usage['recorded'])->toBeTrue();
+});
+
+it('does not bill a reaped turn that never completed a round-trip', function () {
+    // No snapshot means no model and no reported tokens — there is genuinely
+    // nothing to charge, and inventing an event would be worse than the gap.
+    $m = staleBuilderMessage($this->conv, 'streaming');
+
+    $this->artisan('builder:fail-stale-streams')->assertSuccessful();
+
+    expect(AiUsageEvent::query()->where('module', 'builder')->count())->toBe(0);
 });

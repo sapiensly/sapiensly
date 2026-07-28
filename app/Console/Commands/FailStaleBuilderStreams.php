@@ -5,6 +5,7 @@ namespace App\Console\Commands;
 use App\Events\Builder\BuilderStreamComplete;
 use App\Jobs\RunBuilderAiJob;
 use App\Models\BuilderMessage;
+use App\Services\Ai\StreamUsageBiller;
 use Illuminate\Console\Attributes\Description;
 use Illuminate\Console\Attributes\Signature;
 use Illuminate\Console\Command;
@@ -41,7 +42,7 @@ class FailStaleBuilderStreams extends Command
 
     private const ERROR_MESSAGE = 'The build was interrupted before finishing (the process was stopped — usually a restart or a memory limit). Please try again — and if it was a large build, ask for it in smaller steps.';
 
-    public function handle(): int
+    public function handle(StreamUsageBiller $biller): int
     {
         $cutoff = now()->subSeconds(self::CAP_SECONDS);
 
@@ -79,6 +80,12 @@ class FailStaleBuilderStreams extends Command
         $failed = 0;
 
         foreach ($stale as $row) {
+            // The worker behind this turn is long gone, so RunBuilderAiJob::failed()
+            // never ran. Bill what it spent before closing it — a hard-killed turn
+            // reaped here used to vanish from get_build_cost entirely, which is
+            // what `reconciliation.unattributed_turns` kept reporting.
+            $biller->billById((string) $row->id);
+
             $reason = __(self::ERROR_MESSAGE, [], (string) ($row->locale ?? $fallbackLocale));
             $hasNarration = trim((string) $row->content) !== '';
             $errorMessageId = $hasNarration ? 'bmsg_'.strtolower((string) Str::ulid()) : (string) $row->id;

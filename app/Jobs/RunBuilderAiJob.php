@@ -5,7 +5,7 @@ namespace App\Jobs;
 use App\Events\Builder\BuilderStreamComplete;
 use App\Events\Builder\BuilderStreamError;
 use App\Models\BuilderMessage;
-use App\Services\Ai\AiUsageRecorder;
+use App\Services\Ai\StreamUsageBiller;
 use App\Services\Builder\BuilderAiService;
 use App\Services\Builder\BuilderCancellation;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -314,51 +314,12 @@ class RunBuilderAiJob implements ShouldQueue
     }
 
     /**
-     * Bill the spend of a turn that died before BuilderAiService could record it,
-     * from the usage snapshot the stream persisted after each round-trip. Idempotent
-     * via the snapshot's `recorded` flag (the success path sets it true, and this
-     * flips it true after billing) so a turn is never double-counted. A turn killed
-     * before its first round-trip completed has no snapshot and nothing to bill —
-     * the SDK never reported final usage for the in-flight call either.
+     * Bill the spend of a turn that died before BuilderAiService could record it.
+     * The logic is shared with the other two closers of a dead turn (the Detener
+     * backstop and the stale-stream reaper) — see StreamUsageBiller.
      */
     private function recordTimedOutUsage(BuilderMessage $message): void
     {
-        $snapshot = $message->usage;
-        if (! is_array($snapshot) || ($snapshot['recorded'] ?? false) === true) {
-            return;
-        }
-
-        $model = $snapshot['model'] ?? null;
-        if (! is_string($model) || $model === '') {
-            return;
-        }
-
-        try {
-            $conversation = $message->conversation()->first();
-
-            app(AiUsageRecorder::class)->record(
-                'builder',
-                $model,
-                $conversation?->user,
-                $conversation?->organization_id,
-                new Usage(
-                    promptTokens: (int) ($snapshot['prompt_tokens'] ?? 0),
-                    completionTokens: (int) ($snapshot['completion_tokens'] ?? 0),
-                    cacheWriteInputTokens: (int) ($snapshot['cache_write_input_tokens'] ?? 0),
-                    cacheReadInputTokens: (int) ($snapshot['cache_read_input_tokens'] ?? 0),
-                    reasoningTokens: (int) ($snapshot['reasoning_tokens'] ?? 0),
-                ),
-                appId: $conversation?->app_id,
-                conversationId: $message->conversation_id,
-            );
-
-            $message->usage = ['recorded' => true] + $snapshot;
-            $message->save();
-        } catch (Throwable $e) {
-            Log::warning('RunBuilderAiJob: timed-out usage billing failed', [
-                'message_id' => $message->id,
-                'error' => $e->getMessage(),
-            ]);
-        }
+        app(StreamUsageBiller::class)->bill($message);
     }
 }
