@@ -84,7 +84,7 @@ function criticWithDirector(array $verdict): LandingDesignCritic
             parent::__construct($a, $b);
         }
 
-        protected function directorCritique(string $intent, string $html, string $css, ?User $user, ?string $modelOverride, ?StoredImage $screenshot = null, bool $screenshotIsCurrentDraft = false): ?array
+        protected function directorCritique(string $intent, string $html, string $css, ?User $user, ?string $modelOverride, ?StoredImage $screenshot = null, bool $screenshotIsCurrentDraft = false, string $mode = self::MODE_DESIGN): ?array
         {
             return $this->stub;
         }
@@ -154,7 +154,7 @@ function criticWithFailedDirector(): LandingDesignCritic
 {
     return new class(Mockery::mock(AiDefaults::class), Mockery::mock(AiProviderService::class)) extends LandingDesignCritic
     {
-        protected function directorCritique(string $intent, string $html, string $css, ?User $user, ?string $modelOverride, ?StoredImage $screenshot = null, bool $screenshotIsCurrentDraft = false): ?array
+        protected function directorCritique(string $intent, string $html, string $css, ?User $user, ?string $modelOverride, ?StoredImage $screenshot = null, bool $screenshotIsCurrentDraft = false, string $mode = self::MODE_DESIGN): ?array
         {
             $this->directorStatus = 'failed';
 
@@ -195,7 +195,7 @@ it('retries the director on its backup model after a failed primary attempt', fu
             return ['director-primary', 'director-backup'];
         }
 
-        protected function directorAttempt(string $intent, string $html, string $css, User $user, string $model, ?StoredImage $screenshot = null, bool $screenshotIsCurrentDraft = false): ?array
+        protected function directorAttempt(string $intent, string $html, string $css, User $user, string $model, ?StoredImage $screenshot = null, bool $screenshotIsCurrentDraft = false, string $mode = self::MODE_DESIGN): ?array
         {
             $this->attempted[] = $model;
 
@@ -242,4 +242,143 @@ it('the floor blocks an unstyled or unplaced lead_form', function () {
         RICH_CSS.' .sp-lead-form input{background:transparent;border:1px solid #223049}',
     );
     expect(implode(' | ', $good['must_fix']))->not->toContain('sp-lead-form');
+});
+
+/*
+ * settings.fonts that never reaches the page. Both cases below are what a real
+ * import shipped: two webfonts downloaded, neither rendered.
+ */
+
+it('flags a declared font that the css never mentions', function () {
+    $r = designCritic()->deterministicTells(RICH_HTML, RICH_CSS, ['Montserrat:700,700i']);
+
+    expect(implode(' ', $r['tells']))->toContain('Montserrat')
+        ->and(implode(' ', $r['tells']))->toContain('downloads a webfont for nothing')
+        // A waste, not a broken page — it must not block the ship.
+        ->and($r['must_fix'])->not->toContain('Montserrat');
+});
+
+it('flags a declared font whose only declaration is overridden later', function () {
+    // The exact shape observed: --sp-font-main set to Poppins, then re-declared
+    // as Archivo further down. The cascade takes the last one; Poppins is dead.
+    $css = RICH_CSS."\n.lp{--sp-font-main:'Poppins',sans-serif}\n.lp{--sp-font-main:'Archivo',sans-serif}";
+
+    $r = designCritic()->deterministicTells(RICH_HTML, $css, ['Poppins:400,700']);
+
+    expect(implode(' ', $r['tells']))->toContain('Poppins');
+});
+
+it('stays quiet when the declared font actually wins', function () {
+    $css = RICH_CSS."\n.lp{--sp-font-main:'Archivo',sans-serif}\n.lp{--sp-font-main:'Poppins',sans-serif}";
+
+    $r = designCritic()->deterministicTells(RICH_HTML, $css, ['Poppins:400,700']);
+
+    expect(implode(' ', $r['tells']))->not->toContain('Poppins');
+});
+
+it('accepts a font used directly, without a custom property', function () {
+    $css = RICH_CSS."\n.lp h1{font-family:'Instrument Serif',serif}";
+
+    $r = designCritic()->deterministicTells(RICH_HTML, $css, ['Instrument Serif']);
+
+    expect(implode(' ', $r['tells']))->not->toContain('Instrument Serif');
+});
+
+it('says nothing about fonts when none are declared', function () {
+    $r = designCritic()->deterministicTells(RICH_HTML, RICH_CSS);
+
+    expect(implode(' ', $r['tells']))->not->toContain('webfont');
+});
+
+/*
+ * Replicate mode: rebuilding a page that already exists. The reference is the
+ * standard, so the gate keeps its functional rails and withdraws its taste.
+ */
+
+it('withdraws the aesthetic floor when replicating', function () {
+    // A faithful copy of a restrained, centered page: flat type, few colours,
+    // centered throughout. In design mode this is a pile of tells and a block.
+    $plain = '.lp{--a:#111}.lp h1{font-size:1.5rem;text-align:center}'
+        .'.lp p{text-align:center}.lp .a{text-align:center}.lp .b{text-align:center}'
+        .'.lp .c{text-align:center}'.str_repeat('/* body */.lp .x{padding:1rem}', 20);
+
+    $design = designCritic()->deterministicTells(RICH_HTML, $plain);
+    $replica = designCritic()->deterministicTells(RICH_HTML, $plain, [], 'replicate');
+
+    expect($design['must_fix'])->not->toBe([])
+        ->and(implode(' ', $design['tells']))->toContain('centered')
+        // Same page, replicate mode: no art-direction blocking, no taste tells.
+        ->and($replica['must_fix'])->toBe([])
+        ->and(implode(' ', $replica['tells']))->not->toContain('centered')
+        ->and(implode(' ', $replica['tells']))->not->toContain('Timid palette');
+});
+
+it('keeps every functional rail when replicating', function () {
+    // Fidelity mode is not permission to ship something broken.
+    $html = '<section class="hero"><h1>Hola</h1></section><!-- platform block: lead_form (renders .sp-lead-form here) -->';
+
+    $r = designCritic()->deterministicTells($html, RICH_CSS, ['Montserrat'], 'replicate');
+    $joined = implode(' ', $r['must_fix']);
+
+    expect($joined)->toContain('lead_form block is UNSTYLED')
+        ->and($joined)->toContain('no placement slot')
+        // Motion and the dead-webfont tell survive too.
+        ->and($joined)->toContain('The page is static')
+        ->and(implode(' ', $r['tells']))->toContain('Montserrat');
+});
+
+it('still blocks a replica with no bespoke css or sections', function () {
+    $r = designCritic()->deterministicTells('<p>x</p>', 'a{}', [], 'replicate');
+
+    expect(implode(' ', $r['must_fix']))->toContain('Almost no custom_css')
+        ->and(implode(' ', $r['must_fix']))->toContain('No bespoke html sections');
+});
+
+it('carries the mode all the way to the director attempt', function () {
+    // Regression: the mode reached directorCritique but not directorAttempt,
+    // where the instruction set is actually chosen. PHP raised "Undefined
+    // variable $mode", the pass was swallowed as director:'failed', and the
+    // gate degraded silently instead of judging fidelity.
+    // shouldIgnoreMissing: directorCritique calls applyRuntimeConfig() before
+    // the loop, and a strict mock throwing there is swallowed by the guard —
+    // the spy would simply never run.
+    $spy = new class(Mockery::mock(AiDefaults::class), Mockery::mock(AiProviderService::class)->shouldIgnoreMissing()) extends LandingDesignCritic
+    {
+        public array $seen = [];
+
+        protected function directorAttempt(string $intent, string $html, string $css, User $user, string $model, ?StoredImage $screenshot = null, bool $screenshotIsCurrentDraft = false, string $mode = self::MODE_DESIGN): ?array
+        {
+            $this->seen[] = $mode;
+
+            return ['ship' => true, 'score' => 70, 'must_fix' => [], 'direction' => [], 'strengths' => []];
+        }
+
+        public function directorCandidates(?string $explicit = null): array
+        {
+            return ['some-model'];
+        }
+    };
+
+    $spy->critique('rebuild', RICH_HTML, RICH_CSS, new User, null, 1, null, false, [], 'replicate');
+
+    expect($spy->seen)->toBe(['replicate']);
+});
+
+it('ships a faithful rebuild that a vanguard score would have rejected', function () {
+    // 70 is below SHIP_SCORE — in design mode that buys another round. When
+    // replicating it must not: the score grades vanguard-ness, and a faithful
+    // copy of a restrained page scores low BECAUSE it is faithful.
+    $verdict = ['ship' => false, 'score' => 70, 'must_fix' => ['make the hero asymmetric'], 'direction' => [], 'strengths' => []];
+
+    $design = criticWithDirector($verdict)->critique('x', RICH_HTML, RICH_CSS, null, null, 2);
+    $replica = criticWithDirector($verdict)->critique('x', RICH_HTML, RICH_CSS, null, null, 2, null, false, [], 'replicate');
+
+    expect($design['ship'])->toBeFalse()
+        ->and($design['must_fix'])->toContain('make the hero asymmetric')
+        // Round 2 is the replicate cap: remaining notes demote to polish.
+        ->and($replica['ship'])->toBeTrue()
+        ->and($replica['converged'])->toBeTrue()
+        ->and($replica['must_fix'])->toBe([])
+        ->and($replica['direction'])->toContain('make the hero asymmetric')
+        ->and($replica['mode'])->toBe('replicate');
 });

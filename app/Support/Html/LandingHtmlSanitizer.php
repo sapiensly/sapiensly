@@ -53,16 +53,63 @@ class LandingHtmlSanitizer
     /**
      * Tags deleted WHOLE (with their text): keeping the inner text of <script>
      * or <style> would surface JS/CSS on the page — the exact thing we prevent.
-     * svg/math are foreign-content XSS vectors (e.g. <svg><script>), so they go
-     * too. form controls are dropped — the lead form is a first-class block.
+     * math is a foreign-content XSS vector, so it goes too. form controls are
+     * dropped — the lead form is a first-class block.
      *
      * @var list<string>
      */
     private const DANGEROUS_TAGS = [
         'script', 'style', 'iframe', 'object', 'embed', 'link', 'meta', 'base',
         'form', 'input', 'textarea', 'select', 'option', 'optgroup', 'fieldset', 'legend',
-        'svg', 'math', 'noscript', 'template', 'frame', 'frameset', 'applet',
+        'math', 'noscript', 'template', 'frame', 'frameset', 'applet',
         'audio', 'video', 'track', 'source-media', 'portal', 'marquee', 'canvas',
+    ];
+
+    /**
+     * The SVG subset an ICON is made of. `svg` used to be banned outright as a
+     * foreign-content vector, which made an authored icon impossible: a design
+     * import came back with every icon slot an empty box, because inline SVG is
+     * how every icon set (and every hand-drawn logo) ships.
+     *
+     * What made svg dangerous is its CHILDREN, not the element: <script>,
+     * <style> and <foreignObject> re-open HTML inside it, <use href> and <a>
+     * dereference URLs, and <animate> can script attribute values. None of them
+     * are here, and inside an svg subtree anything off this list is dropped
+     * WHOLE rather than unwrapped — text has no meaning in a shape tree, and
+     * unwrapping is exactly how a smuggled payload would surface.
+     *
+     * Comments are stripped everywhere (see walk), which also closes the mXSS
+     * family that needs a comment or CDATA inside foreign content to survive
+     * re-parsing in the browser.
+     *
+     * @var list<string>
+     */
+    private const SVG_TAGS = [
+        'svg', 'g', 'path', 'circle', 'ellipse', 'rect', 'line', 'polyline', 'polygon',
+        'defs', 'lineargradient', 'radialgradient', 'stop', 'title', 'desc', 'text', 'tspan',
+    ];
+
+    /**
+     * Geometry and presentation only. No `href`/`xlink:href` (the <use> and <a>
+     * dereference surface), no `style`, no `on*`, no `filter`/`mask`/`clip-path`
+     * — a paint reference is enough for an icon, and `fill`/`stroke` values are
+     * additionally validated (see isSafePaint).
+     *
+     * DOMDocument lowercases names in HTML mode; browsers' HTML5 parser maps
+     * `viewbox` back to `viewBox` and `lineargradient` to `linearGradient`, so
+     * the lowercase forms here are the correct ones to match and to emit.
+     *
+     * @var list<string>
+     */
+    private const SVG_ATTRS = [
+        'viewbox', 'xmlns', 'width', 'height', 'preserveaspectratio', 'focusable',
+        'fill', 'stroke', 'stroke-width', 'stroke-linecap', 'stroke-linejoin',
+        'stroke-dasharray', 'stroke-dashoffset', 'stroke-miterlimit',
+        'fill-rule', 'clip-rule', 'fill-opacity', 'stroke-opacity', 'opacity',
+        'd', 'points', 'transform', 'vector-effect', 'shape-rendering',
+        'cx', 'cy', 'r', 'rx', 'ry', 'x', 'y', 'x1', 'y1', 'x2', 'y2', 'dx', 'dy',
+        'offset', 'stop-color', 'stop-opacity', 'gradientunits', 'gradienttransform',
+        'text-anchor', 'dominant-baseline', 'font-size', 'font-weight', 'font-family',
     ];
 
     /**
@@ -107,7 +154,11 @@ class LandingHtmlSanitizer
         return trim($out);
     }
 
-    private function walk(DOMNode $node): void
+    /**
+     * @param  bool  $inSvg  Inside an <svg> subtree, where the allowlist is the
+     *                       shape vocabulary and anything else is dropped whole.
+     */
+    private function walk(DOMNode $node, bool $inSvg = false): void
     {
         // Snapshot before mutating — replacing/removing during live iteration is fraught.
         $children = [];
@@ -132,6 +183,21 @@ class LandingHtmlSanitizer
                 continue;
             }
 
+            if ($inSvg || $tag === 'svg') {
+                // Closed vocabulary: no unwrapping, so a smuggled <p>/<style>
+                // subtree leaves nothing behind instead of surfacing its text.
+                if (! in_array($tag, self::SVG_TAGS, true)) {
+                    $node->removeChild($child);
+
+                    continue;
+                }
+
+                $this->filterSvgAttributes($child);
+                $this->walk($child, true);
+
+                continue;
+            }
+
             if (! in_array($tag, self::ALLOWED_TAGS, true)) {
                 // Disallowed but harmless: keep the text, drop the wrapper.
                 $this->unwrap($child);
@@ -142,6 +208,61 @@ class LandingHtmlSanitizer
             $this->filterAttributes($child, $tag);
             $this->walk($child);
         }
+    }
+
+    /**
+     * Geometry/presentation allowlist for a node inside an <svg>.
+     */
+    private function filterSvgAttributes(DOMElement $el): void
+    {
+        $names = [];
+        foreach ($el->attributes as $attr) {
+            $names[] = $attr->nodeName;
+        }
+
+        foreach ($names as $name) {
+            $lower = strtolower($name);
+
+            // A paint can name a reference — keep it local. `url(#id)` points at
+            // a gradient in this same subtree; anything else is a fetch we don't
+            // want a landing making on a visitor's behalf.
+            if (in_array($lower, ['fill', 'stroke', 'stop-color'], true)) {
+                if (! $this->isSafePaint($el->getAttribute($name))) {
+                    $el->removeAttribute($name);
+                }
+
+                continue;
+            }
+
+            if (in_array($lower, self::SVG_ATTRS, true)
+                || in_array($lower, ['class', 'id'], true)
+                || str_starts_with($lower, 'aria-')
+                || str_starts_with($lower, 'data-sp-')) {
+                continue;
+            }
+
+            // href / xlink:href / style / on* / everything else.
+            $el->removeAttribute($name);
+        }
+    }
+
+    /**
+     * A colour, a keyword, a CSS variable, or a same-document `url(#id)`.
+     */
+    private function isSafePaint(string $value): bool
+    {
+        $value = trim($value);
+        if ($value === '') {
+            return false;
+        }
+
+        if (preg_match('/^url\(\s*#[\w:.-]+\s*\)$/i', $value) === 1) {
+            return true;
+        }
+
+        // No scheme, no function call other than the colour ones — that rules
+        // out url(http…), image-set(), and anything with a payload in it.
+        return preg_match('/^(#[0-9a-f]{3,8}|[a-z-]+|(rgb|rgba|hsl|hsla|var)\([^()]*\))$/i', $value) === 1;
     }
 
     /**

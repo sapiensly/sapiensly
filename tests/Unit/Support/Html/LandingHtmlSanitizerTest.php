@@ -65,15 +65,13 @@ it('strips every event handler', function () {
         ->toContain('<span>x</span>');
 });
 
-it('drops iframe, object, form and svg outright', function () {
-    $out = clean('<div>keep</div><iframe src="//evil"></iframe><object data="x"></object><form><input></form><svg onload="alert(1)"></svg>');
+it('drops iframe, object and form outright', function () {
+    $out = clean('<div>keep</div><iframe src="//evil"></iframe><object data="x"></object><form><input></form>');
     expect($out)->toContain('<div>keep</div>')
         ->not->toContain('iframe')
         ->not->toContain('object')
         ->not->toContain('<form')
-        ->not->toContain('<input')
-        ->not->toContain('svg')
-        ->not->toContain('onload');
+        ->not->toContain('<input');
 });
 
 it('keeps a safe link and hardens external ones', function () {
@@ -143,4 +141,101 @@ it('removes a script nested deep inside allowed structure', function () {
     expect($out)->toContain('<p>ok</p>')
         ->not->toContain('steal')
         ->not->toContain('script');
+});
+
+/*
+ * Inline SVG — the only way an authored icon exists. It used to be banned
+ * outright, which is why a design import came back with every icon slot empty.
+ * The element is allowed; its dangerous CHILDREN and attributes are not.
+ */
+
+it('keeps an icon: the shape vocabulary survives intact', function () {
+    $out = clean(
+        '<span class="ico"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" '
+        .'stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">'
+        .'<path d="M3 17l5-5 4 4 8-9"></path><circle cx="12" cy="12" r="3"></circle></svg></span>'
+    );
+
+    expect($out)->toContain('<svg')
+        ->toContain('viewbox="0 0 24 24"')
+        ->toContain('<path d="M3 17l5-5 4 4 8-9"')
+        ->toContain('<circle cx="12" cy="12" r="3"')
+        ->toContain('stroke="currentColor"')
+        ->toContain('stroke-linecap="round"')
+        ->toContain('aria-hidden="true"');
+});
+
+it('keeps a gradient-filled logo, including its local paint reference', function () {
+    $out = clean(
+        '<svg viewBox="0 0 128 128"><defs><linearGradient id="g"><stop offset="0" stop-color="#0096FF">'
+        .'</stop></linearGradient></defs><path fill="url(#g)" d="M10 10h20v20z"></path>'
+        .'<rect fill="var(--t-accent-blue)" x="0" y="0" width="4" height="4"></rect></svg>'
+    );
+
+    expect($out)->toContain('lineargradient')
+        ->toContain('stop-color="#0096FF"')
+        ->toContain('fill="url(#g)"')
+        ->toContain('fill="var(--t-accent-blue)"');
+});
+
+it('strips the scripting surface from inside an svg', function () {
+    // Every one of these is why svg was banned in the first place.
+    $out = clean(
+        '<svg onload="alert(1)"><script>alert(2)</script><style>*{x:y}</style>'
+        .'<foreignObject><p onclick="alert(3)">html</p></foreignObject>'
+        .'<use href="//evil.example/x.svg#i"></use>'
+        .'<a href="javascript:alert(4)"><path d="M0 0"></path></a>'
+        .'<animate attributeName="fill" to="red"></animate>'
+        .'<path d="M1 1" onmouseover="alert(5)"></path></svg>'
+    );
+
+    expect($out)->toContain('<svg')
+        ->toContain('<path d="M1 1"')
+        ->not->toContain('alert')
+        ->not->toContain('onload')
+        ->not->toContain('onmouseover')
+        ->not->toContain('<script')
+        ->not->toContain('<style')
+        ->not->toContain('foreignobject')
+        ->not->toContain('<use')
+        ->not->toContain('href')
+        ->not->toContain('<animate');
+});
+
+it('drops smuggled markup inside an svg whole, without unwrapping its text', function () {
+    // Unwrapping is how a payload surfaces: keep the shape tree closed.
+    $out = clean('<svg><path d="M0 0"></path><p>SMUGGLED</p><div><span>ALSO</span></div></svg>');
+
+    expect($out)->toContain('<path d="M0 0"')
+        ->not->toContain('SMUGGLED')
+        ->not->toContain('ALSO');
+});
+
+it('refuses a paint that points off the document', function () {
+    $out = clean('<svg><path fill="url(https://evil.example/x)" stroke="url( //evil )" d="M0 0"></path></svg>');
+
+    expect($out)->toContain('<path')
+        ->toContain('d="M0 0"')
+        ->not->toContain('evil');
+});
+
+it('strips style and inline handlers on the svg element itself', function () {
+    $out = clean('<svg style="position:fixed" onfocus="alert(1)" viewBox="0 0 8 8"><path d="M0 0"></path></svg>');
+
+    expect($out)->toContain('viewbox="0 0 8 8"')
+        ->not->toContain('style')
+        ->not->toContain('onfocus');
+});
+
+it('strips comments inside an svg — the mXSS carrier', function () {
+    $out = clean('<svg><!--<img src=x onerror=alert(1)>--><path d="M0 0"></path></svg>');
+
+    expect($out)->not->toContain('onerror')
+        ->not->toContain('<!--')
+        ->toContain('<path');
+});
+
+it('still refuses a data:image/svg source on an img', function () {
+    // Allowing authored <svg> must not re-open the data-URI vector.
+    expect(clean('<img src="data:image/svg+xml;base64,AAAA" alt="s">'))->not->toContain('svg+xml');
 });

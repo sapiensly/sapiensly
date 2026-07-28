@@ -55,6 +55,38 @@ class LandingDesignCritic
     private const MAX_ROUNDS = 3;
 
     /**
+     * Two jobs, two bars.
+     *
+     * DESIGN is the default: there is no reference, so the director's taste IS
+     * the standard and it pushes toward vanguard.
+     *
+     * REPLICATE is for rebuilding a page that already exists (a design import).
+     * There the reference is the standard and the director's taste is a
+     * LIABILITY: judged as art direction, a faithful copy of a centered hero
+     * reads as "centered-everything, the classic generic tell", so the gate
+     * demands asymmetry and the rebuild stops resembling the original. That is
+     * not hypothetical — it is what a live import produced, along with editorial
+     * section indices the reference never had, over six director passes that
+     * came to 55% of the build's bill and still scored 72.
+     *
+     * So in replicate mode the gate keeps every FUNCTIONAL rail (the page is
+     * bespoke, the form is styled and placed, motion exists, no dead webfonts)
+     * and drops every AESTHETIC opinion, because the reference already answered
+     * those questions.
+     */
+    public const MODE_DESIGN = 'design';
+
+    public const MODE_REPLICATE = 'replicate';
+
+    /**
+     * Fidelity converges faster than taste: there is a right answer, and the
+     * first pass finds most of the ways the copy diverges from it. A third
+     * round of art direction is exactly the spend replicate mode exists to
+     * avoid.
+     */
+    private const MAX_ROUNDS_REPLICATE = 2;
+
+    /**
      * How many director models one pass may try (the configured director, then
      * its backup). Each attempt can burn up to TIMEOUT_SECONDS, so the list is
      * deliberately short — the gate loop provides further retries.
@@ -133,7 +165,7 @@ class LandingDesignCritic
      * brandbook is unset/empty (the design is then free). Only names the fields
      * the brand actually set.
      */
-    private function brandDirective(): string
+    private function brandDirective(string $mode = self::MODE_DESIGN): string
     {
         $brand = $this->brandFacts();
         if ($brand === null) {
@@ -164,7 +196,9 @@ class LandingDesignCritic
         return 'BRAND ADHERENCE — this org has a Brandbook ('.implode(', ', $facts).'). '
             ."The landing MUST read as this brand's: build the palette AROUND the brand accent — the accent itself or a deliberate, evident harmony with it, never an unrelated hero colour"
             .$logoLine
-            .'. If the design ignores the brand identity, raise it as a BLOCKING must_fix. '
+            .($mode === self::MODE_REPLICATE
+                ? '. NOTE: this page is REPRODUCING an existing design, whose own palette is the reference — do NOT block on the brand accent, and never ask for a colour change that moves the rebuild away from its original. Mention brand alignment as optional polish only. '
+                : '. If the design ignores the brand identity, raise it as a BLOCKING must_fix. ')
             ."(This is about the accent identity and the logo — the page may still use its own neutrals/ink and a characterful DISPLAY font; brand adherence is not flattening the design.)\n\n";
     }
 
@@ -207,11 +241,16 @@ class LandingDesignCritic
         int $round = 1,
         ?StoredImage $screenshot = null,
         bool $screenshotIsCurrentDraft = false,
+        array $declaredFonts = [],
+        string $mode = self::MODE_DESIGN,
     ): array {
-        $det = $this->deterministicTells($html, $css);
+        $replicating = $mode === self::MODE_REPLICATE;
+        $maxRounds = $replicating ? self::MAX_ROUNDS_REPLICATE : self::MAX_ROUNDS;
+
+        $det = $this->deterministicTells($html, $css, $declaredFonts, $mode);
         $floorFix = $det['must_fix'];
         $tells = array_values(array_merge($det['tells'], $this->brandTells($css)));
-        $ai = $this->directorCritique($intent, $html, $css, $user, $modelOverride, $screenshot, $screenshotIsCurrentDraft);
+        $ai = $this->directorCritique($intent, $html, $css, $user, $modelOverride, $screenshot, $screenshotIsCurrentDraft, $mode);
 
         $mustFix = $floorFix;
         $direction = [];
@@ -230,9 +269,16 @@ class LandingDesignCritic
 
             // Converge on a strong score, an explicit director "ship", or the
             // round cap — otherwise the demanding director loops on perfection.
+            //
+            // The SCORE gate is deliberately skipped when replicating: it grades
+            // vanguard-ness, and a faithful copy of a restrained page can be a
+            // perfect result and a mediocre score at the same time. Holding the
+            // rebuild to it buys extra rounds that can only push it away from
+            // the reference (a live import shipped at 72 having done exactly
+            // that). Fidelity ships on the director's own verdict or the cap.
             $converged = $aiShip
-                || ($score !== null && $score >= self::SHIP_SCORE)
-                || $round >= self::MAX_ROUNDS;
+                || (! $replicating && $score !== null && $score >= self::SHIP_SCORE)
+                || $round >= $maxRounds;
 
             if ($converged) {
                 // The floor is still hard-blocking; the director's remaining
@@ -253,7 +299,7 @@ class LandingDesignCritic
         // 'skipped' (no user/provider — a retry cannot help) and at the cap
         // (the gate never hard-blocks a build).
         $director = $ai !== null ? 'ok' : $this->directorStatus;
-        if ($ship && $director === 'failed' && $round < self::MAX_ROUNDS) {
+        if ($ship && $director === 'failed' && $round < $maxRounds) {
             $ship = false;
         }
 
@@ -268,6 +314,7 @@ class LandingDesignCritic
             'director' => $director,
             'converged' => $converged,
             'round' => $round,
+            'mode' => $mode,
         ];
     }
 
@@ -289,9 +336,14 @@ class LandingDesignCritic
             }
         }
 
+        $fonts = $manifest['settings']['fonts'] ?? [];
+
         return [
             'html' => implode("\n\n", $parts),
             'css' => (string) ($manifest['settings']['custom_css'] ?? ''),
+            // Declared webfonts, so the floor can tell whether any of them
+            // actually renders (see unusedFonts).
+            'fonts' => is_array($fonts) ? array_values(array_map('strval', $fonts)) : [],
         ];
     }
 
@@ -336,8 +388,16 @@ class LandingDesignCritic
      *
      * @return array{must_fix: list<string>, tells: list<string>}
      */
-    public function deterministicTells(string $html, string $css): array
+    /**
+     * @param  array<int, string>  $declaredFonts  settings.fonts specs ("Family:400,700").
+     */
+    public function deterministicTells(string $html, string $css, array $declaredFonts = [], string $mode = self::MODE_DESIGN): array
     {
+        // When replicating, the reference already decided the type scale, the
+        // palette and the composition. Judging those is how a faithful copy
+        // gets marked down for resembling its original.
+        $judgeAesthetics = $mode !== self::MODE_REPLICATE;
+
         $must = [];
         $tells = [];
         $css = trim($css);
@@ -357,7 +417,7 @@ class LandingDesignCritic
         $hasBigType =
             preg_match('/font-size\s*:\s*clamp\([^)]*?(?:[2-9]\.\d+|[3-9]|\d{2})rem/i', $css) === 1
             || preg_match('/font-size\s*:\s*(?:[2-9]\.\d+|[3-9]|\d{2})rem/i', $css) === 1;
-        if (! $hasBigType) {
+        if (! $hasBigType && $judgeAesthetics) {
             $must[] = 'No confident display type — open with big, tightly-tracked headline type (e.g. font-size: clamp(2.5rem, 6vw, 4.5rem); letter-spacing: -.03em). One flat body size reads generic.';
         }
 
@@ -380,17 +440,17 @@ class LandingDesignCritic
 
         // ---- softer tells (reported, not blocking) ----
         $centerCount = (int) preg_match_all('/text-align\s*:\s*center/i', $css);
-        if ($centerCount >= 4) {
+        if ($centerCount >= 4 && $judgeAesthetics) {
             $tells[] = "Much of the page is centered ({$centerCount}× text-align:center) — centered-everything is the classic generic tell. Commit to asymmetry and tension: a left-aligned hero, an off-balance grid.";
         }
 
         preg_match_all('/#[0-9a-fA-F]{6}\b/', $css, $hexes);
         $distinctHex = count(array_unique(array_map('strtolower', $hexes[0] ?? [])));
-        if ($distinctHex < 3) {
+        if ($distinctHex < 3 && $judgeAesthetics) {
             $tells[] = 'Timid palette — too few colours. Commit to a palette: a chosen neutral (a grey with a hue bias, or a deep ground), a confident accent, maybe a second colour for tension.';
         }
 
-        if (preg_match('/text-transform\s*:\s*uppercase/i', $css) !== 1) {
+        if (preg_match('/text-transform\s*:\s*uppercase/i', $css) !== 1 && $judgeAesthetics) {
             $tells[] = 'No label/eyebrow system — small uppercase, letter-spaced (ideally mono) labels give a page editorial structure and hierarchy.';
         }
 
@@ -408,7 +468,64 @@ class LandingDesignCritic
             }
         }
 
+        // A family in settings.fonts that never wins in the CSS is a webfont the
+        // visitor downloads and never sees. Observed on a real import: Montserrat
+        // declared and never referenced at all, and Poppins referenced once in
+        // --sp-font-main and then overridden by a later declaration of the same
+        // property — two fonts paid for, neither rendered, and the original's
+        // typography lost in the process.
+        foreach ($this->unusedFonts($css, $declaredFonts) as $family) {
+            $tells[] = "settings.fonts loads '{$family}' but nothing renders in it — either use it (a later declaration of the same custom property overrides an earlier one, so check which one wins) or drop it from settings.fonts; as it stands the visitor downloads a webfont for nothing.";
+        }
+
         return ['must_fix' => $must, 'tells' => $tells];
+    }
+
+    /**
+     * Declared families that the CSS never puts on screen.
+     *
+     * "Never" means: absent from the EFFECTIVE cascade — the last declaration of
+     * each custom property (an earlier one is dead) plus every direct
+     * `font-family` that doesn't defer to a var().
+     *
+     * @param  array<int, string>  $declaredFonts
+     * @return list<string>
+     */
+    private function unusedFonts(string $css, array $declaredFonts): array
+    {
+        if ($declaredFonts === [] || trim($css) === '') {
+            return [];
+        }
+
+        $effective = [];
+
+        preg_match_all('/(--[\w-]+)\s*:\s*([^;}]+)/', $css, $vars, PREG_SET_ORDER);
+        foreach ($vars as $declaration) {
+            // Last write wins, exactly as the cascade resolves it.
+            $effective[strtolower($declaration[1])] = $declaration[2];
+        }
+
+        preg_match_all('/font-family\s*:\s*([^;}]+)/i', $css, $direct);
+        foreach ($direct[1] ?? [] as $value) {
+            if (! str_contains($value, 'var(')) {
+                $effective[] = $value;
+            }
+        }
+
+        $haystack = strtolower(implode(' | ', $effective));
+
+        $unused = [];
+        foreach ($declaredFonts as $spec) {
+            $family = trim(explode(':', (string) $spec)[0]);
+            if ($family === '') {
+                continue;
+            }
+            if (! str_contains($haystack, strtolower($family))) {
+                $unused[] = $family;
+            }
+        }
+
+        return $unused;
     }
 
     /**
@@ -427,6 +544,7 @@ class LandingDesignCritic
         ?string $modelOverride,
         ?StoredImage $screenshot = null,
         bool $screenshotIsCurrentDraft = false,
+        string $mode = self::MODE_DESIGN,
     ): ?array {
         $this->directorStatus = 'skipped';
 
@@ -455,7 +573,7 @@ class LandingDesignCritic
         }
 
         foreach ($candidates as $model) {
-            $decoded = $this->directorAttempt($intent, $html, $css, $user, $model, $screenshot, $screenshotIsCurrentDraft);
+            $decoded = $this->directorAttempt($intent, $html, $css, $user, $model, $screenshot, $screenshotIsCurrentDraft, $mode);
 
             if ($decoded !== null) {
                 $this->directorStatus = 'ok';
@@ -510,6 +628,7 @@ class LandingDesignCritic
         string $model,
         ?StoredImage $screenshot = null,
         bool $screenshotIsCurrentDraft = false,
+        string $mode = self::MODE_DESIGN,
     ): ?array {
         $schemaFn = fn (JsonSchema $schema): array => [
             'ship' => $schema->boolean()
@@ -532,10 +651,14 @@ class LandingDesignCritic
         try {
             $provider = $this->providers->resolveProviderForCatalogModel($model, $user) ?? Lab::Anthropic;
 
-            $agent = (new ExpressGateAgent(self::DIRECTOR_INSTRUCTIONS, $schemaFn))->forModel($model);
+            $instructions = $mode === self::MODE_REPLICATE
+                ? self::REPLICATE_INSTRUCTIONS
+                : self::DIRECTOR_INSTRUCTIONS;
+
+            $agent = (new ExpressGateAgent($instructions, $schemaFn))->forModel($model);
 
             $response = $agent->prompt(
-                $this->buildPrompt($intent, $html, $css, $screenshot !== null, $screenshotIsCurrentDraft),
+                $this->buildPrompt($intent, $html, $css, $screenshot !== null, $screenshotIsCurrentDraft, $mode),
                 attachments: $screenshot !== null ? [$screenshot] : [],
                 provider: $provider,
                 model: $model,
@@ -568,8 +691,9 @@ class LandingDesignCritic
         }
     }
 
-    private function buildPrompt(string $intent, string $html, string $css, bool $hasScreenshot = false, bool $screenshotIsCurrentDraft = false): string
+    private function buildPrompt(string $intent, string $html, string $css, bool $hasScreenshot = false, bool $screenshotIsCurrentDraft = false, string $mode = self::MODE_DESIGN): string
     {
+        $replicating = $mode === self::MODE_REPLICATE;
         $intent = trim($intent) === '' ? '(not stated — infer it from the page and judge whether the page makes its own purpose obvious)' : trim($intent);
 
         $pixels = '';
@@ -585,8 +709,10 @@ class LandingDesignCritic
             ."--- HTML (structure) ---\n".$this->clip($html)."\n\n"
             ."--- CUSTOM CSS (the look) ---\n".$this->clip($css)."\n\n"
             ."NOTE ON MOTION: data-sp-* attributes are LIVE motion hydrated by the runtime — you will NOT see their keyframes in the CSS, so credit them as working motion rather than asking for CSS that isn't there. data-sp-reveal = fade + rise on scroll; data-sp-sequence = the element's children stagger in one by one (e.g. a chat animating message-by-message); data-sp-motion=\"ambient-field\" = an animated connected-node field behind the element. Judge whether the motion CHOICES are ambitious enough, not whether CSS keyframes are present.\n\n"
-            .$this->brandDirective()
-            .'Judge this landing against the vanguard bar. Be demanding — a beautiful-but-generic page is a revise. Ground every note in the intent.';
+            .$this->brandDirective($mode)
+            .($replicating
+                ? 'Judge this rebuild on FIDELITY to the page it is reproducing, described in the intent above. Do not art-direct it.'
+                : 'Judge this landing against the vanguard bar. Be demanding — a beautiful-but-generic page is a revise. Ground every note in the intent.');
     }
 
     private function clip(string $s): string
@@ -630,6 +756,35 @@ class LandingDesignCritic
      * from the studio design discipline: vanguard is SPECIFIC to the subject, and
      * generic-but-polished is a failure.
      */
+    /**
+     * The director's brief when the page is a REPRODUCTION. Same judge, opposite
+     * question: not "is this vanguard?" but "is this the same page?". Taste is
+     * explicitly withdrawn, because the reference already exercised it and the
+     * only thing the director's own taste can do here is pull the copy away.
+     */
+    private const REPLICATE_INSTRUCTIONS = <<<'TXT'
+You are reviewing a REBUILD of an existing web page. Your job is FIDELITY, not art direction. The original — described in the intent, and shown in the screenshot when one is attached — is the standard. Your own taste is not.
+
+WHAT YOU JUDGE — ways the rebuild fails to be the same page:
+- Missing or reordered sections; a section whose content was summarised, shortened or invented.
+- Copy that was rewritten, "improved", translated or paraphrased. The original wording is the correct wording, typos included.
+- Wrong numbers: prices, tiers, percentages, dates, counts.
+- Palette, type scale or spacing that visibly departs from the original.
+- Missing icons/logos, or an empty box where the original had a glyph.
+- Composition that changed: a centered hero rebuilt as a split one, a grid whose column count differs, a panel moved to the other side.
+- Elements that LOOK interactive but cannot be (no JavaScript runs here): a burger menu, tabs, a carousel, a theme toggle. Either the default state is frozen and honest, or it is a dead affordance — that one IS blocking.
+- The lead form: present, styled to match, and placed where the original's form was.
+
+WHAT YOU DO NOT JUDGE — the reference already answered these:
+- Whether the composition is asymmetric, tense or "vanguard". A faithful copy of a centered, restrained page is a SUCCESS, not a generic tell.
+- Whether the type scale is bold enough, the palette adventurous enough, the section labels editorial enough.
+- Anything you would ADD that the original does not have — section indices, eyebrows, decorative rules, extra motion. Adding is a fidelity failure, exactly like omitting.
+
+Never ask for a change whose justification is that you would have designed it differently. Every must_fix must name a concrete, checkable difference from the original.
+
+`ship` = true when the rebuild is faithful: every section present, copy and numbers intact, look recognisably the same, no dead affordances. Small unavoidable losses (a webfont that cannot load, motion that needs JS) are fine when they are declared rather than faked. `score` = 0-100 fidelity to the original, NOT design quality. `direction` = optional notes on remaining differences. `strengths` = what the rebuild got right.
+TXT;
+
     private const DIRECTOR_INSTRUCTIONS = <<<'TXT'
 You are the design director at a studio whose landing pages are considered the best in the market — vanguard, unmistakably crafted, never templated. Judge ONE landing page draft (its HTML structure + its custom CSS) against that bar and push it there. You are demanding: "competent" is a FAIL. You reject anything that reads as generic, AI-made design.
 

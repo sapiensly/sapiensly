@@ -1008,6 +1008,7 @@ class AppBuilderController extends Controller
         $lines[] = '2) Una sección del original = UN bloque `html` con tus propias clases. NUNCA uses los bloques genéricos (hero, feature_grid, cta, testimonials, pricing, faq, stat_band): el validador los rechaza en una landing.';
         $lines[] = '3) Todo el estilo va en settings.custom_css, partiendo del CSS original. Escríbelo por partes con {op:"append", path:"/settings/custom_css"} — nunca un replace gigante. Recuerda el presupuesto de 60.000 caracteres y que las variables CSS van en TU propia clase envolvente, no en :root/body.';
         $lines[] = '4) Conserva el TEXTO literal del original (titulares, copy, precios, nombres). No lo reescribas ni lo "mejores": es una reconstrucción, no un rediseño.';
+        $lines[] = '4b) COPIA LOS ICONOS. El HTML de arriba trae los <svg> en línea del original: reprodúcelos tal cual (path/circle/rect + viewBox, fill, stroke). Se permiten; lo que se elimina al guardar es <script>/<style>/<foreignObject>/<use>/href/style=/on*= dentro del svg. Un recuadro vacío donde el original tenía un glifo es lo que más delata una reconstrucción a medias.';
         $lines[] = '5) Tipografía: si el original usa una familia que no está en el catálogo self-hosted, decláratela en settings.fonts (máx. 4). Nunca @import.';
         $lines[] = '';
         $lines[] = 'Lo que NO se puede portar tal cual (dilo explícitamente en tu resumen en vez de fingir que funciona):';
@@ -1015,7 +1016,7 @@ class AppBuilderController extends Controller
         $lines[] = '- Las animaciones de scroll se rehacen con data-sp-reveal / data-sp-sequence / data-sp-motion, no con JS.';
         $lines[] = '- Si el original tiene un formulario (waitlist, contacto), reconstrúyelo como objeto de leads + bloque `lead_form`, colocado con <div data-sp-slot="lead_form"></div> dentro de la sección donde va, y estilado en custom_css para que combine con el resto.';
         $lines[] = '';
-        $lines[] = 'Trabaja por turnos: primero la estructura de la página con sus secciones, luego el CSS por partes, luego el formulario. Al final llama a critique_landing_design y itera hasta ship:true.';
+        $lines[] = 'Trabaja por turnos: primero la estructura de la página con sus secciones, luego el CSS por partes, luego el formulario. Al final llama a critique_landing_design **con mode:"replicate"** e itera hasta ship:true. Ese modo juzga FIDELIDAD al original en vez de dirección de arte: no te va a pedir que hagas el hero asimétrico ni que añadas recursos editoriales que el original no tiene, y converge en 2 rondas en vez de 3. Si lo llamas sin ese modo, el gate te empujará a rediseñar la página en lugar de copiarla.';
 
         return implode("\n", $lines);
     }

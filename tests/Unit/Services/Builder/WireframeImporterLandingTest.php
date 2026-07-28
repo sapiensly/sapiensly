@@ -86,6 +86,30 @@ it('returns the new keys for a fragment paste too', function () {
 });
 
 /**
+ * A self-extracting bundle, defined HERE rather than borrowed from
+ * BundledDesignTest: a Pest helper only exists when its file is loaded, so a
+ * cross-file dependency passes when the whole suite runs and fails the moment
+ * anyone runs this directory alone.
+ */
+function importerBundleFixture(): string
+{
+    $templateCss = "@font-face{font-family:'Poppins';src:url(\"09ac5f9c\") format('woff2')}"
+        ."@font-face{font-family:'Montserrat';src:url(\"aa11bb22\") format('woff2')}"
+        .':root{--sp-bg-primary:#00031C;--sp-accent-blue:#0096FF}';
+
+    $template = json_encode(
+        '<!DOCTYPE html><html><head><title>Sapiensly — AI agents that do the work.</title>'
+        ."<style>{$templateCss}</style></head><body><div id=\"root\"></div></body></html>"
+    );
+
+    return '<!doctype html><html><head><style>#__bundler_loading{position:fixed}</style></head><body>'
+        .'<div>This page requires JavaScript to display.</div>'
+        .'<script type="__bundler/manifest">{"u":{"mime":"text/jsx","compressed":true,"data":"x"}}</script>'
+        .'<script type="__bundler/template">'.$template.'</script>'
+        .'</body></html>';
+}
+
+/**
  * A self-extracting bundle carries no page: the loader shell parses as "This
  * page requires JavaScript to display". The importer must take its evidence
  * from the recovered template plus a headless render, never from the shell.
@@ -109,12 +133,12 @@ function fakeRenderer(?array $result): void
 it('takes a bundle design from the template, not the loader shell', function () {
     fakeRenderer(['html' => '<header>SAPIENSLY</header><section class="hero"><h1>AI agents</h1></section>', 'screenshot_path' => null]);
 
-    $parsed = app(WireframeImporter::class)->fromHtml(bundleFixture());
+    $parsed = app(WireframeImporter::class)->fromHtml(importerBundleFixture());
 
     expect($parsed['is_landing'])->toBeTrue()
         ->and($parsed['title'])->toBe('Sapiensly — AI agents that do the work.')
         // The design system, not `#__bundler_loading`.
-        ->and($parsed['stylesheet'])->toContain('--sp-bg-primary: #00031C')
+        ->and($parsed['stylesheet'])->toContain('--sp-bg-primary:#00031C')
         ->and($parsed['stylesheet'])->not->toContain('__bundler_loading')
         ->and($parsed['fonts'])->toBe(['Poppins', 'Montserrat'])
         // The markup comes from the render — the only place it exists.
@@ -125,14 +149,14 @@ it('takes a bundle design from the template, not the loader shell', function () 
 it('surfaces the render screenshot so the model can see the page', function () {
     fakeRenderer(['html' => '<h1>hola</h1>', 'screenshot_path' => '/tmp/shot.jpg']);
 
-    expect(app(WireframeImporter::class)->fromHtml(bundleFixture())['screenshot_path'])
+    expect(app(WireframeImporter::class)->fromHtml(importerBundleFixture())['screenshot_path'])
         ->toBe('/tmp/shot.jpg');
 });
 
 it('degrades to static extraction when the render fails', function () {
     fakeRenderer(null);
 
-    $parsed = app(WireframeImporter::class)->fromHtml(bundleFixture());
+    $parsed = app(WireframeImporter::class)->fromHtml(importerBundleFixture());
 
     // No markup to be had, but the design system and SEO still came through —
     // a failed render must not cost what static extraction already recovered.

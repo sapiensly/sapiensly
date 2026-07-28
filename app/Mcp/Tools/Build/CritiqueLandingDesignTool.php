@@ -25,6 +25,7 @@ class CritiqueLandingDesignTool extends SapiensTool
             'app_slug' => ['required', 'string'],
             'intent' => ['required', 'string', 'max:1000'],
             'round' => ['sometimes', 'integer', 'min:1', 'max:10'],
+            'mode' => ['sometimes', 'string', 'in:design,replicate'],
         ]);
 
         /** @var User $user */
@@ -41,7 +42,7 @@ class CritiqueLandingDesignTool extends SapiensTool
             return Response::error("App '{$app->slug}' has no active manifest.");
         }
 
-        ['html' => $html, 'css' => $css] = LandingDesignCritic::extractSurfaces($manifest);
+        ['html' => $html, 'css' => $css, 'fonts' => $fonts] = LandingDesignCritic::extractSurfaces($manifest);
         $round = max(1, (int) ($validated['round'] ?? 1));
 
         // Pixel resolution for the director's eyes, best available first:
@@ -67,6 +68,10 @@ class CritiqueLandingDesignTool extends SapiensTool
             null,
             $round,
             $screenshot,
+            declaredFonts: $fonts,
+            mode: ($validated['mode'] ?? '') === LandingDesignCritic::MODE_REPLICATE
+                ? LandingDesignCritic::MODE_REPLICATE
+                : LandingDesignCritic::MODE_DESIGN,
         );
 
         // The critic has consumed the pixels; drop the headless temp file.
@@ -101,6 +106,8 @@ class CritiqueLandingDesignTool extends SapiensTool
             'intent' => $schema->string()
                 ->description('What the landing is for: the audience and the ONE job of the page. Grounds the critique — vanguard design is specific to the subject.')
                 ->required(),
+            'mode' => $schema->string()
+                ->description('"design" (default) judges the page against a vanguard design bar. Use "replicate" ONLY when rebuilding a page that already exists (a design import): the director then judges FIDELITY to that original — missing sections, rewritten copy, wrong numbers, changed composition, missing icons, dead affordances — and stops asking for art direction the original never had. Replicate also converges in 2 rounds instead of 3.'),
             'round' => $schema->integer()
                 ->description('The 1-based iteration of your critique→revise loop (default 1). By round 3 the director stops blocking on polish and ships.'),
         ];

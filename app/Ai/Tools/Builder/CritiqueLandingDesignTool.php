@@ -77,6 +77,8 @@ DESC;
             'intent' => $schema->string()
                 ->description('What this landing is for: the audience and the ONE job of the page (e.g. "book a demo for a B2B logistics SaaS; visitors are ops directors who need proof it integrates"). Grounds the critique — vanguard design is specific to the subject.')
                 ->required(),
+            'mode' => $schema->string()
+                ->description('"design" (default) judges the page against a vanguard design bar. Use "replicate" ONLY when rebuilding a page that already exists (a design import): the director then judges FIDELITY to that original — missing sections, rewritten copy, wrong numbers, changed composition, missing icons, dead affordances — and stops asking for art direction the original never had. Replicate also converges in 2 rounds instead of 3.'),
             'round' => $schema->integer()
                 ->description('The 1-based iteration of the critique→revise loop. Pass 1 the first time and increment on each re-call. Drives convergence: by round 3 the director stops blocking on polish and ships.'),
         ];
@@ -87,6 +89,9 @@ DESC;
         $args = $request->all();
         $intent = trim((string) ($args['intent'] ?? ''));
         $round = max(1, (int) ($args['round'] ?? 1));
+        $mode = ($args['mode'] ?? '') === LandingDesignCritic::MODE_REPLICATE
+            ? LandingDesignCritic::MODE_REPLICATE
+            : LandingDesignCritic::MODE_DESIGN;
 
         $manifest = $this->proposeTool?->currentManifest()
             ?? $this->manifestService->getActiveManifest($this->appModel);
@@ -94,7 +99,7 @@ DESC;
             return json_encode(['error' => 'No active manifest for this app.'], JSON_THROW_ON_ERROR);
         }
 
-        ['html' => $html, 'css' => $css] = LandingDesignCritic::extractSurfaces($manifest);
+        ['html' => $html, 'css' => $css, 'fonts' => $fonts] = LandingDesignCritic::extractSurfaces($manifest);
 
         // The visual half, freshest first: (Stage 2) ask the open builder UI to
         // render THIS DRAFT and screenshot it — so a brand-new landing gets
@@ -121,6 +126,8 @@ DESC;
                     null,
                     $round, $screenshot,
                     screenshotIsCurrentDraft: $pixelSource === 'draft',
+                    declaredFonts: $fonts,
+                    mode: $mode,
                 );
         } finally {
             if ($pixelSource === 'draft') {

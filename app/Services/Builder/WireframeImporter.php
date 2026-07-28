@@ -189,7 +189,7 @@ class WireframeImporter
         $text = null;
         $cleanedHtml = null;
         if ($rootNode !== null) {
-            $stripped = $this->stripNoise($rootNode);
+            $stripped = $this->stripNoise($rootNode, keepIcons: $isLanding);
             // Plain-text dump: useful for OCR-style wireframes where the
             // structural HTML is too generic to help (e.g. a Figma-exported
             // page with thousands of empty divs).
@@ -299,10 +299,17 @@ class WireframeImporter
      * Returns the (mutated) cloned node so callers can serialize without
      * polluting the original Crawler tree.
      */
-    private function stripNoise(\DOMNode $node): \DOMNode
+    private function stripNoise(\DOMNode $node, bool $keepIcons = false): \DOMNode
     {
         $clone = $node->cloneNode(true);
-        $noise = ['script', 'style', 'noscript', 'iframe', 'svg', 'link', 'meta', 'template'];
+        $noise = ['script', 'style', 'noscript', 'iframe', 'link', 'meta', 'template'];
+
+        // An svg is noise in a mockup (a Figma export is thousands of them) and
+        // is the DESIGN in a page being reproduced — it is how every icon and
+        // logo is drawn, and the landing sanitiser now keeps them.
+        if (! $keepIcons) {
+            $noise[] = 'svg';
+        }
         if ($clone instanceof \DOMElement || $clone instanceof \DOMDocument) {
             foreach ($noise as $tag) {
                 // We have to materialise the NodeList before removing because

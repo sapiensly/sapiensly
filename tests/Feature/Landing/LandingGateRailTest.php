@@ -126,7 +126,7 @@ it('the critique tool stamps landing_shipped_at on the first shipped verdict', f
 
     $shippingCritic = new class(Mockery::mock(AiDefaults::class), Mockery::mock(AiProviderService::class)) extends LandingDesignCritic
     {
-        public function critique(string $intent, string $html, string $css, ?User $user = null, ?string $modelOverride = null, int $round = 1, ?StoredImage $screenshot = null, bool $screenshotIsCurrentDraft = false): array
+        public function critique(string $intent, string $html, string $css, ?User $user = null, ?string $modelOverride = null, int $round = 1, ?StoredImage $screenshot = null, bool $screenshotIsCurrentDraft = false, array $declaredFonts = [], string $mode = self::MODE_DESIGN): array
         {
             return [
                 'ship' => true, 'score' => 92, 'must_fix' => [], 'tells' => [],
