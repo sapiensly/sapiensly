@@ -5004,6 +5004,13 @@ function statusTone(status: Message['status']): string {
                         // preview squeezed to a couple of centimetres shows
                         // nothing useful.
                         'min-h-[26rem] lg:min-h-0',
+                        // …and for a landing, cancel the page gutter too, so the
+                        // preview is the width the visitor will actually get.
+                        // The side border and radius go with it — a hairline
+                        // down the screen edge is chrome pretending to be design.
+                        previewIsLanding && viewMode === 'preview'
+                            ? '-mx-3 rounded-none border-x-0 sm:mx-0 sm:rounded-sp-sm sm:border-x'
+                            : '',
                         ...fullscreenClassFor('work'),
                     ]"
                 >
@@ -5190,7 +5197,15 @@ function statusTone(status: Message['status']): string {
                         @click.capture="onManualPreviewClick"
                         @dblclick.capture="onManualPreviewDblClick"
                         :class="[
-                            'relative flex-1 overflow-auto p-5 transition-colors',
+                            'relative flex-1 overflow-auto transition-colors',
+                            // A landing is full-bleed by nature, and on a phone
+                            // the frame is not free: measured at 390, the p-5
+                            // plus the page gutter rendered it at 324 — 17% gone,
+                            // and its own breakpoints resolving against the wrong
+                            // width. Below `sm` a landing preview sits flush; an
+                            // app or dashboard keeps its frame, where the inset
+                            // reads as chrome rather than as the design.
+                            previewIsLanding ? 'p-0 sm:p-5' : 'p-5',
                             // Paint containment: a landing's position:fixed
                             // overlays (grain, scanlines) position against the
                             // VIEWPORT and painted over the whole builder UI —

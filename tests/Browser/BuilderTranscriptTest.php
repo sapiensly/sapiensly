@@ -170,3 +170,65 @@ it('drops the revert label on a phone and keeps it on desktop', function () {
     visit("/apps/{$app->id}/builder")->on()->iPhone15()->assertScript($label, 'icon-only');
     visit("/apps/{$app->id}/builder")->on()->macbookAir()->assertScript($label, 'labelled');
 });
+
+function landingPreviewApp(): string
+{
+    $user = mcpMember($org = mcpOrg());
+    test()->actingAs($user);
+
+    $app = App::factory()->create(['user_id' => $user->id, 'organization_id' => $org->id]);
+    app(AppManifestService::class)->createVersion($app, [
+        'schema_version' => '1.0.0',
+        'id' => $app->id, 'slug' => 'lp', 'name' => 'LP', 'version' => 1,
+        'objects' => [],
+        'pages' => [[
+            'id' => 'pag_'.strtolower((string) Str::ulid()), 'slug' => 'home', 'name' => 'Home', 'path' => '/',
+            'blocks' => [[
+                'id' => 'blk_'.strtolower((string) Str::ulid()), 'type' => 'html',
+                'content' => '<section class="hero"><h1>Build your first agent</h1></section>',
+            ]],
+        ]],
+        'permissions' => ['roles' => [['id' => 'rol_'.strtolower((string) Str::ulid()), 'slug' => 'admin', 'name' => 'Admin']]],
+        'settings' => ['surface' => 'landing', 'custom_css' => '.hero{padding:4rem 2rem;background:#00031C;color:#fff}'],
+    ], $user);
+
+    return $app->id;
+}
+
+it('previews a landing edge to edge on a phone', function () {
+    // Measured before this: the preview body's p-5 plus the page gutter rendered
+    // a 390px landing at 324 — 17% of the width gone, and the design's own
+    // breakpoints resolving against a width no visitor will ever have.
+    $this->seed(RolesAndPermissionsSeeder::class);
+    $appId = landingPreviewApp();
+
+    $surfaceWidth = <<<'JS'
+    function () {
+        const s = document.querySelector('.sp-app-surface');
+        if (!s) return 'no surface';
+        const r = s.getBoundingClientRect();
+        return (Math.round(r.width) === document.documentElement.clientWidth && Math.round(r.left) === 0)
+            ? 'full-bleed' : `inset w=${Math.round(r.width)} x=${Math.round(r.left)}`;
+    }
+    JS;
+
+    visit("/apps/{$appId}/builder")->on()->iPhone15()
+        ->assertNoJavaScriptErrors()
+        ->assertScript($surfaceWidth, 'full-bleed');
+});
+
+it('keeps the preview framed on a desktop', function () {
+    // The inset is chrome, and at a width that can afford it it reads as chrome.
+    $this->seed(RolesAndPermissionsSeeder::class);
+    $appId = landingPreviewApp();
+
+    $framed = <<<'JS'
+    function () {
+        const s = document.querySelector('.sp-app-surface');
+        if (!s) return 'no surface';
+        return s.getBoundingClientRect().left > 0 ? 'framed' : 'flush';
+    }
+    JS;
+
+    visit("/apps/{$appId}/builder")->on()->macbookAir()->assertScript($framed, 'framed');
+});
