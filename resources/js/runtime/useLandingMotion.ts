@@ -19,6 +19,10 @@ import { onUnmounted, type Ref } from 'vue';
  *                                    that id has scrolled out of view (the
  *                                    sticky header CTA that appears past the
  *                                    hero). Hidden until then, inert while hidden.
+ *   [data-sp-hide-while="<id>"]      the inverse: retreat this element upward
+ *                                    while the element with that id is in view,
+ *                                    and bring it back when it leaves (the fixed
+ *                                    header that steps aside for the footer).
  *   [data-sp-replay]                 a control that replays a sequence: its value
  *                                    is the id of a [data-sp-sequence] container,
  *                                    or empty to replay the nearest one around it.
@@ -61,6 +65,7 @@ export function useLandingMotion(root: Ref<HTMLElement | null>) {
         hydrateSequence(el);
         hydrateAmbient(el);
         hydrateStickyAfter(el);
+        hydrateHideWhile(el);
     }
 
     function hydrateReveal(el: HTMLElement): void {
@@ -244,6 +249,72 @@ export function useLandingMotion(root: Ref<HTMLElement | null>) {
             io.observe(watched);
             cleanups.push(() => io.disconnect());
         });
+    }
+
+    /**
+     * Retreat an element while another is on screen — the fixed header that gets
+     * out of the way once the footer arrives, and comes back the moment the
+     * reader scrolls up off it.
+     *
+     * Deliberately skipped under prefers-reduced-motion. Every other effect here
+     * resolves to its final VISIBLE state when motion is off; the equivalent for
+     * a hide-on-scroll is not to hide at all. That also protects the headless
+     * screenshot path (HeadlessLandingShot forces reduced motion and captures
+     * full-page, so the footer is trivially "in view") — without this guard the
+     * design director would be handed a landing with no header and mark it down
+     * for something no visitor would ever see.
+     */
+    function hydrateHideWhile(el: HTMLElement): void {
+        if (reduce) {
+            return;
+        }
+        const targets = Array.from(
+            el.querySelectorAll<HTMLElement>('[data-sp-hide-while]'),
+        );
+
+        targets.forEach((target) => {
+            const watchId = target.getAttribute('data-sp-hide-while')?.trim();
+            const watched = watchId
+                ? el.querySelector<HTMLElement>(`#${CSS.escape(watchId)}`)
+                : null;
+
+            // Nothing to watch, or no observer: leave the element exactly as the
+            // stylesheet drew it. The failure mode of this effect must be "the
+            // header never hides", never "the header never comes back".
+            if (!watched || !('IntersectionObserver' in window)) {
+                return;
+            }
+
+            const io = new IntersectionObserver(
+                ([entry]) => {
+                    if (entry.isIntersecting) {
+                        retreat(target);
+                    } else {
+                        settle(target);
+                    }
+                },
+                { threshold: 0 },
+            );
+            io.observe(watched);
+            cleanups.push(() => {
+                io.disconnect();
+                settle(target);
+            });
+        });
+    }
+
+    function retreat(el: HTMLElement): void {
+        el.style.transition = 'transform .28s ease, opacity .28s ease';
+        el.style.transform = 'translateY(-100%)';
+        el.style.opacity = '0';
+        el.style.pointerEvents = 'none';
+    }
+
+    function settle(el: HTMLElement): void {
+        el.style.transition = 'transform .28s ease, opacity .28s ease';
+        el.style.transform = '';
+        el.style.opacity = '';
+        el.style.pointerEvents = '';
     }
 
     function show(el: HTMLElement, animate: boolean): void {
