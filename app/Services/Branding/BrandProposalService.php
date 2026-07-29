@@ -76,8 +76,26 @@ class BrandProposalService
      */
     public function propose(Organization $organization, ?string $website): array
     {
-        $site = $this->sites->fetch($website);
+        return $this->fromProfile($organization, $this->sites->fetch($website));
+    }
 
+    /**
+     * The same proposal from a page somebody else already downloaded — the entry
+     * point the unified import uses, so reading a site once can feed both books
+     * instead of each service fetching the same home page for itself.
+     *
+     * @return array{
+     *     read: bool,
+     *     source: string|null,
+     *     proposal: array<string, mixed>,
+     *     diff: list<array{field: string, status: string, current: mixed, proposed: mixed}>,
+     *     has_conflicts: bool,
+     *     palette: array<string, mixed>|null,
+     *     notes: list<string>,
+     * }
+     */
+    public function fromProfile(Organization $organization, ?SiteProfile $site): array
+    {
         if ($site === null || ! $site->hasBrandSignals()) {
             return [
                 'read' => $site !== null,

@@ -3,7 +3,9 @@
 namespace App\Services\Site;
 
 use App\Services\Security\Ssrf\SafeHttpClient;
+use App\Support\Site\SiteFetch;
 use App\Support\Site\SiteProfile;
+use App\Support\Site\SiteUrl;
 use Illuminate\Support\Facades\Log;
 use Throwable;
 
@@ -14,8 +16,10 @@ use Throwable;
  * books in one request downloads the same home page twice.
  *
  * Best-effort by contract. A URL that is unreachable, hostile, or simply not
- * HTML returns null, never an exception a user has to deal with mid-form — the
- * caller degrades to "no website material" and the feature still answers.
+ * HTML comes back empty, never as an exception a user has to deal with mid-form
+ * — the caller degrades to "no website material" and the feature still answers.
+ * {@see read()} additionally reports WHICH of those happened, for callers that
+ * have to explain it to somebody.
  *
  * Every fetch goes through {@see SafeHttpClient}: the URL is tenant-supplied, so
  * it is SSRF-validated and pinned, and that applies to a logo on a CDN exactly
@@ -25,7 +29,7 @@ class SiteProfileFetcher
 {
     private const TIMEOUT_SECONDS = 15;
 
-    /** @var array<string, SiteProfile|null> */
+    /** @var array<string, SiteFetch> */
     private array $memo = [];
 
     public function __construct(private readonly SafeHttpClient $http) {}
@@ -37,19 +41,32 @@ class SiteProfileFetcher
      */
     public function fetch(?string $url): ?SiteProfile
     {
-        $url = trim((string) $url);
-        if ($url === '') {
-            return null;
-        }
-
-        if (array_key_exists($url, $this->memo)) {
-            return $this->memo[$url];
-        }
-
-        return $this->memo[$url] = $this->load($url);
+        return $this->read($url)->profile;
     }
 
-    private function load(string $url): ?SiteProfile
+    /**
+     * The same fetch, but saying why it failed. Callers that put the outcome in
+     * front of a human want this one: "that address is not a website" and "that
+     * site did not answer" are fixed by different actions.
+     *
+     * The URL is normalized here, so `acme.com` reads the same site `https://acme.com`
+     * does and the memo does not hold both spellings.
+     */
+    public function read(?string $url): SiteFetch
+    {
+        if (trim((string) $url) === '') {
+            return SiteFetch::failed(SiteFetch::NO_URL);
+        }
+
+        $normalized = SiteUrl::normalize($url);
+        if ($normalized === null) {
+            return SiteFetch::failed(SiteFetch::INVALID_URL);
+        }
+
+        return $this->memo[$normalized] ??= $this->load($normalized);
+    }
+
+    private function load(string $url): SiteFetch
     {
         try {
             $response = $this->http->request('GET', $url, [
@@ -58,26 +75,28 @@ class SiteProfileFetcher
             ]);
 
             if (! $response->successful()) {
-                return null;
+                return SiteFetch::failed(SiteFetch::UNREACHABLE);
             }
 
             // A PDF or an image would survive strip_tags as garbage and be handed
             // to a model as if it were prose. Only markup is worth parsing.
             $contentType = strtolower((string) $response->header('Content-Type'));
             if ($contentType !== '' && ! str_contains($contentType, 'html')) {
-                return null;
+                return SiteFetch::failed(SiteFetch::NOT_HTML);
             }
 
             $profile = SiteProfile::parse($response->body(), $url);
 
-            return $profile->isEmpty() ? null : $profile;
+            return $profile->isEmpty()
+                ? SiteFetch::failed(SiteFetch::EMPTY_PAGE)
+                : SiteFetch::ok($profile);
         } catch (Throwable $e) {
             Log::info('SiteProfileFetcher: could not read the site', [
                 'url' => $url,
                 'error' => $e->getMessage(),
             ]);
 
-            return null;
+            return SiteFetch::failed(SiteFetch::UNREACHABLE);
         }
     }
 }

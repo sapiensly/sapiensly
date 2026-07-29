@@ -2,6 +2,9 @@
 import InputError from '@/components/InputError.vue';
 import DraftConflicts from '@/components/admin/DraftConflicts.vue';
 import SettingsCard from '@/components/admin/SettingsCard.vue';
+import SiteImport, {
+    type ImportStatus,
+} from '@/components/admin/SiteImport.vue';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import SettingsLayout from '@/layouts/settings/Layout.vue';
@@ -17,7 +20,6 @@ import {
     Package,
     Plus,
     ShieldAlert,
-    Wand2,
     X,
 } from '@lucide/vue';
 import axios from 'axios';
@@ -59,6 +61,8 @@ const props = defineProps<{
     formalityOptions: string[];
     unitOptions: string[];
     updatedAt: string | null;
+    /** What the site import last read anywhere in the org, Brandbook included. */
+    lastImport: { url: string | null; at: string } | null;
 }>();
 
 const { t } = useI18n();
@@ -187,6 +191,7 @@ interface DiffEntry {
 const draftBrief = ref('');
 const drafting = ref(false);
 const conflicts = ref<DiffEntry[]>([]);
+const draftStatus = ref<ImportStatus | null>(null);
 
 const CONFLICT_LABELS = computed<Record<string, string>>(() => ({
     descriptor: t('settings.context.descriptor'),
@@ -216,38 +221,58 @@ function applyField(field: string, value: unknown): void {
     }
 }
 
+/**
+ * One reading of the site proposes BOTH books; this page takes the context half
+ * and reports how much of the same reading the Brandbook could use, so the page
+ * is never downloaded — or drafted — twice.
+ */
 async function deriveDraft(): Promise<void> {
     drafting.value = true;
     conflicts.value = [];
+    draftStatus.value = null;
     try {
         const { data } = await axios.post(
-            '/settings/organization/context/draft',
+            '/settings/organization/site-import',
             { website: form.website || null, brief: draftBrief.value || null },
         );
 
-        if (!data.generated) {
-            toast.info(t('settings.context.draft_empty'));
-            return;
-        }
-
-        const diff = (data.diff ?? []) as DiffEntry[];
+        const diff = (data.context?.diff ?? []) as DiffEntry[];
 
         // Empty fields fill straight away; anything that would replace what the
         // user wrote waits for them.
-        diff.filter((e) => e.status === 'new').forEach((e) =>
-            applyField(e.field, e.proposed),
-        );
+        const applied: string[] = [];
+        diff.filter((e) => e.status === 'new').forEach((e) => {
+            applyField(e.field, e.proposed);
+            applied.push(CONFLICT_LABELS.value[e.field] ?? e.field);
+        });
         conflicts.value = diff.filter((e) => e.status === 'conflict');
 
-        toast.success(
-            conflicts.value.length
-                ? t('settings.context.draft_conflicts', {
-                      count: conflicts.value.length,
-                  })
-                : t('settings.context.draft_applied'),
-        );
+        draftStatus.value = {
+            url: data.url ?? null,
+            // A brief alone is material enough: the draft did not need the site,
+            // so a site that would not open is not a failure of this run.
+            read: Boolean(data.read) || Boolean(data.context?.generated),
+            reason: String(data.reason ?? ''),
+            applied,
+            conflicts: conflicts.value.length,
+            sources: data.context?.sources ?? [],
+            otherCount: (data.brand?.diff ?? []).length,
+            notes: [],
+        };
+
+        // Adopt what was actually fetched, so the stored website is the one that
+        // works rather than the shorthand somebody typed.
+        if (typeof data.url === 'string') {
+            form.website = data.url;
+        }
+
+        if (conflicts.value.length) {
+            toast.info(
+                t('site_import.conflicts', { count: conflicts.value.length }),
+            );
+        }
     } catch {
-        toast.error(t('settings.context.draft_failed'));
+        toast.error(t('site_import.failed'));
     } finally {
         drafting.value = false;
     }
@@ -294,7 +319,7 @@ function submit(): void {
                         />
                         <InputError :message="form.errors.descriptor" />
                     </div>
-                    <div class="grid gap-4 sm:grid-cols-3">
+                    <div class="grid gap-4 sm:grid-cols-2">
                         <div class="space-y-1.5">
                             <Label>{{ t('settings.context.industry') }}</Label>
                             <Input v-model="form.industry" maxlength="80" />
@@ -311,55 +336,34 @@ function submit(): void {
                             />
                             <InputError :message="form.errors.size" />
                         </div>
-                        <div class="space-y-1.5">
-                            <Label>{{ t('settings.context.website') }}</Label>
-                            <Input
-                                v-model="form.website"
-                                type="url"
-                                placeholder="https://"
-                            />
-                            <InputError :message="form.errors.website" />
-                        </div>
                     </div>
 
-                    <!-- Never a blank page: draft from what already exists. -->
+                    <!-- Never a blank page: draft it from the organization's own
+                         website. The website field lives here rather than above,
+                         because it is the same fact typed once. -->
                     <div
                         class="space-y-2 rounded-sp-sm border border-dashed border-soft p-3"
                     >
-                        <p class="text-xs text-ink-muted">
-                            {{ t('settings.context.draft_hint') }}
-                        </p>
-                        <div class="flex items-center gap-2">
-                            <Input
-                                v-model="draftBrief"
-                                maxlength="2000"
-                                :placeholder="
-                                    t(
-                                        'settings.context.draft_brief_placeholder',
-                                    )
-                                "
-                            />
-                            <button
-                                type="button"
-                                :disabled="drafting"
-                                class="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-xs border border-soft px-3 text-xs text-ink-muted transition-colors hover:bg-surface hover:text-ink disabled:opacity-50"
-                                @click="deriveDraft"
-                            >
-                                <Loader2
-                                    v-if="drafting"
-                                    class="size-3.5 animate-spin"
-                                />
-                                <Wand2 v-else class="size-3.5" />
-                                {{ t('settings.context.draft_button') }}
-                            </button>
-                        </div>
+                        <SiteImport
+                            v-model:url="form.website"
+                            v-model:brief="draftBrief"
+                            book="context"
+                            :label="t('settings.context.website')"
+                            with-brief
+                            :loading="drafting"
+                            :status="draftStatus"
+                            :last-import="props.lastImport"
+                            @read="deriveDraft"
+                        >
+                            <InputError :message="form.errors.website" />
 
-                        <DraftConflicts
-                            :entries="conflicts"
-                            :labels="CONFLICT_LABELS"
-                            @accept="acceptConflict"
-                            @dismiss="dismissConflict"
-                        />
+                            <DraftConflicts
+                                :entries="conflicts"
+                                :labels="CONFLICT_LABELS"
+                                @accept="acceptConflict"
+                                @dismiss="dismissConflict"
+                            />
+                        </SiteImport>
                     </div>
                 </div>
             </SettingsCard>

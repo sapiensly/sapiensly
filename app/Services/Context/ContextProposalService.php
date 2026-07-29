@@ -83,6 +83,29 @@ class ContextProposalService
      */
     public function propose(?string $website, string $brief = '', ?User $user = null, array $current = []): array
     {
+        $draft = $this->draft($this->sites->fetch($website), $brief, $user);
+
+        return self::result(
+            OrganizationContext::fromArray($draft['profile']),
+            $draft['sources'],
+            $draft['generated'],
+            $current,
+        );
+    }
+
+    /**
+     * The drafting half on its own: material in, normalized profile out, with no
+     * comparison against anything stored.
+     *
+     * Split out for the unified site import, which needs the two halves apart —
+     * the model call is the slow, billed step and is worth reusing across both
+     * books, while the diff has to be recomputed against whatever is stored at
+     * the moment the user looks at it.
+     *
+     * @return array{profile: array<string, mixed>, sources: list<string>, generated: bool}
+     */
+    public function draft(?SiteProfile $site, string $brief = '', ?User $user = null): array
+    {
         $sources = [];
         $material = '';
 
@@ -92,24 +115,24 @@ class ContextProposalService
             $material .= "What the administrator says about the organization:\n".Str::limit($brief, 2000)."\n\n";
         }
 
-        $site = $this->sites->fetch($website);
         if ($site !== null && $site->text !== null) {
             $sources[] = 'website';
             $material .= self::siteMaterial($site);
         }
 
         if ($material === '') {
-            return self::result(OrganizationContext::fromArray(null), [], false, $current);
+            return ['profile' => OrganizationContext::fromArray(null)->toArray(), 'sources' => [], 'generated' => false];
         }
 
         $decoded = $this->askModel($material, $user);
 
-        return self::result(
-            OrganizationContext::fromArray(is_array($decoded) ? self::sanitize($decoded, $site) : null),
-            $sources,
-            is_array($decoded),
-            $current,
-        );
+        return [
+            'profile' => OrganizationContext::fromArray(
+                is_array($decoded) ? self::sanitize($decoded, $site) : null,
+            )->toArray(),
+            'sources' => $sources,
+            'generated' => is_array($decoded),
+        ];
     }
 
     /**

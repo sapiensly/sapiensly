@@ -49,6 +49,26 @@ function show(field: string, value: unknown): string {
     if (Array.isArray(value)) return `${value.length} ${t('draft.items')}`;
     return String(value);
 }
+
+/**
+ * Colours and images are the fields people get wrong when they can only read
+ * them. `#0f766e` against `#be185d` is a decision nobody can make from the text,
+ * and a logo URL says nothing at all about the logo — so both are shown as
+ * themselves, with the value still spelled out underneath.
+ */
+const HEX = /^#[0-9A-Fa-f]{6}$/;
+
+function swatch(value: unknown): string | null {
+    return typeof value === 'string' && HEX.test(value) ? value : null;
+}
+
+function image(field: string, value: unknown): string | null {
+    return field.endsWith('_url') &&
+        typeof value === 'string' &&
+        /^https?:\/\//i.test(value)
+        ? value
+        : null;
+}
 </script>
 
 <template>
@@ -68,24 +88,38 @@ function show(field: string, value: unknown): string {
             <p class="text-xs font-medium text-ink">{{ label(entry.field) }}</p>
 
             <div class="grid gap-2 sm:grid-cols-2">
-                <div class="space-y-1">
+                <div
+                    v-for="side in [
+                        { key: 'yours', value: entry.current },
+                        { key: 'theirs', value: entry.proposed },
+                    ]"
+                    :key="side.key"
+                    class="space-y-1"
+                >
                     <p
                         class="text-[11px] tracking-wide text-ink-muted uppercase"
                     >
-                        {{ t('draft.yours') }}
+                        {{
+                            side.key === 'yours'
+                                ? t('draft.yours')
+                                : t('draft.from_site')
+                        }}
                     </p>
-                    <p class="text-xs break-words text-ink">
-                        {{ show(entry.field, entry.current) }}
-                    </p>
-                </div>
-                <div class="space-y-1">
-                    <p
-                        class="text-[11px] tracking-wide text-ink-muted uppercase"
-                    >
-                        {{ t('draft.from_site') }}
-                    </p>
-                    <p class="text-xs break-words text-ink">
-                        {{ show(entry.field, entry.proposed) }}
+
+                    <img
+                        v-if="image(entry.field, side.value)"
+                        :src="image(entry.field, side.value)!"
+                        alt=""
+                        class="h-9 max-w-[160px] rounded-xs border border-soft bg-surface object-contain p-1"
+                    />
+                    <span
+                        v-else-if="swatch(side.value)"
+                        class="block size-9 rounded-xs border border-soft"
+                        :style="{ background: swatch(side.value)! }"
+                    />
+
+                    <p class="text-xs break-all text-ink">
+                        {{ show(entry.field, side.value) }}
                     </p>
                 </div>
             </div>

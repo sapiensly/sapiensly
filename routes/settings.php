@@ -3,6 +3,7 @@
 use App\Http\Controllers\Settings\OrganizationBrandController;
 use App\Http\Controllers\Settings\OrganizationContextController;
 use App\Http\Controllers\Settings\OrganizationController;
+use App\Http\Controllers\Settings\OrganizationSiteImportController;
 use App\Http\Controllers\Settings\ProfileController;
 use App\Http\Controllers\Settings\SsoConnectionController;
 use Illuminate\Support\Facades\Route;
@@ -34,7 +35,6 @@ Route::middleware([
     Route::put('settings/organization/brand', [OrganizationBrandController::class, 'update'])->name('organization.brand.update');
     Route::post('settings/organization/brand/asset', [OrganizationBrandController::class, 'uploadAsset'])->name('organization.brand.asset');
     Route::post('settings/organization/brand/asset/import', [OrganizationBrandController::class, 'importAsset'])->name('organization.brand.asset.import');
-    Route::post('settings/organization/brand/from-site', [OrganizationBrandController::class, 'proposeFromSite'])->name('organization.brand.from-site');
     Route::post('settings/organization/brand/palette-proposals', [OrganizationBrandController::class, 'proposePalettes'])->name('organization.brand.palettes');
     Route::post('settings/organization/brand/palette', [OrganizationBrandController::class, 'derivePalette'])->name('organization.brand.palette.derive');
 
@@ -43,7 +43,11 @@ Route::middleware([
     Route::get('settings/organization/context', [OrganizationContextController::class, 'show'])->name('organization.context.show');
     Route::put('settings/organization/context', [OrganizationContextController::class, 'update'])->name('organization.context.update');
     Route::post('settings/organization/context/preview', [OrganizationContextController::class, 'preview'])->name('organization.context.preview');
-    Route::post('settings/organization/context/draft', [OrganizationContextController::class, 'propose'])->name('organization.context.draft');
+
+    // One reading of the organization's website, proposing BOTH books. Shared by
+    // the Brandbook and Contextbook screens so the URL is typed once, the page is
+    // downloaded once, and the draft is paid for once.
+    Route::post('settings/organization/site-import', [OrganizationSiteImportController::class, 'store'])->name('organization.site-import');
 
     Route::get('settings/sso', [SsoConnectionController::class, 'show'])->name('sso.show');
     Route::put('settings/sso', [SsoConnectionController::class, 'update'])->name('sso.update');

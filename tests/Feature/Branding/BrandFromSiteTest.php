@@ -127,10 +127,10 @@ it('exposes the proposal over the settings endpoint without writing', function (
     fakeBrandSite();
 
     $this->actingAs($this->owner)
-        ->postJson('/settings/organization/brand/from-site', ['website' => 'https://acme.example'])
+        ->postJson('/settings/organization/site-import', ['website' => 'https://acme.example'])
         ->assertOk()
-        ->assertJsonPath('proposal.accent_color', '#0f766e')
-        ->assertJsonStructure(['read', 'source', 'proposal', 'diff', 'has_conflicts', 'palette', 'notes']);
+        ->assertJsonPath('brand.proposal.accent_color', '#0f766e')
+        ->assertJsonStructure(['brand' => ['read', 'source', 'proposal', 'diff', 'has_conflicts', 'palette', 'notes']]);
 
     expect($this->org->fresh()->brand)->toBeNull();
 });
@@ -143,6 +143,6 @@ it('keeps the proposal away from a plain member', function () {
     ]);
 
     $this->actingAs($member)
-        ->postJson('/settings/organization/brand/from-site', ['website' => 'https://acme.example'])
+        ->postJson('/settings/organization/site-import', ['website' => 'https://acme.example'])
         ->assertForbidden();
 });

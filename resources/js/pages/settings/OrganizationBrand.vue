@@ -2,6 +2,9 @@
 import InputError from '@/components/InputError.vue';
 import DraftConflicts from '@/components/admin/DraftConflicts.vue';
 import SettingsCard from '@/components/admin/SettingsCard.vue';
+import SiteImport, {
+    type ImportStatus,
+} from '@/components/admin/SiteImport.vue';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import SettingsLayout from '@/layouts/settings/Layout.vue';
@@ -42,7 +45,14 @@ interface Palette {
 }
 
 // `palette` is the one currently in effect (derived from the saved accent).
-const props = defineProps<{ brand: Brand; palette: Palette }>();
+// `website` is what the Contextbook records, so the import starts from the URL
+// the admin already gave us instead of asking for it a second time.
+const props = defineProps<{
+    brand: Brand;
+    palette: Palette;
+    website: string | null;
+    lastImport: { url: string | null; at: string } | null;
+}>();
 
 const { t } = useI18n();
 
@@ -247,9 +257,9 @@ interface DiffEntry {
     proposed: unknown;
 }
 
-const siteUrl = ref('');
+const siteUrl = ref(props.website ?? '');
 const siteReading = ref(false);
-const siteNotes = ref<string[]>([]);
+const siteStatus = ref<ImportStatus | null>(null);
 const siteConflicts = ref<DiffEntry[]>([]);
 
 /**
@@ -311,38 +321,61 @@ async function applySiteField(field: string, value: unknown): Promise<boolean> {
     return true;
 }
 
+/**
+ * One reading of the site proposes BOTH books; this page takes the brand half
+ * and reports how much of the same reading is waiting on the Contextbook, so
+ * nobody pays to read the page twice.
+ */
 async function readSite(): Promise<void> {
     siteReading.value = true;
     siteConflicts.value = [];
-    siteNotes.value = [];
     siteFailures.value = [];
+    siteStatus.value = null;
     try {
         const { data } = await axios.post(
-            '/settings/organization/brand/from-site',
+            '/settings/organization/site-import',
             { website: siteUrl.value },
         );
 
-        siteNotes.value = data.notes ?? [];
-        const diff = (data.diff ?? []) as DiffEntry[];
+        const diff = (data.brand?.diff ?? []) as DiffEntry[];
 
+        // Empty fields fill straight away; what would replace something the
+        // organization already set waits below for a decision.
+        const applied: string[] = [];
         for (const entry of diff.filter((e) => e.status === 'new')) {
-            await applySiteField(entry.field, entry.proposed);
+            if (await applySiteField(entry.field, entry.proposed)) {
+                applied.push(CONFLICT_LABELS.value[entry.field] ?? entry.field);
+            }
         }
         siteConflicts.value = diff.filter((e) => e.status === 'conflict');
 
-        if (!diff.length && !siteNotes.value.length) {
-            toast.info(t('settings.brand.from_site_empty'));
-        } else if (siteConflicts.value.length) {
-            toast.success(
-                t('settings.brand.from_site_conflicts', {
+        siteStatus.value = {
+            url: data.url ?? null,
+            read: Boolean(data.read),
+            reason: String(data.reason ?? ''),
+            applied,
+            conflicts: siteConflicts.value.length,
+            sources: data.context?.sources ?? [],
+            otherCount: (data.context?.diff ?? []).length,
+            notes: data.brand?.notes ?? [],
+        };
+
+        // Adopt what was actually fetched, so a retry reads the same address.
+        if (typeof data.url === 'string') {
+            siteUrl.value = data.url;
+        }
+
+        // The summary is inline; only the decisions still owed are worth a nudge
+        // the user might otherwise scroll past.
+        if (siteConflicts.value.length) {
+            toast.info(
+                t('site_import.conflicts', {
                     count: siteConflicts.value.length,
                 }),
             );
-        } else {
-            toast.success(t('settings.brand.from_site_applied'));
         }
     } catch {
-        toast.error(t('settings.brand.from_site_failed'));
+        toast.error(t('site_import.failed'));
     } finally {
         siteReading.value = false;
     }
@@ -421,43 +454,22 @@ function dismissSiteField(field: string): void {
                 </div>
             </SettingsCard>
 
-            <!-- Read the brand off the organization's own website. -->
+            <!-- Read the brand off the organization's own website. The card
+                 carries no description of its own: SiteImport states the terms
+                 (what is read, what is never replaced) for both books at once. -->
             <SettingsCard
                 :icon="Globe"
                 :title="t('settings.brand.from_site')"
-                :description="t('settings.brand.from_site_hint')"
                 tint="var(--sp-accent-green)"
             >
-                <div class="space-y-3">
-                    <div class="flex items-center gap-2">
-                        <Input
-                            v-model="siteUrl"
-                            type="url"
-                            placeholder="https://"
-                        />
-                        <button
-                            type="button"
-                            :disabled="siteReading || !siteUrl"
-                            class="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-xs border border-soft px-3 text-xs text-ink-muted transition-colors hover:bg-surface hover:text-ink disabled:opacity-50"
-                            @click="readSite"
-                        >
-                            <Loader2
-                                v-if="siteReading"
-                                class="size-3.5 animate-spin"
-                            />
-                            <Wand2 v-else class="size-3.5" />
-                            {{ t('settings.brand.from_site_button') }}
-                        </button>
-                    </div>
-
-                    <p
-                        v-for="note in siteNotes"
-                        :key="note"
-                        class="text-xs text-ink-muted"
-                    >
-                        {{ note }}
-                    </p>
-
+                <SiteImport
+                    v-model:url="siteUrl"
+                    book="brand"
+                    :loading="siteReading"
+                    :status="siteStatus"
+                    :last-import="props.lastImport"
+                    @read="readSite"
+                >
                     <DraftConflicts
                         :entries="siteConflicts"
                         :labels="CONFLICT_LABELS"
@@ -499,7 +511,7 @@ function dismissSiteField(field: string): void {
                             </button>
                         </div>
                     </div>
-                </div>
+                </SiteImport>
             </SettingsCard>
 
             <!-- Logo & icon. -->

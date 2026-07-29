@@ -3,11 +3,12 @@
 namespace App\Http\Controllers\Settings;
 
 use App\Http\Controllers\Controller;
+use App\Http\Controllers\Settings\Concerns\AuthorizesOrganizationAdmin;
 use App\Models\Organization;
-use App\Models\User;
-use App\Services\Branding\BrandProposalService;
+use App\Models\OrganizationAiContext;
 use App\Services\Branding\PaletteProposalService;
 use App\Services\Security\Ssrf\SafeHttpClient;
+use App\Services\Site\SiteImportService;
 use App\Services\Storage\TenantStorage;
 use App\Support\Branding\ColorPalette;
 use App\Support\Branding\OrganizationBrand;
@@ -29,6 +30,8 @@ use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
  */
 class OrganizationBrandController extends Controller
 {
+    use AuthorizesOrganizationAdmin;
+
     /** The brand fields accepted from the form, in canonical (stored) vocabulary. */
     private const FIELDS = [
         'logo_url', 'icon_url', 'logo_dark_url', 'icon_dark_url', 'accent_color', 'logo_bg_color', 'font', 'theme',
@@ -66,9 +69,9 @@ class OrganizationBrandController extends Controller
 
     public function __construct(private readonly TenantStorage $tenantStorage) {}
 
-    public function show(Request $request): Response
+    public function show(Request $request, SiteImportService $import): Response
     {
-        $organization = $this->authorizeOrganization($request);
+        $organization = $this->authorizeOrganization($request, 'the brand');
         $brand = $organization->brandbook();
 
         return Inertia::render('settings/OrganizationBrand', [
@@ -76,6 +79,12 @@ class OrganizationBrandController extends Controller
             // The palette currently in effect (derived from the active accent) so
             // the page can show it without waiting for AI proposals.
             'palette' => ColorPalette::fromAccent($brand->effectiveAccent()),
+            // The site import starts from the website the Contextbook already
+            // knows: the Brandbook has no URL of its own, and asking the admin to
+            // retype the address they typed on the other page is asking twice for
+            // the same fact.
+            'website' => $this->knownWebsite($organization),
+            'lastImport' => $import->lastImport(),
         ]);
     }
 
@@ -87,7 +96,7 @@ class OrganizationBrandController extends Controller
      */
     public function derivePalette(Request $request): JsonResponse
     {
-        $this->authorizeOrganization($request);
+        $this->authorizeOrganization($request, 'the brand');
 
         $validated = $request->validate([
             'accent' => ['nullable', 'string', 'regex:/^#[0-9A-Fa-f]{6}$/'],
@@ -103,7 +112,7 @@ class OrganizationBrandController extends Controller
 
     public function update(Request $request): RedirectResponse
     {
-        $organization = $this->authorizeOrganization($request);
+        $organization = $this->authorizeOrganization($request, 'the brand');
 
         $validated = $request->validate([
             'logo_url' => ['nullable', 'string', 'max:2000'],
@@ -134,7 +143,7 @@ class OrganizationBrandController extends Controller
      */
     public function proposePalettes(Request $request, PaletteProposalService $palettes): JsonResponse
     {
-        $organization = $this->authorizeOrganization($request);
+        $organization = $this->authorizeOrganization($request, 'the brand');
 
         $validated = $request->validate([
             'brief' => ['nullable', 'string', 'max:600'],
@@ -145,25 +154,6 @@ class OrganizationBrandController extends Controller
             $organization->brandbook()->accentColor,
             $request->user(),
         ));
-    }
-
-    /**
-     * Read the organization's website and propose a Brandbook from it — the
-     * Brandbook's half of the shared site fetch the Contextbook already uses.
-     *
-     * It proposes only. Every field that would land on something the
-     * organization already set comes back marked `conflict`, and applying one is
-     * a separate, explicit act by the user; this endpoint writes nothing.
-     */
-    public function proposeFromSite(Request $request, BrandProposalService $brands): JsonResponse
-    {
-        $organization = $this->authorizeOrganization($request);
-
-        $validated = $request->validate([
-            'website' => ['required', 'string', 'max:300', 'url'],
-        ]);
-
-        return response()->json($brands->propose($organization, $validated['website']));
     }
 
     /**
@@ -179,7 +169,7 @@ class OrganizationBrandController extends Controller
      */
     public function importAsset(Request $request, SafeHttpClient $http): JsonResponse
     {
-        $organization = $this->authorizeOrganization($request);
+        $organization = $this->authorizeOrganization($request, 'the brand');
 
         $validated = $request->validate([
             'kind' => ['required', Rule::in(['logo', 'icon'])],
@@ -235,7 +225,7 @@ class OrganizationBrandController extends Controller
      */
     public function uploadAsset(Request $request): JsonResponse
     {
-        $organization = $this->authorizeOrganization($request);
+        $organization = $this->authorizeOrganization($request, 'the brand');
 
         $validated = $request->validate([
             'kind' => ['required', Rule::in(['logo', 'icon', 'logo_dark', 'icon_dark'])],
@@ -301,21 +291,12 @@ class OrganizationBrandController extends Controller
         ]);
     }
 
-    /**
-     * The acting user's organization, or abort — only an org owner / sysadmin may
-     * edit the brand.
-     */
-    private function authorizeOrganization(Request $request): Organization
+    /** The organization's website as the Contextbook records it, if it has one. */
+    private function knownWebsite(Organization $organization): ?string
     {
-        /** @var User $user */
-        $user = $request->user();
+        $profile = OrganizationAiContext::firstOrNew(['organization_id' => $organization->id])->profile ?? [];
+        $website = $profile['website'] ?? null;
 
-        abort_unless(
-            $user->organization_id !== null && ($user->hasRole('owner') || $user->hasRole('sysadmin')),
-            403,
-            'Only an organization administrator can manage the brand.',
-        );
-
-        return $user->organization;
+        return is_string($website) && $website !== '' ? $website : null;
     }
 }

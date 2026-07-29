@@ -192,11 +192,11 @@ it('exposes the draft over the settings endpoint without storing it', function (
     Ai::fakeAgent(ChatAgent::class, [json_encode(['descriptor' => 'Moves refrigerated freight.'])]);
 
     $this->actingAs($this->owner)
-        ->postJson('/settings/organization/context/draft', ['website' => 'https://acme.example'])
+        ->postJson('/settings/organization/site-import', ['website' => 'https://acme.example'])
         ->assertOk()
-        ->assertJsonPath('generated', true)
-        ->assertJsonPath('profile.descriptor', 'Moves refrigerated freight.')
-        ->assertJsonStructure(['profile', 'sources', 'preview', 'tokens']);
+        ->assertJsonPath('context.generated', true)
+        ->assertJsonPath('context.profile.descriptor', 'Moves refrigerated freight.')
+        ->assertJsonStructure(['context' => ['profile', 'sources', 'preview', 'tokens']]);
 
     expect(OrganizationAiContext::where('organization_id', $this->org->id)->exists())->toBeFalse();
 });

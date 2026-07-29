@@ -3,10 +3,10 @@
 namespace App\Http\Controllers\Settings;
 
 use App\Http\Controllers\Controller;
+use App\Http\Controllers\Settings\Concerns\AuthorizesOrganizationAdmin;
 use App\Models\Organization;
 use App\Models\OrganizationAiContext;
-use App\Models\User;
-use App\Services\Context\ContextProposalService;
+use App\Services\Site\SiteImportService;
 use App\Support\Context\OrganizationContext;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -24,13 +24,18 @@ use Inertia\Response;
  */
 class OrganizationContextController extends Controller
 {
-    public function show(Request $request): Response
+    use AuthorizesOrganizationAdmin;
+
+    public function show(Request $request, SiteImportService $import): Response
     {
-        $organization = $this->authorizeOrganization($request);
+        $organization = $this->authorizeOrganization($request, 'the context');
         $row = $this->row($organization);
         $context = $row->context();
 
         return Inertia::render('settings/OrganizationContext', [
+            // What the site import last read, so this page can offer the reading
+            // the admin already did on the Brandbook instead of asking again.
+            'lastImport' => $import->lastImport(),
             'context' => $context->toArray(),
             'enabled' => $row->enabled,
             'preview' => $context->promptBlock($organization->name),
@@ -44,7 +49,7 @@ class OrganizationContextController extends Controller
 
     public function update(Request $request): RedirectResponse
     {
-        $organization = $this->authorizeOrganization($request);
+        $organization = $this->authorizeOrganization($request, 'the context');
         $validated = $this->validated($request);
 
         $row = $this->row($organization);
@@ -78,46 +83,13 @@ class OrganizationContextController extends Controller
      */
     public function preview(Request $request): JsonResponse
     {
-        $organization = $this->authorizeOrganization($request);
+        $organization = $this->authorizeOrganization($request, 'the context');
         $context = OrganizationContext::fromArray($this->validated($request));
 
         return response()->json([
             'preview' => $context->promptBlock($organization->name),
             'tokens' => $context->estimatedTokens($organization->name),
             'max_tokens' => OrganizationContext::MAX_TOKENS,
-        ]);
-    }
-
-    /**
-     * Draft a Contextbook from the organization's website and a one-line brief,
-     * so the form is never a blank page. Nothing is stored — the draft lands in
-     * the form for a human to edit and save like any manual entry.
-     */
-    public function propose(Request $request, ContextProposalService $proposals): JsonResponse
-    {
-        $organization = $this->authorizeOrganization($request);
-
-        $validated = $request->validate([
-            'website' => ['nullable', 'string', 'max:300', 'url'],
-            'brief' => ['nullable', 'string', 'max:2000'],
-        ]);
-
-        // The stored profile goes in so the draft comes back knowing which of its
-        // fields would overwrite something a human already wrote. Nothing here
-        // applies anything — the UI reviews the conflicts and the user decides.
-        $draft = $proposals->propose(
-            $validated['website'] ?? null,
-            trim((string) ($validated['brief'] ?? '')),
-            $request->user(),
-            $this->row($organization)->profile ?? [],
-        );
-
-        $context = OrganizationContext::fromArray($draft['profile']);
-
-        return response()->json([
-            ...$draft,
-            'preview' => $context->promptBlock($organization->name),
-            'tokens' => $context->estimatedTokens($organization->name),
         ]);
     }
 
@@ -167,19 +139,5 @@ class OrganizationContextController extends Controller
     {
         return OrganizationAiContext::firstOrNew(['organization_id' => $organization->id])
             ->setRelation('organization', $organization);
-    }
-
-    private function authorizeOrganization(Request $request): Organization
-    {
-        /** @var User $user */
-        $user = $request->user();
-
-        abort_unless(
-            $user->organization_id !== null && ($user->hasRole('owner') || $user->hasRole('sysadmin')),
-            403,
-            'Only an organization administrator can manage the context.',
-        );
-
-        return $user->organization;
     }
 }
