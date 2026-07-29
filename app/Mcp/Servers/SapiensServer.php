@@ -42,6 +42,14 @@ Build & debug apps (apps:build):
     colour palette (also live as CSS vars on every app); use named icons
     (list_available_icons) on buttons/stats/cards and custom_css for fine touches —
     keep it executive, not loud.
+  - Filling the books from the org's website: import_organization_books reads the
+    site ONCE and proposes the Brandbook AND the Contextbook from it. Prefer it
+    over reading a page yourself and writing set_organization_brand /
+    set_organization_context — it applies the rails those tools cannot (an accent
+    that cannot carry a button is refused with a reason, placeholder values and
+    padded glossaries are stripped, logo/icon are copied onto our own storage) and
+    it never overwrites what a human already wrote: those come back as conflicts
+    for a person to decide.
   - Landing pages are a CREATIVE build — ASK the user which mode first:
     (a) hand it to the app builder's design pipeline (continue_builder_conversation
     with the landing brief: bespoke authoring + the design-director gate, async), or
@@ -139,6 +147,7 @@ class SapiensServer extends Server
         Tools\Account\SetOrganizationBrandTool::class,
         Tools\Account\GetOrganizationContextTool::class,
         Tools\Account\SetOrganizationContextTool::class,
+        Tools\Account\ImportOrganizationBooksTool::class,
         // Build & debug apps.
         Tools\Build\ListAppsTool::class,
         Tools\Build\CreateAppTool::class,

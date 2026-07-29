@@ -6,8 +6,9 @@ use App\Http\Controllers\Controller;
 use App\Http\Controllers\Settings\Concerns\AuthorizesOrganizationAdmin;
 use App\Models\Organization;
 use App\Models\OrganizationAiContext;
+use App\Services\Branding\BrandAssetImporter;
+use App\Services\Branding\BrandAssetImportFailed;
 use App\Services\Branding\PaletteProposalService;
-use App\Services\Security\Ssrf\SafeHttpClient;
 use App\Services\Site\SiteImportService;
 use App\Services\Storage\TenantStorage;
 use App\Support\Branding\ColorPalette;
@@ -37,9 +38,6 @@ class OrganizationBrandController extends Controller
         'logo_url', 'icon_url', 'logo_dark_url', 'icon_dark_url', 'accent_color', 'logo_bg_color', 'font', 'theme',
     ];
 
-    /** Content storage prefix (under the tenant partition) for brand assets. */
-    private const ASSET_DIR = 'org-brand';
-
     /** Upload extension → served Content-Type. We control the extension on write. */
     private const ASSET_MIME = [
         'png' => 'image/png',
@@ -49,23 +47,6 @@ class OrganizationBrandController extends Controller
         'webp' => 'image/webp',
         'ico' => 'image/x-icon',
     ];
-
-    /**
-     * Remote Content-Type → the extension we store it under. Deliberately
-     * narrower than ASSET_MIME: no SVG, because these bytes come from a
-     * third-party host rather than a file a human picked. `.ico` is here because
-     * a site's `<link rel="icon">` very often is one.
-     */
-    private const IMPORTABLE_MIME = [
-        'image/png' => 'png',
-        'image/jpeg' => 'jpg',
-        'image/webp' => 'webp',
-        'image/x-icon' => 'ico',
-        'image/vnd.microsoft.icon' => 'ico',
-    ];
-
-    /** Matches the 2 MB ceiling the upload path enforces through validation. */
-    private const MAX_ASSET_BYTES = 2 * 1024 * 1024;
 
     public function __construct(private readonly TenantStorage $tenantStorage) {}
 
@@ -158,16 +139,13 @@ class OrganizationBrandController extends Controller
 
     /**
      * Copy a remote image (a logo or icon a site proposal found) onto the
-     * tenant's disk and return the local URL, so the brand does not depend on
-     * someone else's server staying up. Runs only when the user accepts a
+     * tenant's disk and return the local URL. Runs only when the user accepts a
      * proposal — proposing must never write bytes anywhere.
      *
-     * SVG is deliberately NOT importable here even though {@see self::uploadAsset}
-     * accepts it: an upload is a file a human deliberately picked, while this
-     * takes whatever a third-party host serves, and these assets are streamed
-     * back from our own origin by an unauthenticated route.
+     * The rules live in {@see BrandAssetImporter}, shared with the MCP import so
+     * both make the same decisions about what may be adopted.
      */
-    public function importAsset(Request $request, SafeHttpClient $http): JsonResponse
+    public function importAsset(Request $request, BrandAssetImporter $assets): JsonResponse
     {
         $organization = $this->authorizeOrganization($request, 'the brand');
 
@@ -177,42 +155,12 @@ class OrganizationBrandController extends Controller
         ]);
 
         try {
-            $response = $http->request('GET', $validated['url'], ['timeout' => 15]);
-        } catch (\Throwable) {
-            return response()->json(['message' => __('That image could not be downloaded.')], 422);
+            $url = $assets->import($organization, $validated['kind'], $validated['url']);
+        } catch (BrandAssetImportFailed $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
         }
 
-        if (! $response->successful()) {
-            return response()->json(['message' => __('That image could not be downloaded.')], 422);
-        }
-
-        $contentType = strtolower(trim(explode(';', (string) $response->header('Content-Type'))[0]));
-        $ext = self::IMPORTABLE_MIME[$contentType] ?? null;
-
-        if ($ext === null) {
-            return response()->json([
-                'message' => __('That file type cannot be imported (:type). Upload the image instead.', ['type' => $contentType ?: 'unknown']),
-            ], 422);
-        }
-
-        $bytes = $response->body();
-        if (strlen($bytes) > self::MAX_ASSET_BYTES) {
-            return response()->json(['message' => __('That image is too large to import.')], 422);
-        }
-
-        $filename = $validated['kind'].'-'.Str::lower((string) Str::ulid()).'.'.$ext;
-        $diskName = $this->tenantStorage->diskNameForOwner($organization->id, null);
-        $relativePath = TenantPath::scope($organization->id, null, self::ASSET_DIR.'/'.$filename);
-
-        $this->tenantStorage->diskFromName($diskName)->put($relativePath, $bytes);
-
-        return response()->json([
-            'kind' => $validated['kind'],
-            'url' => route('organization.brand.asset.show', [
-                'organization' => $organization->id,
-                'filename' => $filename,
-            ]),
-        ]);
+        return response()->json(['kind' => $validated['kind'], 'url' => $url]);
     }
 
     /**
@@ -239,7 +187,7 @@ class OrganizationBrandController extends Controller
         // Owner-aware disk (throws → 503 when no S3 is configured). The tenant
         // partition prefix keeps a shared global bucket isolated per org.
         $diskName = $this->tenantStorage->diskNameForOwner($organization->id, null);
-        $relativePath = TenantPath::scope($organization->id, null, self::ASSET_DIR.'/'.$filename);
+        $relativePath = TenantPath::scope($organization->id, null, BrandAssetImporter::ASSET_DIR.'/'.$filename);
 
         $this->tenantStorage->diskFromName($diskName)->putFileAs(
             dirname($relativePath),
@@ -271,7 +219,7 @@ class OrganizationBrandController extends Controller
             throw new NotFoundHttpException('Asset not found.');
         }
 
-        $relativePath = TenantPath::scope($organization->id, null, self::ASSET_DIR.'/'.$filename);
+        $relativePath = TenantPath::scope($organization->id, null, BrandAssetImporter::ASSET_DIR.'/'.$filename);
 
         try {
             $disk = $this->tenantStorage->diskFromName(
