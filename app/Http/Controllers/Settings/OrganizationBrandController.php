@@ -11,6 +11,7 @@ use App\Services\Branding\BrandAssetImportFailed;
 use App\Services\Branding\PaletteProposalService;
 use App\Services\Site\SiteImportService;
 use App\Services\Storage\TenantStorage;
+use App\Support\Branding\AssetTone;
 use App\Support\Branding\ColorPalette;
 use App\Support\Branding\OrganizationBrand;
 use App\Support\Storage\TenantPath;
@@ -155,12 +156,46 @@ class OrganizationBrandController extends Controller
         ]);
 
         try {
-            $url = $assets->import($organization, $validated['kind'], $validated['url']);
+            $asset = $assets->import($organization, $validated['kind'], $validated['url']);
         } catch (BrandAssetImportFailed $e) {
             return response()->json(['message' => $e->getMessage()], 422);
         }
 
-        return response()->json(['kind' => $validated['kind'], 'url' => $url]);
+        return response()->json([
+            'kind' => $validated['kind'],
+            'url' => $asset->url,
+            ...$this->toneAdvice($organization, $validated['kind'], $asset->tone),
+        ]);
+    }
+
+    /**
+     * What a light-ink logo needs, when we just adopted one.
+     *
+     * Half the web puts its logo in a dark header, so the logo published in the
+     * markup is the light one — and dropped into `logo_url`, the field light
+     * surfaces read, it is invisible. There is no rescue in the dark variant
+     * ({@see OrganizationBrand::logoFor()} gives light surfaces no fallback), so
+     * the answer is the backdrop field that exists for exactly this.
+     *
+     * Advice, not action: a tone reading is a signal, and nothing here restyles
+     * a brand on its own.
+     *
+     * @return array{needs_backdrop?: bool, suggested_logo_bg_color?: string}
+     */
+    private function toneAdvice(Organization $organization, string $kind, AssetTone $tone): array
+    {
+        $brand = $organization->brandbook();
+
+        // Not a header logo, not light ink, or already answered — the rule lives
+        // here rather than in the form, so the MCP import and this page agree.
+        if (! str_starts_with($kind, 'logo') || ! $tone->isLight() || $brand->logoBgColor !== null) {
+            return [];
+        }
+
+        return [
+            'needs_backdrop' => true,
+            'suggested_logo_bg_color' => ColorPalette::backdrop($brand->effectiveAccent()),
+        ];
     }
 
     /**
@@ -201,6 +236,15 @@ class OrganizationBrandController extends Controller
                 'organization' => $organization->id,
                 'filename' => $filename,
             ]),
+            // A hand-picked file fails the same way a fetched one does: somebody
+            // uploading their white logo into "Logo" gets an invisible header,
+            // and until now nothing said so. SVG is skipped — reading its tone
+            // would mean rendering it, and an upload is already trusted.
+            ...($ext === 'svg'
+                ? []
+                : $this->toneAdvice($organization, $validated['kind'], AssetTone::of(
+                    (string) file_get_contents($uploaded->getRealPath()),
+                ))),
         ]);
     }
 

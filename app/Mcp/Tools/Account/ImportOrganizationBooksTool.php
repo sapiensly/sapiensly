@@ -9,6 +9,7 @@ use App\Models\User;
 use App\Services\Branding\BrandAssetImporter;
 use App\Services\Branding\BrandAssetImportFailed;
 use App\Services\Site\SiteImportService;
+use App\Support\Branding\ColorPalette;
 use App\Support\Branding\OrganizationBrand;
 use App\Support\Context\OrganizationContext;
 use App\Support\Draft\DraftDiff;
@@ -123,6 +124,7 @@ class ImportOrganizationBooksTool extends SapiensTool
     {
         $additions = [];
         $failed = [];
+        $lightLogo = false;
 
         foreach (self::additions($diff) as $field => $value) {
             if (! in_array($field, self::BRAND_FIELDS, true) || ! is_string($value)) {
@@ -133,15 +135,27 @@ class ImportOrganizationBooksTool extends SapiensTool
 
             if ($kind !== null) {
                 try {
-                    $value = $assets->import($organization, $kind, $value);
+                    $asset = $assets->import($organization, $kind, $value);
                 } catch (BrandAssetImportFailed $e) {
                     $failed[] = ['field' => $field, 'url' => $value, 'message' => $e->getMessage()];
 
                     continue;
                 }
+
+                $lightLogo = $lightLogo || ($kind === 'logo' && $asset->tone->isLight());
+                $value = $asset->url;
             }
 
             $additions[$field] = $value;
+        }
+
+        // Half the web draws its logo for a dark header, so what the markup
+        // publishes is the light-ink one — and `logo_url` is the field LIGHT
+        // surfaces read, with no fallback to the dark variant. Left alone it is
+        // a white mark on a white header. Filling the backdrop is the same rule
+        // as every other field here: it was empty, so it is safe to fill.
+        if ($lightLogo && ($organization->brandbook()->logoBgColor === null)) {
+            $additions['logo_bg_color'] = ColorPalette::backdrop($organization->brandbook()->effectiveAccent());
         }
 
         if ($additions !== []) {

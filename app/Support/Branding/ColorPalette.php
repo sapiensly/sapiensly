@@ -28,6 +28,12 @@ final class ColorPalette
      */
     private const NEUTRAL_ACCENT = '#4b5563';
 
+    /** Above this brightness a backdrop cannot carry white ink. */
+    private const MAX_BACKDROP_LUMINANCE = 0.35;
+
+    /** The fallback surface when the brand's own deepest shade is still too bright. */
+    private const NEUTRAL_BACKDROP = '#0f172a';
+
     /**
      * `grays` is a whole-surface mode, not just a chart-series mode: the ramp
      * feeds the hero gradient and the --sp-accent-* vars, so leaving it derived
@@ -89,6 +95,32 @@ final class ColorPalette
             'on_accent' => self::readableOn([$r, $g, $b]),
             'chart' => $chart,
         ];
+    }
+
+    /**
+     * A surface dark enough to carry a light-ink logo, drawn from the brand's own
+     * accent rather than a generic black — this becomes `logo_bg_color`, the
+     * header strip behind the mark, so it should look chosen and not defaulted.
+     *
+     * The deepest ramp stop is that colour for almost every accent; a pale or
+     * yellow accent is the exception whose 900 is still too bright to read white
+     * on, and there the neutral near-black wins over an on-brand illegible one.
+     */
+    public static function backdrop(string $accent): string
+    {
+        $deep = self::fromAccent($accent)['ramp']['900'];
+
+        return self::luminance($deep) <= self::MAX_BACKDROP_LUMINANCE
+            ? $deep
+            : self::NEUTRAL_BACKDROP;
+    }
+
+    /** Perceived brightness, 0 (black) to 1 (white). */
+    private static function luminance(string $hex): float
+    {
+        [$r, $g, $b] = self::toRgb($hex);
+
+        return (0.299 * $r + 0.587 * $g + 0.114 * $b) / 255;
     }
 
     /**

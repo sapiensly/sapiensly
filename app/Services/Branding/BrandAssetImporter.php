@@ -5,6 +5,7 @@ namespace App\Services\Branding;
 use App\Models\Organization;
 use App\Services\Security\Ssrf\SafeHttpClient;
 use App\Services\Storage\TenantStorage;
+use App\Support\Branding\AssetTone;
 use App\Support\Storage\TenantPath;
 use Illuminate\Support\Str;
 use Throwable;
@@ -63,7 +64,7 @@ class BrandAssetImporter
      *
      * @throws BrandAssetImportFailed with a message meant for whoever asked
      */
-    public function import(Organization $organization, string $kind, string $url): string
+    public function import(Organization $organization, string $kind, string $url): ImportedAsset
     {
         try {
             $response = $this->http->request('GET', $url, ['timeout' => 15]);
@@ -104,9 +105,15 @@ class BrandAssetImporter
 
         $this->tenantStorage->diskFromName($diskName)->put($relativePath, $bytes);
 
-        return route('organization.brand.asset.show', [
-            'organization' => $organization->id,
-            'filename' => $filename,
-        ]);
+        return new ImportedAsset(
+            route('organization.brand.asset.show', [
+                'organization' => $organization->id,
+                'filename' => $filename,
+            ]),
+            // Read while we still hold the bytes: a light-ink mark dropped into
+            // the light-surface field is invisible, and nothing downstream can
+            // work that out from a URL.
+            AssetTone::of($bytes),
+        );
     }
 }

@@ -93,6 +93,8 @@
     "settings.brand.accent": "Color de acento",
     "settings.brand.logo_bg": "Color de fondo del logo",
     "settings.brand.logo_bg_hint": "Fondo de la barra de encabezado de una app (donde van el logo y el menú principal). El texto contrasta automáticamente. Déjalo vacío para el encabezado por defecto.",
+    "settings.brand.light_logo_hint": "Ese logo está dibujado en tinta clara, así que desaparece sobre fondo claro. Este color de fondo, derivado de tu acento, es el que usará la cabecera detrás de él.",
+    "settings.brand.light_logo_apply": "Usar este fondo",
     "settings.brand.typography": "Tipografía y tema",
     "settings.brand.typography_hint": "Fuente predeterminada y paleta clara/oscura.",
     "settings.brand.font": "Fuente",

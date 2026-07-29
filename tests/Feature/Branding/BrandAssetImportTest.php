@@ -8,6 +8,7 @@ use App\Models\User;
 use App\Services\Branding\BrandAssetImportFailed;
 use App\Services\Branding\SvgRasterizer;
 use Database\Seeders\RolesAndPermissionsSeeder;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
@@ -162,4 +163,93 @@ it('is closed to a plain member', function () {
     $this->actingAs($member)
         ->postJson('/settings/organization/brand/asset/import', ['kind' => 'logo', 'url' => 'https://acme.example/logo.png'])
         ->assertForbidden();
+});
+
+/** A white PNG on transparency, the shape half the web publishes as its logo. */
+function lightLogoPng(): string
+{
+    $image = imagecreatetruecolor(120, 60);
+    imagealphablending($image, false);
+    imagesavealpha($image, true);
+    imagefill($image, 0, 0, imagecolorallocatealpha($image, 0, 0, 0, 127));
+    imagefilledrectangle($image, 10, 20, 110, 40, imagecolorallocatealpha($image, 255, 255, 255, 0));
+
+    ob_start();
+    imagepng($image);
+    $bytes = (string) ob_get_clean();
+    imagedestroy($image);
+
+    return $bytes;
+}
+
+/**
+ * The gap this closes: `logo_url` is the field LIGHT surfaces read, and
+ * OrganizationBrand::logoFor() gives them no fallback to the dark variant — so a
+ * light-ink logo dropped in there is a blank header, with nothing to say so.
+ */
+it('flags a light logo and proposes a backdrop it can be read on', function () {
+    Http::fake(['*' => Http::response(lightLogoPng(), 200, ['Content-Type' => 'image/png'])]);
+    $this->org->update(['brand' => ['accent_color' => '#f97316']]);
+
+    $this->actingAs($this->owner)
+        ->postJson('/settings/organization/brand/asset/import', [
+            'kind' => 'logo',
+            'url' => 'https://acme.example/logo.png',
+        ])
+        ->assertOk()
+        ->assertJsonPath('needs_backdrop', true)
+        // Drawn from the brand's own accent, not a generic black.
+        ->assertJsonPath('suggested_logo_bg_color', '#5f2c08');
+});
+
+/** A dark logo reads fine where it lands; saying nothing is the right answer. */
+it('says nothing about a dark logo', function () {
+    $image = imagecreatetruecolor(120, 60);
+    imagealphablending($image, false);
+    imagesavealpha($image, true);
+    imagefill($image, 0, 0, imagecolorallocatealpha($image, 0, 0, 0, 127));
+    imagefilledrectangle($image, 10, 20, 110, 40, imagecolorallocatealpha($image, 20, 24, 32, 0));
+    ob_start();
+    imagepng($image);
+    $dark = (string) ob_get_clean();
+    imagedestroy($image);
+
+    Http::fake(['*' => Http::response($dark, 200, ['Content-Type' => 'image/png'])]);
+
+    $this->actingAs($this->owner)
+        ->postJson('/settings/organization/brand/asset/import', ['kind' => 'logo', 'url' => 'https://acme.example/l.png'])
+        ->assertOk()
+        ->assertJsonMissingPath('needs_backdrop');
+});
+
+/** An icon is not a header logo; the backdrop question does not apply to it. */
+it('does not push a backdrop for a light icon', function () {
+    Http::fake(['*' => Http::response(lightLogoPng(), 200, ['Content-Type' => 'image/png'])]);
+
+    $this->actingAs($this->owner)
+        ->postJson('/settings/organization/brand/asset/import', ['kind' => 'icon', 'url' => 'https://acme.example/i.png'])
+        ->assertOk()
+        ->assertJsonMissingPath('needs_backdrop');
+});
+
+/** Somebody uploading their own white logo by hand hits exactly the same wall. */
+it('flags a light logo on a hand-picked upload too', function () {
+    $this->actingAs($this->owner)
+        ->post('/settings/organization/brand/asset', [
+            'kind' => 'logo',
+            'file' => UploadedFile::fake()->createWithContent('logo.png', lightLogoPng()),
+        ])
+        ->assertOk()
+        ->assertJsonPath('needs_backdrop', true);
+});
+
+/** Already answered: a brand that set its backdrop is not asked again. */
+it('stays quiet when the brand already has a backdrop', function () {
+    Http::fake(['*' => Http::response(lightLogoPng(), 200, ['Content-Type' => 'image/png'])]);
+    $this->org->update(['brand' => ['logo_bg_color' => '#123456']]);
+
+    $this->actingAs($this->owner)
+        ->postJson('/settings/organization/brand/asset/import', ['kind' => 'logo', 'url' => 'https://acme.example/l.png'])
+        ->assertOk()
+        ->assertJsonMissingPath('needs_backdrop');
 });

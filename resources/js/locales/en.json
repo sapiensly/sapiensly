@@ -93,6 +93,8 @@
     "settings.brand.accent": "Accent colour",
     "settings.brand.logo_bg": "Logo bg colour",
     "settings.brand.logo_bg_hint": "Background of an app's header bar (where the logo + main menu sit). Text auto-contrasts. Leave empty for the default header.",
+    "settings.brand.light_logo_hint": "That logo is drawn in light ink, so it disappears on a light background. This backdrop colour, derived from your accent, is what the header will use behind it.",
+    "settings.brand.light_logo_apply": "Use this backdrop",
     "settings.brand.typography": "Typography & theme",
     "settings.brand.typography_hint": "Default font family and light/dark palette.",
     "settings.brand.font": "Font",

@@ -62,7 +62,11 @@ class SvgRasterizer
                 // and an <img>-referenced SVG cannot run any regardless.
                 ->disableJavascript()
                 ->select('img')
-                ->transparentBackground()
+                // NOT ->transparentBackground(): that helper only reaches the
+                // PDF command, so on a screenshot it is silently a no-op and the
+                // logo comes back on opaque white — which makes a white logo a
+                // blank image. Puppeteer's own option is what does the work.
+                ->setOption('omitBackground', true)
                 ->setScreenshotType('png')
                 ->deviceScaleFactor(2)
                 ->windowSize(self::MAX_WIDTH, self::MAX_HEIGHT)

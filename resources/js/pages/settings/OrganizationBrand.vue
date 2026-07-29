@@ -99,6 +99,32 @@ const uploading = ref<Record<AssetKind, boolean>>({
     icon_dark: false,
 });
 
+/**
+ * A logo drawn in light ink, which a light surface renders as nothing at all.
+ * The server reads the tone while it holds the bytes — on an upload as much as
+ * on a site import, because someone picking their white logo by hand hits the
+ * same wall. The Brandbook's answer is the backdrop colour; applying it stays
+ * one deliberate click, since a tone reading is a signal, not a verdict.
+ */
+const backdropAdvice = ref<string | null>(null);
+
+function noteTone(res: {
+    needs_backdrop?: boolean;
+    suggested_logo_bg_color?: string;
+}): void {
+    backdropAdvice.value =
+        res.needs_backdrop && !form.logo_bg_color
+            ? (res.suggested_logo_bg_color ?? null)
+            : null;
+}
+
+function applyBackdrop(): void {
+    if (backdropAdvice.value) {
+        form.logo_bg_color = backdropAdvice.value;
+        backdropAdvice.value = null;
+    }
+}
+
 /** Upload a logo/icon file (base or dark variant); on success store the returned URL. */
 async function uploadAsset(kind: AssetKind, event: Event): Promise<void> {
     const input = event.target as HTMLInputElement;
@@ -116,6 +142,7 @@ async function uploadAsset(kind: AssetKind, event: Event): Promise<void> {
         );
         (form as unknown as Record<string, unknown>)[ASSET_FIELD[kind]] =
             res.url;
+        noteTone(res);
         toast.success(t('settings.brand.asset_uploaded'));
     } catch {
         toast.error(t('settings.brand.asset_failed'));
@@ -289,6 +316,7 @@ async function adoptAsset(field: string, url: string): Promise<string | null> {
             '/settings/organization/brand/asset/import',
             { kind: field === 'logo_url' ? 'logo' : 'icon', url },
         );
+        noteTone(data);
         return data.url;
     } catch (error) {
         const message =
@@ -611,6 +639,43 @@ function dismissSiteField(field: string): void {
                         </div>
                         <InputError :message="form.errors.icon_url" />
                     </div>
+                </div>
+
+                <!-- A light-ink logo on a light surface is nothing at all, and
+                     the dark variant cannot rescue it (light surfaces have no
+                     fallback). The backdrop colour is the Brandbook's answer. -->
+                <div
+                    v-if="backdropAdvice"
+                    class="mt-4 flex flex-wrap items-center gap-3 rounded-sp-sm border border-soft p-3"
+                >
+                    <span
+                        class="flex h-9 shrink-0 items-center rounded-xs px-3"
+                        :style="{ background: backdropAdvice }"
+                    >
+                        <img
+                            v-if="form.logo_url"
+                            :src="form.logo_url"
+                            alt=""
+                            class="h-5 max-w-[110px] object-contain"
+                        />
+                    </span>
+                    <p class="min-w-[12rem] flex-1 text-xs text-ink-muted">
+                        {{ t('settings.brand.light_logo_hint') }}
+                    </p>
+                    <button
+                        type="button"
+                        class="h-8 shrink-0 rounded-xs bg-accent-blue px-3 text-xs font-medium text-white transition-opacity hover:opacity-90"
+                        @click="applyBackdrop"
+                    >
+                        {{ t('settings.brand.light_logo_apply') }}
+                    </button>
+                    <button
+                        type="button"
+                        class="h-8 shrink-0 rounded-xs border border-soft px-3 text-xs text-ink-muted transition-colors hover:bg-surface hover:text-ink"
+                        @click="backdropAdvice = null"
+                    >
+                        {{ t('settings.brand.asset_skip') }}
+                    </button>
                 </div>
 
                 <!-- Dark-surface variants. Optional: when unset, dark surfaces
