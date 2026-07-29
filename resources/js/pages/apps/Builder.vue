@@ -2,6 +2,7 @@
 import * as AppController from '@/actions/App/Http/Controllers/AppController';
 import DesktopOnlyNotice from '@/components/app-v2/DesktopOnlyNotice.vue';
 import AppAccessPanel from '@/components/apps/AppAccessPanel.vue';
+import LandingLinksPanel from '@/components/apps/builder/LandingLinksPanel.vue';
 import BuildPlanCard from '@/components/apps/BuildPlanCard.vue';
 import LayersExplorer from '@/components/apps/LayersExplorer.vue';
 import SchemaView from '@/components/apps/SchemaView.vue';
@@ -94,6 +95,7 @@ import {
     Database,
     Download,
     Eye,
+    FileCode2,
     FileText,
     GripHorizontal,
     GripVertical,
@@ -106,8 +108,8 @@ import {
     Loader2,
     Maximize2,
     Minimize2,
-    MoreVertical,
     Minus,
+    MoreVertical,
     MousePointerClick,
     PaintBucket,
     Palette,
@@ -116,7 +118,6 @@ import {
     Paperclip,
     Play,
     Plus,
-    FileCode2,
     Repeat2,
     Rocket,
     RotateCcw,
@@ -1394,9 +1395,7 @@ const ATTACHMENT_MIMES = ['image/png', 'image/jpeg', 'image/webp', 'image/gif'];
  * arrives with an empty `type`.
  */
 function isHtmlFile(file: File): boolean {
-    return (
-        file.type === 'text/html' || /\.html?$/i.test(file.name)
-    );
+    return file.type === 'text/html' || /\.html?$/i.test(file.name);
 }
 
 function setAttachment(file: File | null) {
@@ -1968,7 +1967,9 @@ const viewTabs = computed(() => {
     // The workflow editor is a node canvas: it needs a pointer and room, so it
     // is not offered below lg. A session already in it keeps it (with the
     // notice on the pane) rather than being yanked somewhere else mid-edit.
-    return isLargeScreen.value ? tabs : tabs.filter((m) => m.id !== 'workflows');
+    return isLargeScreen.value
+        ? tabs
+        : tabs.filter((m) => m.id !== 'workflows');
 });
 watch(previewIsLanding, (landing) => {
     if (landing && !viewTabs.value.some((m) => m.id === viewMode.value)) {
@@ -2254,9 +2255,7 @@ function readStyleValues(el: HTMLElement) {
             cs.letterSpacing === 'normal'
                 ? 0
                 : Math.round((parseFloat(cs.letterSpacing) || 0) * 10) / 10,
-        lineHeight: isNaN(lhPx)
-            ? 1.2
-            : Math.round((lhPx / fontPx) * 10) / 10,
+        lineHeight: isNaN(lhPx) ? 1.2 : Math.round((lhPx / fontPx) * 10) / 10,
     };
 }
 function isTransparent(color: string): boolean {
@@ -2267,6 +2266,10 @@ function selectStyleTarget(el: HTMLElement) {
     styleTargetEl.value?.classList.remove('sp-style-target');
     styleTargetEl.value = el;
     styleTargetId.value = el.getAttribute('data-sp-edit-id');
+    // A CTA is usually a styled <span> inside the <a> — the link affordance
+    // belongs to the whole control, so look upward for it.
+    const link = el.closest('a, button');
+    styleTargetLink.value = link instanceof HTMLElement ? link : null;
     el.classList.add('sp-style-target');
     readStyleValues(el);
 }
@@ -2274,6 +2277,30 @@ function clearStyleTarget() {
     styleTargetEl.value?.classList.remove('sp-style-target');
     styleTargetEl.value = null;
     styleTargetId.value = null;
+    styleTargetLink.value = null;
+}
+
+// ---- Landing fine-tune: where the links go --------------------------------
+// The panel is page-wide and grouped by destination, because "the primary CTA"
+// is one intention spread over many controls. Clicking a control in the preview
+// jumps into its group — matched by the href itself, never by a DOM position,
+// so an element the runtime injects (the lead form moving into its slot) can't
+// make the gesture edit the wrong link.
+const linksPanelOpen = ref(false);
+const linksPanelFocus = ref<string | null>(null);
+const styleTargetLink = ref<HTMLElement | null>(null);
+
+/** The destination of the selected control, normalised the way the panel groups. */
+const styleTargetLinkTarget = computed(() => {
+    const link = styleTargetLink.value;
+    if (!link) return null;
+    const href = (link.getAttribute('href') ?? '').trim();
+    return href === '#' ? '' : href;
+});
+
+function openLinksPanel(focus: string | null = null) {
+    linksPanelFocus.value = focus;
+    linksPanelOpen.value = true;
 }
 function ensureStyleAnchor(
     el: HTMLElement,
@@ -2329,14 +2356,20 @@ function stepFontSize(delta: number) {
 function stepLetterSpacing(delta: number) {
     const next =
         Math.round(
-            Math.min(16, Math.max(-4, (styleValues.value.letterSpacingPx || 0) + delta)) * 10,
+            Math.min(
+                16,
+                Math.max(-4, (styleValues.value.letterSpacingPx || 0) + delta),
+            ) * 10,
         ) / 10;
     applyElementStyle({ letter_spacing: `${next}px` });
 }
 function stepLineHeight(delta: number) {
     const next =
         Math.round(
-            Math.min(3, Math.max(0.8, (styleValues.value.lineHeight || 1.2) + delta)) * 10,
+            Math.min(
+                3,
+                Math.max(0.8, (styleValues.value.lineHeight || 1.2) + delta),
+            ) * 10,
         ) / 10;
     applyElementStyle({ line_height: `${next}` });
 }
@@ -3657,7 +3690,9 @@ function statusTone(status: Message['status']): string {
             class="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-3 py-4 transition-[padding-right] duration-300 ease-out sm:px-7 sm:py-5 lg:overflow-visible"
             :style="drawerOpen ? { paddingRight: '340px' } : undefined"
         >
-            <header class="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+            <header
+                class="flex flex-wrap items-center justify-between gap-x-4 gap-y-2"
+            >
                 <div class="flex min-w-0 items-center gap-3">
                     <button
                         type="button"
@@ -3932,7 +3967,9 @@ function statusTone(status: Message['status']): string {
                                 v-for="m in [
                                     {
                                         id: 'chat',
-                                        label: t('apps.builder.panel_mode_chat'),
+                                        label: t(
+                                            'apps.builder.panel_mode_chat',
+                                        ),
                                     },
                                     {
                                         id: 'manual',
@@ -4282,7 +4319,11 @@ function statusTone(status: Message['status']): string {
                              the card sat there offering suggestions while the
                              status bar already read "working". -->
                         <div
-                            v-if="messages.length === 0 && !isBusy && !aiIsThinking"
+                            v-if="
+                                messages.length === 0 &&
+                                !isBusy &&
+                                !aiIsThinking
+                            "
                             class="rounded-sp-sm border border-dashed border-soft bg-surface p-5"
                         >
                             <div
@@ -4607,7 +4648,9 @@ function statusTone(status: Message['status']): string {
                                             v-if="m.status === 'applied'"
                                             type="button"
                                             :title="t('apps.builder.revert')"
-                                            :aria-label="t('apps.builder.revert')"
+                                            :aria-label="
+                                                t('apps.builder.revert')
+                                            "
                                             class="inline-flex items-center gap-1 rounded-pill border border-medium bg-surface px-2 py-1 text-[11px] text-ink transition-colors hover:border-strong hover:bg-surface-hover sm:px-2.5"
                                             @click="revertMessage(m)"
                                         >
@@ -4695,9 +4738,12 @@ function statusTone(status: Message['status']): string {
                             >
                                 {{ attachedFile?.name }}
                                 <em
-                                    v-if="attachedFile && isHtmlFile(attachedFile)"
-                                    class="not-italic text-ink-subtle"
-                                    >— {{ t('apps.builder.attach_html_hint') }}</em
+                                    v-if="
+                                        attachedFile && isHtmlFile(attachedFile)
+                                    "
+                                    class="text-ink-subtle not-italic"
+                                    >—
+                                    {{ t('apps.builder.attach_html_hint') }}</em
                                 >
                             </span>
                             <button
@@ -5081,6 +5127,27 @@ function statusTone(status: Message['status']): string {
                                 <BarChart3 class="size-3.5" />
                                 {{ t('apps.builder.add_chart') }}
                             </button>
+                            <button
+                                v-if="
+                                    panelMode === 'manual' && previewIsLanding
+                                "
+                                type="button"
+                                class="inline-flex items-center gap-1.5 rounded-pill border px-2.5 py-1 text-[11px] font-semibold transition-colors"
+                                :class="
+                                    linksPanelOpen
+                                        ? 'border-accent-blue bg-accent-blue/10 text-accent-blue'
+                                        : 'border-medium bg-surface text-ink-muted hover:text-ink'
+                                "
+                                :title="t('apps.builder.links_title')"
+                                @click="
+                                    linksPanelOpen
+                                        ? (linksPanelOpen = false)
+                                        : openLinksPanel()
+                                "
+                            >
+                                <Link2 class="size-3.5" />
+                                {{ t('apps.builder.links_button') }}
+                            </button>
                             <h2
                                 class="text-xs font-medium tracking-wide text-ink-muted uppercase"
                             >
@@ -5400,13 +5467,29 @@ function statusTone(status: Message['status']): string {
                             </button>
                         </div>
 
+                        <!-- Where every link on the page goes, grouped by
+                             destination. Page-wide, so it lives beside the
+                             preview rather than on the selected element. -->
+                        <LandingLinksPanel
+                            v-if="
+                                previewIsLanding &&
+                                panelMode === 'manual' &&
+                                linksPanelOpen
+                            "
+                            :app-id="app.id"
+                            :focus-target="linksPanelFocus"
+                            @close="linksPanelOpen = false"
+                            @changed="afterManualChange"
+                        />
+
                         <!-- Fine-tune discoverability hint. -->
                         <div
                             v-if="
                                 previewIsLanding &&
                                 panelMode === 'manual' &&
                                 !textEditing &&
-                                !styleTargetEl
+                                !styleTargetEl &&
+                                !linksPanelOpen
                             "
                             class="pointer-events-none fixed bottom-6 left-1/2 z-[60] -translate-x-1/2 rounded-pill bg-navy-elevated/90 px-3 py-1 text-[11px] text-ink-muted shadow-lg backdrop-blur"
                         >
@@ -5425,9 +5508,7 @@ function statusTone(status: Message['status']): string {
                         >
                             <span
                                 class="font-mono text-[10px] tracking-wider text-ink-subtle uppercase"
-                                >{{
-                                    styleTargetEl.tagName.toLowerCase()
-                                }}</span
+                                >{{ styleTargetEl.tagName.toLowerCase() }}</span
                             >
                             <label
                                 class="flex items-center gap-1.5"
@@ -5516,11 +5597,17 @@ function statusTone(status: Message['status']): string {
                                 :title="t('apps.builder.style_align')"
                             >
                                 <button
-                                    v-for="a in ['left', 'center', 'right'] as const"
+                                    v-for="a in [
+                                        'left',
+                                        'center',
+                                        'right',
+                                    ] as const"
                                     :key="a"
                                     type="button"
                                     :disabled="styleBusy"
-                                    @click="applyElementStyle({ text_align: a })"
+                                    @click="
+                                        applyElementStyle({ text_align: a })
+                                    "
                                     :class="[
                                         'flex size-6 items-center justify-center rounded-full',
                                         styleValues.textAlign === a
@@ -5599,6 +5686,33 @@ function statusTone(status: Message['status']): string {
                                     <Plus class="size-3.5" />
                                 </button>
                             </div>
+                            <!-- The selected element is (or sits inside) a link:
+                                 offer where it goes, next to how it looks. -->
+                            <template v-if="styleTargetLink">
+                                <span class="h-4 w-px bg-white/15" />
+                                <button
+                                    type="button"
+                                    @click="
+                                        openLinksPanel(styleTargetLinkTarget)
+                                    "
+                                    :title="t('apps.builder.links_edit_target')"
+                                    class="flex items-center gap-1 rounded-pill px-1.5 py-0.5 text-[10px] transition-colors"
+                                    :class="
+                                        styleTargetLinkTarget
+                                            ? 'text-ink-muted hover:bg-white/10 hover:text-ink'
+                                            : 'bg-amber-500/15 text-amber-200 hover:bg-amber-500/25'
+                                    "
+                                >
+                                    <Link2 class="size-3.5" />
+                                    <span
+                                        class="max-w-[9rem] truncate font-mono"
+                                        >{{
+                                            styleTargetLinkTarget ||
+                                            t('apps.builder.links_no_target')
+                                        }}</span
+                                    >
+                                </button>
+                            </template>
                             <template v-if="styleTargetId">
                                 <span class="h-4 w-px bg-white/15" />
                                 <button

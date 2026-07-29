@@ -43,6 +43,7 @@ use App\Support\Apps\AppNaming;
 use App\Support\Branding\ColorPalette;
 use App\Support\Branding\OrganizationBrand;
 use App\Support\Builder\FineTuneStyles;
+use App\Support\Builder\LandingLinks;
 use App\Support\Css\ScopedAppCss;
 use App\Support\Manifest\PageNavigation;
 use App\Support\Storage\TenantPath;
@@ -2030,6 +2031,107 @@ class AppBuilderController extends Controller
         }
 
         return response()->json(['ok' => true, 'version' => $version->version_number]);
+    }
+
+    /**
+     * Fine-tune: the landing's link inventory — every `<a>`/`<button>` in its
+     * html sections, grouped by where it currently points, plus the in-page
+     * anchors a link may be pointed at.
+     */
+    public function landingLinks(Request $request, App $app): JsonResponse
+    {
+        $this->assertCanAccess($request, $app);
+
+        $manifest = $this->manifestService->getActiveManifest($app);
+        if (! is_array($manifest)) {
+            abort(404, 'App has no active manifest yet.');
+        }
+
+        return response()->json([
+            'groups' => LandingLinks::groups($manifest),
+            'anchors' => LandingLinks::anchors($manifest),
+        ]);
+    }
+
+    /**
+     * Fine-tune: point a set of links at a new destination — ONE version for the
+     * whole set, because "send every primary CTA to the sign-up page" is one
+     * intention even when it spans nine controls in five sections. A `<button>`
+     * in the set becomes an `<a>`: the sanitiser forces buttons inert, so that
+     * conversion is the only way the control can lead anywhere.
+     */
+    public function retargetLinks(Request $request, App $app): JsonResponse
+    {
+        $this->assertCanAccess($request, $app);
+
+        $data = $request->validate([
+            'link_ids' => ['required', 'array', 'min:1', 'max:300'],
+            'link_ids.*' => ['string', 'regex:/^[^:]+:\d+$/'],
+            'to' => ['required', 'string', 'max:2048'],
+        ]);
+
+        $to = trim($data['to']);
+        if (! LandingLinks::isValidTarget($to)) {
+            return response()->json([
+                'error' => 'invalid_target',
+                'message' => 'Ese destino no es válido. Usa un ancla (#seccion), una ruta (/ruta), una URL http(s), mailto: o tel:.',
+            ], 422);
+        }
+
+        $manifest = $this->manifestService->getActiveManifest($app);
+        if (! is_array($manifest)) {
+            abort(404, 'App has no active manifest yet.');
+        }
+
+        /** @var array<string, list<int>> $byBlock */
+        $byBlock = [];
+        foreach ($data['link_ids'] as $linkId) {
+            [$blockId, $ordinal] = explode(':', $linkId, 2);
+            $byBlock[$blockId][] = (int) $ordinal;
+        }
+
+        $ops = [];
+        $changed = 0;
+        foreach ($byBlock as $blockId => $ordinals) {
+            $found = $this->findBlockPath($manifest, $blockId);
+            if ($found === null) {
+                continue;
+            }
+            [$pointer, $block] = $found;
+            if (($block['type'] ?? null) !== 'html' || ! is_string($block['content'] ?? null)) {
+                continue;
+            }
+
+            $result = LandingLinks::retarget($block['content'], $ordinals, $to);
+            if ($result['changed'] === 0 || $result['content'] === $block['content']) {
+                continue;
+            }
+
+            $ops[] = ['op' => 'add', 'path' => $pointer.'/content', 'value' => $result['content']];
+            $changed += $result['changed'];
+        }
+
+        if ($ops === []) {
+            return response()->json([
+                'error' => 'not_found',
+                'message' => 'Esos enlaces ya no están donde estaban. Vuelve a abrir el panel para ver la lista actual.',
+            ], 404);
+        }
+
+        try {
+            $version = $this->manifestService->applyPatch(
+                $app,
+                $ops,
+                $request->user(),
+                $changed === 1
+                    ? 'Ajuste fino: cambié el destino de un enlace'
+                    : "Ajuste fino: cambié el destino de {$changed} enlaces",
+            );
+        } catch (InvalidManifestException $e) {
+            return response()->json(['error' => 'invalid_manifest', 'errors' => $e->result->errorsArray()], 422);
+        }
+
+        return response()->json(['ok' => true, 'version' => $version->version_number, 'changed' => $changed]);
     }
 
     /**

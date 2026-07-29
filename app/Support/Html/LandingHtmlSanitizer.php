@@ -356,6 +356,16 @@ class LandingHtmlSanitizer
 
     private function isSafeHref(string $href): bool
     {
+        return self::isSafeLinkTarget($href);
+    }
+
+    /**
+     * Where a link may point. Public because the fine-tune link editor validates
+     * a destination BEFORE writing it, and a second opinion on this question
+     * could only ever disagree with the boundary that actually enforces it.
+     */
+    public static function isSafeLinkTarget(string $href): bool
+    {
         $href = trim($href);
         if ($href === '') {
             return false;

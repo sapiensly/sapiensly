@@ -57,6 +57,10 @@ Route::middleware([
     Route::post('/apps/{app}/builder/blocks/content', [AppBuilderController::class, 'setBlockContent'])->name('apps.builder.blocks.content');
     Route::post('/apps/{app}/builder/blocks/style', [AppBuilderController::class, 'styleElement'])->name('apps.builder.blocks.style');
     Route::post('/apps/{app}/builder/blocks/style/reset', [AppBuilderController::class, 'resetElement'])->name('apps.builder.blocks.style.reset');
+    // Landing link inventory + bulk retarget: "where do my buttons go?" is a
+    // question about the whole page, so it is answered (and edited) page-wide.
+    Route::get('/apps/{app}/builder/links', [AppBuilderController::class, 'landingLinks'])->name('apps.builder.links');
+    Route::post('/apps/{app}/builder/links/retarget', [AppBuilderController::class, 'retargetLinks'])->name('apps.builder.links.retarget');
     Route::post('/apps/{app}/builder/messages/{message}/approve', [AppBuilderController::class, 'approve'])->name('apps.builder.approve');
     Route::post('/apps/{app}/builder/messages/{message}/reject', [AppBuilderController::class, 'reject'])->name('apps.builder.reject');
     Route::post('/apps/{app}/builder/messages/{message}/revert', [AppBuilderController::class, 'revert'])->name('apps.builder.revert');
