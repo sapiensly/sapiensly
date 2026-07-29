@@ -14,6 +14,18 @@ it('flags the forbidden constructs', function () {
     expect(ScopedAppCss::issues('a { background: url(javascript:alert(1)) }'))->not->toBe([]);
     expect(ScopedAppCss::issues('</style><script>alert(1)</script>'))->not->toBe([]);
     expect(ScopedAppCss::issues(str_repeat('a', ScopedAppCss::MAX_LENGTH + 1)))->not->toBe([]);
+    // IE's HTC binding — the thing the rule is actually for.
+    expect(ScopedAppCss::issues('a { behavior: url(evil.htc) }'))->not->toBe([]);
+});
+
+/**
+ * `\b` treats a hyphen as a word break, so the behavior guard also rejected two
+ * standard, inert properties. A landing whose CTAs are all in-page anchors wants
+ * `scroll-behavior: smooth` — and was told its CSS was a script vector.
+ */
+it('does not mistake hyphenated standard properties for the HTC binding', function () {
+    expect(ScopedAppCss::issues('html { scroll-behavior: smooth; }'))->toBe([]);
+    expect(ScopedAppCss::issues('.pane { overscroll-behavior: contain; }'))->toBe([]);
 });
 
 it('scopes author CSS to the app surface via nesting', function () {

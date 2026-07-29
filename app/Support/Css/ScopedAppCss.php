@@ -53,7 +53,12 @@ final class ScopedAppCss
         '/@import\b/i' => '@import is not allowed — inline the styles instead. For fonts: the platform ships a curated self-hosted catalog (Fraunces, Instrument Serif, Bricolage Grotesque, Archivo, IBM Plex Mono, Alfa Slab One, Anton) you can reference directly, and ANY other Google Fonts family loads via settings.fonts (e.g. ["Space Grotesk:400,700"]) — never via @import.',
         '/\bexpression\s*\(/i' => 'CSS expression(...) is not allowed.',
         '/javascript\s*:/i' => 'javascript: URLs are not allowed.',
-        '/\bbehavior\s*:/i' => 'CSS behavior is not allowed.',
+        // IE's HTC binding property, which could attach script to an element.
+        // `\b` was the wrong boundary: a hyphen IS a word break, so this also
+        // matched `scroll-behavior:` and `overscroll-behavior:` — two standard,
+        // inert properties. A landing whose CTAs are all in-page anchors wants
+        // smooth scrolling, and was told its CSS was a script vector.
+        '/(?<![-\w])behavior\s*:/i' => 'CSS behavior is not allowed.',
         '/-moz-binding\b/i' => '-moz-binding is not allowed.',
     ];
 
