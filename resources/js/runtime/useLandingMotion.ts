@@ -15,6 +15,19 @@ import { onUnmounted, type Ref } from 'vue';
  *                                    appearing); ms = step between children.
  *   [data-sp-motion="ambient-field"] paint an animated connected-node field
  *                                    behind the element (the orchestration motif).
+ *   [data-sp-sticky-after="<id>"]    reveal this element once the element with
+ *                                    that id has scrolled out of view (the
+ *                                    sticky header CTA that appears past the
+ *                                    hero). Hidden until then, inert while hidden.
+ *   [data-sp-replay]                 a control that replays a sequence: its value
+ *                                    is the id of a [data-sp-sequence] container,
+ *                                    or empty to replay the nearest one around it.
+ *
+ * These two exist because a landing ships NO author JavaScript — the sanitiser
+ * strips it, and it must, since the page is public and its author is a model
+ * reading untrusted input. The answer to "we need behaviour" is a vocabulary the
+ * runtime implements and we review once, never an allowlist of code: HTML has a
+ * finite grammar you can enumerate, JavaScript does not.
  *
  * All effects respect prefers-reduced-motion (they resolve to the final visible
  * state) and every observer / rAF / injected canvas is torn down on dispose.
@@ -47,6 +60,7 @@ export function useLandingMotion(root: Ref<HTMLElement | null>) {
         hydrateReveal(el);
         hydrateSequence(el);
         hydrateAmbient(el);
+        hydrateStickyAfter(el);
     }
 
     function hydrateReveal(el: HTMLElement): void {
@@ -87,7 +101,11 @@ export function useLandingMotion(root: Ref<HTMLElement | null>) {
         cleanups.push(() => io.disconnect());
     }
 
+    /** Sequence containers, by the element, so a replay control can re-run one. */
+    const replays = new Map<HTMLElement, () => void>();
+
     function hydrateSequence(el: HTMLElement): void {
+        replays.clear();
         const containers = Array.from(
             el.querySelectorAll<HTMLElement>('[data-sp-sequence]'),
         );
@@ -110,6 +128,10 @@ export function useLandingMotion(root: Ref<HTMLElement | null>) {
             });
             const play = () => {
                 kids.forEach((k, i) => {
+                    // Back to the start, so a replay is a replay and not a no-op
+                    // on children that are already in place.
+                    k.style.opacity = '0';
+                    k.style.transform = 'translateY(8px)';
                     const to = window.setTimeout(() => {
                         k.style.opacity = '1';
                         k.style.transform = 'none';
@@ -117,6 +139,7 @@ export function useLandingMotion(root: Ref<HTMLElement | null>) {
                     cleanups.push(() => window.clearTimeout(to));
                 });
             };
+            replays.set(c, play);
             if ('IntersectionObserver' in window) {
                 let started = false;
                 const io = new IntersectionObserver(
@@ -137,6 +160,105 @@ export function useLandingMotion(root: Ref<HTMLElement | null>) {
                 play();
             }
         });
+
+        hydrateReplay(el);
+    }
+
+    /**
+     * A control that replays a sequence. The original does this with a "Replay"
+     * button on a debate transcript; here the author writes the button and names
+     * the sequence, and the runtime owns the behaviour.
+     */
+    function hydrateReplay(el: HTMLElement): void {
+        const controls = Array.from(
+            el.querySelectorAll<HTMLElement>('[data-sp-replay]'),
+        );
+
+        controls.forEach((control) => {
+            const named = control.getAttribute('data-sp-replay')?.trim();
+            const target = named
+                ? el.querySelector<HTMLElement>(
+                      `#${CSS.escape(named)}[data-sp-sequence]`,
+                  )
+                : // No name: the sequence this control belongs to. Closest
+                  // ancestor that holds one, then the section it sits in.
+                  (control.closest('[data-sp-sequence]') as HTMLElement | null) ??
+                  control
+                      .closest('section, div')
+                      ?.querySelector<HTMLElement>('[data-sp-sequence]') ??
+                  null;
+
+            const play = target ? replays.get(target) : undefined;
+            if (!play) {
+                // Nothing to replay: leave the control alone rather than wire a
+                // click that does nothing — a dead affordance is worse than none.
+                return;
+            }
+
+            const onClick = (event: Event) => {
+                event.preventDefault();
+                play();
+            };
+            control.addEventListener('click', onClick);
+            cleanups.push(() => control.removeEventListener('click', onClick));
+        });
+    }
+
+    /**
+     * Reveal an element once another has scrolled out of view — the header CTA
+     * that appears once the hero's own is gone.
+     */
+    function hydrateStickyAfter(el: HTMLElement): void {
+        const targets = Array.from(
+            el.querySelectorAll<HTMLElement>('[data-sp-sticky-after]'),
+        );
+
+        targets.forEach((target) => {
+            const watchId = target.getAttribute('data-sp-sticky-after')?.trim();
+            const watched = watchId
+                ? el.querySelector<HTMLElement>(`#${CSS.escape(watchId)}`)
+                : null;
+
+            // Without something to watch — or without an observer — the honest
+            // fallback is the visible state: an element stuck invisible is worse
+            // than one that never hides.
+            if (!watched || !('IntersectionObserver' in window)) {
+                show(target, false);
+
+                return;
+            }
+
+            show(target, false);
+            hide(target);
+
+            const io = new IntersectionObserver(
+                ([entry]) => {
+                    if (entry.isIntersecting) {
+                        hide(target);
+                    } else {
+                        show(target, !reduce);
+                    }
+                },
+                { threshold: 0 },
+            );
+            io.observe(watched);
+            cleanups.push(() => io.disconnect());
+        });
+    }
+
+    function show(el: HTMLElement, animate: boolean): void {
+        el.style.transition = animate ? 'opacity .3s ease, transform .3s ease' : '';
+        el.style.opacity = '1';
+        el.style.transform = 'none';
+        el.style.pointerEvents = '';
+    }
+
+    function hide(el: HTMLElement): void {
+        el.style.opacity = '0';
+        el.style.transform = 'translateY(-6px)';
+        // Inert while invisible: an unreachable control must not still be
+        // clickable or focusable.
+        el.style.pointerEvents = 'none';
     }
 
     function hydrateAmbient(el: HTMLElement): void {

@@ -232,3 +232,72 @@ it('keeps the preview framed on a desktop', function () {
 
     visit("/apps/{$appId}/builder")->on()->macbookAir()->assertScript($framed, 'framed');
 });
+
+function motionHooksApp(): string
+{
+    $user = mcpMember($org = mcpOrg());
+    test()->actingAs($user);
+
+    $app = App::factory()->create(['user_id' => $user->id, 'organization_id' => $org->id]);
+    app(AppManifestService::class)->createVersion($app, [
+        'schema_version' => '1.0.0',
+        'id' => $app->id, 'slug' => 'hooks', 'name' => 'Hooks', 'version' => 1,
+        'objects' => [],
+        'pages' => [[
+            'id' => 'pag_'.strtolower((string) Str::ulid()), 'slug' => 'home', 'name' => 'Home', 'path' => '/',
+            'blocks' => [[
+                'id' => 'blk_'.strtolower((string) Str::ulid()), 'type' => 'html',
+                'content' => '<section class="hero"><a id="hero-cta" href="#x">Build your first agent</a></section>'
+                    .'<div id="sticky" data-sp-sticky-after="hero-cta">Sticky CTA</div>'
+                    .'<div id="seq" data-sp-sequence="40"><p>uno</p><p>dos</p><p>tres</p></div>'
+                    .'<button data-sp-replay="seq">Replay</button>',
+            ]],
+        ]],
+        'permissions' => ['roles' => [['id' => 'rol_'.strtolower((string) Str::ulid()), 'slug' => 'admin', 'name' => 'Admin']]],
+        'settings' => ['surface' => 'landing', 'custom_css' => '.hero{padding:2rem}'],
+    ], $user);
+
+    return $app->id;
+}
+
+it('keeps a sticky-after element hidden AND inert until its anchor leaves', function () {
+    // The header CTA that appears past the hero. Invisible is not enough: an
+    // unreachable control must not still be clickable or focusable.
+    $this->seed(RolesAndPermissionsSeeder::class);
+    $appId = motionHooksApp();
+
+    $state = <<<'JS'
+    function () {
+        const el = document.querySelector('[data-sp-sticky-after]');
+        if (!el) return 'missing';
+        const cs = getComputedStyle(el);
+        return `${cs.opacity}/${cs.pointerEvents}`;
+    }
+    JS;
+
+    visit("/apps/{$appId}/builder")->on()->macbookAir()
+        ->assertNoJavaScriptErrors()
+        ->assertScript($state, '0/none');
+});
+
+it('wires a replay control to restart its sequence', function () {
+    $this->seed(RolesAndPermissionsSeeder::class);
+    $appId = motionHooksApp();
+
+    // Clicking resets the children to the start — without that a "replay" on an
+    // already-played sequence is a button that does nothing.
+    $replay = <<<'JS'
+    function () {
+        const btn = document.querySelector('[data-sp-replay]');
+        const seq = document.getElementById('seq');
+        if (!btn || !seq) return 'missing';
+        [...seq.children].forEach(k => { k.style.opacity = '1'; });
+        btn.click();
+        return [...seq.children].every(k => k.style.opacity === '0') ? 'restarted' : 'no-op';
+    }
+    JS;
+
+    visit("/apps/{$appId}/builder")->on()->macbookAir()
+        ->assertNoJavaScriptErrors()
+        ->assertScript($replay, 'restarted');
+});
