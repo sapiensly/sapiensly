@@ -195,6 +195,23 @@ final class ManifestPatch
             throw new \InvalidArgumentException('append cannot target the document root.');
         }
 
+        // MARKUP CANNOT BE STREAMED. Every save re-parses and REPAIRS a block's
+        // html (LandingHtmlSanitizer / HtmlSanitizer), so a partial first chunk
+        // comes back with its open tags closed — and the next append lands as a
+        // sibling AFTER the element it belonged to, not inside it. Cutting on
+        // element boundaries doesn't help: the ancestors are still open at the
+        // cut. It fails silently (every patch reports success, the manifest
+        // reads fine), so it has to be refused here rather than discovered in
+        // pixels. Observed: half a logo marquee rendering as a stray row below
+        // its own track, after six "successful" patches.
+        if (str_starts_with($path, '/pages/') && str_ends_with($path, '/content')) {
+            throw new \InvalidArgumentException(
+                "append cannot write a block's `content`: the markup is re-parsed and repaired on every save, "
+                .'so a partial chunk gets its open tags closed and everything appended after it lands outside '
+                .'the element. Send the whole content in one `add` op — a large value is fine.'
+            );
+        }
+
         $parentTokens = $tokens;
         $leaf = array_pop($parentTokens);
         $parent = self::resolve($target, $parentTokens);

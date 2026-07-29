@@ -185,12 +185,52 @@ it('append rejects a non-string target, a non-string value, and a missing parent
     ]))->toThrow(InvalidArgumentException::class, 'does not exist');
 });
 
-it('append works on a nested html block content', function () {
+/**
+ * This used to assert the opposite — that a block's html could be streamed the
+ * way custom_css is. In isolation the concatenation is fine, which is exactly
+ * why the bug hid here: the damage happens between two saves, when the
+ * sanitiser re-parses the partial markup and closes the tags the author left
+ * open. The next chunk then lands outside the element it belonged to.
+ */
+it('refuses to append to a block content — markup cannot be streamed', function () {
     $doc = ['pages' => [['blocks' => [['id' => 'blk_1', 'type' => 'html', 'content' => '<section>']]]]];
 
-    $result = ManifestPatch::apply($doc, [
+    expect(fn () => ManifestPatch::apply($doc, [
         ['op' => 'append', 'path' => '/pages/0/blocks/0/content', 'value' => '<h1>Hola</h1></section>'],
+    ]))->toThrow(InvalidArgumentException::class, 'one `add` op');
+});
+
+/**
+ * A block's html is re-parsed and REPAIRED on every save, so a partial chunk
+ * comes back with its open tags closed and the next append lands outside the
+ * element it belonged to. It fails silently — every patch reports success and
+ * the manifest reads fine — so it is refused at the patch layer instead.
+ *
+ * Cost a live rebuild half its logo marquee, rendering as a stray row below
+ * its own track, after six "successful" patches.
+ */
+it('refuses it for a block nested inside another block too', function () {
+    $doc = ['pages' => [['blocks' => [['id' => 'blk_a', 'type' => 'html', 'content' => '<section><div>']]]]];
+
+    expect(fn () => ManifestPatch::apply($doc, [
+        ['op' => 'append', 'path' => '/pages/0/blocks/2/blocks/1/content', 'value' => 'x'],
+    ]))->toThrow(InvalidArgumentException::class, 'append cannot write');
+});
+
+it('still allows a block content to be written whole', function () {
+    $doc = ['pages' => [['blocks' => [['id' => 'blk_a', 'type' => 'html', 'content' => 'old']]]]];
+
+    $result = ManifestPatch::apply($doc, [
+        ['op' => 'add', 'path' => '/pages/0/blocks/0/content', 'value' => '<section><p>whole</p></section>'],
     ]);
 
-    expect($result['pages'][0]['blocks'][0]['content'])->toBe('<section><h1>Hola</h1></section>');
+    expect($result['pages'][0]['blocks'][0]['content'])->toBe('<section><p>whole</p></section>');
+});
+
+it('keeps streaming custom_css, which is not markup', function () {
+    $result = ManifestPatch::apply(['settings' => ['custom_css' => '.a{}']], [
+        ['op' => 'append', 'path' => '/settings/custom_css', 'value' => '.b{}'],
+    ]);
+
+    expect($result['settings']['custom_css'])->toBe('.a{}.b{}');
 });

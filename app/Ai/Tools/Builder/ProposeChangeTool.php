@@ -91,10 +91,14 @@ change_summary strings of every successful call with " · ".
   - {"op":"test","path":"/version","value":1}
   - {"op":"append","path":"/settings/custom_css","value":"..."} — extension for
     LONG STRINGS: concatenates onto the existing string (absent → starts empty).
-    Use it to write settings.custom_css (or a long html content) in SMALL CHUNKS
-    across calls instead of one giant replace, and to REVISE css by appending
-    overriding rules (the cascade favors later rules) instead of resending the
-    whole stylesheet. Never resend a 10k+ string a `replace` already holds.
+    Use it to write settings.custom_css in SMALL CHUNKS across calls instead of
+    one giant replace, and to REVISE css by appending overriding rules (the
+    cascade favors later rules) instead of resending the whole stylesheet.
+    Never resend a 10k+ stylesheet a `replace` already holds.
+    NOT FOR MARKUP: appending to a block's `content` is REFUSED. Html is
+    re-parsed and repaired on every save, so a partial chunk gets its open tags
+    closed and everything after it lands outside the element. Send a block's
+    content whole in one `add` — a large value goes through fine.
 
 For arrays, `/-` APPENDS to the end and a numeric index INSERTS before that
 position (both keep the inserted value intact): `add /pages/0/blocks/0` puts a
