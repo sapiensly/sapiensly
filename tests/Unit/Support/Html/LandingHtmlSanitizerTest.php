@@ -239,3 +239,18 @@ it('still refuses a data:image/svg source on an img', function () {
     // Allowing authored <svg> must not re-open the data-URI vector.
     expect(clean('<img src="data:image/svg+xml;base64,AAAA" alt="s">'))->not->toContain('svg+xml');
 });
+
+/**
+ * The invariant behind "write a block's content in ONE op": the sanitiser runs
+ * on EVERY save and repairs the markup, so a partial chunk comes back with its
+ * open ancestors closed. Append the next chunk and it lands OUTSIDE the element
+ * it belonged to — silently, since the patch still succeeds. Cost a live
+ * landing half its logo marquee, rendering as a stray row below the track.
+ */
+it('closes the open tags of a partial fragment, which is why content cannot be appended in chunks', function () {
+    $partial = '<section class="band"><div class="track"><span>one</span>';
+
+    $out = clean($partial);
+
+    expect($out)->toEndWith('</span></div></section>');
+});
