@@ -30,7 +30,7 @@ beforeEach(function () {
 it('drafts a contextbook from the website and normalizes what the model returns', function () {
     config()->set('security.ssrf.enabled', false); // the guard has its own tests; here we exercise the fetch
     Http::fake(['*' => Http::response(
-        '<html><head><title>Acme</title></head><body>Acme moves refrigerated freight.</body></html>',
+        '<html><head><title>Acme</title></head><body>'.siteCopy().'</body></html>',
         200,
         ['Content-Type' => 'text/html'],
     )]);
@@ -58,7 +58,7 @@ it('drafts a contextbook from the website and normalizes what the model returns'
  */
 it('drops the placeholders a model writes when it means "I do not know"', function () {
     config()->set('security.ssrf.enabled', false);
-    Http::fake(['*' => Http::response('<html><body>Acme.</body></html>', 200, ['Content-Type' => 'text/html'])]);
+    Http::fake(['*' => Http::response('<html><body>'.siteCopy().'</body></html>', 200, ['Content-Type' => 'text/html'])]);
     Ai::fakeAgent(ChatAgent::class, [json_encode([
         'descriptor' => 'Moves freight.',
         'size' => 'No especificado',
@@ -76,7 +76,7 @@ it('drops the placeholders a model writes when it means "I do not know"', functi
 
 it('refuses to describe the same product twice, once per section', function () {
     config()->set('security.ssrf.enabled', false);
-    Http::fake(['*' => Http::response('<html><body>Acme.</body></html>', 200, ['Content-Type' => 'text/html'])]);
+    Http::fake(['*' => Http::response('<html><body>'.siteCopy().'</body></html>', 200, ['Content-Type' => 'text/html'])]);
     Ai::fakeAgent(ChatAgent::class, [json_encode([
         'offerings' => [
             ['name' => 'YuhuDILS', 'description' => 'Interest-free marketplace.'],
@@ -101,7 +101,7 @@ it('refuses to describe the same product twice, once per section', function () {
 
 it('never lists the home page several times under invented labels', function () {
     config()->set('security.ssrf.enabled', false);
-    Http::fake(['*' => Http::response('<html><body>Acme.</body></html>', 200, ['Content-Type' => 'text/html'])]);
+    Http::fake(['*' => Http::response('<html><body>'.siteCopy().'</body></html>', 200, ['Content-Type' => 'text/html'])]);
     Ai::fakeAgent(ChatAgent::class, [json_encode([
         'links' => [
             ['label' => 'White paper', 'url' => 'https://acme.example'],
@@ -122,7 +122,7 @@ it('never lists the home page several times under invented labels', function () 
 
 it('keeps the home page when it is the only link there is', function () {
     config()->set('security.ssrf.enabled', false);
-    Http::fake(['*' => Http::response('<html><body>Acme.</body></html>', 200, ['Content-Type' => 'text/html'])]);
+    Http::fake(['*' => Http::response('<html><body>'.siteCopy().'</body></html>', 200, ['Content-Type' => 'text/html'])]);
     Ai::fakeAgent(ChatAgent::class, [json_encode([
         'links' => [['label' => 'Site', 'url' => 'https://acme.example']],
     ])]);
@@ -156,7 +156,7 @@ it('degrades to the brief alone when the website cannot be read', function () {
  */
 it('never overwrites a contextbook that is already written — it reports the clash', function () {
     config()->set('security.ssrf.enabled', false);
-    Http::fake(['*' => Http::response('<html><body>Acme.</body></html>', 200, ['Content-Type' => 'text/html'])]);
+    Http::fake(['*' => Http::response('<html><body>'.siteCopy().'</body></html>', 200, ['Content-Type' => 'text/html'])]);
     Ai::fakeAgent(ChatAgent::class, [json_encode([
         'descriptor' => 'What the website says.',
         'industry' => 'logistics',
@@ -185,7 +185,7 @@ it('never overwrites a contextbook that is already written — it reports the cl
 it('exposes the draft over the settings endpoint without storing it', function () {
     config()->set('security.ssrf.enabled', false); // the guard has its own tests; here we exercise the fetch
     Http::fake(['*' => Http::response(
-        '<html><body>Acme moves refrigerated freight.</body></html>',
+        '<html><body>'.siteCopy().'</body></html>',
         200,
         ['Content-Type' => 'text/html'],
     )]);

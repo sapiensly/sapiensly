@@ -31,6 +31,9 @@ final class SiteProfile
     /** Sanity cap on stored prose. Consumers trim further for their own prompt budget. */
     private const MAX_TEXT_CHARS = 20000;
 
+    /** Below this many characters of visible text, {@see hasProse()} says there is nothing to draft from. */
+    private const MIN_PROSE_CHARS = 200;
+
     /** Rel values that mark a favicon-ish link, best first. */
     private const ICON_RELS = ['apple-touch-icon', 'icon', 'shortcut icon'];
 
@@ -92,6 +95,25 @@ final class SiteProfile
     {
         return $this->iconUrl !== null || $this->logoUrl !== null
             || $this->themeColor !== null || $this->fonts !== [];
+    }
+
+    /**
+     * Whether the page carries prose worth drafting a Contextbook from.
+     *
+     * A client-rendered site is the case this exists for: it answers 200 with a
+     * perfectly good `<title>` and favicon, and a body holding nothing but a
+     * "you are using an outdated browser" notice, because the real content is
+     * assembled by JavaScript we do not run. Nothing about that reads as a
+     * failure — which is exactly the problem, because a draft built from it is
+     * empty and the user is left concluding the feature is broken rather than
+     * that their home page has no server-rendered text.
+     *
+     * The floor is deliberately low. It is not a quality bar; it separates "a
+     * page with words on it" from "a page with no words on it at all".
+     */
+    public function hasProse(): bool
+    {
+        return mb_strlen(trim((string) $this->text)) >= self::MIN_PROSE_CHARS;
     }
 
     /**

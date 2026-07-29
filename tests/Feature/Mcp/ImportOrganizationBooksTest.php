@@ -52,7 +52,7 @@ function fakeBooksSite(string $themeColor = '#0f766e'): void
             .'<meta name="theme-color" content="'.$themeColor.'">'
             .'<link rel="apple-touch-icon" href="/touch.png">'
             .'<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Fraunces">'
-            .'</head><body>Acme moves refrigerated freight.</body></html>',
+            .'</head><body>'.siteCopy().'</body></html>',
             200,
             ['Content-Type' => 'text/html'],
         ),

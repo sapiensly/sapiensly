@@ -222,3 +222,15 @@ function deferredBlockData($test, string $url, string $component = 'runtime/Page
         'X-Inertia-Partial-Data' => $props,
     ]);
 }
+
+/**
+ * Body copy for a faked home page. Long enough to clear the prose floor
+ * SiteProfile::hasProse() applies — a one-liner is not what a real home page
+ * looks like, and the floor exists to tell a page with words from one without.
+ */
+function siteCopy(): string
+{
+    return 'Acme moves refrigerated freight for food producers across the country. '
+        .'We run temperature-controlled trailers, same-day dispatch and a live tracking portal '
+        .'so shippers always know where a load is. Founded in 2009, based in Monterrey.';
+}

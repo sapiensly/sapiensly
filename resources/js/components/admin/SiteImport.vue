@@ -41,6 +41,12 @@ export interface ImportStatus {
     otherCount: number;
     /** Free-form remarks from the proposal (why an accent was refused, etc.). */
     notes: string[];
+    /**
+     * The page opened but had no words on it — a client-rendered site whose
+     * content we do not run. Only the Contextbook cares: the brand signals live
+     * in the markup and are read either way.
+     */
+    noProse?: boolean;
 }
 
 const props = defineProps<{
@@ -245,6 +251,21 @@ function reuse(url: string): void {
             <p v-else-if="emptyForBook" class="text-xs text-ink-muted">
                 {{ t(`site_import.nothing.${book}`) }}
             </p>
+
+            <!-- The page opened and had no words on it. Saying so is the whole
+                 point: an empty draft with no explanation reads as a broken
+                 feature rather than as a client-rendered home page. -->
+            <div
+                v-if="book === 'context' && status.noProse"
+                class="flex items-start gap-2 rounded-sp-sm border border-soft px-3 py-2"
+            >
+                <AlertCircle
+                    class="text-accent-amber mt-0.5 size-3.5 shrink-0"
+                />
+                <p class="text-xs text-ink-muted">
+                    {{ t('site_import.no_prose') }}
+                </p>
+            </div>
 
             <!-- Where the draft came from: without this, a draft built from the
                  brief alone reads as a draft the website produced. -->

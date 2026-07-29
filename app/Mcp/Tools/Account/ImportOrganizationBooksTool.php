@@ -97,6 +97,13 @@ class ImportOrganizationBooksTool extends SapiensTool
                 'drafted_from' => $result['context']['sources'],
                 'estimated_tokens' => $result['context']['tokens'],
             ],
+            // Say it plainly rather than returning an empty draft and letting the
+            // caller guess: the page opened, and had no words on it.
+            'warning' => $result['read'] && ! $result['context']['site_has_prose']
+                ? 'That page carries no readable text — its content is most likely rendered by JavaScript, which we do not run. '
+                    .'The Brandbook signals in the markup were still read. To get a Contextbook, call again with a `brief` '
+                    .'describing the business; the website alone cannot produce one.'
+                : null,
             'next' => $apply
                 ? 'Conflicts were left untouched. Show them to a human and resolve each with set_organization_brand / set_organization_context.'
                 : 'Nothing was written. Call again with apply="new_only" to fill the empty fields, or use set_organization_brand / set_organization_context to decide field by field.',

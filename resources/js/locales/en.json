@@ -133,6 +133,7 @@
     "site_import.conflicts": "{count} field(s) you already had were left untouched — decide on each below.",
     "site_import.nothing.brand": "That page carries no icon, logo, brand colour or typeface we can use.",
     "site_import.nothing.context": "Nothing new came out of that — everything it found, you already had.",
+    "site_import.no_prose": "We opened that page and it carries no readable text — its content is most likely built by JavaScript, which we don't run. Describe the business in one line above and read it again; the brand colours and logo were still read from the page.",
     "site_import.sources": "Drafted from: {sources}",
     "site_import.source.website": "your website",
     "site_import.source.brief": "your description",

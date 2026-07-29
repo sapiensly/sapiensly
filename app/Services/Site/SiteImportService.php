@@ -97,7 +97,7 @@ class SiteImportService
             'reused' => $reused,
             'imported_at' => $importedAt,
             'brand' => $this->brands->fromProfile($organization, $fetch->profile),
-            'context' => $this->contextResult($organization, $draft),
+            'context' => $this->contextResult($organization, $draft, $fetch),
         ];
     }
 
@@ -122,7 +122,7 @@ class SiteImportService
      * @param  array{profile: array<string, mixed>, sources: list<string>, generated: bool}  $draft
      * @return array<string, mixed>
      */
-    private function contextResult(Organization $organization, array $draft): array
+    private function contextResult(Organization $organization, array $draft, SiteFetch $fetch): array
     {
         $stored = OrganizationAiContext::firstOrNew(['organization_id' => $organization->id])->profile ?? [];
         $diff = DraftDiff::between($stored, $draft['profile']);
@@ -132,6 +132,10 @@ class SiteImportService
             'profile' => $draft['profile'],
             'sources' => $draft['sources'],
             'generated' => $draft['generated'],
+            // The page opened but had no words on it — a client-rendered site.
+            // Without saying so, an empty draft next to "drafted from: your
+            // website" reads as the feature being broken.
+            'site_has_prose' => $fetch->successful() && $fetch->profile->hasProse(),
             'diff' => $diff->toArray(),
             'has_conflicts' => $diff->hasConflicts(),
             'preview' => $context->promptBlock($organization->name),

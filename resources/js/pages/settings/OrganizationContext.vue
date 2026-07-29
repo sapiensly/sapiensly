@@ -258,6 +258,7 @@ async function deriveDraft(): Promise<void> {
             sources: data.context?.sources ?? [],
             otherCount: (data.brand?.diff ?? []).length,
             notes: [],
+            noProse: Boolean(data.read) && !data.context?.site_has_prose,
         };
 
         // Adopt what was actually fetched, so the stored website is the one that

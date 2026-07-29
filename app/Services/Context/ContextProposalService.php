@@ -115,7 +115,10 @@ class ContextProposalService
             $material .= "What the administrator says about the organization:\n".Str::limit($brief, 2000)."\n\n";
         }
 
-        if ($site !== null && $site->text !== null) {
+        // A page with a title and no words is not material. Sending it anyway
+        // asks a model to profile a company from its name — which is either an
+        // empty answer we paid for, or an invented one.
+        if ($site !== null && $site->hasProse()) {
             $sources[] = 'website';
             $material .= self::siteMaterial($site);
         }

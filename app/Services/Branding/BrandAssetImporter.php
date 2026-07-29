@@ -19,9 +19,12 @@ use Throwable;
  * proposing, which must write nothing anywhere.
  *
  * Shared by the settings page and the MCP import so both make the same
- * decisions about what may be adopted. SVG is deliberately NOT importable even
- * though an upload accepts it: an upload is a file a human deliberately picked,
- * while this takes whatever a third-party host serves, and these assets are
+ * decisions about what may be adopted.
+ *
+ * A third-party SVG is never stored as an SVG — it is rasterized by
+ * {@see SvgRasterizer} and what lands in storage is a PNG this server produced.
+ * An upload may still be an SVG, because that is a file a human deliberately
+ * picked; this takes whatever a third-party host serves, and these assets are
  * streamed back from our own origin by an unauthenticated route.
  */
 class BrandAssetImporter
@@ -44,9 +47,13 @@ class BrandAssetImporter
     /** Matches the 2 MB ceiling the upload path enforces through validation. */
     private const MAX_ASSET_BYTES = 2 * 1024 * 1024;
 
+    /** Rendered to PNG on the way in rather than stored as a document. */
+    private const RASTERIZE_MIME = 'image/svg+xml';
+
     public function __construct(
         private readonly TenantStorage $tenantStorage,
         private readonly SafeHttpClient $http,
+        private readonly SvgRasterizer $rasterizer,
     ) {}
 
     /**
@@ -69,7 +76,8 @@ class BrandAssetImporter
         }
 
         $contentType = strtolower(trim(explode(';', (string) $response->header('Content-Type'))[0]));
-        $ext = self::IMPORTABLE_MIME[$contentType] ?? null;
+        $rasterize = $contentType === self::RASTERIZE_MIME;
+        $ext = $rasterize ? 'png' : (self::IMPORTABLE_MIME[$contentType] ?? null);
 
         if ($ext === null) {
             throw new BrandAssetImportFailed(__(
@@ -79,8 +87,15 @@ class BrandAssetImporter
         }
 
         $bytes = $response->body();
+
+        // The ceiling applies to what came off the wire, so an enormous document
+        // is refused before a browser is ever asked to render it.
         if (strlen($bytes) > self::MAX_ASSET_BYTES) {
             throw new BrandAssetImportFailed(__('That image is too large to import.'));
+        }
+
+        if ($rasterize) {
+            $bytes = $this->rasterizer->toPng($bytes);
         }
 
         $filename = $kind.'-'.Str::lower((string) Str::ulid()).'.'.$ext;

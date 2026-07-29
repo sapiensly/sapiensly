@@ -133,6 +133,7 @@
     "site_import.conflicts": "{count} campo(s) que ya tenías quedaron intactos — decide abajo en cada uno.",
     "site_import.nothing.brand": "Esa página no trae icono, logo, color de marca ni tipografía que podamos usar.",
     "site_import.nothing.context": "De ahí no salió nada nuevo — todo lo que encontró ya lo tenías.",
+    "site_import.no_prose": "Abrimos esa página y no trae texto legible — su contenido lo construye JavaScript, que no ejecutamos. Describe el negocio en una línea arriba y vuelve a leerla; los colores y el logo sí se leyeron de la página.",
     "site_import.sources": "Redactado a partir de: {sources}",
     "site_import.source.website": "tu sitio web",
     "site_import.source.brief": "tu descripción",

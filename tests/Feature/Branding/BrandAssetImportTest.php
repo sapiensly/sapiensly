@@ -5,6 +5,8 @@ use App\Enums\MembershipStatus;
 use App\Models\Organization;
 use App\Models\OrganizationMembership;
 use App\Models\User;
+use App\Services\Branding\BrandAssetImportFailed;
+use App\Services\Branding\SvgRasterizer;
 use Database\Seeders\RolesAndPermissionsSeeder;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Storage;
@@ -64,19 +66,65 @@ it('imports a favicon, which is very often an .ico', function () {
 });
 
 /**
- * The upload path accepts SVG because a human picked that file. This path takes
- * whatever a third-party host serves, and the result is streamed back from our
- * own origin by an unauthenticated route — so it does not.
+ * SVG is the normal logo format on the modern web, so refusing it outright meant
+ * refusing most sites' logos. It is now rasterized instead — and the property the
+ * old refusal protected still holds: **no third-party SVG is stored, and none is
+ * ever served.** What lands on the disk is a PNG this server rendered.
  */
-it('refuses to import an svg even though uploading one is allowed', function () {
+it('rasterizes a remote svg logo instead of storing somebody else\'s document', function () {
     Http::fake(['*' => Http::response('<svg onload="alert(1)"></svg>', 200, ['Content-Type' => 'image/svg+xml'])]);
+
+    // The renderer itself is exercised for real in the browser suite; here the
+    // wiring is what matters, and it must not need a browser.
+    $rasterized = false;
+    app()->instance(SvgRasterizer::class, new class($rasterized) extends SvgRasterizer
+    {
+        public function __construct(private bool &$called) {}
+
+        public function toPng(string $svg): string
+        {
+            $this->called = true;
+
+            return 'rendered-png-bytes';
+        }
+    });
+
+    $response = $this->actingAs($this->owner)
+        ->postJson('/settings/organization/brand/asset/import', [
+            'kind' => 'logo',
+            'url' => 'https://acme.example/logo.svg',
+        ])
+        ->assertOk();
+
+    $stored = Storage::disk('s3')->allFiles("org/{$this->org->id}/org-brand");
+
+    expect($rasterized)->toBeTrue()
+        ->and($stored)->toHaveCount(1)
+        ->and($stored[0])->toEndWith('.png')
+        // The bytes are ours, not theirs.
+        ->and(Storage::disk('s3')->get($stored[0]))->toBe('rendered-png-bytes')
+        ->and($response->json('url'))->toEndWith('.png');
+});
+
+/** A logo that will not render is refused, not stored half-way. */
+it('reports an svg it could not render', function () {
+    Http::fake(['*' => Http::response('<svg></svg>', 200, ['Content-Type' => 'image/svg+xml'])]);
+
+    app()->instance(SvgRasterizer::class, new class extends SvgRasterizer
+    {
+        public function toPng(string $svg): string
+        {
+            throw new BrandAssetImportFailed('That logo could not be converted.');
+        }
+    });
 
     $this->actingAs($this->owner)
         ->postJson('/settings/organization/brand/asset/import', [
             'kind' => 'logo',
             'url' => 'https://acme.example/logo.svg',
         ])
-        ->assertStatus(422);
+        ->assertStatus(422)
+        ->assertJsonStructure(['message']);
 
     expect(Storage::disk('s3')->allFiles("org/{$this->org->id}/org-brand"))->toBeEmpty();
 });

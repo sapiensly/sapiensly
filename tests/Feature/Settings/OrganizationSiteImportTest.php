@@ -34,7 +34,7 @@ function fakeSitePage(): void
         '<html><head><title>Acme</title>'
         .'<meta name="theme-color" content="#0f766e">'
         .'<link rel="apple-touch-icon" href="/touch.png">'
-        .'</head><body>Acme moves refrigerated freight.</body></html>',
+        .'</head><body>'.siteCopy().'</body></html>',
         200,
         ['Content-Type' => 'text/html'],
     )]);
@@ -224,4 +224,70 @@ it('keeps the import away from a plain member', function () {
     $this->actingAs($member)
         ->postJson('/settings/organization/site-import', ['website' => 'https://acme.example'])
         ->assertForbidden();
+});
+
+/**
+ * The case aerobit.com made concrete: a client-rendered site answers 200 with a
+ * good title and favicon and a body holding only a browser notice. Nothing about
+ * that reads as a failure, so an empty Contextbook next to "drafted from: your
+ * website" reads as a broken feature instead of a page with no words on it.
+ */
+it('says the page carried no readable text instead of returning an empty draft', function () {
+    Http::fake(['*' => Http::response(
+        '<html><head><title>Aerobit</title><link rel="apple-touch-icon" href="/touch.png"></head>'
+        .'<body>You are using an outdated browser. Please upgrade your browser.</body></html>',
+        200,
+        ['Content-Type' => 'text/html'],
+    )]);
+    Ai::fakeAgent(ChatAgent::class, [json_encode(['descriptor' => 'Invented from a name.'])]);
+
+    $response = $this->actingAs($this->owner)
+        ->postJson('/settings/organization/site-import', ['website' => 'https://acme.example'])
+        ->assertOk()
+        ->assertJsonPath('read', true)
+        ->assertJsonPath('context.site_has_prose', false)
+        // The website is not claimed as a source it could not be.
+        ->assertJsonPath('context.sources', [])
+        ->assertJsonPath('context.generated', false);
+
+    // And the brand signals in the markup were still read.
+    expect($response->json('brand.proposal.icon_url'))->toBe('https://acme.example/touch.png');
+});
+
+/** A brief is material even when the page is not, so the draft still happens. */
+it('still drafts from the brief when the page carries no text', function () {
+    Http::fake(['*' => Http::response(
+        '<html><head><title>Aerobit</title></head><body>Outdated browser.</body></html>',
+        200,
+        ['Content-Type' => 'text/html'],
+    )]);
+    Ai::fakeAgent(ChatAgent::class, [json_encode(['descriptor' => 'Builds drone hardware.'])]);
+
+    $this->actingAs($this->owner)
+        ->postJson('/settings/organization/site-import', [
+            'website' => 'https://acme.example',
+            'brief' => 'We build industrial drone hardware for mining surveys.',
+        ])
+        ->assertOk()
+        ->assertJsonPath('context.site_has_prose', false)
+        ->assertJsonPath('context.sources', ['brief'])
+        ->assertJsonPath('context.profile.descriptor', 'Builds drone hardware.');
+});
+
+/** A page with real copy is unaffected — the floor separates words from no words. */
+it('treats a page with real copy as material', function () {
+    Http::fake(['*' => Http::response(
+        '<html><head><title>Acme</title></head><body>'
+        .str_repeat('Acme moves refrigerated freight for food producers across the country. ', 8)
+        .'</body></html>',
+        200,
+        ['Content-Type' => 'text/html'],
+    )]);
+    Ai::fakeAgent(ChatAgent::class, [json_encode(['descriptor' => 'Moves refrigerated freight.'])]);
+
+    $this->actingAs($this->owner)
+        ->postJson('/settings/organization/site-import', ['website' => 'https://acme.example'])
+        ->assertOk()
+        ->assertJsonPath('context.site_has_prose', true)
+        ->assertJsonPath('context.sources', ['website']);
 });
