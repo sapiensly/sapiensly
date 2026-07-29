@@ -289,7 +289,7 @@ class LandingHtmlSanitizer
             if ($tag === 'a' && $lower === 'href') {
                 $href = trim($el->getAttribute($name));
                 if ($this->isSafeHref($href)) {
-                    if ($href !== '' && ! str_starts_with($href, '#')) {
+                    if (self::leavesTheSite($href)) {
                         $el->setAttribute('target', '_blank');
                         $el->setAttribute('rel', 'noopener noreferrer nofollow');
                     }
@@ -382,6 +382,28 @@ class LandingHtmlSanitizer
         }
 
         return in_array(strtolower(substr($href, 0, $colon)), self::ALLOWED_HREF_SCHEMES, true);
+    }
+
+    /**
+     * Whether a (already safe) href actually leaves this site. Only a scheme'd
+     * URL does — `https://…`, `mailto:…`. `#top`, `/pricing`, `?lang=es` and a
+     * bare relative path all stay on the page.
+     *
+     * The distinction is not cosmetic. Hardening a same-site link as if it were
+     * third-party has two real costs: `target="_blank"` opens YOUR OWN page in a
+     * second tab (which is exactly how a `?lang=es` switch stops feeling like a
+     * switch and starts feeling broken), and `rel="nofollow"` tells crawlers not
+     * to follow your own pages — including the hreflang partner the multilingual
+     * runtime goes out of its way to advertise.
+     *
+     * Anything before the first `/`, `?` or `#` is where a scheme can live; a
+     * colon after that belongs to the path or the query.
+     */
+    private static function leavesTheSite(string $href): bool
+    {
+        $colon = strpos($href, ':');
+
+        return $colon !== false && $colon < strcspn($href, '/?#');
     }
 
     private function isSafeImageSrc(string $src): bool

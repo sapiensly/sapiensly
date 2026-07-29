@@ -85,6 +85,27 @@ it('keeps a safe link and hardens external ones', function () {
     expect(substr_count($out, 'target="_blank"'))->toBe(1);
 });
 
+it('leaves same-site links alone — only a scheme means "external"', function () {
+    // `?lang=es` is the language switch the multilingual runtime reads. Sent to
+    // a new tab it stops being a switch, and `rel="nofollow"` would tell
+    // crawlers not to follow the hreflang partner we advertise on every page.
+    $out = clean('<a href="?lang=es">ES</a><a href="/pricing">P</a><a href="docs/start">D</a>');
+    expect($out)
+        ->toContain('href="?lang=es"')
+        ->toContain('href="/pricing"')
+        ->toContain('href="docs/start"')
+        ->not->toContain('target="_blank"')
+        ->not->toContain('nofollow');
+});
+
+it('still hardens a link whose colon is a real scheme, not a path', function () {
+    $out = clean('<a href="mailto:a@b.com">m</a><a href="/a/b:c?q=x:y">rel</a>');
+    // One target, and it belongs to the mailto — the colons in the second href
+    // sit after the path started, so it is not a scheme.
+    expect(substr_count($out, 'target="_blank"'))->toBe(1);
+    expect($out)->toContain('href="/a/b:c?q=x:y"');
+});
+
 it('strips a javascript: href but keeps the element', function () {
     $out = clean('<a href="javascript:alert(1)">x</a>');
     expect($out)->toContain('>x</a>')
