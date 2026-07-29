@@ -3149,18 +3149,33 @@ it('keeps the 20k custom_css budget for non-landing surfaces', function () {
         ->toContain('landing');
 });
 
-it('grants a landing surface the full 60k custom_css budget', function () {
+it('grants a landing surface the full 200k custom_css budget', function () {
+    // Raised from 60k, which was 3x the app budget rather than a measurement.
+    // A landing's whole look is its CSS AND it carries the interaction the page
+    // cannot ship as JavaScript; at ~14.5% gzip, 200k is ~29 KB over the wire.
     $manifest = baseManifest();
     $manifest['settings']['surface'] = 'landing';
-    $manifest['settings']['custom_css'] = str_repeat('.a{color:#123456;} ', 1200); // ~22.8k
+    $manifest['settings']['custom_css'] = str_repeat('.a{color:#123456;} ', 6000); // ~114k
 
     expect((new ManifestValidator)->validate($manifest)->valid)->toBeTrue();
 });
 
-it('rejects custom_css past 60k even on a landing (the schema ceiling)', function () {
+it('still rejects custom_css past 200k on a landing (the schema ceiling)', function () {
+    // The ceiling stays — it guards against a model in a loop writing megabytes,
+    // which is a different job from constraining the design.
     $manifest = baseManifest();
     $manifest['settings']['surface'] = 'landing';
-    $manifest['settings']['custom_css'] = str_repeat('.a{color:#123456;} ', 3400); // ~64.6k
+    $manifest['settings']['custom_css'] = str_repeat('.a{color:#123456;} ', 11000); // ~209k
+
+    expect((new ManifestValidator)->validate($manifest)->valid)->toBeFalse();
+});
+
+it('keeps an app or dashboard at 20k', function () {
+    // Unchanged on purpose: there the CSS is a tweak over components that
+    // already exist, and a huge stylesheet is a sign something is being done
+    // the hard way.
+    $manifest = baseManifest();
+    $manifest['settings']['custom_css'] = str_repeat('.a{color:#123456;} ', 1500); // ~28.5k
 
     expect((new ManifestValidator)->validate($manifest)->valid)->toBeFalse();
 });

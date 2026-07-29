@@ -59,7 +59,13 @@ class WireframeImporter
      */
     private const MAX_CLEANED_HTML_LANDING = 80000;
 
-    /** Matches the landing custom_css budget — more would not survive the save. */
+    /**
+     * How much of a bundle's design system we hand to the model. NOT the storage budget: that is
+     * 200,000 now (ScopedAppCss::LANDING_MAX_LENGTH) and the two were only ever
+     * equal by coincidence. This one is a PROMPT cost — every extra character
+     * is re-sent each turn — so it is sized by what a real page actually
+     * carries (measured: 14 KB of design system, 41 KB of element rules).
+     */
     private const MAX_STYLESHEET = 60000;
 
     public function __construct(

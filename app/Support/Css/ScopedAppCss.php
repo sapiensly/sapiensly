@@ -18,11 +18,30 @@ final class ScopedAppCss
     public const MAX_LENGTH = 20000;
 
     /**
-     * The budget for a landing surface (settings.surface="landing"): a landing's
-     * bespoke look IS its CSS, so it gets 3× the app/dashboard budget. Callers
-     * pass it to issues(); the schema ceiling matches.
+     * The budget for a landing surface (settings.surface="landing").
+     *
+     * This used to be 60,000 — 3× the app budget above, a multiple of another
+     * number rather than a measurement of what a landing needs. Two things make
+     * that the wrong shape. A landing's whole look is its CSS, and on top of
+     * that the CSS stands in for JavaScript the page may not ship: every hover
+     * that a React original wrote as onMouseEnter, every transition and every
+     *
+     * @keyframes lands here. We raised the demand and left the budget alone.
+     *
+     * And the limit was counting the wrong thing. CSS is repetitive and
+     * compresses accordingly — measured on this app's own stylesheet, 235,912
+     * bytes gzip to 34,283 (14.5%). At that ratio 200,000 chars is about 29 KB
+     * over the wire, less than one badly-exported product photo. The budget was
+     * never protecting the visitor; it was costing the build. Observed live: a
+     * model spent a whole turn compacting its stylesheet to fit, and compaction
+     * is where fidelity dies — what looks redundant under pressure is the base
+     * rule whose override lives in a media query.
+     *
+     * A ceiling still belongs here, as a guard against a model in a loop
+     * writing megabytes. 200,000 is that guard, not a design constraint.
+     * Callers pass it to issues(); the schema ceiling matches.
      */
-    public const LANDING_MAX_LENGTH = 60000;
+    public const LANDING_MAX_LENGTH = 200000;
 
     /**
      * Constructs never allowed in app custom CSS, mapped to author-facing reasons.

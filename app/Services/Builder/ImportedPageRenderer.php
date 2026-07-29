@@ -36,7 +36,13 @@ class ImportedPageRenderer
      */
     private const MAX_HTML = 120000;
 
-    /** The hoisted rules, bounded like everything else we forward. */
+    /**
+     * How many of the hoisted per-element rules we hand to the model. NOT the storage budget: that is
+     * 200,000 now (ScopedAppCss::LANDING_MAX_LENGTH) and the two were only ever
+     * equal by coincidence. This one is a PROMPT cost — every extra character
+     * is re-sent each turn — so it is sized by what a real page actually
+     * carries (measured: 14 KB of design system, 41 KB of element rules).
+     */
     private const MAX_STYLES = 60000;
 
     /**
