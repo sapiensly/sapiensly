@@ -2109,6 +2109,21 @@ class AppBuilderController extends Controller
 
             $ops[] = ['op' => 'add', 'path' => $pointer.'/content', 'value' => $result['content']];
             $changed += $result['changed'];
+
+            // A destination is the same in every language, and the translations
+            // are required to share the block's structure — so the same ordinals
+            // land on the same controls. Skipping them would leave the Spanish
+            // page pointing at the old target: a broken link nobody sees,
+            // because whoever fixed it was reading the page in English.
+            foreach (($block['content_i18n'] ?? []) as $lang => $markup) {
+                if (! is_string($markup)) {
+                    continue;
+                }
+                $translated = LandingLinks::retarget($markup, $ordinals, $to);
+                if ($translated['content'] !== $markup) {
+                    $ops[] = ['op' => 'add', 'path' => $pointer.'/content_i18n/'.$lang, 'value' => $translated['content']];
+                }
+            }
         }
 
         if ($ops === []) {

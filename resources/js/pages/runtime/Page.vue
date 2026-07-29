@@ -126,6 +126,16 @@ const footer = computed(() => settings.value.footer);
 // settings.fonts — extra Google Fonts families (served from the bunny.net
 // mirror), rendered as <link>s inside <Head> so SSR ships them with the page.
 const fontHrefs = computed(() => manifestFontHrefs(settings.value.fonts));
+
+// A multilingual landing exists at one URL per language. Without hreflang the
+// two versions compete with each other in the index instead of pointing at each
+// other, and a crawler that arrives with no Accept-Language only ever sees the
+// default. x-default is the negotiating URL itself — the one that decides.
+// They are built SERVER-side from the URL the visitor actually used (custom
+// domain included): during SSR there is no `window`, and SSR is precisely the
+// pass a crawler reads.
+type LangProps = { alternates?: { lang: string; href: string }[] };
+const alternates = computed(() => (props as LangProps).alternates ?? []);
 // Accent colour + font family as CSS vars / inline style on the page surface.
 const surfaceStyle = computed(() => ({
     '--sp-bleed': '1.25rem',
@@ -255,6 +265,20 @@ onMounted(() => {
             rel="stylesheet"
             :href="href"
         />
+        <template v-if="alternates.length">
+            <link
+                v-for="alt in alternates"
+                :key="alt.lang"
+                rel="alternate"
+                :hreflang="alt.lang"
+                :href="alt.href"
+            />
+            <link
+                rel="alternate"
+                hreflang="x-default"
+                :href="alternates[0].href"
+            />
+        </template>
     </Head>
 
     <!-- Runtime is full-screen (no platform shell), so the app owns the viewport.

@@ -266,6 +266,16 @@ class AppManifestService
             if (($block['type'] ?? null) === 'html' && isset($block['content']) && is_string($block['content'])) {
                 $block['content'] = $sanitizer->sanitize($block['content']);
             }
+            // Translations are markup from the same author and reach the same
+            // public page — they pass the same boundary, or a landing gets a
+            // sanitiser bypass for the price of adding a language.
+            if (($block['type'] ?? null) === 'html' && is_array($block['content_i18n'] ?? null)) {
+                foreach ($block['content_i18n'] as $lang => $markup) {
+                    if (is_string($markup)) {
+                        $block['content_i18n'][$lang] = $sanitizer->sanitize($markup);
+                    }
+                }
+            }
             foreach (['blocks', 'left_blocks', 'right_blocks'] as $key) {
                 if (isset($block[$key]) && is_array($block[$key])) {
                     $block[$key] = $this->sanitizeBlockList($block[$key], $sanitizer);

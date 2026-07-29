@@ -8,6 +8,7 @@ use App\Http\Middleware\RejectBlockedUsers;
 use App\Http\Middleware\ResolveTenantConnection;
 use App\Http\Middleware\SetLocale;
 use App\Http\Middleware\SetPermissionsTeam;
+use App\Http\Middleware\VaryOnNegotiatedLanguage;
 use App\Http\Middleware\VerifyWhatsAppSignature;
 use Illuminate\Auth\Middleware\Authorize;
 use Illuminate\Contracts\Auth\Middleware\AuthenticatesRequests;
@@ -48,6 +49,12 @@ return Application::configure(basePath: dirname(__DIR__))
     )
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->encryptCookies(except: ['appearance', 'sidebar_state']);
+
+        // Prepended, so its RETURN path runs after every appended middleware —
+        // including Inertia's, which replaces Vary outright on the way out.
+        $middleware->web(prepend: [
+            VaryOnNegotiatedLanguage::class,
+        ]);
 
         $middleware->web(append: [
             RejectBlockedUsers::class,

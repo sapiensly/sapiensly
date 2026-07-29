@@ -7,6 +7,7 @@ use App\Models\Chatbot;
 use App\Services\Records\RecordQueryService;
 use App\Services\Records\SafeExpressionEvaluator;
 use App\Support\Css\ScopedAppCss;
+use App\Support\Landing\LandingLanguages;
 use Cron\CronExpression;
 use Opis\JsonSchema\Errors\ErrorFormatter;
 use Opis\JsonSchema\Errors\ValidationError;
@@ -848,6 +849,73 @@ class ManifestValidator
     }
 
     /**
+     * Reject every `content_i18n` a visitor could never be served. Each of these
+     * is silent at render time — the section simply shows the default language —
+     * so the author would only find out by reading the page in that language.
+     *
+     * @param  array<int, mixed>  $blocks
+     * @param  array<string, mixed>  $settings
+     * @param  ManifestValidationError[]  $errors
+     */
+    private function validateLanguageVariants(array $blocks, string $path, array $settings, array &$errors): void
+    {
+        $declared = LandingLanguages::declared($settings);
+        $isLanding = ($settings['surface'] ?? null) === 'landing';
+
+        foreach ($blocks as $i => $block) {
+            if (! is_array($block)) {
+                continue;
+            }
+            $variants = $block['content_i18n'] ?? null;
+            if (is_array($variants) && $variants !== []) {
+                $at = "{$path}/{$i}/content_i18n";
+                if (! $isLanding) {
+                    $errors[] = new ManifestValidationError(
+                        $at,
+                        'Language variants are only served on a landing surface (settings.surface="landing"). Elsewhere the runtime renders `content` and these would never appear.',
+                        'i18n_not_landing',
+                    );
+                } elseif ($declared === []) {
+                    $errors[] = new ManifestValidationError(
+                        $at,
+                        'This block has translations but the landing declares no languages. Add settings.languages (e.g. ["en","es"]) — the FIRST entry is the language `content` itself is written in.',
+                        'i18n_undeclared',
+                    );
+                } else {
+                    foreach (array_keys($variants) as $lang) {
+                        if ($lang === $declared[0]) {
+                            $errors[] = new ManifestValidationError(
+                                "{$at}/{$lang}",
+                                "'{$lang}' is the default language — it belongs in `content`, not in content_i18n, and a variant here is never read.",
+                                'i18n_default_variant',
+                            );
+                        } elseif (! in_array((string) $lang, $declared, true)) {
+                            $errors[] = new ManifestValidationError(
+                                "{$at}/{$lang}",
+                                "Language '{$lang}' is not in settings.languages (".implode(', ', $declared).'), so this translation would never be served. Declare it or remove it.',
+                                'i18n_undeclared_language',
+                            );
+                        }
+                    }
+                }
+            }
+
+            foreach (['blocks', 'left_blocks', 'right_blocks'] as $key) {
+                if (is_array($block[$key] ?? null)) {
+                    $this->validateLanguageVariants($block[$key], "{$path}/{$i}/{$key}", $settings, $errors);
+                }
+            }
+            foreach (['tabs', 'sections'] as $key) {
+                foreach ($block[$key] ?? [] as $j => $sub) {
+                    if (is_array($sub) && is_array($sub['blocks'] ?? null)) {
+                        $this->validateLanguageVariants($sub['blocks'], "{$path}/{$i}/{$key}/{$j}/blocks", $settings, $errors);
+                    }
+                }
+            }
+        }
+    }
+
+    /**
      * @param  array<string, mixed>  $manifest
      * @return ManifestValidationError[]
      */
@@ -881,6 +949,18 @@ class ManifestValidator
             foreach ($pages as $i => $page) {
                 $this->rejectGenericLandingBlocks($page['blocks'] ?? [], "/pages/{$i}/blocks", $errors);
             }
+        }
+
+        // A translation that can never be served is worse than no translation:
+        // it looks done in the manifest and is invisible on the page. Every way
+        // that can happen is rejected here rather than discovered by a visitor.
+        foreach ($pages as $i => $page) {
+            $this->validateLanguageVariants(
+                $page['blocks'] ?? [],
+                "/pages/{$i}/blocks",
+                $manifest['settings'] ?? [],
+                $errors,
+            );
         }
 
         $objectsById = [];

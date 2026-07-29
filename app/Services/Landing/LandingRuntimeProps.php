@@ -6,6 +6,7 @@ use App\Models\App;
 use App\Support\Branding\ColorPalette;
 use App\Support\Branding\OrganizationBrand;
 use App\Support\Css\ScopedAppCss;
+use App\Support\Landing\LandingLanguages;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
 /**
@@ -24,9 +25,10 @@ class LandingRuntimeProps
 {
     /**
      * @param  array<string, mixed>|null  $manifest  the version's manifest to render
+     * @param  string  $language  the negotiated language, '' for a single-language landing
      * @return array<string, mixed>
      */
-    public static function build(App $app, ?array $manifest, bool $publicSurface): array
+    public static function build(App $app, ?array $manifest, bool $publicSurface, string $language = ''): array
     {
         $pages = $manifest['pages'] ?? [];
         if ($manifest === null || $pages === []) {
@@ -36,6 +38,10 @@ class LandingRuntimeProps
         // A landing is its first page (anchors cover in-page navigation).
         $page = $pages[0];
         $page['blocks'] = PublicLandingBlocks::filter($page['blocks'] ?? []);
+        // Resolve the language INTO `content` and drop the variants, so the
+        // browser is sent one language rather than every language it isn't
+        // going to read.
+        $page['blocks'] = self::applyLanguage($page['blocks'], $language);
 
         // Effective settings = manifest settings + org Brandbook fallback + the
         // derived palette, exactly like the authenticated runtime.
@@ -48,6 +54,12 @@ class LandingRuntimeProps
         );
 
         $seo = is_array($settings['seo'] ?? null) ? $settings['seo'] : [];
+        // The title and description are read by a person and by a crawler, so
+        // they translate too — a Spanish page with an English <title> is half a
+        // translation.
+        $seoI18n = is_array($settings['seo_i18n'][$language] ?? null) ? $settings['seo_i18n'][$language] : [];
+        $seo = array_merge($seo, array_filter($seoI18n, static fn ($v): bool => is_string($v) && $v !== ''));
+        unset($settings['seo_i18n']);
 
         return [
             'app' => [
@@ -83,6 +95,55 @@ class LandingRuntimeProps
             ],
             'publicSurface' => $publicSurface,
             'turnstileSiteKey' => config('services.turnstile.site_key'),
+            // What the page is in, and what else it exists as. The head uses
+            // these for `hreflang` + canonical, and the page for its own
+            // language switch — which has to stay visible: detection is a good
+            // guess about a person, never a fact about them.
+            'language' => $language,
+            'languages' => LandingLanguages::declared($settings),
         ];
+    }
+
+    /**
+     * Swap each html block's `content` for the requested language and remove the
+     * variants map. Anything untranslated falls back to `content`, so a partial
+     * translation degrades to the default language instead of to a blank
+     * section.
+     *
+     * @param  list<array<string, mixed>>  $blocks
+     * @return list<array<string, mixed>>
+     */
+    private static function applyLanguage(array $blocks, string $language): array
+    {
+        foreach ($blocks as &$block) {
+            if (! is_array($block)) {
+                continue;
+            }
+            $variants = is_array($block['content_i18n'] ?? null) ? $block['content_i18n'] : null;
+            if ($variants !== null) {
+                if ($language !== '' && is_string($variants[$language] ?? null)) {
+                    $block['content'] = $variants[$language];
+                }
+                unset($block['content_i18n']);
+            }
+            foreach (['blocks', 'left_blocks', 'right_blocks'] as $key) {
+                if (is_array($block[$key] ?? null)) {
+                    $block[$key] = self::applyLanguage($block[$key], $language);
+                }
+            }
+            foreach (['tabs', 'sections'] as $key) {
+                if (is_array($block[$key] ?? null)) {
+                    foreach ($block[$key] as &$sub) {
+                        if (is_array($sub) && is_array($sub['blocks'] ?? null)) {
+                            $sub['blocks'] = self::applyLanguage($sub['blocks'], $language);
+                        }
+                    }
+                    unset($sub);
+                }
+            }
+        }
+        unset($block);
+
+        return $blocks;
     }
 }
