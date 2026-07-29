@@ -37,7 +37,12 @@ class HeadlessLandingShot
 
     public int $viewportHeight = 1400;
 
-    public function capture(App $app, User $user): ?StoredImage
+    /**
+     * @param  string  $language  render a multilingual landing in this language
+     *                            ('' = the default). The signed URL carries it,
+     *                            so the shot shows the language it claims to.
+     */
+    public function capture(App $app, User $user, string $language = ''): ?StoredImage
     {
         try {
             // Browsershot (Chromium launch + hydrate + capture) routinely outruns
@@ -56,6 +61,7 @@ class HeadlessLandingShot
                 'app' => $app->id,
                 'org' => $user->organization_id,
                 'uid' => $user->id,
+                ...($language !== '' ? ['lang' => $language] : []),
             ]);
 
             $shot = Browsershot::url($url)

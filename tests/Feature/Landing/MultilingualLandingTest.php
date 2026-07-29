@@ -7,6 +7,7 @@ use App\Services\Landing\LandingPublisher;
 use App\Services\Manifest\AppManifestService;
 use App\Services\Manifest\InvalidManifestException;
 use App\Support\Landing\LandingLanguages;
+use Illuminate\Support\Facades\URL;
 use Illuminate\Support\Str;
 
 /**
@@ -256,4 +257,24 @@ it('refuses translations outside a landing surface, where nothing would serve th
         bilingualManifest($this->app_, ['surface' => 'app']),
         $this->user,
     ))->toThrow(InvalidManifestException::class, 'only served on a landing surface');
+});
+
+/**
+ * The headless render is how a translation gets REVIEWED before it ships — the
+ * design director's eyes, and `render_landing`'s. Without a language it only
+ * ever shows the default, and a translation ships unseen.
+ */
+it('renders the requested language for review, before anything is published', function () {
+    $this->manifests->createVersion($this->app_, bilingualManifest($this->app_), $this->user);
+
+    $url = URL::temporarySignedRoute('landing.render', now()->addMinutes(5), [
+        'app' => $this->app_->id,
+        'org' => $this->user->organization_id,
+        'uid' => $this->user->id,
+        'lang' => 'es',
+    ]);
+
+    $this->get($url)->assertOk()->assertInertia(fn ($page) => $page
+        ->where('language', 'es')
+        ->where('page.blocks.0.content', '<section id="top"><h1>Hola</h1></section>'));
 });

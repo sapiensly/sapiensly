@@ -6,6 +6,7 @@ use App\Models\App;
 use App\Models\User;
 use App\Services\Landing\LandingRuntimeProps;
 use App\Services\Manifest\AppManifestService;
+use App\Support\Landing\LandingLanguages;
 use App\Support\Tenancy\TenantContext;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -53,7 +54,17 @@ class LandingRenderController extends Controller
             // page: the lead_form renders styled-but-inert (no public endpoint to
             // post to on an unpublished draft), and the .sp-lead-form design the
             // director judges is identical.
-            return Inertia::render('runtime/Page', LandingRuntimeProps::build($appModel, $manifest, publicSurface: false));
+            // A multilingual landing has to be reviewable in each language
+            // BEFORE it ships — otherwise the only way to see a translation is
+            // to publish it and hope. `?lang=` picks one; absent, the default.
+            $language = LandingLanguages::resolve($request, LandingLanguages::declared($manifest['settings'] ?? []));
+
+            return Inertia::render('runtime/Page', LandingRuntimeProps::build(
+                $appModel,
+                $manifest,
+                publicSurface: false,
+                language: $language,
+            ));
         } finally {
             $ctx->set($previousOrg, $previousUid);
         }

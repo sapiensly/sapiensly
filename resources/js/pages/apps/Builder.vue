@@ -1908,6 +1908,62 @@ const previewSidebar = computed(
 // landing branch — no SiteHeader/Sidebar/Footer, no content gutters. Reads the
 // DRAFT settings (not app.kind, which only updates on apply) so setting
 // settings.surface="landing" mid-turn flips the preview immediately.
+// A multilingual landing has to be REVIEWABLE per language here, because this
+// is where the author looks. The public page negotiates from Accept-Language,
+// which the builder preview has no business doing — so the author picks, and
+// the picked language is resolved into `content` exactly the way the server
+// resolves it for a visitor.
+const previewLanguages = computed<string[]>(() => {
+    const declared = (previewSettings.value as { languages?: unknown })
+        .languages;
+    return Array.isArray(declared) && declared.length > 1
+        ? declared.filter((l): l is string => typeof l === 'string')
+        : [];
+});
+const previewLanguage = ref('');
+watch(previewLanguages, (langs) => {
+    if (!langs.includes(previewLanguage.value)) {
+        previewLanguage.value = langs[0] ?? '';
+    }
+});
+/** Swap each html block's content for the chosen language, like the runtime. */
+function withLanguage(blocks: unknown[], lang: string): unknown[] {
+    return (blocks as Record<string, any>[]).map((b) => {
+        if (!b || typeof b !== 'object') return b;
+        const next: Record<string, any> = { ...b };
+        if (
+            lang &&
+            next.content_i18n &&
+            typeof next.content_i18n[lang] === 'string'
+        ) {
+            next.content = next.content_i18n[lang];
+        }
+        for (const key of ['blocks', 'left_blocks', 'right_blocks']) {
+            if (Array.isArray(next[key]))
+                next[key] = withLanguage(next[key], lang);
+        }
+        for (const key of ['tabs', 'sections']) {
+            if (Array.isArray(next[key])) {
+                next[key] = next[key].map((s: Record<string, any>) =>
+                    Array.isArray(s?.blocks)
+                        ? { ...s, blocks: withLanguage(s.blocks, lang) }
+                        : s,
+                );
+            }
+        }
+        return next;
+    });
+}
+const previewLandingBlocks = computed(() =>
+    previewLanguages.value.length &&
+    previewLanguage.value !== previewLanguages.value[0]
+        ? withLanguage(
+              (props.preview?.page.blocks ?? []) as unknown[],
+              previewLanguage.value,
+          )
+        : ((props.preview?.page.blocks ?? []) as unknown[]),
+);
+
 const previewIsLanding = computed(
     () =>
         (previewSettings.value as { surface?: string }).surface === 'landing' ||
@@ -5127,6 +5183,32 @@ function statusTone(status: Message['status']): string {
                                 <BarChart3 class="size-3.5" />
                                 {{ t('apps.builder.add_chart') }}
                             </button>
+                            <!-- Which language the preview shows. The public page
+                                 negotiates this from the browser; here the author
+                                 chooses, because reviewing a translation is the
+                                 whole point of looking. -->
+                            <div
+                                v-if="
+                                    previewLanguages.length &&
+                                    viewMode === 'preview'
+                                "
+                                class="inline-flex items-center rounded-pill border border-medium bg-surface p-0.5"
+                            >
+                                <button
+                                    v-for="lang in previewLanguages"
+                                    :key="lang"
+                                    type="button"
+                                    @click="previewLanguage = lang"
+                                    :class="[
+                                        'rounded-pill px-2 py-0.5 text-[11px] font-semibold uppercase transition-colors',
+                                        previewLanguage === lang
+                                            ? 'bg-accent-blue/15 text-accent-blue'
+                                            : 'text-ink-muted hover:text-ink',
+                                    ]"
+                                >
+                                    {{ lang }}
+                                </button>
+                            </div>
                             <button
                                 v-if="
                                     panelMode === 'manual' && previewIsLanding
@@ -5877,7 +5959,7 @@ function statusTone(status: Message['status']): string {
                                  sections, so no site chrome and no gutters. -->
                             <div v-if="previewIsLanding">
                                 <AppRenderer
-                                    :blocks="preview.page.blocks"
+                                    :blocks="previewLandingBlocks"
                                     :block-data="previewBlockDataMap"
                                     :objects="preview.objects"
                                     :locale="previewLocale"
