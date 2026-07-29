@@ -278,3 +278,27 @@ it('renders the requested language for review, before anything is published', fu
         ->where('language', 'es')
         ->where('page.blocks.0.content', '<section id="top"><h1>Hola</h1></section>'));
 });
+
+/**
+ * The authenticated runtime renders the same landing at /r/{slug} — the URL the
+ * platform hands you when you create the app, and the first place an author
+ * opens it. It ignored ?lang= entirely, which read as "the switch is broken".
+ */
+it('resolves the language on the authenticated runtime too', function () {
+    // The runtime route matches ^[a-z][a-z0-9_]*$, so pin a slug it can reach.
+    $this->app_->update(['slug' => 'mi_landing']);
+    $this->manifests->createVersion($this->app_, bilingualManifest($this->app_), $this->user);
+
+    $this->actingAs($this->user)
+        ->withHeaders(['Accept-Language' => 'en-US,en;q=0.9'])
+        ->get("/r/{$this->app_->slug}?lang=es")
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->where('language', 'es')
+            ->where('page.blocks.0.content', '<section id="top"><h1>Hola</h1></section>'));
+
+    $this->actingAs($this->user)
+        ->withHeaders(['Accept-Language' => 'es'])
+        ->get("/r/{$this->app_->slug}")
+        ->assertInertia(fn ($page) => $page->where('language', 'es'));
+});

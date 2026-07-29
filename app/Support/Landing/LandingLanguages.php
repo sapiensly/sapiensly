@@ -191,4 +191,50 @@ final class LandingLanguages
 
         return $tag;
     }
+
+    /**
+     * Swap each html block's `content` for the requested language and remove the
+     * variants map. Shared by every surface that renders a landing, so the
+     * public page, the headless shot and the authenticated runtime resolve a
+     * translation the same way — a surface that forgets to call this shows the
+     * default language and looks like the feature is broken. Anything untranslated falls back to `content`, so a partial
+     * translation degrades to the default language instead of to a blank
+     * section.
+     *
+     * @param  list<array<string, mixed>>  $blocks
+     * @return list<array<string, mixed>>
+     */
+    public static function apply(array $blocks, string $language): array
+    {
+        foreach ($blocks as &$block) {
+            if (! is_array($block)) {
+                continue;
+            }
+            $variants = is_array($block['content_i18n'] ?? null) ? $block['content_i18n'] : null;
+            if ($variants !== null) {
+                if ($language !== '' && is_string($variants[$language] ?? null)) {
+                    $block['content'] = $variants[$language];
+                }
+                unset($block['content_i18n']);
+            }
+            foreach (['blocks', 'left_blocks', 'right_blocks'] as $key) {
+                if (is_array($block[$key] ?? null)) {
+                    $block[$key] = self::apply($block[$key], $language);
+                }
+            }
+            foreach (['tabs', 'sections'] as $key) {
+                if (is_array($block[$key] ?? null)) {
+                    foreach ($block[$key] as &$sub) {
+                        if (is_array($sub) && is_array($sub['blocks'] ?? null)) {
+                            $sub['blocks'] = self::apply($sub['blocks'], $language);
+                        }
+                    }
+                    unset($sub);
+                }
+            }
+        }
+        unset($block);
+
+        return $blocks;
+    }
 }

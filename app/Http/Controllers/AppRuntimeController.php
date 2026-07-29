@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\AppKind;
+use App\Http\Middleware\VaryOnNegotiatedLanguage;
 use App\Models\App;
 use App\Services\Apps\AppAccessResolver;
 use App\Services\Apps\BlockVisibilityFilter;
@@ -10,6 +12,7 @@ use App\Services\Records\BlockDataResolver;
 use App\Support\Branding\ColorPalette;
 use App\Support\Branding\OrganizationBrand;
 use App\Support\Css\ScopedAppCss;
+use App\Support\Landing\LandingLanguages;
 use App\Support\Manifest\PageNavigation;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -130,6 +133,20 @@ class AppRuntimeController extends Controller
             (string) ($settings['palette_mode'] ?? 'brand'),
         );
 
+        // A landing rendered HERE is the same page a visitor gets at /l/{slug},
+        // so it resolves its language the same way. Without this the authenticated
+        // runtime — the URL the platform hands you when you create the app — is
+        // the one surface that silently ignores ?lang= and shows the default.
+        $languages = LandingLanguages::declared($manifest['settings'] ?? []);
+        $language = $languages !== [] && $app->kind === AppKind::Landing
+            ? LandingLanguages::resolve($request, $languages)
+            : '';
+        if ($language !== '') {
+            app()->setLocale($language);
+            $page['blocks'] = LandingLanguages::apply($page['blocks'] ?? [], $language);
+            $request->attributes->set(VaryOnNegotiatedLanguage::ATTRIBUTE, true);
+        }
+
         return Inertia::render('runtime/Page', [
             'app' => [
                 'id' => $app->id,
@@ -168,6 +185,7 @@ class AppRuntimeController extends Controller
                     : null,
             ],
             'page' => $page,
+            'language' => $language,
             // The menu slug to highlight (a detail page lights its parent list).
             'activeSlug' => $activeSlug,
             // Deferred: the shell (nav, layout, filter bar, skeletons) paints

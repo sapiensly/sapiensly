@@ -41,7 +41,7 @@ class LandingRuntimeProps
         // Resolve the language INTO `content` and drop the variants, so the
         // browser is sent one language rather than every language it isn't
         // going to read.
-        $page['blocks'] = self::applyLanguage($page['blocks'], $language);
+        $page['blocks'] = LandingLanguages::apply($page['blocks'], $language);
 
         // Effective settings = manifest settings + org Brandbook fallback + the
         // derived palette, exactly like the authenticated runtime.
@@ -102,48 +102,5 @@ class LandingRuntimeProps
             'language' => $language,
             'languages' => LandingLanguages::declared($settings),
         ];
-    }
-
-    /**
-     * Swap each html block's `content` for the requested language and remove the
-     * variants map. Anything untranslated falls back to `content`, so a partial
-     * translation degrades to the default language instead of to a blank
-     * section.
-     *
-     * @param  list<array<string, mixed>>  $blocks
-     * @return list<array<string, mixed>>
-     */
-    private static function applyLanguage(array $blocks, string $language): array
-    {
-        foreach ($blocks as &$block) {
-            if (! is_array($block)) {
-                continue;
-            }
-            $variants = is_array($block['content_i18n'] ?? null) ? $block['content_i18n'] : null;
-            if ($variants !== null) {
-                if ($language !== '' && is_string($variants[$language] ?? null)) {
-                    $block['content'] = $variants[$language];
-                }
-                unset($block['content_i18n']);
-            }
-            foreach (['blocks', 'left_blocks', 'right_blocks'] as $key) {
-                if (is_array($block[$key] ?? null)) {
-                    $block[$key] = self::applyLanguage($block[$key], $language);
-                }
-            }
-            foreach (['tabs', 'sections'] as $key) {
-                if (is_array($block[$key] ?? null)) {
-                    foreach ($block[$key] as &$sub) {
-                        if (is_array($sub) && is_array($sub['blocks'] ?? null)) {
-                            $sub['blocks'] = self::applyLanguage($sub['blocks'], $language);
-                        }
-                    }
-                    unset($sub);
-                }
-            }
-        }
-        unset($block);
-
-        return $blocks;
     }
 }
