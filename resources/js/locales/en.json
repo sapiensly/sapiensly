@@ -721,6 +721,7 @@
     "apps.builder.attachment_invalid_type": "Only PNG, JPG, WebP or GIF images are accepted.",
     "apps.builder.attachment_too_large": "The image is too large (5 MB max).",
     "apps.builder.attach_html_hint": "rebuilt as a landing",
+    "apps.builder.header_menu": "Options",
     "apps.builder.attachment_default_message": "Take a look at the attached image.",
     "apps.builder.drop_to_attach": "Drop the image to attach it",
     "apps.builder.remove_attachment": "Remove image",

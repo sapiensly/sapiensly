@@ -579,6 +579,8 @@ function setPaletteMode(mode: string) {
 }
 
 const panelMode = ref<'chat' | 'manual'>('chat');
+// Collapsed by default: on a phone the header's pills are four rows of chrome.
+const headerMenuOpen = ref(false);
 
 // ---- Manual adjust: selection, drawer, on-grid resize ----------------------
 const selectedBlockId = ref<string | null>(null);
@@ -3698,7 +3700,33 @@ function statusTone(status: Message['status']): string {
                     </div>
                 </div>
 
-                <div class="flex flex-wrap items-center justify-end gap-2">
+                <!-- On a phone this row wraps into four lines of pills and
+                     eats the screen before the chat starts. Below `lg` it
+                     collapses behind one control, closed by default. The row
+                     itself is untouched: these are pickers and panels with their
+                     own state, and re-authoring them as menu items would risk
+                     real behaviour for a presentation change. -->
+                <button
+                    type="button"
+                    @click="headerMenuOpen = !headerMenuOpen"
+                    :aria-expanded="headerMenuOpen"
+                    class="inline-flex items-center gap-1.5 rounded-pill border border-medium bg-surface px-3 py-1.5 text-xs text-ink-muted transition-colors hover:border-strong hover:text-ink lg:hidden"
+                >
+                    <SlidersHorizontal class="size-3.5" />
+                    {{ t('apps.builder.header_menu') }}
+                    <ChevronDown
+                        class="size-3.5 transition-transform"
+                        :class="headerMenuOpen && 'rotate-180'"
+                    />
+                </button>
+
+                <div
+                    :class="[
+                        'flex-wrap items-center gap-2',
+                        headerMenuOpen ? 'flex' : 'hidden',
+                        'w-full justify-start lg:flex lg:w-auto lg:justify-end',
+                    ]"
+                >
                     <!-- Dashboard toolbar: palette source + panel mode + Run. -->
                     <template v-if="app.kind === 'dashboard'">
                         <DropdownMenu>

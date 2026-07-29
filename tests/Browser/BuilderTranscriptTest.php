@@ -301,3 +301,52 @@ it('wires a replay control to restart its sequence', function () {
         ->assertNoJavaScriptErrors()
         ->assertScript($replay, 'restarted');
 });
+
+it('collapses the header pills behind one control on a phone', function () {
+    // Four rows of pills before the chat even starts. Closed by default, and
+    // the toggle opens them — asserted through a real click, not by reading a
+    // class, so a broken handler shows up as a failure.
+    $this->seed(RolesAndPermissionsSeeder::class);
+    $appId = landingPreviewApp();
+
+    $pillsVisible = <<<'JS'
+    function () {
+        const btn = [...document.querySelectorAll('button')].find(b => /Opciones|Options/i.test(b.textContent || ''));
+        if (!btn) return 'no toggle';
+        const row = btn.nextElementSibling;
+        if (!row) return 'no row';
+        return getComputedStyle(row).display === 'none' ? 'collapsed' : 'open';
+    }
+    JS;
+
+    $openIt = <<<'JS'
+    function () {
+        const btn = [...document.querySelectorAll('button')].find(b => /Opciones|Options/i.test(b.textContent || ''));
+        btn.click();
+        return getComputedStyle(btn.nextElementSibling).display !== 'none' ? 'open' : 'still closed';
+    }
+    JS;
+
+    visit("/apps/{$appId}/builder")->on()->iPhone15()
+        ->assertNoJavaScriptErrors()
+        ->assertScript($pillsVisible, 'collapsed')
+        ->assertScript($openIt, 'open');
+});
+
+it('leaves the header pills in place on a desktop', function () {
+    // The toggle is a phone affordance; at a width that fits the row it must not
+    // appear at all, and the pills must be there without a click.
+    $this->seed(RolesAndPermissionsSeeder::class);
+    $appId = landingPreviewApp();
+
+    $desktop = <<<'JS'
+    function () {
+        const btn = [...document.querySelectorAll('button')].find(b => /Opciones|Options/i.test(b.textContent || ''));
+        if (btn && btn.getBoundingClientRect().width > 0) return 'toggle showing';
+        const pills = [...document.querySelectorAll('button')].filter(b => /Acento|Accent|Capas|Layers/i.test(b.textContent || ''));
+        return pills.some(p => p.getBoundingClientRect().width > 0) ? 'pills visible' : 'pills hidden';
+    }
+    JS;
+
+    visit("/apps/{$appId}/builder")->on()->macbookAir()->assertScript($desktop, 'pills visible');
+});
