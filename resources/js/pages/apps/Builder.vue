@@ -4971,18 +4971,34 @@ function statusTone(status: Message['status']): string {
                                         />
                                         {{ t('apps.builder.thinking') }}
                                     </span>
+                                    <!-- Icon only: the label sat next to
+                                         "thinking…" saying the same thing twice,
+                                         and a square is the universal stop.
+                                         The STATE still has to be visible
+                                         without it, so the glyph carries it —
+                                         square while it can be stopped, spinner
+                                         once the stop is in flight. -->
                                     <button
                                         type="button"
                                         @click="stopBuild"
                                         :disabled="stopping"
-                                        class="inline-flex items-center gap-1.5 rounded-pill border border-medium bg-surface px-3.5 py-1.5 text-xs font-medium text-ink-muted transition-colors hover:border-red-400 hover:text-red-500 disabled:opacity-60"
-                                    >
-                                        <Square class="size-3" />
-                                        {{
+                                        :title="
                                             stopping
                                                 ? t('apps.builder.stopping')
                                                 : t('apps.builder.stop_build')
-                                        }}
+                                        "
+                                        :aria-label="
+                                            stopping
+                                                ? t('apps.builder.stopping')
+                                                : t('apps.builder.stop_build')
+                                        "
+                                        class="inline-flex items-center justify-center rounded-pill border border-medium bg-surface p-2 text-ink-muted transition-colors hover:border-red-400 hover:text-red-500 disabled:opacity-60"
+                                    >
+                                        <Loader2
+                                            v-if="stopping"
+                                            class="size-3.5 animate-spin"
+                                        />
+                                        <Square v-else class="size-3.5" />
                                     </button>
                                 </div>
                             </div>
