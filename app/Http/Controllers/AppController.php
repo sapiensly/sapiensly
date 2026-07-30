@@ -6,6 +6,7 @@ use App\Enums\Visibility;
 use App\Http\Requests\App\StoreAppRequest;
 use App\Http\Requests\App\UpdateAppRequest;
 use App\Models\App;
+use App\Models\AppTemplate;
 use App\Models\Record;
 use App\Services\Apps\AppPackage;
 use App\Services\Apps\AppTemplateCatalog;
@@ -285,6 +286,52 @@ class AppController extends Controller
         return redirect()
             ->route('apps.builder', $result['app'])
             ->with('import_notes', $result['notes']);
+    }
+
+    /**
+     * Save this app as a starter template for the organization.
+     *
+     * The package is snapshotted, so the template survives the app being
+     * rewritten or deleted — and it goes through the same portability scrub, so
+     * a template can never carry a connected source or a workflow bound to an
+     * integration that the next app would not have.
+     */
+    public function saveAsTemplate(Request $request, App $app): RedirectResponse
+    {
+        $this->authorizeAccess($request, $app);
+
+        $data = $request->validate([
+            'name' => ['nullable', 'string', 'max:80'],
+            'description' => ['nullable', 'string', 'max:280'],
+            'with_records' => ['sometimes', 'boolean'],
+        ]);
+
+        try {
+            app(AppTemplateCatalog::class)->saveFrom(
+                $app,
+                $request->user(),
+                $data['name'] ?? null,
+                $data['description'] ?? null,
+                (bool) ($data['with_records'] ?? false),
+            );
+        } catch (\InvalidArgumentException $e) {
+            return back()->withErrors(['app' => $e->getMessage()]);
+        }
+
+        return back()->with('success', 'Guardada como plantilla.');
+    }
+
+    /** Remove one of the organization's own templates. RLS scopes the lookup. */
+    public function destroyTemplate(Request $request, string $templateId): RedirectResponse
+    {
+        $template = AppTemplate::find($templateId);
+        if ($template === null) {
+            return back()->withErrors(['template' => 'No such template.']);
+        }
+
+        $template->delete();
+
+        return back()->with('success', 'Plantilla eliminada.');
     }
 
     /** Install one of the built-in starter templates. */

@@ -32,6 +32,10 @@ Route::middleware([
         ->middleware('throttle:20,1')
         ->name('apps.import');
     Route::post('/apps/from-template', [AppController::class, 'createFromTemplate'])->name('apps.from-template');
+    Route::post('/apps/{app}/save-as-template', [AppController::class, 'saveAsTemplate'])->name('apps.save-as-template');
+    Route::delete('/apps/templates/{template}', [AppController::class, 'destroyTemplate'])
+        ->where('template', 'tpl_[a-z0-9]+')
+        ->name('apps.templates.destroy');
 
     // Builder AI surface — chat that edits the manifest via JSON Patches.
     Route::get('/apps/{app}/builder', [AppBuilderController::class, 'show'])->name('apps.builder');

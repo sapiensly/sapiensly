@@ -3,6 +3,7 @@ import * as AppController from '@/actions/App/Http/Controllers/AppController';
 import { Link, router } from '@inertiajs/vue3';
 import {
     AppWindow,
+    Bookmark,
     Building2,
     Copy,
     Download,
@@ -47,6 +48,16 @@ function duplicateApp(event: Event): void {
     event.preventDefault();
     event.stopPropagation();
     router.post(`/apps/${props.app.id}/duplicate`);
+}
+
+function saveAsTemplate(event: Event): void {
+    event.preventDefault();
+    event.stopPropagation();
+    router.post(
+        `/apps/${props.app.id}/save-as-template`,
+        {},
+        { preserveScroll: true },
+    );
 }
 
 const { t } = useI18n();
@@ -205,6 +216,15 @@ const versionPill = computed<PillStyle>(() => {
                         @click="duplicateApp"
                     >
                         <Copy class="size-3.5" />
+                    </button>
+                    <button
+                        type="button"
+                        class="rounded-md p-1 text-ink-subtle transition-colors hover:text-ink"
+                        :title="t('apps.card.save_template')"
+                        :aria-label="t('apps.card.save_template')"
+                        @click="saveAsTemplate"
+                    >
+                        <Bookmark class="size-3.5" />
                     </button>
                     <button
                         type="button"

@@ -223,7 +223,12 @@ it('duplicates an app without touching the original', function () {
 
 it('ships starter templates that install through the same path', function () {
     $catalog = app(AppTemplateCatalog::class);
-    $templates = $catalog->all();
+    // Built-ins only: this is about the FILES we ship, and an organization's
+    // own are covered by their own test.
+    $templates = array_values(array_filter(
+        $catalog->all(),
+        fn (array $t): bool => $t['source'] === 'builtin',
+    ));
 
     expect($templates)->not->toBeEmpty();
 
@@ -275,4 +280,34 @@ it('writes seed rows through the same validated path as a typed one', function (
     expect($rows)->toHaveCount(1)
         ->and($rows->first()->data['nombre'])->toBe('Acme')
         ->and(collect($result['notes'])->implode(' '))->toContain('skipped');
+});
+
+it('saves an app as a template the organization can start from', function () {
+    $catalog = app(AppTemplateCatalog::class);
+
+    $saved = $catalog->saveFrom($this->testApp, $this->owner, 'Mi plantilla', 'Para clientes nuevos');
+
+    // It shows up alongside the built-ins, in one list.
+    $listed = collect($catalog->all())->firstWhere('slug', $saved->id);
+    expect($listed['name'])->toBe('Mi plantilla')
+        ->and($listed['source'])->toBe('organization')
+        ->and($listed['objects'])->toBe(1);
+
+    // …and installs through exactly the same path as a file-based one.
+    $installed = $this->packages->import($catalog->package($saved->id), $this->owner, 'Desde plantilla')['app'];
+    expect(app(AppManifestService::class)->getActiveManifest($installed)['objects'][0]['slug'])
+        ->toBe('clientes');
+});
+
+it('keeps a saved template working after its source app changes', function () {
+    $catalog = app(AppTemplateCatalog::class);
+    $saved = $catalog->saveFrom($this->testApp, $this->owner);
+
+    // Gut the original: the template is a snapshot, not a reference.
+    $emptied = $this->manifest;
+    $emptied['objects'] = [];
+    $emptied['pages'] = [];
+    app(AppManifestService::class)->createVersion($this->testApp, $emptied, $this->owner);
+
+    expect($catalog->package($saved->id)['manifest']['objects'])->toHaveCount(1);
 });

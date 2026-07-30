@@ -41,6 +41,7 @@ final class Schemas
         'app_files',
         'app_notifications',
         'app_imports',
+        'app_templates',
         'knowledge_bases',
         'knowledge_base_documents',
         'document_knowledge_base',

@@ -401,3 +401,49 @@ it('is fail-closed for app_user_roles when no tenant scope is set', function () 
     scopeTenant(null, null);
     expect(tenantAppUserRoleCount())->toBe(0);
 });
+
+/* ---------------- app_templates (an org's saved starter apps) ---------------- */
+
+function seedAppTemplate(?string $orgId, ?int $userId, string $name): void
+{
+    DB::connection('owner_commit')->table('tenant.app_templates')->insert([
+        'id' => 'tpl_'.uniqid(),
+        'organization_id' => $orgId,
+        'user_id' => $userId,
+        'name' => $name,
+        'kind' => 'app',
+        'package' => json_encode(['format' => 'sapiensly.app-package', 'manifest' => []]),
+        'created_at' => now(),
+        'updated_at' => now(),
+    ]);
+}
+
+function tenantAppTemplateCount(): int
+{
+    return DB::connection('tenant_app_real')->table('tenant.app_templates')->count();
+}
+
+it('isolates app_templates by organization', function () {
+    $orgA = makeRlsOrg('A');
+    $orgB = makeRlsOrg('B');
+
+    // A saved template carries a whole manifest — and optionally rows — from an
+    // app someone built. Another tenant reading one would be reading their work.
+    seedAppTemplate($orgA->id, null, 'CRM de A');
+    seedAppTemplate($orgA->id, null, 'Pedidos de A');
+    seedAppTemplate($orgB->id, null, 'Algo de B');
+
+    scopeTenant($orgA->id, null);
+    expect(tenantAppTemplateCount())->toBe(2);
+
+    scopeTenant($orgB->id, null);
+    expect(tenantAppTemplateCount())->toBe(1);
+});
+
+it('is fail-closed for app_templates when no tenant scope is set', function () {
+    $org = makeRlsOrg('O');
+    seedAppTemplate($org->id, null, 'Cualquiera');
+
+    scopeTenant(null, null);
+    expect(tenantAppTemplateCount())->toBe(0);
+});
