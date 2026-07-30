@@ -325,6 +325,14 @@ export interface RuntimePageProps {
         current: string | null;
         roles: Array<{ slug: string; name: string }>;
     } | null;
+    /**
+     * Portal sign-in state. Present only on a public portal: whether it has
+     * identity at all, and who is signed in right now.
+     */
+    portalAuth?: {
+        enabled: boolean;
+        user: { email: string; name: string | null } | null;
+    } | null;
     /** Head metadata resolved by the public landing controller. */
     seo?: { title?: string; description?: string; og_image?: string };
     /** True on the public (unauthenticated) landing surface — enables lead_form submits. */

@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\AccountSwitchController;
 use App\Http\Controllers\LandingRenderController;
+use App\Http\Controllers\PortalAuthController;
 use App\Http\Controllers\PublicAppActionController;
 use App\Http\Controllers\PublicAppController;
 use App\Http\Controllers\PublicAppFileController;
@@ -84,6 +85,25 @@ Route::post('a/{public_slug}/actions', PublicAppActionController::class)
     ->where('public_slug', '[a-z0-9][a-z0-9_-]*')
     ->middleware([BindPublicAppContext::class, 'throttle:20,1'])
     ->name('portal.public.actions');
+
+// Portal sign-in. The request endpoint answers identically whatever happened —
+// a portal that replied differently for a known address would be an account
+// oracle, and anyone may ask.
+Route::post('a/{public_slug}/auth/request', [PortalAuthController::class, 'request'])
+    ->where('public_slug', '[a-z0-9][a-z0-9_-]*')
+    ->middleware([BindPublicAppContext::class, 'throttle:10,1'])
+    ->name('portal.public.auth.request');
+
+Route::get('a/{public_slug}/auth/{token}', [PortalAuthController::class, 'callback'])
+    ->where('public_slug', '[a-z0-9][a-z0-9_-]*')
+    ->where('token', '[a-f0-9]{64}')
+    ->middleware([BindPublicAppContext::class, 'throttle:20,1'])
+    ->name('portal.public.auth.callback');
+
+Route::post('a/{public_slug}/auth/logout', [PortalAuthController::class, 'logout'])
+    ->where('public_slug', '[a-z0-9][a-z0-9_-]*')
+    ->middleware([BindPublicAppContext::class])
+    ->name('portal.public.auth.logout');
 
 // Portal file upload/serve. Writable storage reachable by anyone is the most
 // abusable surface here, so the controller bounds it hard: writes must be on,

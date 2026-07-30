@@ -994,6 +994,39 @@ class ManifestValidator
             );
         }
 
+        // The signed-in role is a second door into the same portal, so it gets
+        // the same two checks the anonymous one does.
+        $memberRoleId = (string) ($public['member_role_id'] ?? '');
+        if ($memberRoleId !== '') {
+            $memberRole = $rolesById[$memberRoleId] ?? null;
+
+            if ($memberRole === null) {
+                $errors[] = new ManifestValidationError(
+                    '/permissions/public/member_role_id',
+                    "member_role_id '{$memberRoleId}' does not match any defined role",
+                    'unresolved_ref',
+                );
+            } elseif (($memberRole['is_default'] ?? false) === true) {
+                $errors[] = new ManifestValidationError(
+                    '/permissions/public/member_role_id',
+                    "The signed-in portal role must not be the is_default role ('{$memberRole['slug']}') — that is the role org members fall back to.",
+                    'public_role_is_default',
+                );
+            }
+        }
+
+        // An identity nobody can obtain is a promise the portal cannot keep: a
+        // row_filter written against {{current_user.id}} would match nothing,
+        // and the page would render empty with no error anywhere.
+        $signup = (string) ($public['signup'] ?? 'none');
+        if ($signup === 'none' && $memberRoleId !== '') {
+            $errors[] = new ManifestValidationError(
+                '/permissions/public/signup',
+                'member_role_id names the role a SIGNED-IN visitor assumes, but signup is "none", so nobody can sign in. Set signup to "open" or "invite".',
+                'public_member_role_without_signup',
+            );
+        }
+
         if (($public['allow_writes'] ?? false) === true) {
             return;
         }
@@ -1001,15 +1034,21 @@ class ManifestValidator
         // A read-only portal that carries write policies is a manifest telling
         // two stories. The runtime believes allow_writes, so the policies would
         // be dead code the author reads as live permission.
+        // Both portal roles are covered: allow_writes is the outer gate for the
+        // whole surface, so a write grant on the signed-in role is just as dead
+        // as one on the anonymous role while it is off.
+        $portalRoleIds = array_values(array_filter([$roleId, $memberRoleId !== '' ? $memberRoleId : null]));
+
         foreach ($permissions['object_policies'] ?? [] as $i => $policy) {
-            if (($policy['role_id'] ?? null) !== $roleId) {
+            if (! in_array($policy['role_id'] ?? null, $portalRoleIds, true)) {
                 continue;
             }
             $writes = array_values(array_intersect($policy['actions'] ?? [], ['create', 'update', 'delete']));
             if ($writes !== []) {
+                $slug = $rolesById[$policy['role_id']]['slug'] ?? $role['slug'];
                 $errors[] = new ManifestValidationError(
                     "/permissions/object_policies/{$i}/actions",
-                    "Role '{$role['slug']}' is the public role and grants ".implode('/', $writes).', but permissions.public.allow_writes is false — the portal is read-only and these grants would never apply. Set allow_writes true, or drop them.',
+                    "Role '{$slug}' is a portal role and grants ".implode('/', $writes).', but permissions.public.allow_writes is false — the portal is read-only and these grants would never apply. Set allow_writes true, or drop them.',
                     'public_write_without_optin',
                 );
             }

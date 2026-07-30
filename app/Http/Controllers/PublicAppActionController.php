@@ -6,6 +6,7 @@ use App\Models\App;
 use App\Services\Apps\AppAccessContext;
 use App\Services\Apps\AppAccessResolver;
 use App\Services\Apps\BlockVisibilityFilter;
+use App\Services\Apps\PortalAuth;
 use App\Services\Records\AppActionExecutor;
 use App\Services\Records\BlockDataResolver;
 use App\Services\Records\ExpressionResolver;
@@ -60,6 +61,7 @@ class PublicAppActionController extends Controller
         private readonly ExpressionResolver $expressions,
         private readonly BlockDataResolver $blockData,
         private readonly BlockVisibilityFilter $visibility,
+        private readonly PortalAuth $portalAuth,
     ) {}
 
     public function __invoke(Request $request, string $publicSlug): JsonResponse
@@ -81,7 +83,9 @@ class PublicAppActionController extends Controller
             'turnstile_token' => ['sometimes', 'nullable', 'string', 'max:2048'],
         ]);
 
-        $access = $this->accessResolver->resolvePublic($manifest);
+        $portalUser = $this->portalAuth->current($request, $app);
+
+        $access = $this->accessResolver->resolvePublic($manifest, signedIn: $portalUser !== null);
         if (! $access->hasAccess) {
             abort(404);
         }
@@ -122,9 +126,10 @@ class PublicAppActionController extends Controller
             }
         }
 
-        // No `current_user`: an expression reading {{current_user.id}} resolves
-        // to null, so a row_filter written against it matches nothing — the
-        // safe direction when the reader is a stranger.
+        // With a signed-in portal user, `current_user` resolves — so an action
+        // can stamp their id onto a record it creates, and a row_filter can
+        // then keep that record to them. Without one it stays absent and such a
+        // filter matches nothing, the safe direction for a stranger.
         $context = [
             'params' => $request->input('params', []) ?? [],
             'form' => $request->input('form', []) ?? [],
@@ -132,6 +137,9 @@ class PublicAppActionController extends Controller
             '__access' => $access,
             '__actor' => null,
         ];
+        if ($portalUser !== null) {
+            $context['current_user'] = $portalUser->toExpressionContext();
+        }
 
         $results = [];
         $clientActions = [];

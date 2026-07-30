@@ -417,6 +417,8 @@ onMounted(() => {
                     :current-slug="activeSlug"
                     :href-for="hrefFor"
                     :app-slug="props.mount ? undefined : props.app.slug"
+                    :portal-auth="props.portalAuth ?? null"
+                    :mount="props.mount"
                 />
             </div>
 

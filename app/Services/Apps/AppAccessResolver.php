@@ -139,7 +139,7 @@ class AppAccessResolver
      *
      * @param  array<string, mixed>  $manifest
      */
-    public function resolvePublic(array $manifest): AppAccessContext
+    public function resolvePublic(array $manifest, bool $signedIn = false): AppAccessContext
     {
         $permissions = $manifest['permissions'] ?? [];
         $public = $permissions['public'] ?? null;
@@ -148,7 +148,14 @@ class AppAccessResolver
             return AppAccessContext::denied();
         }
 
+        // A SIGNED-IN portal user may assume a different role from a stranger —
+        // that is what lets one portal show a sign-in page to the public and
+        // their own orders to a customer. Falls back to the anonymous role when
+        // the manifest declares no separate one.
         $roleId = (string) ($public['role_id'] ?? '');
+        if ($signedIn && ! empty($public['member_role_id'])) {
+            $roleId = (string) $public['member_role_id'];
+        }
         $role = null;
         foreach ($permissions['roles'] ?? [] as $candidate) {
             if (($candidate['id'] ?? null) === $roleId) {

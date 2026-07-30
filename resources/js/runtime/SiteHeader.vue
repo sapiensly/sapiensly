@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import NotificationBell from '@/runtime/NotificationBell.vue';
+import PortalAuthBar from '@/runtime/PortalAuthBar.vue';
 import RuntimeUserMenu from '@/runtime/RuntimeUserMenu.vue';
 import { useIsDarkSurface } from '@/runtime/useRuntimeTheme';
 import { computed } from 'vue';
@@ -28,6 +29,13 @@ const props = defineProps<{
     embedded?: boolean;
     /** The slug the app is addressed by, so the bell can fetch its inbox. */
     appSlug?: string;
+    /** Portal sign-in state; absent on the authenticated runtime. */
+    portalAuth?: {
+        enabled: boolean;
+        user: { email: string; name: string | null } | null;
+    } | null;
+    /** Where the portal is mounted, for its auth endpoints. */
+    mount?: string;
 }>();
 
 // Only directly-addressable pages belong in the top nav; record-scoped detail
@@ -128,9 +136,20 @@ const activeStyle = {
                 {{ brand.cta.label }}
             </a>
 
+            <!-- Portal sign-in, when this portal has identity at all. -->
+            <PortalAuthBar
+                v-if="portalAuth?.enabled && mount"
+                :mount="mount"
+                :user="portalAuth.user"
+            />
+
             <!-- In-app inbox. Absent in the builder preview (`embedded`),
-                 which has no session to read notifications for. -->
-            <NotificationBell v-if="!embedded && appSlug" :app-slug="appSlug" />
+                 which has no session to read notifications for, and on a portal,
+                 where the viewer is not a platform user. -->
+            <NotificationBell
+                v-if="!embedded && appSlug && !portalAuth"
+                :app-slug="appSlug"
+            />
 
             <!-- Default user widget: identity + "exit to Sapiensly". -->
             <RuntimeUserMenu />

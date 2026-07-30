@@ -6809,6 +6809,19 @@
                             "type": "boolean",
                             "default": false,
                             "description": "Whether visitors may submit data (forms, record actions). False (default) makes the portal read-only whatever the object policies say. When true, each write is still gated by the create/update/delete actions granted to role_id."
+                        },
+                        "signup": {
+                            "enum": [
+                                "none",
+                                "open",
+                                "invite"
+                            ],
+                            "default": "none",
+                            "description": "Whether visitors can have an IDENTITY. 'none' (default): the portal is anonymous, so {{current_user.id}} resolves to null and a row_filter written against it matches nothing. 'open': anyone may sign in with a magic link sent to their address — what a self-service tracker or request form needs. 'invite': only addresses the organization added beforehand can sign in. Signing in is what makes 'each customer sees only their own rows' expressible."
+                        },
+                        "member_role_id": {
+                            "$ref": "#/$defs/id",
+                            "description": "The role a SIGNED-IN portal user assumes, when it should differ from the anonymous one. Omit and they keep role_id. This is how a portal shows a stranger a sign-in page and a customer their own orders."
                         }
                     }
                 },

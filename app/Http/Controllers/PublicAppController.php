@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\App;
 use App\Services\Apps\AppAccessResolver;
 use App\Services\Apps\BlockVisibilityFilter;
+use App\Services\Apps\PortalAuth;
 use App\Services\Records\BlockDataResolver;
 use App\Support\Branding\ColorPalette;
 use App\Support\Branding\OrganizationBrand;
@@ -39,6 +40,7 @@ class PublicAppController extends Controller
         private readonly BlockDataResolver $blockData,
         private readonly AppAccessResolver $accessResolver,
         private readonly BlockVisibilityFilter $visibility,
+        private readonly PortalAuth $portalAuth,
     ) {}
 
     public function __invoke(Request $request, string $publicSlug, ?string $pageSlug = null): Response
@@ -48,7 +50,11 @@ class PublicAppController extends Controller
         /** @var array<string, mixed> $manifest */
         $manifest = $request->attributes->get('publicAppManifest');
 
-        $access = $this->accessResolver->resolvePublic($manifest);
+        // Who is asking. A portal user is NOT a platform user: their identity
+        // is scoped to this app alone and reaches nothing else.
+        $portalUser = $this->portalAuth->current($request, $app);
+
+        $access = $this->accessResolver->resolvePublic($manifest, signedIn: $portalUser !== null);
         if (! $access->hasAccess) {
             abort(404);
         }
@@ -85,6 +91,15 @@ class PublicAppController extends Controller
             // integration's own service credentials, never to a person's token.
             '__actor' => null,
         ];
+
+        // THE thing portal identity exists for: with a signed-in visitor,
+        // a row_filter written as {{current_user.id}} finally resolves, so
+        // "each customer sees only their own records" becomes expressible on a
+        // public surface. Absent, it stays null and such a filter matches
+        // nothing — which is the safe direction for a stranger.
+        if ($portalUser !== null) {
+            $context['current_user'] = $portalUser->toExpressionContext();
+        }
 
         $page['blocks'] = $this->visibility->visibleBlocks($page['blocks'] ?? [], $access, $context);
 
@@ -131,6 +146,15 @@ class PublicAppController extends Controller
             'params' => (object) $params,
             'customCss' => ScopedAppCss::compile($settings['custom_css'] ?? null),
             'seo' => $settings['seo'] ?? null,
+            // Sign-in state for the portal chrome: whether this portal has
+            // sign-in at all, and who is signed in right now.
+            'portalAuth' => [
+                'enabled' => ($manifest['permissions']['public']['signup'] ?? 'none') !== 'none',
+                'user' => $portalUser === null ? null : [
+                    'email' => $portalUser->email,
+                    'name' => $portalUser->name,
+                ],
+            ],
         ]);
     }
 
