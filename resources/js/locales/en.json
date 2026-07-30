@@ -2861,6 +2861,8 @@
     "apps.builder.import.failed": "Could not read that file.",
     "apps.builder.import.failed_rows": "These rows were not imported:",
     "apps.builder.import.row": "Row {row}",
+    "apps.builder.import.running": "Importing… {processed} of {total} rows",
+    "apps.builder.import.done_summary": "{created} created · {updated} updated · {failed} failed",
     "apps.builder.api.button": "API keys",
     "apps.builder.api.title": "API keys",
     "apps.builder.api.intro": "A key lets another system read and write this app's records. It acts as the app role you pick — it can never do more than a person with that role.",

@@ -2861,6 +2861,8 @@
     "apps.builder.import.failed": "No se pudo leer ese archivo.",
     "apps.builder.import.failed_rows": "Estas filas no se importaron:",
     "apps.builder.import.row": "Fila {row}",
+    "apps.builder.import.running": "Importando… {processed} de {total} filas",
+    "apps.builder.import.done_summary": "{created} creadas · {updated} actualizadas · {failed} fallaron",
     "apps.builder.api.button": "Llaves de API",
     "apps.builder.api.title": "Llaves de API",
     "apps.builder.api.intro": "Una llave permite que otro sistema lea y escriba los registros de esta app. Actúa con el rol que elijas — nunca puede hacer más que una persona con ese rol.",

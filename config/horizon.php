@@ -267,6 +267,25 @@ return [
             'timeout' => 300, // 5 minutes — a run may chain AI, HTTP and connector steps
             'nice' => 0,
         ],
+        'supervisor-imports' => [
+            'connection' => 'redis',
+            'queue' => ['imports'],
+            'balance' => 'auto',
+            'autoScalingStrategy' => 'time',
+            'maxProcesses' => 1,
+            'maxTime' => 0,
+            'maxJobs' => 0,
+            // A spreadsheet is parsed into memory before a row is written.
+            'memory' => 512,
+            // 1 try: the write path is not idempotent unless the import chose an
+            // upsert key, so a retry would duplicate everything already written.
+            'tries' => 1,
+            // 15 minutes. Moving the import off the request was the whole point;
+            // leaving it on the 60s default queue would reproduce the timeout it
+            // was meant to fix, just one layer down.
+            'timeout' => 900,
+            'nice' => 0,
+        ],
         'supervisor-whatsapp-webhooks' => [
             'connection' => 'redis',
             'queue' => ['whatsapp-webhooks'],
@@ -316,6 +335,11 @@ return [
                 'balanceMaxShift' => 1,
                 'balanceCooldown' => 3,
             ],
+            'supervisor-imports' => [
+                'maxProcesses' => 3,
+                'balanceMaxShift' => 1,
+                'balanceCooldown' => 3,
+            ],
             'supervisor-whatsapp-webhooks' => [
                 'maxProcesses' => 5,
                 'balanceMaxShift' => 1,
@@ -343,6 +367,9 @@ return [
             ],
             'supervisor-workflows' => [
                 'maxProcesses' => 2,
+            ],
+            'supervisor-imports' => [
+                'maxProcesses' => 1,
             ],
             'supervisor-whatsapp-webhooks' => [
                 'maxProcesses' => 2,

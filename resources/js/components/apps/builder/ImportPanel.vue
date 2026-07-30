@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import axios from 'axios';
+import echo from '@/echo';
 import { FileSpreadsheet, Loader2, Upload, X } from '@lucide/vue';
-import { computed, ref } from 'vue';
+import axios from 'axios';
+import { computed, onUnmounted, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 
 /**
@@ -9,9 +10,13 @@ import { useI18n } from 'vue-i18n';
  *
  * The review step is the point. An import succeeds silently and is painful to
  * undo, so the panel shows the inferred type of every column, what will be
- * skipped and why, and a few real rows — before anything is written. The file is
- * re-sent on confirm rather than parked server-side, so the import always acts
- * on the file the user is looking at.
+ * skipped and why, and a few real rows — before anything is written.
+ *
+ * Analysing is synchronous (it only reads). Importing is NOT: thousands of rows
+ * go through the full validated write path, so confirming hands the file to a
+ * queued job and this panel follows its progress — live over the socket, and by
+ * polling as well, because a dropped socket must cost the animation and never
+ * the answer.
  */
 const props = defineProps<{
     appId: string;
@@ -40,6 +45,20 @@ interface Plan {
     sample: Array<Record<string, string | null>>;
 }
 
+interface Progress {
+    id: string;
+    status: string;
+    total_rows: number;
+    processed: number;
+    created: number;
+    updated: number;
+    failed: number;
+    errors: Array<{ row: number; errors: Record<string, string[]> }>;
+    error: string | null;
+    truncated: boolean;
+    finished: boolean;
+}
+
 const file = ref<File | null>(null);
 const plan = ref<Plan | null>(null);
 const targetSlug = ref('');
@@ -47,17 +66,18 @@ const objectName = ref('');
 const upsertKey = ref('');
 const busy = ref(false);
 const error = ref('');
-const result = ref<{
-    summary: string;
-    created: number;
-    updated: number;
-    failed: number;
-    errors: Array<{ row: number; errors: Record<string, string[]> }>;
-} | null>(null);
+// header → field slug, when the user corrects a match the planner got wrong.
+const overrides = ref<Record<string, string>>({});
+const progress = ref<Progress | null>(null);
 
 const mappedCount = computed(
     () => plan.value?.mappings.filter((m) => m.field_slug !== null).length ?? 0,
 );
+const percent = computed(() => {
+    const p = progress.value;
+    if (!p || p.total_rows === 0) return 0;
+    return Math.min(100, Math.round((p.processed / p.total_rows) * 100));
+});
 const skipped = computed(
     () => plan.value?.mappings.filter((m) => m.field_slug === null) ?? [],
 );
@@ -68,14 +88,32 @@ function body(): FormData {
     if (targetSlug.value) form.append('object_slug', targetSlug.value);
     else if (objectName.value) form.append('object_name', objectName.value);
     if (upsertKey.value) form.append('upsert_key', upsertKey.value);
+    for (const [header, slug] of Object.entries(overrides.value)) {
+        if (slug) form.append(`overrides[${header}]`, slug);
+    }
     return form;
+}
+
+/** The fields a column may be pointed at, once a target object is chosen. */
+const targetFields = computed(
+    () =>
+        (
+            plan.value?.object as {
+                fields?: Array<{ slug: string; name: string }>;
+            }
+        )?.fields ?? [],
+);
+
+function remap(header: string, slug: string): void {
+    overrides.value = { ...overrides.value, [header]: slug };
+    analyze();
 }
 
 async function pick(event: Event) {
     const picked = (event.target as HTMLInputElement).files?.[0] ?? null;
     if (!picked) return;
     file.value = picked;
-    result.value = null;
+    progress.value = null;
     // A sensible default name for a new object: the file's own, without the
     // extension. The user renames it if they disagree.
     objectName.value = picked.name.replace(/\.[^.]+$/, '');
@@ -107,12 +145,13 @@ async function run() {
     busy.value = true;
     error.value = '';
     try {
+        // 202: the file is parked and a job takes it from here.
         const { data } = await axios.post(
             `/apps/${props.appId}/builder/import/run`,
             body(),
         );
-        result.value = { summary: data.summary, ...data.result };
-        emit('imported');
+        progress.value = data.import;
+        watchImport(data.import.id);
     } catch (e) {
         error.value =
             (e as { response?: { data?: { message?: string } } }).response?.data
@@ -121,6 +160,57 @@ async function run() {
         busy.value = false;
     }
 }
+
+// Live over the socket; polled as well. The two agree because both read the
+// same row, and whichever arrives first simply wins.
+type ChannelHandle = ReturnType<typeof echo.private>;
+let channel: ChannelHandle | null = null;
+let poll: ReturnType<typeof setInterval> | null = null;
+
+function watchImport(id: string): void {
+    stopWatching();
+
+    try {
+        channel = echo.private(`app.import.${id}`);
+        channel.listen('.AppImportProgress', (data: { progress: Progress }) => {
+            progress.value = data.progress;
+            if (data.progress.finished) finish();
+        });
+    } catch {
+        // No socket: the poll below is the whole mechanism.
+    }
+
+    poll = setInterval(async () => {
+        try {
+            const { data } = await axios.get(
+                `/apps/${props.appId}/builder/import/${id}`,
+            );
+            progress.value = data.import;
+            if (data.import.finished) finish();
+        } catch {
+            /* keep polling; a blip is not an outcome */
+        }
+    }, 2000);
+}
+
+function finish(): void {
+    stopWatching();
+    emit('imported');
+}
+
+function stopWatching(): void {
+    if (poll) {
+        clearInterval(poll);
+        poll = null;
+    }
+    if (channel) {
+        channel.stopListening('.AppImportProgress');
+        echo.leave(`app.import.${progress.value?.id ?? ''}`);
+        channel = null;
+    }
+}
+
+onUnmounted(stopWatching);
 </script>
 
 <template>
@@ -171,7 +261,7 @@ async function run() {
                 </label>
 
                 <!-- Step 2: review, then confirm. -->
-                <div v-else-if="!result" class="space-y-4">
+                <div v-else-if="!progress" class="space-y-4">
                     <div class="flex flex-wrap items-end gap-3">
                         <label
                             class="flex flex-col gap-1 text-xs text-ink-muted"
@@ -280,21 +370,58 @@ async function run() {
                                         {{ m.header }}
                                     </td>
                                     <td class="px-3 py-2">
-                                        <span
-                                            v-if="m.field_slug"
-                                            class="rounded-pill bg-accent-blue/10 px-2 py-0.5 text-accent-blue"
+                                        <!-- Into an EXISTING object the target is
+                                             editable: an auto-match that guessed
+                                             wrong is fixed here, not by renaming
+                                             the spreadsheet and re-uploading. -->
+                                        <select
+                                            v-if="targetSlug"
+                                            class="rounded-md border border-medium bg-surface px-2 py-1 text-xs text-ink"
+                                            :value="m.field_slug ?? ''"
+                                            @change="
+                                                remap(
+                                                    m.header,
+                                                    (
+                                                        $event.target as HTMLSelectElement
+                                                    ).value,
+                                                )
+                                            "
                                         >
-                                            {{ m.field_slug }} · {{ m.type }}
-                                        </span>
-                                        <span
-                                            v-else
-                                            class="text-ink-muted"
-                                            :title="m.skip_reason ?? ''"
-                                        >
-                                            {{
-                                                t('apps.builder.import.skipped')
-                                            }}
-                                        </span>
+                                            <option value="">
+                                                {{
+                                                    t(
+                                                        'apps.builder.import.skipped',
+                                                    )
+                                                }}
+                                            </option>
+                                            <option
+                                                v-for="f in targetFields"
+                                                :key="f.slug"
+                                                :value="f.slug"
+                                            >
+                                                {{ f.name }}
+                                            </option>
+                                        </select>
+                                        <template v-else>
+                                            <span
+                                                v-if="m.field_slug"
+                                                class="rounded-pill bg-accent-blue/10 px-2 py-0.5 text-accent-blue"
+                                            >
+                                                {{ m.field_slug }} ·
+                                                {{ m.type }}
+                                            </span>
+                                            <span
+                                                v-else
+                                                class="text-ink-muted"
+                                                :title="m.skip_reason ?? ''"
+                                            >
+                                                {{
+                                                    t(
+                                                        'apps.builder.import.skipped',
+                                                    )
+                                                }}
+                                            </span>
+                                        </template>
                                     </td>
                                     <td class="px-3 py-2 text-ink-muted">
                                         {{ m.profile.samples.join(' · ') }}
@@ -313,16 +440,47 @@ async function run() {
                     </p>
                 </div>
 
-                <!-- Step 3: what actually happened. -->
+                <!-- Step 3: the job, while it runs and after it stops. -->
                 <div v-else class="space-y-3">
-                    <p class="text-sm text-ink">{{ result.summary }}</p>
+                    <p class="text-sm text-ink">
+                        {{
+                            progress.finished
+                                ? t('apps.builder.import.done_summary', {
+                                      created: progress.created,
+                                      updated: progress.updated,
+                                      failed: progress.failed,
+                                  })
+                                : t('apps.builder.import.running', {
+                                      processed: progress.processed,
+                                      total: progress.total_rows,
+                                  })
+                        }}
+                    </p>
+
                     <div
-                        v-if="result.failed > 0"
+                        v-if="!progress.finished"
+                        class="bg-surface-muted h-1.5 w-full overflow-hidden rounded-full"
+                    >
+                        <div
+                            class="h-full rounded-full bg-accent-blue transition-all"
+                            :style="{ width: percent + '%' }"
+                        />
+                    </div>
+
+                    <p
+                        v-if="progress.status === 'failed' && progress.error"
+                        class="text-xs text-red-400"
+                    >
+                        {{ progress.error }}
+                    </p>
+
+                    <div
+                        v-if="progress.failed > 0"
                         class="space-y-1 rounded-md border border-red-500/30 bg-red-500/5 px-3 py-2 text-[11px] text-red-400"
                     >
                         <p>{{ t('apps.builder.import.failed_rows') }}</p>
                         <ul class="space-y-0.5">
-                            <li v-for="e in result.errors" :key="e.row">
+                            <li v-for="e in progress.errors" :key="e.row">
                                 {{
                                     t('apps.builder.import.row', {
                                         row: e.row,
@@ -348,13 +506,13 @@ async function run() {
                     @click="emit('close')"
                 >
                     {{
-                        result
+                        progress
                             ? t('apps.builder.import.done')
                             : t('apps.builder.import.cancel')
                     }}
                 </button>
                 <button
-                    v-if="plan && !result"
+                    v-if="plan && !progress"
                     type="button"
                     :disabled="busy || mappedCount === 0"
                     class="inline-flex items-center gap-1.5 rounded-pill border border-accent-blue/30 bg-accent-blue/10 px-3 py-1.5 text-xs font-medium text-accent-blue transition-colors hover:bg-accent-blue/20 disabled:opacity-50"

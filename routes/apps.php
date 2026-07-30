@@ -60,6 +60,9 @@ Route::middleware([
     Route::post('/apps/{app}/builder/import/analyze', [AppBuilderController::class, 'importAnalyze'])
         ->middleware('throttle:30,1')
         ->name('apps.builder.import.analyze');
+    Route::get('/apps/{app}/builder/import/{importId}', [AppBuilderController::class, 'importStatus'])
+        ->where('importId', 'imp_[a-z0-9]+')
+        ->name('apps.builder.import.status');
     Route::post('/apps/{app}/builder/import/run', [AppBuilderController::class, 'importRun'])
         ->middleware('throttle:20,1')
         ->name('apps.builder.import.run');

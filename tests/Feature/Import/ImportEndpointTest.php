@@ -2,7 +2,9 @@
 
 use App\Enums\MembershipRole;
 use App\Enums\MembershipStatus;
+use App\Jobs\RunSpreadsheetImportJob;
 use App\Models\App;
+use App\Models\AppImport;
 use App\Models\Organization;
 use App\Models\OrganizationMembership;
 use App\Models\Record;
@@ -11,6 +13,7 @@ use App\Services\Import\RemoteSheetFetcher;
 use App\Services\Manifest\AppManifestService;
 use Database\Seeders\RolesAndPermissionsSeeder;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Str;
 use Spatie\Permission\PermissionRegistrar;
 
@@ -76,19 +79,56 @@ it('returns a plan without writing anything', function () {
     expect(Record::where('app_id', $this->testApp->id)->count())->toBe(0);
 });
 
-it('imports the rows on run', function () {
-    $csv = "Nombre;Precio\nAcme;1.200,50\nGlobex;900,00\n";
+it('hands the import to a job instead of doing it in the request', function () {
+    Queue::fake();
 
-    $this->actingAs($this->owner)->post(
+    $response = $this->actingAs($this->owner)->post(
         "/apps/{$this->testApp->id}/builder/import/run",
-        ['file' => csvUpload($csv), 'object_name' => 'Clientes'],
-    )
-        ->assertOk()
-        ->assertJsonPath('result.created', 2)
-        ->assertJsonPath('result.failed', 0)
-        ->assertJsonPath('created_object', true);
+        ['file' => csvUpload("Nombre;Precio\nAcme;1.200,50\nGlobex;900,00\n"), 'object_name' => 'Clientes'],
+    );
 
-    expect(Record::where('app_id', $this->testApp->id)->count())->toBe(2);
+    // 202: accepted, not done. Thousands of validated writes cannot finish
+    // inside an HTTP request, and pretending otherwise is what timed out.
+    $response->assertStatus(202)->assertJsonPath('import.status', 'queued');
+
+    Queue::assertPushed(RunSpreadsheetImportJob::class);
+    expect(Record::where('app_id', $this->testApp->id)->count())->toBe(0);
+
+    // The run is readable straight away, so a reload finds it.
+    $this->actingAs($this->owner)
+        ->getJson("/apps/{$this->testApp->id}/builder/import/".$response->json('import.id'))
+        ->assertOk()
+        ->assertJsonPath('import.status', 'queued');
+});
+
+it('runs the queued import for real, and reports it row by row', function () {
+    $response = $this->actingAs($this->owner)->post(
+        "/apps/{$this->testApp->id}/builder/import/run",
+        ['file' => csvUpload("Nombre;Precio\nAcme;1.200,50\nGlobex;900,00\n"), 'object_name' => 'Clientes'],
+    )->assertStatus(202);
+
+    // The queue runs inline in tests, so by here the job has been through.
+    $import = AppImport::find($response->json('import.id'));
+
+    expect($import->status)->toBe('completed')
+        ->and($import->created_count)->toBe(2)
+        ->and($import->failed_count)->toBe(0)
+        ->and($import->processed)->toBe(2)
+        ->and(Record::where('app_id', $this->testApp->id)->count())->toBe(2);
+});
+
+it('records a failed import instead of leaving it queued forever', function () {
+    // A target object that does not exist: the plan throws inside the job.
+    $response = $this->actingAs($this->owner)->post(
+        "/apps/{$this->testApp->id}/builder/import/run",
+        ['file' => csvUpload("Nombre\nAcme\n"), 'object_slug' => 'fantasma'],
+    )->assertStatus(202);
+
+    $import = AppImport::find($response->json('import.id'));
+
+    expect($import->status)->toBe('failed')
+        ->and($import->error)->toContain('fantasma')
+        ->and($import->finished_at)->not->toBeNull();
 });
 
 it('refuses a file that has no rows to import', function () {

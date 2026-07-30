@@ -39,6 +39,7 @@ class RecordImporter
         ImportPlan $plan,
         SheetData $sheet,
         ?User $user = null,
+        ?callable $onProgress = null,
     ): ImportResult {
         $objectId = (string) $plan->object['id'];
         $mapped = $plan->mapped();
@@ -49,6 +50,7 @@ class RecordImporter
 
         $created = 0;
         $updated = 0;
+        $processed = 0;
         $errors = [];
 
         foreach (array_chunk($sheet->rows, self::CHUNK, true) as $chunk) {
@@ -79,6 +81,14 @@ class RecordImporter
                 } catch (Throwable $e) {
                     $errors[] = ['row' => $line, 'errors' => ['_' => [$e->getMessage()]]];
                 }
+            }
+
+            // Reported per CHUNK, not per row: a progress signal that writes to
+            // the database and a socket on every record would cost more than the
+            // import itself.
+            $processed += count($chunk);
+            if ($onProgress !== null) {
+                $onProgress($processed, $created, $updated, count($errors), $errors);
             }
         }
 

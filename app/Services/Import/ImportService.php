@@ -36,6 +36,15 @@ class ImportService
     }
 
     /**
+     * Read bytes of unknown format — what a file pulled off a storage disk
+     * hands us, where there is no path to hand a parser.
+     */
+    public function readBytes(string $contents, ?string $originalName = null): SheetData
+    {
+        return $this->reader->readBytes($contents, $originalName);
+    }
+
+    /**
      * Plan the import. With no `$objectSlug` the file defines a NEW object;
      * with one, it feeds an object that already exists.
      *
@@ -71,7 +80,7 @@ class ImportService
      * the user is left with a real, reviewable, revertible object rather than
      * rows referring to a schema that was never saved.
      */
-    public function run(App $app, SheetData $sheet, ImportPlan $plan, ?User $user = null): ImportResult
+    public function run(App $app, SheetData $sheet, ImportPlan $plan, ?User $user = null, ?callable $onProgress = null): ImportResult
     {
         $manifest = $this->manifests->getActiveManifest($app);
         if ($manifest === null) {
@@ -91,7 +100,7 @@ class ImportService
             $manifest = $this->manifests->getActiveManifest($app->refresh()) ?? $manifest;
         }
 
-        return $this->importer->import($app, $manifest, $plan, $sheet, $user);
+        return $this->importer->import($app, $manifest, $plan, $sheet, $user, $onProgress);
     }
 
     /**

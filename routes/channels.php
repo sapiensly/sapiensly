@@ -1,6 +1,7 @@
 <?php
 
 use App\Enums\DocumentType;
+use App\Models\AppImport;
 use App\Models\BuilderConversation;
 use App\Models\Chat;
 use App\Models\Conversation;
@@ -80,4 +81,12 @@ Broadcast::channel('documents.stream.{streamId}', function ($user, string $strea
     $ownerId = Cache::get("document-stream:{$streamId}");
 
     return $ownerId !== null && (string) $ownerId === (string) $user->id;
+});
+
+// Spreadsheet import progress. The run belongs to an app; whoever can see the
+// app can watch its import.
+Broadcast::channel('app.import.{importId}', function ($user, string $importId) {
+    $import = AppImport::find($importId);
+
+    return $import !== null && $import->app?->isVisibleTo($user);
 });

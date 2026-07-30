@@ -6,8 +6,10 @@ use App\Ai\BuilderAgent;
 use App\Enums\AppKind;
 use App\Jobs\ResolveStoppedBuildJob;
 use App\Jobs\RunBuilderAiJob;
+use App\Jobs\RunSpreadsheetImportJob;
 use App\Models\App;
 use App\Models\AppApiKey;
+use App\Models\AppImport;
 use App\Models\AppSetting;
 use App\Models\AppVersion;
 use App\Models\BuilderConversation;
@@ -31,7 +33,6 @@ use App\Services\Builder\WireframeImporter;
 use App\Services\Express\ExpressIntentRouter;
 use App\Services\Express\ExpressLauncher;
 use App\Services\Express\LabelGrounding;
-use App\Services\Import\ImportPlan;
 use App\Services\Import\ImportService;
 use App\Services\Landing\CustomDomainService;
 use App\Services\Landing\DraftPreviewShot;
@@ -2734,29 +2735,57 @@ class AppBuilderController extends Controller
         ]);
 
         $file = $request->file('file');
-        $imports = app(ImportService::class);
 
+        // The file is parked so the JOB can read it: an import of thousands of
+        // rows goes through the full validated write path and cannot finish
+        // inside this request. The tenant disk is preferred because a queue
+        // worker is frequently not the machine that took the upload; `local`
+        // is the single-host fallback when no tenant storage is configured.
         try {
-            $sheet = $imports->readFile($file->getRealPath(), $file->getClientOriginalName());
-            $plan = $imports->plan(
-                $app,
-                $sheet,
-                objectSlug: $data['object_slug'] ?? null,
-                overrides: $data['overrides'] ?? [],
-                upsertKeyHeader: $data['upsert_key'] ?? null,
-                objectName: $data['object_name'] ?? pathinfo((string) $file->getClientOriginalName(), PATHINFO_FILENAME),
-            );
-            $result = $imports->run($app, $sheet, $plan, $request->user());
-        } catch (\InvalidArgumentException|\RuntimeException $e) {
-            return response()->json(['message' => $e->getMessage()], 422);
+            $disk = $this->tenantStorage->diskName($app);
+        } catch (\Throwable) {
+            $disk = 'local';
         }
 
-        return response()->json([
-            'result' => $result->toArray(),
-            'summary' => $result->summary(),
-            'object' => ['slug' => $plan->object['slug'], 'name' => $plan->object['name']],
-            'created_object' => $plan->mode === ImportPlan::MODE_CREATE,
+        $path = 'imports/'.$app->id.'/'.Str::ulid().'.'.($file->getClientOriginalExtension() ?: 'csv');
+        Storage::disk($disk)->put($path, (string) file_get_contents($file->getRealPath()));
+
+        $import = AppImport::create([
+            'organization_id' => $app->organization_id,
+            'app_id' => $app->id,
+            'file_name' => $file->getClientOriginalName(),
+            'status' => 'queued',
         ]);
+
+        RunSpreadsheetImportJob::dispatch(
+            $import->id,
+            $app->id,
+            $request->user()?->id,
+            $disk,
+            $path,
+            $file->getClientOriginalName(),
+            $data['object_slug'] ?? null,
+            $data['object_name'] ?? pathinfo((string) $file->getClientOriginalName(), PATHINFO_FILENAME),
+            $data['upsert_key'] ?? null,
+            $data['overrides'] ?? [],
+        );
+
+        return response()->json(['import' => $import->toProgress()], 202);
+    }
+
+    /**
+     * The state of one import. The broadcast makes progress live; this makes it
+     * survive a reload, another device, or a socket that dropped.
+     */
+    public function importStatus(Request $request, App $app, string $importId): JsonResponse
+    {
+        $this->assertCanAccess($request, $app);
+
+        $import = AppImport::query()->where('app_id', $app->id)->where('id', $importId)->first();
+
+        return $import === null
+            ? response()->json(['message' => 'No such import.'], 404)
+            : response()->json(['import' => $import->toProgress()]);
     }
 
     /**
