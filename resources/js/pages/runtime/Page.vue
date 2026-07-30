@@ -410,6 +410,7 @@ onMounted(() => {
                     :pages="manifest.pages"
                     :current-slug="activeSlug"
                     :href-for="hrefFor"
+                    :app-slug="props.mount ? undefined : props.app.slug"
                 />
             </div>
 

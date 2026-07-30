@@ -44,6 +44,12 @@ class ListAvailableStepsTool implements Tool
                 'output' => '{variable, value}',
             ],
             [
+                'type' => 'notify.send',
+                'props' => 'to (array of: an email address, "user:<id>", "role:<app role slug>", or "owner" — expressions allowed), subject, body, channel? (email|in_app, default email), link?',
+                'output' => '{sent, channel, recipients, unresolved, throttled, failed}',
+                'note' => 'THE way to tell a person something happened — use it instead of a connector.call for plain email. `to` entries are expression-resolved first, so "{{trigger.record.data.email}}" reaches whoever submitted the record, and "role:admin" reaches everyone granted that role in the Access panel. channel=in_app raises it in the app\'s notification bell instead of sending mail. The step NEVER fails the run over an unreachable recipient: it reports `unresolved` (nothing matched), `throttled` (past the organization\'s hourly ceiling — 20 recipients per step, 200 sends per hour) and `failed`, so read the output and tell the user what actually went out. During verify_workflow nothing is sent (simulated: true).',
+            ],
+            [
                 'type' => 'record.create',
                 'props' => 'object_id, values ({field_slug: expression})',
                 'output' => '{record_id, data}',

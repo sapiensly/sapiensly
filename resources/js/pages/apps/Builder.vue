@@ -2,6 +2,7 @@
 import * as AppController from '@/actions/App/Http/Controllers/AppController';
 import DesktopOnlyNotice from '@/components/app-v2/DesktopOnlyNotice.vue';
 import AppAccessPanel from '@/components/apps/AppAccessPanel.vue';
+import ApiKeysPanel from '@/components/apps/builder/ApiKeysPanel.vue';
 import ImportPanel from '@/components/apps/builder/ImportPanel.vue';
 import LandingLinksPanel from '@/components/apps/builder/LandingLinksPanel.vue';
 import BuildPlanCard from '@/components/apps/BuildPlanCard.vue';
@@ -102,6 +103,7 @@ import {
     GripHorizontal,
     GripVertical,
     ImagePlus,
+    KeyRound,
     Layers,
     LayoutDashboard,
     Lightbulb,
@@ -2542,6 +2544,7 @@ async function unpublishLanding() {
 // (analyse → review → import) and reports back so the preview re-reads the
 // manifest, since importing into a new object changes the schema.
 const importOpen = ref(false);
+const apiKeysOpen = ref(false);
 function onImported() {
     router.reload({
         only: ['preview', 'previewBlockData', 'manifest', 'schema'],
@@ -4369,6 +4372,18 @@ function statusTone(status: Message['status']): string {
                     >
                         <FileSpreadsheet class="size-3.5" />
                         {{ t('apps.builder.import.button') }}
+                    </button>
+
+                    <!-- Credentials for the app's REST data API. Issuing one is
+                         a human act: the token is shown once and never again. -->
+                    <button
+                        v-if="!previewIsLanding"
+                        type="button"
+                        class="inline-flex items-center gap-1.5 rounded-pill border border-medium bg-surface px-3 py-1.5 text-xs text-ink-muted transition-colors hover:text-ink"
+                        @click="apiKeysOpen = true"
+                    >
+                        <KeyRound class="size-3.5" />
+                        {{ t('apps.builder.api.button') }}
                     </button>
 
                     <a
@@ -6327,6 +6342,19 @@ function statusTone(status: Message['status']): string {
 
         <!-- Spreadsheet import: upload, review what each column would become,
              then commit. Mounted only while open so the flow starts clean. -->
+        <ApiKeysPanel
+            v-if="apiKeysOpen"
+            :app-id="props.app.id"
+            :roles="
+                (manifest?.permissions?.roles ?? []) as {
+                    id: string;
+                    slug: string;
+                    name: string;
+                }[]
+            "
+            @close="apiKeysOpen = false"
+        />
+
         <ImportPanel
             v-if="importOpen"
             :app-id="props.app.id"

@@ -5,6 +5,7 @@ use App\Http\Controllers\AppActionController;
 use App\Http\Controllers\AppBuilderController;
 use App\Http\Controllers\AppController;
 use App\Http\Controllers\AppFileController;
+use App\Http\Controllers\AppNotificationController;
 use App\Http\Controllers\AppRuntimeAgentController;
 use App\Http\Controllers\AppRuntimeController;
 use App\Http\Controllers\AppWorkflowController;
@@ -52,6 +53,12 @@ Route::middleware([
     Route::post('/apps/{app}/builder/import/run', [AppBuilderController::class, 'importRun'])
         ->middleware('throttle:20,1')
         ->name('apps.builder.import.run');
+
+    // API keys for the app's REST data API. Minting returns the token once;
+    // it is stored only as a hash, so it can never be shown again.
+    Route::get('/apps/{app}/builder/api-keys', [AppBuilderController::class, 'apiKeys'])->name('apps.builder.api-keys');
+    Route::post('/apps/{app}/builder/api-keys', [AppBuilderController::class, 'createApiKey'])->name('apps.builder.api-keys.create');
+    Route::delete('/apps/{app}/builder/api-keys/{key}', [AppBuilderController::class, 'revokeApiKey'])->name('apps.builder.api-keys.revoke');
 
     Route::post('/apps/{app}/builder/publish-portal', [AppBuilderController::class, 'publishPortal'])->name('apps.builder.publish-portal');
     Route::post('/apps/{app}/builder/unpublish-portal', [AppBuilderController::class, 'unpublishPortal'])->name('apps.builder.unpublish-portal');
@@ -170,6 +177,17 @@ Route::middleware([
     Route::post('/r/{app_slug}/uploads', [AppFileController::class, 'upload'])
         ->where('app_slug', '[a-z][a-z0-9_]*')
         ->name('apps.runtime.uploads');
+
+    // In-app notification inbox: what notify.send raised for THIS person in
+    // THIS app. Filtered by recipient inside the controller — RLS scopes the
+    // tenant, the recipient filter scopes the person.
+    Route::get('/r/{app_slug}/notifications', [AppNotificationController::class, 'index'])
+        ->where('app_slug', '[a-z][a-z0-9_]*')
+        ->name('apps.runtime.notifications');
+
+    Route::post('/r/{app_slug}/notifications/read', [AppNotificationController::class, 'markRead'])
+        ->where('app_slug', '[a-z][a-z0-9_]*')
+        ->name('apps.runtime.notifications.read');
 
     Route::get('/r/{app_slug}/files/{file_id}', [AppFileController::class, 'show'])
         ->where('app_slug', '[a-z][a-z0-9_]*')

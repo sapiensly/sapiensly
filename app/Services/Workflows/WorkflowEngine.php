@@ -19,6 +19,7 @@ use App\Services\AiProviderService;
 use App\Services\Connectors\ConnectorCallGate;
 use App\Services\Context\OrganizationContextResolver;
 use App\Services\LLMService;
+use App\Services\Notifications\NotificationSender;
 use App\Services\Records\ExpressionResolver;
 use App\Services\Records\RecordQueryService;
 use App\Services\Records\RecordWriteService;
@@ -273,6 +274,7 @@ class WorkflowEngine
             'http.request' => $this->handleHttpRequest($step, $context),
             'connector.call' => $this->handleConnectorCall($step, $context, $app, $user),
             'script.run' => $this->handleScriptRun($step, $context),
+            'notify.send' => $this->handleNotify($step, $context, $app, $run),
             default => throw new StepFailedException("Unknown step type '{$step['type']}'"),
         };
     }
@@ -592,6 +594,56 @@ class WorkflowEngine
         Log::log($level, "[workflow] {$message}");
 
         return ['logged' => true, 'message' => $message];
+    }
+
+    /**
+     * Tell a person something happened.
+     *
+     * Every part of the step is expression-resolved first — the whole point is a
+     * subject and body that quote the record that triggered the run, and a `to`
+     * that can be "{{trigger.record.data.email}}".
+     *
+     * The step never throws on a recipient it could not reach: it returns what
+     * was sent, what did not resolve, and what the hourly quota held back. A
+     * failed delivery must not roll back the record write that occasioned it,
+     * and the author needs to SEE the shortfall rather than infer it from a run
+     * that stopped early.
+     *
+     * @param  array<string, mixed>  $step
+     * @param  array<string, mixed>  $context
+     * @return array<string, mixed>
+     */
+    private function handleNotify(array $step, array $context, App $app, WorkflowRun $run): array
+    {
+        $to = [];
+        foreach ($step['to'] ?? [] as $reference) {
+            $resolved = $this->expressions->resolve((string) $reference, $context);
+            // An expression that found nothing yields '' — dropped here so it
+            // is never mistaken for a literal address downstream.
+            if (is_array($resolved)) {
+                foreach ($resolved as $one) {
+                    $to[] = trim((string) $one);
+                }
+            } else {
+                $to[] = trim((string) $resolved);
+            }
+        }
+
+        $link = isset($step['link'])
+            ? (string) $this->expressions->resolve((string) $step['link'], $context)
+            : null;
+
+        return app(NotificationSender::class)->send(
+            app: $app,
+            channel: (string) ($step['channel'] ?? 'email'),
+            references: array_values(array_filter($to, fn (string $v): bool => $v !== '')),
+            title: (string) $this->expressions->resolve((string) $step['subject'], $context),
+            body: (string) $this->expressions->resolve((string) $step['body'], $context),
+            link: $link !== '' ? $link : null,
+            workflowId: $run->workflow_id,
+            workflowRunId: $run->id,
+            dryRun: $this->dryRun,
+        );
     }
 
     /**

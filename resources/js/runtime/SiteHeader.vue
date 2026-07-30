@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import NotificationBell from '@/runtime/NotificationBell.vue';
 import RuntimeUserMenu from '@/runtime/RuntimeUserMenu.vue';
 import { useIsDarkSurface } from '@/runtime/useRuntimeTheme';
 import { computed } from 'vue';
@@ -25,6 +26,8 @@ const props = defineProps<{
     /** Inside the Builder preview the bar scrolls with the board (mirrors
      *  SiteSidebar's `embedded`); only the real runtime pins it. */
     embedded?: boolean;
+    /** The slug the app is addressed by, so the bell can fetch its inbox. */
+    appSlug?: string;
 }>();
 
 // Only directly-addressable pages belong in the top nav; record-scoped detail
@@ -124,6 +127,10 @@ const activeStyle = {
             >
                 {{ brand.cta.label }}
             </a>
+
+            <!-- In-app inbox. Absent in the builder preview (`embedded`),
+                 which has no session to read notifications for. -->
+            <NotificationBell v-if="!embedded && appSlug" :app-slug="appSlug" />
 
             <!-- Default user widget: identity + "exit to Sapiensly". -->
             <RuntimeUserMenu />

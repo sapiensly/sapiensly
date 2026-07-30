@@ -7,6 +7,7 @@ use App\Enums\AppKind;
 use App\Jobs\ResolveStoppedBuildJob;
 use App\Jobs\RunBuilderAiJob;
 use App\Models\App;
+use App\Models\AppApiKey;
 use App\Models\AppSetting;
 use App\Models\AppVersion;
 use App\Models\BuilderConversation;
@@ -16,6 +17,7 @@ use App\Models\Integration;
 use App\Models\Record;
 use App\Services\Ai\AiDefaults;
 use App\Services\AiProviderService;
+use App\Services\Apps\ApiKeyService;
 use App\Services\Apps\AppAccessResolver;
 use App\Services\Apps\AppNamer;
 use App\Services\Apps\BlockVisibilityFilter;
@@ -2576,6 +2578,89 @@ class AppBuilderController extends Controller
         app(LandingPublisher::class)->unpublish($app);
 
         return response()->json(['published' => false]);
+    }
+
+    /** The app's API keys, with the token itself absent — it is unrecoverable by design. */
+    public function apiKeys(Request $request, App $app): JsonResponse
+    {
+        $this->assertCanAccess($request, $app);
+
+        return response()->json(['keys' => $this->apiKeyList($app)]);
+    }
+
+    /**
+     * Mint a key. The plaintext token is in this response and nowhere else,
+     * ever — only its hash is stored, so a leak of our table is not a leak of
+     * anyone's credential.
+     */
+    public function createApiKey(Request $request, App $app): JsonResponse
+    {
+        $this->assertCanAccess($request, $app);
+
+        $data = $request->validate([
+            'name' => ['required', 'string', 'max:80'],
+            'role_slug' => ['required', 'string', 'max:60'],
+            // {"<object slug>": ["read","create"]} — omit for "whatever the role allows".
+            'scopes' => ['nullable', 'array'],
+            'scopes.*' => ['array'],
+            'scopes.*.*' => ['string'],
+            'expires_at' => ['nullable', 'date', 'after:now'],
+        ]);
+
+        try {
+            $minted = app(ApiKeyService::class)->mint(
+                app: $app,
+                name: $data['name'],
+                roleSlug: $data['role_slug'],
+                objectScopes: $data['scopes'] ?? null,
+                creator: $request->user(),
+                expiresAt: isset($data['expires_at']) ? new \DateTimeImmutable($data['expires_at']) : null,
+            );
+        } catch (\InvalidArgumentException $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
+        }
+
+        return response()->json([
+            'token' => $minted['token'],
+            'note' => 'Copy this token now — it cannot be shown again.',
+            'keys' => $this->apiKeyList($app),
+        ], 201);
+    }
+
+    public function revokeApiKey(Request $request, App $app, string $keyId): JsonResponse
+    {
+        $this->assertCanAccess($request, $app);
+
+        $key = AppApiKey::query()->where('app_id', $app->id)->where('id', $keyId)->first();
+        if ($key === null) {
+            return response()->json(['message' => 'No such key.'], 404);
+        }
+
+        app(ApiKeyService::class)->revoke($key);
+
+        return response()->json(['keys' => $this->apiKeyList($app)]);
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    private function apiKeyList(App $app): array
+    {
+        return AppApiKey::query()
+            ->where('app_id', $app->id)
+            ->orderByDesc('created_at')
+            ->get()
+            ->map(fn (AppApiKey $k): array => [
+                'id' => $k->id,
+                'name' => $k->name,
+                'prefix' => $k->prefix,
+                'role_slug' => $k->role_slug,
+                'scopes' => $k->scopes['objects'] ?? '*',
+                'last_used_at' => $k->last_used_at?->toIso8601String(),
+                'expires_at' => $k->expires_at?->toIso8601String(),
+                'revoked' => $k->revoked_at !== null,
+            ])
+            ->all();
     }
 
     /**

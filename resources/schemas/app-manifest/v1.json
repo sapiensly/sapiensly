@@ -6351,6 +6351,64 @@
                         {
                             "type": "object",
                             "additionalProperties": false,
+                            "description": "Tell a person something happened. `channel` email sends a branded message; in_app raises a notification in the app's bell. Bounded per organization per hour — this is an outbound channel a record write can reach.",
+                            "properties": {
+                                "id": true,
+                                "name": true,
+                                "output_variable": true,
+                                "skip_if": true,
+                                "retry": true,
+                                "type": {
+                                    "const": "notify.send"
+                                },
+                                "channel": {
+                                    "enum": [
+                                        "email",
+                                        "in_app"
+                                    ],
+                                    "default": "email"
+                                },
+                                "to": {
+                                    "type": "array",
+                                    "minItems": 1,
+                                    "maxItems": 20,
+                                    "description": "Destinations. Each is an email address, `user:<id>`, `role:<app role slug>` (everyone granted that role in the Access panel) or `owner`. Expressions are resolved first, so \"{{trigger.record.data.email}}\" works.",
+                                    "items": {
+                                        "type": "string",
+                                        "maxLength": 320
+                                    }
+                                },
+                                "subject": {
+                                    "type": "string",
+                                    "maxLength": 200
+                                },
+                                "body": {
+                                    "type": "string",
+                                    "maxLength": 5000
+                                },
+                                "link": {
+                                    "type": "string",
+                                    "maxLength": 2000,
+                                    "description": "Optional URL the message links to (a page of this app, or an absolute link)."
+                                }
+                            },
+                            "required": [
+                                "type",
+                                "to",
+                                "subject",
+                                "body"
+                            ]
+                        }
+                    ]
+                },
+                {
+                    "allOf": [
+                        {
+                            "$ref": "#/$defs/step_base"
+                        },
+                        {
+                            "type": "object",
+                            "additionalProperties": false,
                             "properties": {
                                 "id": true,
                                 "name": true,

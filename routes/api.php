@@ -1,11 +1,13 @@
 <?php
 
+use App\Http\Controllers\Api\AppRecordApiController;
 use App\Http\Controllers\Api\Widget\AttachmentController;
 use App\Http\Controllers\Api\Widget\ChatController;
 use App\Http\Controllers\Api\Widget\ConfigController;
 use App\Http\Controllers\Api\Widget\ErrorController;
 use App\Http\Controllers\Api\Widget\FeedbackController;
 use App\Http\Controllers\Api\Widget\SessionController;
+use App\Http\Middleware\AuthenticateAppApiKey;
 use App\Http\Middleware\BindWidgetTenantContext;
 use App\Http\Middleware\ThrottleWidgetRequests;
 use App\Http\Middleware\ValidateWidgetApiToken;
@@ -22,6 +24,23 @@ use Illuminate\Support\Facades\Route;
 | and feedback collection.
 |
 */
+
+// An app's REST data API. The KEY identifies the app, so none appears in the
+// URL — a credential cannot even ask about another app. AuthenticateAppApiKey
+// resolves the key, binds the owner's tenant scope and turns the key's role
+// into the same AppAccessContext the UI is gated by.
+Route::prefix('apps/v1')
+    ->middleware([AuthenticateAppApiKey::class, 'throttle:120,1'])
+    ->group(function () {
+        Route::get('/objects', [AppRecordApiController::class, 'objects'])->name('api.apps.objects');
+
+        Route::get('/objects/{object}/records', [AppRecordApiController::class, 'index'])->name('api.apps.records.index');
+        Route::post('/objects/{object}/records', [AppRecordApiController::class, 'store'])->name('api.apps.records.store');
+        Route::get('/objects/{object}/records/{record}', [AppRecordApiController::class, 'show'])->name('api.apps.records.show');
+        Route::patch('/objects/{object}/records/{record}', [AppRecordApiController::class, 'update'])->name('api.apps.records.update');
+        Route::delete('/objects/{object}/records/{record}', [AppRecordApiController::class, 'destroy'])->name('api.apps.records.destroy');
+    })
+    ->where(['object' => '[a-z][a-z0-9_]*', 'record' => 'rec_[a-z0-9]+']);
 
 Route::prefix('widget/v1')->group(function () {
     // Public config endpoint - token is in the URL

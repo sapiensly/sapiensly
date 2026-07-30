@@ -39,6 +39,7 @@ final class Schemas
         'documents',
         'deck_versions',
         'app_files',
+        'app_notifications',
         'knowledge_bases',
         'knowledge_base_documents',
         'document_knowledge_base',

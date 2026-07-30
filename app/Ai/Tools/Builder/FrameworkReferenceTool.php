@@ -284,6 +284,27 @@ PERMISSIONS & ACCESS (roles, policies, access mode — ENFORCED at runtime):
 }
 TXT,
 
+        'notifications' => <<<'TXT'
+TELLING A PERSON SOMETHING HAPPENED (`notify.send`):
+- This is the native step for email and in-app messages. Use it INSTEAD of a `connector.call` whenever the user says "avísame", "que le llegue un correo", "notifica al equipo", "mándale confirmación" — a connector for plain email is a needless integration the user then has to authorize.
+- SHAPE: `{type:"notify.send", channel?:"email"|"in_app", to:[…], subject:"…", body:"…", link?:"…"}`. Every field is expression-resolved first, which is the whole point: the subject and body quote the record that triggered the run.
+- `to` entries, and no fifth form: a plain address, `user:<id>`, `role:<app role slug>`, or `owner`. "{{trigger.record.data.email}}" reaches whoever submitted the record — the canonical confirmation. "role:admin" reaches everyone GRANTED that role in the Access panel (not every member who merely inherits the default role, so if nobody has been assigned it, nobody is notified — say so rather than assuming). A `user:` id from another organization resolves to nothing.
+- CHANNEL: `email` sends a message wearing the org's Brandbook (accent + logo). `in_app` raises it in the app's notification bell instead — right for internal "a ti te toca esto" and for anything too frequent to email.
+- IT NEVER FAILS THE RUN over an unreachable recipient. The output is `{sent, recipients, unresolved, throttled, failed}` — READ IT and report honestly: "le avisé al cliente" is false if `sent` is 0. `unresolved` means nothing matched (a blank expression, a bad address, a role nobody holds); `throttled` means the organization's hourly ceiling was hit (20 recipients per step, 200 sends per hour).
+- WHY THE CEILING EXISTS: a public portal lets a stranger write a record, `record.created` runs a workflow, and that workflow can send email. Nothing in the chain is wrong alone; together it is a spam cannon. Design within the ceiling — notify the ONE person who needs to know, not a list.
+- During `verify_workflow` nothing is sent (the output carries `simulated: true`) but recipients still resolve, so verification tells you who WOULD be reached.
+TXT,
+
+        'api' => <<<'TXT'
+THE APP'S REST DATA API (external systems reading and writing records):
+- Every app can expose its records over HTTP at `/api/apps/v1/…`, authenticated by an API key. Reach for this when the user asks to "conectar X con esto", "que mi sistema mande los pedidos", "sacar los datos a otro lado" — the app becomes the system of record for something else.
+- THE KEY IDENTIFIES THE APP, so no app appears in the URL and a key cannot even ask about another app. Endpoints: `GET /api/apps/v1/objects` (discovery — what this key may see), then `GET|POST /api/apps/v1/objects/{object_slug}/records` and `GET|PATCH|DELETE /api/apps/v1/objects/{object_slug}/records/{record_id}`. Auth: `Authorization: Bearer <token>`. Bodies wrap the record in `data`: `{"data": {"cliente": "Acme"}}`.
+- TWO LIMITS, BOTH APPLY. A key names an app ROLE — that is its CEILING, and it can never exceed what a person with that role could do (the same policies, row filters and hidden fields as the UI). A key also carries SCOPES per object — that is its GRANT, and it narrows further. Effective permission is the intersection, so a key issued for "read pedidos" stays useless for everything else even if its role could do more.
+- YOUR JOB when the user wants an API: make sure the ROLE exists and is authored. Create a dedicated role (e.g. `integracion`) with `object_policies` granting exactly the objects and actions the integration needs — plus `field_restrictions.hidden` for anything it should not see (margins, internal notes). Do NOT point an integration at the `admin` role because it is convenient; the whole value is that a leaked key is bounded.
+- YOU DO NOT MINT KEYS. Issuing a credential is the user's act, from the builder's API keys panel — the token is shown once and stored only as a hash. Author the role and the policies, then tell them where to create the key and which role to pick.
+- NO current_user: a key is not a person, so a `row_filter` written against `{{current_user.id}}` matches NOTHING for an API caller. Scope an integration's rows with a real field instead (a status, an owner column the caller sets).
+TXT,
+
         'import' => <<<'TXT'
 IMPORTING REAL DATA (spreadsheets → objects):
 - `import_spreadsheet` is how an empty app becomes the user's actual business. Use it the moment they mention having their data "en un Excel / en Sheets / en un CSV" — do NOT offer to type it in, and do NOT invent demo data when a real file is on offer.

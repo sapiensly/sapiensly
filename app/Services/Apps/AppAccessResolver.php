@@ -5,6 +5,7 @@ namespace App\Services\Apps;
 use App\Enums\MembershipRole;
 use App\Enums\MembershipStatus;
 use App\Models\App;
+use App\Models\AppApiKey;
 use App\Models\AppUserRole;
 use App\Models\OrganizationMembership;
 use App\Models\User;
@@ -59,6 +60,55 @@ class AppAccessResolver
             'roleSlugs' => $roleSlugs,
             'viewablePageIds' => $this->viewablePages($manifest, $permissions['page_policies'] ?? [], $userRoleIds, $roleSlugs),
             ...$this->objectCapabilities($permissions['object_policies'] ?? [], $userRoleIds, $slugByFieldId),
+        ]);
+    }
+
+    /**
+     * The capabilities of a named app ROLE, with no person behind it — what an
+     * API key acting as that role may do.
+     *
+     * Deliberately the SAME semantics a member holding the role gets, not the
+     * portal's strict ones: a key that behaved differently from the role it
+     * names would make "why does my key 403 when the UI works?" a permanent
+     * support question. The narrowing that makes a key least-privilege lives on
+     * the key's own scopes ({@see AppApiKey::allows()}), which are
+     * checked alongside this — role is the ceiling, scope is the grant.
+     *
+     * There is no bypass here whatever the role is called: an app-owner-shaped
+     * role does not turn a credential into an owner.
+     *
+     * @param  array<string, mixed>  $manifest
+     */
+    public function resolveForRole(array $manifest, string $roleSlug): AppAccessContext
+    {
+        $permissions = $manifest['permissions'] ?? [];
+
+        $role = null;
+        foreach ($permissions['roles'] ?? [] as $candidate) {
+            if (($candidate['slug'] ?? null) === $roleSlug) {
+                $role = $candidate;
+                break;
+            }
+        }
+
+        // A key whose role was renamed or removed stops working rather than
+        // falling back to the default role — a dangling grant must never widen.
+        if ($role === null) {
+            return AppAccessContext::denied();
+        }
+
+        $roleIds = [$role['id']];
+
+        return new AppAccessContext(...[
+            'bypass' => false,
+            'hasAccess' => true,
+            'roleSlugs' => [$role['slug']],
+            'viewablePageIds' => $this->viewablePages($manifest, $permissions['page_policies'] ?? [], $roleIds, [$role['slug']]),
+            ...$this->objectCapabilities(
+                $permissions['object_policies'] ?? [],
+                $roleIds,
+                $this->slugByFieldId($manifest),
+            ),
         ]);
     }
 
