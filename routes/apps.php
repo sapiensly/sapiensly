@@ -44,6 +44,17 @@ Route::middleware([
     Route::post('/apps/{app}/builder/messages/{message}/discard-plan', [AppBuilderController::class, 'discardPlanProposal'])->name('apps.builder.messages.discard-plan');
     Route::post('/apps/{app}/builder/publish-landing', [AppBuilderController::class, 'publishLanding'])->name('apps.builder.publish-landing');
     Route::post('/apps/{app}/builder/unpublish-landing', [AppBuilderController::class, 'unpublishLanding'])->name('apps.builder.unpublish-landing');
+    // Spreadsheet import: analyze returns the plan (writes nothing), run does
+    // the work. Both take the file; neither trusts a client-supplied plan.
+    Route::post('/apps/{app}/builder/import/analyze', [AppBuilderController::class, 'importAnalyze'])
+        ->middleware('throttle:30,1')
+        ->name('apps.builder.import.analyze');
+    Route::post('/apps/{app}/builder/import/run', [AppBuilderController::class, 'importRun'])
+        ->middleware('throttle:20,1')
+        ->name('apps.builder.import.run');
+
+    Route::post('/apps/{app}/builder/publish-portal', [AppBuilderController::class, 'publishPortal'])->name('apps.builder.publish-portal');
+    Route::post('/apps/{app}/builder/unpublish-portal', [AppBuilderController::class, 'unpublishPortal'])->name('apps.builder.unpublish-portal');
     Route::post('/apps/{app}/builder/landing-domain/connect', [AppBuilderController::class, 'landingDomainConnect'])->name('apps.builder.landing-domain.connect');
     Route::post('/apps/{app}/builder/landing-domain/verify', [AppBuilderController::class, 'landingDomainVerify'])->middleware('throttle:30,1')->name('apps.builder.landing-domain.verify');
     Route::post('/apps/{app}/builder/landing-domain/disconnect', [AppBuilderController::class, 'landingDomainDisconnect'])->name('apps.builder.landing-domain.disconnect');

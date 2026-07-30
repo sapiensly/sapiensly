@@ -17,6 +17,12 @@ namespace App\Services\Apps;
  * the per-object/page maps empty and these accessors fall back to "allowed",
  * preserving the open-within-visibility behaviour of apps without authored
  * policies.
+ *
+ * $strict INVERTS that fallback, and exists for exactly one caller: the public
+ * portal, where the "user" is a stranger off the internet. There, silence in
+ * the manifest must mean NO — an object nobody wrote a policy for is invisible,
+ * a page nobody granted is unreachable. Authoring an app must never expose data
+ * by omission.
  */
 final class AppAccessContext
 {
@@ -30,6 +36,7 @@ final class AppAccessContext
      * @param  array<string, array<string, mixed>|null>  $objectRowFilters
      * @param  array<string, list<string>>  $objectHidden  field slugs
      * @param  array<string, list<string>>  $objectReadonly  field slugs
+     * @param  bool  $strict  deny-by-default: no policy ⇒ no access (public portal)
      */
     public function __construct(
         public readonly bool $bypass,
@@ -41,6 +48,7 @@ final class AppAccessContext
         private readonly array $objectRowFilters = [],
         private readonly array $objectHidden = [],
         private readonly array $objectReadonly = [],
+        public readonly bool $strict = false,
     ) {}
 
     public static function bypass(): self
@@ -63,12 +71,17 @@ final class AppAccessContext
      * fully open (within app visibility); objects WITH policies return only the
      * union granted to the user's roles (possibly empty ⇒ no access).
      *
+     * In $strict mode the no-policy case flips to DENIED — see the class note.
+     *
      * @return list<string>
      */
     public function objectActions(string $objectId): array
     {
-        if ($this->bypass || ! isset($this->objectsWithPolicies[$objectId])) {
+        if ($this->bypass) {
             return self::ACTIONS;
+        }
+        if (! isset($this->objectsWithPolicies[$objectId])) {
+            return $this->strict ? [] : self::ACTIONS;
         }
 
         return $this->objectActions[$objectId] ?? [];

@@ -62,6 +62,75 @@ class AppAccessResolver
         ]);
     }
 
+    /**
+     * The capabilities of an ANONYMOUS visitor to a public portal — a stranger
+     * with no account, no org membership and no grant.
+     *
+     * Everything about this path is deliberately narrower than {@see resolve()}:
+     * there is no administrator bypass to reach, no default-role fallback (a
+     * dangling role_id denies rather than widening), and the resulting context
+     * is `strict`, so an object or page the author never wrote a policy for is
+     * invisible instead of open. `allow_writes` is the outer gate: while it is
+     * false the portal is read-only no matter what the object policies grant,
+     * so a policy left over from an earlier design cannot open the door by
+     * itself.
+     *
+     * @param  array<string, mixed>  $manifest
+     */
+    public function resolvePublic(array $manifest): AppAccessContext
+    {
+        $permissions = $manifest['permissions'] ?? [];
+        $public = $permissions['public'] ?? null;
+
+        if (! is_array($public) || ($public['enabled'] ?? false) !== true) {
+            return AppAccessContext::denied();
+        }
+
+        $roleId = (string) ($public['role_id'] ?? '');
+        $role = null;
+        foreach ($permissions['roles'] ?? [] as $candidate) {
+            if (($candidate['id'] ?? null) === $roleId) {
+                $role = $candidate;
+                break;
+            }
+        }
+
+        // Both refusals mirror a validator rail. They are repeated here because
+        // a manifest saved before the rail existed must not become a leak the
+        // day someone publishes it.
+        if ($role === null || ($role['is_default'] ?? false) === true) {
+            return AppAccessContext::denied();
+        }
+
+        $capabilities = $this->objectCapabilities(
+            $permissions['object_policies'] ?? [],
+            [$roleId],
+            $this->slugByFieldId($manifest),
+        );
+
+        if (($public['allow_writes'] ?? false) !== true) {
+            $capabilities['objectActions'] = array_map(
+                fn (array $actions): array => array_values(array_intersect($actions, ['read'])),
+                $capabilities['objectActions'],
+            );
+        }
+
+        return new AppAccessContext(...[
+            'bypass' => false,
+            'hasAccess' => true,
+            'roleSlugs' => [$role['slug']],
+            'viewablePageIds' => $this->viewablePages(
+                $manifest,
+                $permissions['page_policies'] ?? [],
+                [$roleId],
+                [$role['slug']],
+                strict: true,
+            ),
+            ...$capabilities,
+            'strict' => true,
+        ]);
+    }
+
     private function isAdministrator(App $app, User $user): bool
     {
         if ($user->hasRole('sysadmin')) {
@@ -123,11 +192,11 @@ class AppAccessResolver
      * @param  list<string>  $roleSlugs
      * @return array<string, true>
      */
-    private function viewablePages(array $manifest, array $pagePolicies, array $userRoleIds, array $roleSlugs): array
+    private function viewablePages(array $manifest, array $pagePolicies, array $userRoleIds, array $roleSlugs, bool $strict = false): array
     {
         $viewable = [];
         foreach ($manifest['pages'] ?? [] as $page) {
-            if ($this->pageViewable($page, $pagePolicies, $userRoleIds, $roleSlugs)) {
+            if ($this->pageViewable($page, $pagePolicies, $userRoleIds, $roleSlugs, $strict)) {
                 $viewable[$page['id']] = true;
             }
         }
@@ -139,12 +208,15 @@ class AppAccessResolver
      * A page is viewable iff its visibility rule (if any) passes AND, when
      * page_policies exist for it, one of the user's roles is granted can_view.
      *
+     * A page with NO policy at all is viewable for an org member and NOT for a
+     * public visitor ($strict) — see the note on {@see AppAccessContext}.
+     *
      * @param  array<string, mixed>  $page
      * @param  list<array<string, mixed>>  $pagePolicies
      * @param  list<string>  $userRoleIds
      * @param  list<string>  $roleSlugs
      */
-    private function pageViewable(array $page, array $pagePolicies, array $userRoleIds, array $roleSlugs): bool
+    private function pageViewable(array $page, array $pagePolicies, array $userRoleIds, array $roleSlugs, bool $strict = false): bool
     {
         $rule = $page['visibility'] ?? null;
         if (is_array($rule) && ! empty($rule['roles']) && array_intersect($roleSlugs, $rule['roles']) === []) {
@@ -153,7 +225,7 @@ class AppAccessResolver
 
         $forPage = array_filter($pagePolicies, fn (array $p): bool => ($p['page_id'] ?? null) === ($page['id'] ?? null));
         if ($forPage === []) {
-            return true;
+            return ! $strict;
         }
 
         foreach ($forPage as $policy) {

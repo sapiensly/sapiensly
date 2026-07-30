@@ -6,9 +6,9 @@ use App\Models\App;
 use App\Services\Manifest\AppManifestService;
 use App\Services\Records\RecordValidationException;
 use App\Services\Records\RecordWriteService;
+use App\Support\Http\Turnstile;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
 /**
@@ -190,31 +190,8 @@ class PublicLeadController extends Controller
             ?? 'Listo — un agente ya está revisando tu solicitud. Te contactamos en breve.');
     }
 
-    /**
-     * Cloudflare Turnstile verification. Skipped entirely when no secret is
-     * configured (local/dev), so the honeypot + throttle remain the floor.
-     */
     private function passesTurnstile(Request $request, string $token): bool
     {
-        $secret = (string) (config('services.turnstile.secret_key') ?? '');
-        if ($secret === '') {
-            return true;
-        }
-        if ($token === '') {
-            return false;
-        }
-
-        try {
-            $response = Http::asForm()->timeout(5)->post(
-                'https://challenges.cloudflare.com/turnstile/v0/siteverify',
-                ['secret' => $secret, 'response' => $token, 'remoteip' => $request->ip()],
-            );
-
-            return (bool) ($response->json('success') ?? false);
-        } catch (\Throwable) {
-            // Verification outage: fail OPEN with the honeypot+throttle floor
-            // still in place — a lost lead costs more than a spam row.
-            return true;
-        }
+        return Turnstile::passes($request, $token);
     }
 }

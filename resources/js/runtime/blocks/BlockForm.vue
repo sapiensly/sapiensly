@@ -52,7 +52,7 @@ const { execute } = useActionExecutor();
 // App slug travels via inject from the runtime page; falls back to URL parsing.
 const appSlug = inject<string>('appSlug', deriveSlugFromUrl());
 function deriveSlugFromUrl(): string {
-    const m = window.location.pathname.match(/^\/r\/([a-z][a-z0-9_]*)/);
+    const m = window.location.pathname.match(/^\/[ra]\/([a-z0-9][a-z0-9_-]*)/);
     return m?.[1] ?? '';
 }
 

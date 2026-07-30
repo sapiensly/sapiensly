@@ -2,11 +2,14 @@
 
 use App\Http\Controllers\AccountSwitchController;
 use App\Http\Controllers\LandingRenderController;
+use App\Http\Controllers\PublicAppActionController;
+use App\Http\Controllers\PublicAppController;
 use App\Http\Controllers\PublicLandingController;
 use App\Http\Controllers\PublicLeadController;
 use App\Http\Controllers\Settings\OrganizationBrandController;
 use App\Http\Controllers\Tools\ToolOAuth2Controller;
 use App\Http\Controllers\WidgetAssetController;
+use App\Http\Middleware\BindPublicAppContext;
 use App\Http\Middleware\BindPublicLandingContext;
 use App\Services\Landing\CustomDomainService;
 use App\Support\Tenancy\TenantContext;
@@ -61,6 +64,25 @@ Route::post('l/{public_slug}/lead', PublicLeadController::class)
     ->where('public_slug', '[a-z0-9][a-z0-9_-]*')
     ->middleware([BindPublicLandingContext::class, 'throttle:10,1'])
     ->name('landing.public.lead');
+
+// Public app PORTALS (public, no auth). BindPublicAppContext resolves the app
+// by its globally-unique public slug and 404s anything unpublished, landing-
+// shaped, or whose active manifest no longer opens the portal — closing it in
+// the manifest takes the URL down the same second, without a second act.
+// Throttled — this is an internet-facing surface.
+Route::get('a/{public_slug}/{page_slug?}', PublicAppController::class)
+    ->where('public_slug', '[a-z0-9][a-z0-9_-]*')
+    ->where('page_slug', '[a-z][a-z0-9_]*')
+    ->middleware([BindPublicAppContext::class, 'throttle:120,1'])
+    ->name('portal.public');
+
+// The portal's write path. Same publish gate; tighter throttle (it writes), and
+// permissions.public.allow_writes + the visitor role's per-object grants +
+// honeypot/Turnstile inside the controller.
+Route::post('a/{public_slug}/actions', PublicAppActionController::class)
+    ->where('public_slug', '[a-z0-9][a-z0-9_-]*')
+    ->middleware([BindPublicAppContext::class, 'throttle:20,1'])
+    ->name('portal.public.actions');
 
 // Signed headless-render of an owner's landing (published OR draft) for
 // HeadlessLandingShot's Browsershot capture. No session — the tenant scope

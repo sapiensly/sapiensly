@@ -19,6 +19,7 @@ use App\Services\AiProviderService;
 use App\Services\Apps\AppAccessResolver;
 use App\Services\Apps\AppNamer;
 use App\Services\Apps\BlockVisibilityFilter;
+use App\Services\Apps\PortalPublisher;
 use App\Services\Builder\BuilderAiService;
 use App\Services\Builder\BuilderCancellation;
 use App\Services\Builder\BuildPlan;
@@ -28,6 +29,8 @@ use App\Services\Builder\WireframeImporter;
 use App\Services\Express\ExpressIntentRouter;
 use App\Services\Express\ExpressLauncher;
 use App\Services\Express\LabelGrounding;
+use App\Services\Import\ImportPlan;
+use App\Services\Import\ImportService;
 use App\Services\Landing\CustomDomainService;
 use App\Services\Landing\DraftPreviewShot;
 use App\Services\Landing\LandingPublisher;
@@ -194,6 +197,38 @@ class AppBuilderController extends Controller
     }
 
     /**
+     * The portal the manifest declares, summarised for the builder panel: is it
+     * open, which role does a visitor assume, may they write, and how many pages
+     * would they actually reach. Null when the app declares no portal at all.
+     *
+     * The page count is the number that matters and the one nobody expects:
+     * a portal is deny-by-default, so zero granted pages means the URL would
+     * publish an empty room.
+     *
+     * @param  array<string, mixed>  $manifest
+     * @return array{enabled: bool, role: string|null, allow_writes: bool, pages: int}|null
+     */
+    private static function portalSummary(array $manifest): ?array
+    {
+        $public = $manifest['permissions']['public'] ?? null;
+        if (! is_array($public)) {
+            return null;
+        }
+
+        $roleId = (string) ($public['role_id'] ?? '');
+        $role = collect($manifest['permissions']['roles'] ?? [])->firstWhere('id', $roleId);
+
+        return [
+            'enabled' => ($public['enabled'] ?? false) === true,
+            'role' => $role['name'] ?? null,
+            'allow_writes' => ($public['allow_writes'] ?? false) === true,
+            'pages' => collect($manifest['permissions']['page_policies'] ?? [])
+                ->filter(fn ($p): bool => ($p['role_id'] ?? null) === $roleId && ($p['can_view'] ?? true) === true)
+                ->count(),
+        ];
+    }
+
+    /**
      * The recent version history for the Layers explorer — a compact timeline of
      * what changed, newest first, with the current version flagged.
      *
@@ -329,6 +364,10 @@ class AppBuilderController extends Controller
             'settings' => $settings,
             // Author CSS scoped to the app surface — preview mirrors the runtime.
             'custom_css' => ScopedAppCss::compile($settings['custom_css'] ?? null),
+            // What the manifest currently promises a stranger, so the portal
+            // panel can state it plainly instead of showing a publish button
+            // whose consequences live three files away.
+            'portal' => self::portalSummary($manifest),
         ];
 
         return [
@@ -2535,6 +2574,137 @@ class AppBuilderController extends Controller
         $this->assertCanAccess($request, $app);
 
         app(LandingPublisher::class)->unpublish($app);
+
+        return response()->json(['published' => false]);
+    }
+
+    /**
+     * Read an uploaded spreadsheet and return the PLAN — what would be created,
+     * which column becomes which field, what would be skipped. Writes nothing.
+     *
+     * Analyse and import are two stateless requests, and the client re-sends the
+     * file on the second. Parking the upload server-side between them would buy
+     * one saved transfer and cost a token to mint, a stale file to expire and a
+     * confirm that can act on a file the user already replaced.
+     */
+    public function importAnalyze(Request $request, App $app): JsonResponse
+    {
+        $this->assertCanAccess($request, $app);
+
+        $data = $request->validate([
+            'file' => ['required', 'file', 'mimes:csv,txt,tsv,xlsx,xls,ods', 'max:15360'],
+            'object_slug' => ['nullable', 'string'],
+            'object_name' => ['nullable', 'string', 'max:80'],
+            'upsert_key' => ['nullable', 'string'],
+        ]);
+
+        $file = $request->file('file');
+        $imports = app(ImportService::class);
+
+        try {
+            $sheet = $imports->readFile($file->getRealPath(), $file->getClientOriginalName());
+        } catch (\Throwable $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
+        }
+
+        if ($sheet->headers === [] || $sheet->rows === []) {
+            return response()->json([
+                'message' => 'That file has no readable rows — the first row must name the columns.',
+            ], 422);
+        }
+
+        try {
+            $plan = $imports->plan(
+                $app,
+                $sheet,
+                objectSlug: $data['object_slug'] ?? null,
+                upsertKeyHeader: $data['upsert_key'] ?? null,
+                objectName: $data['object_name'] ?? pathinfo((string) $file->getClientOriginalName(), PATHINFO_FILENAME),
+            );
+        } catch (\InvalidArgumentException $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
+        }
+
+        return response()->json(['plan' => $plan->toArray()]);
+    }
+
+    /**
+     * Import the rows. The plan is rebuilt server-side from the same file and
+     * the same choices — the client sends what the user PICKED, never the plan
+     * itself, so a tampered payload cannot map a column onto a field the
+     * planner would never have offered.
+     */
+    public function importRun(Request $request, App $app): JsonResponse
+    {
+        $this->assertCanAccess($request, $app);
+
+        $data = $request->validate([
+            'file' => ['required', 'file', 'mimes:csv,txt,tsv,xlsx,xls,ods', 'max:15360'],
+            'object_slug' => ['nullable', 'string'],
+            'object_name' => ['nullable', 'string', 'max:80'],
+            'upsert_key' => ['nullable', 'string'],
+            // header => field slug, when the user corrected a match.
+            'overrides' => ['nullable', 'array'],
+            'overrides.*' => ['string'],
+        ]);
+
+        $file = $request->file('file');
+        $imports = app(ImportService::class);
+
+        try {
+            $sheet = $imports->readFile($file->getRealPath(), $file->getClientOriginalName());
+            $plan = $imports->plan(
+                $app,
+                $sheet,
+                objectSlug: $data['object_slug'] ?? null,
+                overrides: $data['overrides'] ?? [],
+                upsertKeyHeader: $data['upsert_key'] ?? null,
+                objectName: $data['object_name'] ?? pathinfo((string) $file->getClientOriginalName(), PATHINFO_FILENAME),
+            );
+            $result = $imports->run($app, $sheet, $plan, $request->user());
+        } catch (\InvalidArgumentException|\RuntimeException $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
+        }
+
+        return response()->json([
+            'result' => $result->toArray(),
+            'summary' => $result->summary(),
+            'object' => ['slug' => $plan->object['slug'], 'name' => $plan->object['name']],
+            'created_object' => $plan->mode === ImportPlan::MODE_CREATE,
+        ]);
+    }
+
+    /**
+     * Open a regular app as a public portal at /a/{public_slug}. Deliberately a
+     * human act in the builder rather than something a builder turn can do:
+     * authoring who may see what and putting tenant data on the internet are
+     * different decisions. Same lifecycle as the MCP publish_portal tool.
+     */
+    public function publishPortal(Request $request, App $app): JsonResponse
+    {
+        $this->assertCanAccess($request, $app);
+
+        try {
+            $result = app(PortalPublisher::class)->publish($app);
+        } catch (\InvalidArgumentException $e) {
+            return response()->json(['error' => 'portal_not_configured', 'message' => $e->getMessage()], 422);
+        }
+
+        return response()->json([
+            'published' => true,
+            'public_slug' => $result['public_slug'],
+            'url' => $result['url'],
+            'role' => $result['role'],
+            'writes' => $result['writes'],
+        ]);
+    }
+
+    /** Take the portal off the public internet — its /a URL starts returning 404. */
+    public function unpublishPortal(Request $request, App $app): JsonResponse
+    {
+        $this->assertCanAccess($request, $app);
+
+        app(PortalPublisher::class)->unpublish($app);
 
         return response()->json(['published' => false]);
     }

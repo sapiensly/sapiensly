@@ -284,6 +284,48 @@ PERMISSIONS & ACCESS (roles, policies, access mode — ENFORCED at runtime):
 }
 TXT,
 
+        'import' => <<<'TXT'
+IMPORTING REAL DATA (spreadsheets → objects):
+- `import_spreadsheet` is how an empty app becomes the user's actual business. Use it the moment they mention having their data "en un Excel / en Sheets / en un CSV" — do NOT offer to type it in, and do NOT invent demo data when a real file is on offer.
+- INPUT: `url` (a Google Sheets share link, or any CSV/XLSX URL — the Sheets editor link is converted to its CSV export for you) OR `content` (delimited text the user pasted). One or the other, never both.
+- TWO MODES: leave `object_slug` empty and the FILE defines a new object — every column becomes a field typed from its real values (a "Precio" column of "1.200,50" becomes `currency`, "25/12/2026" becomes `date`, a column of 3 repeating words becomes a choice list). Pass `object_slug` to load an object that already exists — columns match fields by name (accents and spaces folded, so «Correo Electrónico» finds `correo_electronico`) and anything unmatched is REPORTED AS SKIPPED, never invented as a new field. Adding fields to a live object is a schema change; make it deliberately with propose_change if the user wants it.
+- DRY RUN FIRST when you have not seen the data: `dry_run: true` returns the inferred schema, the per-column mapping, sample rows and warnings WITHOUT writing. Show the user what you found (especially the types) and import on the next turn. Skip the dry run only when they explicitly said "impórtalo".
+- RE-IMPORTS: `upsert_key_column` (a column NAME from the file, e.g. "Código" or "Email") updates records that match instead of creating duplicates. ALWAYS pass it when the user is re-uploading a corrected or updated version of a file they already imported — without it they get a second copy of everything.
+- REPORT HONESTLY. The response carries created/updated/failed counts and lists failing rows BY THEIR LINE NUMBER in the file. Say "importé 240 filas; 3 fallaron (líneas 18, 92, 401: el correo no es válido)" — never round a partial import up to a success, and never hide skipped columns. If the file was truncated (over the row cap) say that too.
+- WHAT IT WON'T DO: it never writes derived fields (formula/lookup/rollup are computed on read — a stale value from a spreadsheet would shadow the real one), and it never creates fields on an existing object. A relation column DOES work: a value naming an existing record ("Acme Corp") resolves to that record, and a value matching none is reported as a failed row rather than a dangling reference.
+- AFTER IMPORTING, build on it: the object is real and populated, so go straight to `add_crud_page` for a list screen or `add_dashboard_page` for analysis. Do not seed demo data on top of imported data.
+TXT,
+
+        'public_portal' => <<<'TXT'
+PUBLIC PORTALS (opening an app to people with NO account):
+- WHAT IT IS: `permissions.public` turns a regular app into a portal reachable at /a/{public_slug} by anyone on the internet — a customer status page, an order tracker, a public request form, a supplier directory. This is the ONLY way tenant data reaches someone who is not an org member. A LANDING is a different thing (a marketing page at /l/{slug}, published with publish_landing) and the validator rejects `permissions.public` on a landing surface.
+- THE SHAPE: `permissions.public = {enabled: true, role_id: "rol_…", allow_writes: false}`. `role_id` is the role a VISITOR assumes.
+- DENY BY DEFAULT — this is the rule that matters, and it INVERTS the normal one. For an org member, an object or page with no policy is OPEN. For a visitor it is INVISIBLE. So authoring a portal is not "restrict what strangers shouldn't see", it is "grant, one by one, the few things they should". A page with no page_policy granting the visitor role can_view does not exist for them; an object with no object_policy for that role returns nothing.
+- FOUR RAILS, ENFORCED AT SAVE TIME (fix them, don't work around them):
+  1. `role_id` must be a declared role. 2. It must NOT be the `is_default` role — that is the role org members fall back to, and handing it to the internet grants strangers whatever staff can reach. Declare a dedicated `visitor`/`cliente` role. 3. With `enabled:true` at least one page_policy must grant that role can_view, or the portal would show a visitor nothing. 4. While `allow_writes` is false, granting the visitor role create/update/delete is rejected — the manifest must not claim a permission the runtime will ignore.
+- WRITES: `allow_writes: true` is the outer gate; each write is then gated by the create/update/delete the visitor role holds on that specific object. `run_workflow` is REFUSED from a public page whatever the manifest says — a workflow can call connectors and spend model tokens, so a stranger never triggers one directly. Automation still reaches a portal submission the right way: put a `record.created` trigger on the object the visitor writes, exactly like a landing lead. Honeypot + Turnstile + throttling are built into the public endpoint.
+- NO CURRENT USER: a visitor has no identity, so `{{current_user.id}}` resolves to null. A row_filter written against it matches NOTHING — which is the safe direction, but it means "each customer sees only their own rows" is NOT expressible with an anonymous portal. Scope a portal by a value in the URL instead (a page param filtered on a token-ish field), or keep the portal to genuinely public data.
+- THE EMBEDDED AGENT never mounts on a portal (it is session-authenticated and bills per message).
+- PUBLISHING IS A SECOND, EXPLICIT ACT: setting `enabled:true` does NOT put the app online — call `publish_portal` (or the builder's portal panel) for that, and only when the user actually asked. Conversely, removing `permissions.public` takes the URL down the same second, with no unpublish needed.
+- WORKED SNIPPET (a public order-status page; visitors read tickets minus the internal notes, and submit new ones):
+{
+  "permissions": {
+    "public": { "enabled": true, "role_id": "rol_visitorrole1", "allow_writes": true },
+    "roles": [
+      { "id": "rol_staffrole001", "slug": "staff", "name": "Staff", "is_default": true },
+      { "id": "rol_visitorrole1", "slug": "visitor", "name": "Visitante", "is_default": false }
+    ],
+    "object_policies": [
+      { "object_id": "obj_ticketsobject", "role_id": "rol_visitorrole1", "actions": ["read","create"],
+        "field_restrictions": { "hidden": ["fld_internalnotes01"] } }
+    ],
+    "page_policies": [
+      { "page_id": "pag_statuspage01", "role_id": "rol_visitorrole1", "can_view": true }
+    ]
+  }
+}
+TXT,
+
         'example' => <<<'TXT'
 WORKED EXAMPLE — a COMPLETE valid "Mini CRM" manifest (this exact thing passes validation). The placeholder ids are valid; generate your own `<prefix>_<token>` ids — a 2-5 lowercase-letter prefix, an underscore, then 8-60 chars of [a-z0-9_] (a lowercased ULID is one easy choice, but ANY opaque lowercase token in that range is accepted; it does NOT need to be exactly 26 chars or valid base32). Pattern-match this SHAPE instead of reasoning the schema from scratch. Note the EXACT keys that trip people up: `schema_version` is a string "1.0.0" (not a number); top level REQUIRES id, version and permissions; single_select options use `value`+`label` (NOT slug); a `heading` block uses `content` (not text); a `page` requires `path` (starts with "/"). There is no `email` or `text` field type — use `string`.
 

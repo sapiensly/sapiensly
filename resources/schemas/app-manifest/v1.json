@@ -6729,6 +6729,31 @@
                     "default": "open",
                     "description": "How org members reach this app. 'open' (default): every member who can see the app gets the default role; assignments only elevate. 'allowlist': only members with an explicit role assignment may use the app; everyone else is denied entry."
                 },
+                "public": {
+                    "type": "object",
+                    "required": [
+                        "enabled",
+                        "role_id"
+                    ],
+                    "additionalProperties": false,
+                    "description": "Opens this app as a PUBLIC PORTAL: anyone on the internet, with no account, reaches it at /a/{public_slug} once published. access_mode above governs org members; this governs strangers, and it is deny-by-default — a visitor sees ONLY what page_policies and object_policies grant to role_id explicitly. An object or page with no policy is invisible to them, the inverse of the member default.",
+                    "properties": {
+                        "enabled": {
+                            "type": "boolean",
+                            "default": false,
+                            "description": "Whether the portal is open. Publishing is still a separate, explicit act — this alone does not put the app online."
+                        },
+                        "role_id": {
+                            "$ref": "#/$defs/id",
+                            "description": "The role an anonymous visitor assumes. Must be a declared role, and must NOT be the is_default role — the role members fall back to is not the role to hand the internet."
+                        },
+                        "allow_writes": {
+                            "type": "boolean",
+                            "default": false,
+                            "description": "Whether visitors may submit data (forms, record actions). False (default) makes the portal read-only whatever the object policies say. When true, each write is still gated by the create/update/delete actions granted to role_id."
+                        }
+                    }
+                },
                 "roles": {
                     "type": "array",
                     "minItems": 1,

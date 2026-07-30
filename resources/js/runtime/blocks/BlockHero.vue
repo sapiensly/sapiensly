@@ -86,7 +86,7 @@ const heroStat = computed(() => {
 
 const appSlug = inject<string>('appSlug', deriveSlugFromUrl());
 function deriveSlugFromUrl(): string {
-    const m = window.location.pathname.match(/^\/r\/([a-z][a-z0-9_]*)/);
+    const m = window.location.pathname.match(/^\/[ra]\/([a-z0-9][a-z0-9_-]*)/);
     return m?.[1] ?? '';
 }
 

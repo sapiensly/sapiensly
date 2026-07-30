@@ -311,6 +311,12 @@ export interface RuntimePageProps {
     params?: Record<string, string | string[]>;
     /** Author CSS, already compiled + scoped to `.sp-app-surface` (may be ''). */
     customCss?: string;
+    /**
+     * URL prefix this app is served under, so nav links and action POSTs stay
+     * on the surface the visitor is on. Defaults to `/r/{app.slug}` (the
+     * authenticated runtime); a public portal passes `/a/{public_slug}`.
+     */
+    mount?: string;
     /** Head metadata resolved by the public landing controller. */
     seo?: { title?: string; description?: string; og_image?: string };
     /** True on the public (unauthenticated) landing surface — enables lead_form submits. */

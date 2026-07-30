@@ -2,6 +2,7 @@
 import * as AppController from '@/actions/App/Http/Controllers/AppController';
 import DesktopOnlyNotice from '@/components/app-v2/DesktopOnlyNotice.vue';
 import AppAccessPanel from '@/components/apps/AppAccessPanel.vue';
+import ImportPanel from '@/components/apps/builder/ImportPanel.vue';
 import LandingLinksPanel from '@/components/apps/builder/LandingLinksPanel.vue';
 import BuildPlanCard from '@/components/apps/BuildPlanCard.vue';
 import LayersExplorer from '@/components/apps/LayersExplorer.vue';
@@ -96,6 +97,7 @@ import {
     Download,
     Eye,
     FileCode2,
+    FileSpreadsheet,
     FileText,
     GripHorizontal,
     GripVertical,
@@ -179,6 +181,17 @@ interface Preview {
     objects: ObjectDef[];
     settings: { default_locale?: string; default_currency?: string };
     custom_css?: string;
+    /**
+     * The public portal this manifest declares, or null when it declares none.
+     * `pages` is how many pages the visitor role actually reaches — a portal is
+     * deny-by-default, so zero is a real (and otherwise silent) outcome.
+     */
+    portal?: {
+        enabled: boolean;
+        role: string | null;
+        allow_writes: boolean;
+        pages: number;
+    } | null;
 }
 
 // Local mirrors of SiteSidebar's `navItems` / `pages` prop shapes, so the
@@ -2524,6 +2537,62 @@ async function unpublishLanding() {
         publishBusy.value = false;
     }
 }
+
+// Spreadsheet import. Opened from the header; the panel owns the whole flow
+// (analyse → review → import) and reports back so the preview re-reads the
+// manifest, since importing into a new object changes the schema.
+const importOpen = ref(false);
+function onImported() {
+    router.reload({
+        only: ['preview', 'previewBlockData', 'manifest', 'schema'],
+    });
+}
+
+// Public PORTAL: a regular (non-landing) app opened to people with no account.
+// The manifest declares who may see what; this only decides whether the app is
+// on the internet — deliberately a human act, not something a builder turn does.
+const portal = computed(
+    () =>
+        (props.preview?.portal ?? null) as {
+            enabled: boolean;
+            role: string | null;
+            allow_writes: boolean;
+            pages: number;
+        } | null,
+);
+const portalPublicSlug = ref<string | null>(
+    props.app.kind === 'landing' ? null : (props.app.public_slug ?? null),
+);
+async function publishPortal() {
+    if (publishBusy.value) return;
+    publishBusy.value = true;
+    publishError.value = '';
+    try {
+        const { data } = await axios.post(
+            `/apps/${props.app.id}/builder/publish-portal`,
+        );
+        portalPublicSlug.value = data.public_slug ?? null;
+    } catch (e) {
+        publishError.value =
+            (e as { response?: { data?: { message?: string } } }).response?.data
+                ?.message ?? t('apps.builder.publish_failed');
+    } finally {
+        publishBusy.value = false;
+    }
+}
+async function unpublishPortal() {
+    if (publishBusy.value) return;
+    publishBusy.value = true;
+    publishError.value = '';
+    try {
+        await axios.post(`/apps/${props.app.id}/builder/unpublish-portal`);
+        portalPublicSlug.value = null;
+    } catch {
+        publishError.value = t('apps.builder.publish_failed');
+    } finally {
+        publishBusy.value = false;
+    }
+}
 // Custom domain panel: connect the tenant's own hostname to this landing,
 // verify DNS until active, disconnect. Same server path as the MCP
 // manage_landing_domain tool (shared CustomDomainService).
@@ -4230,12 +4299,78 @@ function statusTone(status: Message['status']): string {
                         </div>
                     </template>
 
+                    <!-- Public PORTAL controls: shown only once the manifest
+                         actually declares one, so the button to put tenant data
+                         on the internet never appears by accident. The chip
+                         states what a visitor gets — the role, read vs write,
+                         and how many pages they reach (a portal is
+                         deny-by-default, so zero is a real and silent outcome). -->
+                    <template v-else-if="portal">
+                        <span
+                            class="hidden h-5 w-px bg-current opacity-15 lg:inline-block"
+                        />
+                        <template v-if="portalPublicSlug">
+                            <a
+                                :href="`/a/${portalPublicSlug}`"
+                                target="_blank"
+                                rel="noopener"
+                                class="inline-flex items-center gap-1.5 rounded-pill border border-accent-blue/30 bg-accent-blue/10 px-3 py-1.5 text-xs font-medium text-accent-blue transition-colors hover:bg-accent-blue/20"
+                                :title="`/a/${portalPublicSlug}`"
+                            >
+                                <Rocket class="size-3.5" />
+                                {{ t('apps.builder.portal_live') }}
+                            </a>
+                            <button
+                                type="button"
+                                :disabled="publishBusy"
+                                class="inline-flex items-center rounded-pill border border-medium bg-surface px-3 py-1.5 text-xs text-ink-muted transition-colors hover:text-ink disabled:opacity-50"
+                                @click="unpublishPortal"
+                            >
+                                {{ t('apps.builder.unpublish_portal') }}
+                            </button>
+                        </template>
+                        <button
+                            v-else
+                            type="button"
+                            :disabled="publishBusy || !portal.enabled"
+                            class="inline-flex items-center gap-1.5 rounded-pill border border-accent-blue/30 bg-accent-blue/10 px-3 py-1.5 text-xs font-medium text-accent-blue transition-colors hover:bg-accent-blue/20 disabled:opacity-50"
+                            :title="publishError || undefined"
+                            @click="publishPortal"
+                        >
+                            <Rocket class="size-3.5" />
+                            {{ t('apps.builder.publish_portal') }}
+                        </button>
+                        <span class="text-[11px] text-ink-muted">
+                            {{
+                                t('apps.builder.portal_scope', {
+                                    role: portal.role ?? '—',
+                                    pages: portal.pages,
+                                    mode: portal.allow_writes
+                                        ? t('apps.builder.portal_writes')
+                                        : t('apps.builder.portal_read_only'),
+                                })
+                            }}
+                        </span>
+                    </template>
+
                     <!-- Run the app in its real runtime, in a fresh tab. Uses the
                          LIVE slug (appMeta), not the page prop: the first prompt
                          renames the app and changes its slug, so `app.slug` from
                          the initial props points at the old (untitled) slug and
                          404s until a reload. Hidden for landings — their real
                          surface is the public /l URL (the "En vivo" chip). -->
+                    <!-- Load the user's real data. Hidden on a landing, which
+                         has no objects to import into. -->
+                    <button
+                        v-if="!previewIsLanding"
+                        type="button"
+                        class="inline-flex items-center gap-1.5 rounded-pill border border-medium bg-surface px-3 py-1.5 text-xs text-ink-muted transition-colors hover:text-ink"
+                        @click="importOpen = true"
+                    >
+                        <FileSpreadsheet class="size-3.5" />
+                        {{ t('apps.builder.import.button') }}
+                    </button>
+
                     <a
                         v-if="!previewIsLanding"
                         :href="`/r/${appMeta.slug}`"
@@ -6189,6 +6324,22 @@ function statusTone(status: Message['status']): string {
                 />
             </SheetContent>
         </Sheet>
+
+        <!-- Spreadsheet import: upload, review what each column would become,
+             then commit. Mounted only while open so the flow starts clean. -->
+        <ImportPanel
+            v-if="importOpen"
+            :app-id="props.app.id"
+            :objects="
+                (preview?.objects ?? []) as {
+                    id: string;
+                    slug: string;
+                    name: string;
+                }[]
+            "
+            @close="importOpen = false"
+            @imported="onImported"
+        />
     </AppLayoutV2>
 </template>
 

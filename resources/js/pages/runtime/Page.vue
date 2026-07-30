@@ -203,10 +203,15 @@ const contentBlocks = computed<AnyBlock[]>(() => {
     return blocks;
 });
 
-const hrefFor = (slug: string) => `/r/${props.app.slug}/${slug}`;
+// Where this app is mounted. The authenticated runtime lives at /r/{app slug};
+// a public portal lives at /a/{public slug} and passes its own mount, so every
+// nav link and every action POST stays inside the surface the visitor is on.
+const mount = computed(() => props.mount ?? `/r/${props.app.slug}`);
+const hrefFor = (slug: string) => `${mount.value}/${slug}`;
 
-// Provide the App slug so BlockForm/BlockButton can POST to /r/{slug}/actions.
-provide('appSlug', props.app.slug);
+// Provide the slug the app is addressed by so BlockForm/BlockButton can POST to
+// <mount>/actions — the public slug on a portal, the app slug in the runtime.
+provide('appSlug', mount.value.split('/')[2] ?? props.app.slug);
 // Public-surface flags for the lead_form block: live submits happen only on
 // the published /l page; the preview/authenticated runtime render it disabled.
 provide('publicSurface', props.publicSurface ?? false);
@@ -234,9 +239,13 @@ useScrollReveal(sectionsEl);
 onMounted(() => {
     const ready = () =>
         requestAnimationFrame(() => {
-            (window as unknown as { __spLandingReady?: boolean }).__spLandingReady = true;
+            (
+                window as unknown as { __spLandingReady?: boolean }
+            ).__spLandingReady = true;
         });
-    const fonts = (document as unknown as { fonts?: { ready?: Promise<unknown> } }).fonts;
+    const fonts = (
+        document as unknown as { fonts?: { ready?: Promise<unknown> } }
+    ).fonts;
     if (fonts?.ready) {
         fonts.ready.then(ready, ready);
     } else {

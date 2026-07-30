@@ -1,0 +1,111 @@
+<?php
+
+namespace App\Services\Import;
+
+use App\Models\App;
+use App\Models\User;
+use App\Services\Manifest\AppManifestService;
+use InvalidArgumentException;
+
+/**
+ * The whole import, in the two steps a user experiences it as: PLAN (what would
+ * happen) and RUN (make it happen). Every surface — the builder upload, the
+ * builder AI tool, MCP — goes through this, so a file imported by a person and
+ * the same file imported by an agent produce the same schema and the same rows.
+ *
+ * The split matters. Analysing is free and reversible; importing five thousand
+ * rows under the wrong types is neither. Nothing here writes until run().
+ */
+class ImportService
+{
+    public function __construct(
+        private readonly SpreadsheetReader $reader,
+        private readonly ImportPlanner $planner,
+        private readonly RecordImporter $importer,
+        private readonly AppManifestService $manifests,
+    ) {}
+
+    public function readFile(string $path, ?string $originalName = null): SheetData
+    {
+        return $this->reader->readFile($path, $originalName);
+    }
+
+    public function readString(string $contents): SheetData
+    {
+        return $this->reader->readString($contents);
+    }
+
+    /**
+     * Plan the import. With no `$objectSlug` the file defines a NEW object;
+     * with one, it feeds an object that already exists.
+     *
+     * @param  array<string, string>  $overrides  header => field slug
+     *
+     * @throws InvalidArgumentException when the named object does not exist
+     */
+    public function plan(
+        App $app,
+        SheetData $sheet,
+        ?string $objectSlug = null,
+        array $overrides = [],
+        ?string $upsertKeyHeader = null,
+        ?string $objectName = null,
+    ): ImportPlan {
+        if ($objectSlug === null) {
+            return $this->planner->planNewObject($sheet, $objectName ?: 'Datos importados');
+        }
+
+        $manifest = $this->manifests->getActiveManifest($app) ?? [];
+        $object = $this->findObject($manifest, $objectSlug);
+
+        if ($object === null) {
+            throw new InvalidArgumentException("This app has no object '{$objectSlug}'.");
+        }
+
+        return $this->planner->planExistingObject($sheet, $object, $overrides, $upsertKeyHeader);
+    }
+
+    /**
+     * Execute a plan. When it creates an object, the schema change is committed
+     * as its own manifest version FIRST — so if the row import then goes badly,
+     * the user is left with a real, reviewable, revertible object rather than
+     * rows referring to a schema that was never saved.
+     */
+    public function run(App $app, SheetData $sheet, ImportPlan $plan, ?User $user = null): ImportResult
+    {
+        $manifest = $this->manifests->getActiveManifest($app);
+        if ($manifest === null) {
+            throw new InvalidArgumentException('This app has no manifest to import into.');
+        }
+
+        if ($plan->mode === ImportPlan::MODE_CREATE) {
+            $manifest['objects'][] = $plan->object;
+            $this->manifests->createVersion(
+                $app,
+                $manifest,
+                $user,
+                'Imported the object «'.$plan->object['name'].'» from a file',
+            );
+            // Re-read so the import writes against the manifest as SAVED
+            // (ids filled, defaults applied) rather than the draft in memory.
+            $manifest = $this->manifests->getActiveManifest($app->refresh()) ?? $manifest;
+        }
+
+        return $this->importer->import($app, $manifest, $plan, $sheet, $user);
+    }
+
+    /**
+     * @param  array<string, mixed>  $manifest
+     * @return array<string, mixed>|null
+     */
+    private function findObject(array $manifest, string $slugOrId): ?array
+    {
+        foreach ($manifest['objects'] ?? [] as $object) {
+            if (($object['slug'] ?? null) === $slugOrId || ($object['id'] ?? null) === $slugOrId) {
+                return $object;
+            }
+        }
+
+        return null;
+    }
+}

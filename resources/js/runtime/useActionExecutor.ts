@@ -83,35 +83,56 @@ export const blockDataBus = new BlockDataBus();
 /** The current page slug from the runtime URL (/r/{app}/{page}), or undefined. */
 function currentPageSlug(): string | undefined {
     const m = window.location.pathname.match(
-        /^\/r\/[a-z][a-z0-9_]*\/([a-z][a-z0-9_]*)/,
+        /^\/[ra]\/[a-z0-9][a-z0-9_-]*\/([a-z][a-z0-9_]*)/,
     );
     return m?.[1];
+}
+
+/**
+ * Where this app is mounted: `/r/{slug}` for the authenticated runtime,
+ * `/a/{public_slug}` for a public portal.
+ *
+ * Read from the URL rather than passed down, because the mount is a fact about
+ * the page the visitor is ON — and every caller of this module is a click
+ * handler, so the browser is always there to ask. The ctx.appSlug form is the
+ * fallback for a non-browser context and for anything served outside the two
+ * known mounts.
+ */
+function mountFor(ctx: ExecutionContext): string {
+    if (typeof window !== 'undefined') {
+        const m = window.location.pathname.match(
+            /^\/(r|a)\/([a-z0-9][a-z0-9_-]*)/,
+        );
+        if (m) return `/${m[1]}/${m[2]}`;
+    }
+    return `/r/${ctx.appSlug}`;
 }
 
 /**
  * Resolve a navigate `to` into a real in-app URL. A manifest authors page links
  * as a page reference ("pos", "/pos", "pos?order=1"), NOT the full runtime path
  * — but `router.visit("/pos")` would hit the host root and 404 (the app is
- * mounted under /r/{appSlug}/). So we rebase any in-app reference onto
- * /r/{appSlug}/<page>. Genuinely external/absolute URLs and already-rebased
- * (/r/…) paths pass through untouched.
+ * mounted under its own prefix). So we rebase any in-app reference onto
+ * <mount>/<page>. Genuinely external/absolute URLs and already-rebased
+ * (/r/…, /a/…) paths pass through untouched.
  */
 function resolveNavTo(to: string, ctx: ExecutionContext): string {
     if (to === '') return to;
     // External (http(s)://, protocol-relative //, mailto:, tel:) — leave alone.
     if (/^([a-z]+:)?\/\//i.test(to) || /^(mailto:|tel:)/i.test(to)) return to;
-    // Already a runtime path.
-    if (to.startsWith('/r/')) return to;
+    // Already a runtime path (either mount).
+    if (to.startsWith('/r/') || to.startsWith('/a/')) return to;
     if (!ctx.appSlug) return to;
 
+    const mount = mountFor(ctx);
     const ref = to.replace(/^\/+/, '');
     // A bare query/hash ("?order=1") means "this page" — keep the current slug.
     if (ref === '' || ref.startsWith('?') || ref.startsWith('#')) {
         const page = ctx.page ?? currentPageSlug() ?? '';
-        return `/r/${ctx.appSlug}/${page}${ref}`;
+        return `${mount}/${page}${ref}`;
     }
 
-    return `/r/${ctx.appSlug}/${ref}`;
+    return `${mount}/${ref}`;
 }
 
 /** Walk a dotted path (e.g. "row.data.title") against the execution context. */
@@ -183,7 +204,7 @@ export function useActionExecutor() {
 
         try {
             const { data } = await axios.post(
-                `/r/${ctx.appSlug}/actions`,
+                `${mountFor(ctx)}/actions`,
                 {
                     actions,
                     params: ctx.params ?? {},

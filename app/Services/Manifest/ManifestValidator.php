@@ -919,6 +919,103 @@ class ManifestValidator
      * @param  array<string, mixed>  $manifest
      * @return ManifestValidationError[]
      */
+    /**
+     * The rails on `permissions.public` — the switch that puts tenant data in
+     * front of strangers. Each one exists because the failure it prevents is
+     * silent: a portal that exposes more than its author believed, or one that
+     * publishes a URL with nothing behind it. Deny-by-default is enforced at
+     * runtime by the strict access context; these checks make the manifest say
+     * out loud what the portal exposes, at SAVE time.
+     *
+     * @param  array<string, mixed>  $manifest
+     * @param  array<string, mixed>  $permissions
+     * @param  array<string, array<string, mixed>>  $rolesById
+     * @param  list<ManifestValidationError>  $errors
+     */
+    private function validatePublicPortal(array $manifest, array $permissions, array $rolesById, array &$errors): void
+    {
+        $public = $permissions['public'] ?? null;
+        if (! is_array($public)) {
+            return;
+        }
+
+        $roleId = (string) ($public['role_id'] ?? '');
+        $role = $rolesById[$roleId] ?? null;
+
+        if ($role === null) {
+            $errors[] = new ManifestValidationError(
+                '/permissions/public/role_id',
+                "role_id '{$roleId}' does not match any defined role",
+                'unresolved_ref',
+            );
+        } elseif (($role['is_default'] ?? false) === true) {
+            // The default role is what every org member falls back to. Handing
+            // it to anonymous visitors silently grants the internet whatever
+            // staff can reach — the portal must have a role of its own.
+            $errors[] = new ManifestValidationError(
+                '/permissions/public/role_id',
+                "The public role must not be the is_default role ('{$role['slug']}') — that is the role org members fall back to. Declare a separate role for visitors and grant it explicitly.",
+                'public_role_is_default',
+            );
+        }
+
+        if (($public['enabled'] ?? false) !== true) {
+            return;
+        }
+
+        // A landing is already a public surface with its own publish path,
+        // renderer and block allowlist. Two doors to the same room drift.
+        if (($manifest['settings']['surface'] ?? null) === 'landing') {
+            $errors[] = new ManifestValidationError(
+                '/permissions/public',
+                'A landing is already public — it publishes at /l/{slug}. permissions.public is for opening a regular app as a portal.',
+                'public_on_landing',
+            );
+        }
+
+        if ($role === null) {
+            return;
+        }
+
+        // Deny-by-default means a portal with no page grant shows a visitor
+        // nothing. Publishing that URL is a promise the app cannot keep.
+        $viewable = false;
+        foreach ($permissions['page_policies'] ?? [] as $policy) {
+            if (($policy['role_id'] ?? null) === $roleId && ($policy['can_view'] ?? true) === true) {
+                $viewable = true;
+                break;
+            }
+        }
+        if (! $viewable) {
+            $errors[] = new ManifestValidationError(
+                '/permissions/public',
+                "The public portal would show nothing: no page_policy grants can_view to role '{$role['slug']}'. A visitor sees only pages granted explicitly.",
+                'public_portal_has_no_pages',
+            );
+        }
+
+        if (($public['allow_writes'] ?? false) === true) {
+            return;
+        }
+
+        // A read-only portal that carries write policies is a manifest telling
+        // two stories. The runtime believes allow_writes, so the policies would
+        // be dead code the author reads as live permission.
+        foreach ($permissions['object_policies'] ?? [] as $i => $policy) {
+            if (($policy['role_id'] ?? null) !== $roleId) {
+                continue;
+            }
+            $writes = array_values(array_intersect($policy['actions'] ?? [], ['create', 'update', 'delete']));
+            if ($writes !== []) {
+                $errors[] = new ManifestValidationError(
+                    "/permissions/object_policies/{$i}/actions",
+                    "Role '{$role['slug']}' is the public role and grants ".implode('/', $writes).', but permissions.public.allow_writes is false — the portal is read-only and these grants would never apply. Set allow_writes true, or drop them.',
+                    'public_write_without_optin',
+                );
+            }
+        }
+    }
+
     private function validateCrossCutting(array $manifest): array
     {
         $errors = [];
@@ -1401,6 +1498,8 @@ class ManifestValidator
                 );
             }
         }
+
+        $this->validatePublicPortal($manifest, $permissions, $rolesById, $errors);
 
         if ($navigation !== null) {
             $this->validateNavigation($navigation['items'] ?? [], '/navigation/items', $pagesById, $errors);
