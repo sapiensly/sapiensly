@@ -30,17 +30,17 @@ beforeEach(function () {
     ]);
 });
 
-it('renders the contextbook page for an org admin with the stored context and its cost', function () {
+it('renders the identity screen with the stored context and its cost', function () {
     OrganizationAiContext::create([
         'organization_id' => $this->org->id,
         'profile' => OrganizationContext::fromArray(['descriptor' => 'Moves freight.', 'currency' => 'MXN'])->toArray(),
     ]);
 
     $this->actingAs($this->owner)
-        ->get('/settings/organization/context')
+        ->get('/settings/organization/identity')
         ->assertOk()
         ->assertInertia(fn ($page) => $page
-            ->component('settings/OrganizationContext')
+            ->component('settings/OrganizationIdentity')
             ->where('context.descriptor', 'Moves freight.')
             ->where('context.currency', 'MXN')
             ->where('maxTokens', OrganizationContext::MAX_TOKENS)
@@ -49,9 +49,9 @@ it('renders the contextbook page for an org admin with the stored context and it
             ->where('preview', fn (string $preview) => str_contains($preview, 'Moves freight.')));
 });
 
-it('renders an empty contextbook without a stored row', function () {
+it('renders an empty contextbook on the identity screen without a stored row', function () {
     $this->actingAs($this->owner)
-        ->get('/settings/organization/context')
+        ->get('/settings/organization/identity')
         ->assertOk()
         ->assertInertia(fn ($page) => $page
             ->where('context.descriptor', null)
@@ -60,7 +60,7 @@ it('renders an empty contextbook without a stored row', function () {
 
 it('saves the context and compiles the block on write', function () {
     $this->actingAs($this->owner)
-        ->put('/settings/organization/context', [
+        ->put('/settings/organization/identity', [
             'descriptor' => 'Moves refrigerated freight.',
             'timezone' => 'America/Mexico_City',
             'currency' => 'mxn',
@@ -88,7 +88,7 @@ it('leaves fields the form did not touch alone and clears the ones it blanked', 
     ]);
 
     $this->actingAs($this->owner)
-        ->put('/settings/organization/context', ['descriptor' => 'New.', 'industry' => null])
+        ->put('/settings/organization/identity', ['descriptor' => 'New.', 'industry' => null])
         ->assertRedirect();
 
     $row = OrganizationAiContext::where('organization_id', $this->org->id)->firstOrFail();
@@ -100,7 +100,7 @@ it('leaves fields the form did not touch alone and clears the ones it blanked', 
 it('rejects a context that would not fit the per-call token budget', function () {
     // Twenty maxed-out glossary entries and ten boundaries blow past the cap.
     $this->actingAs($this->owner)
-        ->put('/settings/organization/context', [
+        ->put('/settings/organization/identity', [
             'descriptor' => str_repeat('a', 240),
             'audience' => str_repeat('b', 400),
             'glossary' => array_fill(0, 20, ['term' => str_repeat('t', 40), 'meaning' => str_repeat('m', 160)]),
@@ -114,7 +114,7 @@ it('rejects a context that would not fit the per-call token budget', function ()
 
 it('rejects an unusable timezone, currency or url', function () {
     $this->actingAs($this->owner)
-        ->put('/settings/organization/context', [
+        ->put('/settings/organization/identity', [
             'timezone' => 'Mars/Olympus_Mons',
             'currency' => 'pesos',
             'website' => 'not-a-url',
@@ -133,14 +133,14 @@ it('previews the block for unsaved form state without storing anything', functio
 });
 
 it('keeps the contextbook out of reach of a plain member', function () {
-    $this->actingAs($this->member)->get('/settings/organization/context')->assertForbidden();
+    $this->actingAs($this->member)->get('/settings/organization/identity')->assertForbidden();
     $this->actingAs($this->member)
-        ->put('/settings/organization/context', ['descriptor' => 'Sneaky.'])
+        ->put('/settings/organization/identity', ['descriptor' => 'Sneaky.'])
         ->assertForbidden();
 });
 
 it('is unreachable for a personal account', function () {
     $personal = User::factory()->create(['email_verified_at' => now(), 'organization_id' => null]);
 
-    $this->actingAs($personal)->get('/settings/organization/context')->assertForbidden();
+    $this->actingAs($personal)->get('/settings/organization/identity')->assertForbidden();
 });

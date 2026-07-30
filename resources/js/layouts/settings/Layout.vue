@@ -39,13 +39,11 @@ const sidebarNavItems = computed<NavItem[]>(() => {
     }
 
     if (hasOrganization.value && isOwner.value) {
+        // One item for both books: they answer the same question about the same
+        // organization and are read off the same website.
         items.push({
-            title: t('settings.nav.brand'),
-            href: '/settings/organization/brand',
-        });
-        items.push({
-            title: t('settings.nav.context'),
-            href: '/settings/organization/context',
+            title: t('settings.nav.identity'),
+            href: '/settings/organization/identity',
         });
         items.push({
             title: t('settings.nav.sso'),
@@ -59,7 +57,8 @@ const sidebarNavItems = computed<NavItem[]>(() => {
 const currentPath = typeof window !== undefined ? window.location.pathname : '';
 
 // Settings items are flat siblings (not nested), so match the path EXACTLY —
-// otherwise /settings/organization/brand would also light up /settings/organization.
+// otherwise /settings/organization/identity would also light up
+// /settings/organization.
 function isActive(href: NavItem['href']): boolean {
     return currentPath === (toUrl(href) ?? '').split('?')[0];
 }

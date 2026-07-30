@@ -3,6 +3,7 @@
 use App\Http\Controllers\Settings\OrganizationBrandController;
 use App\Http\Controllers\Settings\OrganizationContextController;
 use App\Http\Controllers\Settings\OrganizationController;
+use App\Http\Controllers\Settings\OrganizationIdentityController;
 use App\Http\Controllers\Settings\OrganizationSiteImportController;
 use App\Http\Controllers\Settings\ProfileController;
 use App\Http\Controllers\Settings\SsoConnectionController;
@@ -29,24 +30,32 @@ Route::middleware([
     Route::delete('settings/organization', [OrganizationController::class, 'destroy'])->name('organization.destroy');
     Route::post('settings/organization/invite', [OrganizationController::class, 'invite'])->name('organization.invite');
 
-    // Organization Brandbook: the central logo/icon/colours/font every
-    // customizable surface inherits. Admin-gated inside the controller.
-    Route::get('settings/organization/brand', [OrganizationBrandController::class, 'show'])->name('organization.brand.show');
-    Route::put('settings/organization/brand', [OrganizationBrandController::class, 'update'])->name('organization.brand.update');
+    // The organization's identity: the Brandbook (logo/icon/colours/font every
+    // customizable surface inherits) and the Contextbook (the business knowledge
+    // every AI interaction is grounded in) as two tabs over the general facts both
+    // are built from, saved in one write. Admin-gated inside the controller.
+    Route::get('settings/organization/identity', [OrganizationIdentityController::class, 'show'])->name('organization.identity.show');
+    Route::put('settings/organization/identity', [OrganizationIdentityController::class, 'update'])->name('organization.identity.update');
+
+    // Each book used to be a page of its own; the addresses still work and land on
+    // their tab, because they are in people's history and in old links.
+    Route::get('settings/organization/brand', fn () => redirect('/settings/organization/identity?tab=brand'))
+        ->name('organization.brand.show');
+    Route::get('settings/organization/context', fn () => redirect('/settings/organization/identity?tab=context'))
+        ->name('organization.context.show');
+
+    // Brandbook assets and palettes.
     Route::post('settings/organization/brand/asset', [OrganizationBrandController::class, 'uploadAsset'])->name('organization.brand.asset');
     Route::post('settings/organization/brand/asset/import', [OrganizationBrandController::class, 'importAsset'])->name('organization.brand.asset.import');
     Route::post('settings/organization/brand/palette-proposals', [OrganizationBrandController::class, 'proposePalettes'])->name('organization.brand.palettes');
     Route::post('settings/organization/brand/palette', [OrganizationBrandController::class, 'derivePalette'])->name('organization.brand.palette.derive');
 
-    // Organization Contextbook: the business knowledge every AI interaction in
-    // the organization is grounded in. Admin-gated inside the controller.
-    Route::get('settings/organization/context', [OrganizationContextController::class, 'show'])->name('organization.context.show');
-    Route::put('settings/organization/context', [OrganizationContextController::class, 'update'])->name('organization.context.update');
+    // The Contextbook block as the models will read it, for form state that is not
+    // saved yet (the cost is shown before anything is stored).
     Route::post('settings/organization/context/preview', [OrganizationContextController::class, 'preview'])->name('organization.context.preview');
 
-    // One reading of the organization's website, proposing BOTH books. Shared by
-    // the Brandbook and Contextbook screens so the URL is typed once, the page is
-    // downloaded once, and the draft is paid for once.
+    // One reading of the organization's website, proposing BOTH books, so the URL
+    // is typed once, the page is downloaded once, and the draft is paid for once.
     Route::post('settings/organization/site-import', [OrganizationSiteImportController::class, 'store'])->name('organization.site-import');
 
     Route::get('settings/sso', [SsoConnectionController::class, 'show'])->name('sso.show');

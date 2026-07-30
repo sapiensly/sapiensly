@@ -32,14 +32,14 @@ beforeEach(function () {
     ]);
 });
 
-it('renders the brandbook page for an org admin with the current brand and its palette', function () {
+it('renders the identity screen with the current brand and its palette', function () {
     $this->org->update(['brand' => ['accent_color' => '#123456', 'font' => 'serif']]);
 
     $this->actingAs($this->owner)
-        ->get('/settings/organization/brand')
+        ->get('/settings/organization/identity')
         ->assertOk()
         ->assertInertia(fn ($page) => $page
-            ->component('settings/OrganizationBrand')
+            ->component('settings/OrganizationIdentity')
             ->where('brand.accent_color', '#123456')
             ->where('brand.font', 'serif')
             // The palette in effect is passed so the page shows it immediately.
@@ -68,15 +68,15 @@ it('forbids a non-admin from deriving a palette', function () {
         ->assertForbidden();
 });
 
-it('forbids a non-admin from viewing the brandbook page', function () {
+it('forbids a non-admin from viewing the identity screen', function () {
     $this->actingAs($this->member)
-        ->get('/settings/organization/brand')
+        ->get('/settings/organization/identity')
         ->assertForbidden();
 });
 
 it('lets an org owner save the brandbook (normalized)', function () {
     $this->actingAs($this->owner)
-        ->put('/settings/organization/brand', [
+        ->put('/settings/organization/identity', [
             'accent_color' => '#1A2B3C',
             'font' => 'serif',
             'theme' => 'dark',
@@ -94,7 +94,7 @@ it('lets an org owner save the brandbook (normalized)', function () {
 
 it('saves the dark-surface logo/icon variants', function () {
     $this->actingAs($this->owner)
-        ->put('/settings/organization/brand', [
+        ->put('/settings/organization/identity', [
             'logo_url' => 'https://cdn.example.com/logo.png',
             'logo_dark_url' => 'https://cdn.example.com/logo-dark.png',
             'icon_dark_url' => 'https://cdn.example.com/icon-dark.png',
@@ -110,13 +110,13 @@ it('saves the dark-surface logo/icon variants', function () {
 
 it('rejects an invalid colour', function () {
     $this->actingAs($this->owner)
-        ->put('/settings/organization/brand', ['accent_color' => 'blue'])
+        ->put('/settings/organization/identity', ['accent_color' => 'blue'])
         ->assertSessionHasErrors('accent_color');
 });
 
 it('forbids a non-admin member from editing the brand', function () {
     $this->actingAs($this->member)
-        ->put('/settings/organization/brand', ['accent_color' => '#000000'])
+        ->put('/settings/organization/identity', ['accent_color' => '#000000'])
         ->assertForbidden();
 
     expect($this->org->refresh()->brand)->toBeNull();

@@ -38,11 +38,17 @@ function importLabel(string $key): string
 }
 
 /**
- * The Brandbook has no website of its own. Asking for it again, on the second of
- * two pages that read the same site, is asking twice for the same fact.
+ * One URL box for both books, and it is the website the organization stores —
+ * asking for the same fact twice is what the unified screen exists to stop.
  */
-it('starts the brandbook import from the website the contextbook knows', function () {
+it('starts from the website the organization already recorded', function () {
     siteImportOwner('https://acme.example');
+
+    $boxes = <<<'JS'
+    function () {
+        return String(document.querySelectorAll('input[inputmode="url"]').length);
+    }
+    JS;
 
     $typed = <<<'JS'
     function () {
@@ -50,9 +56,11 @@ it('starts the brandbook import from the website the contextbook knows', functio
     }
     JS;
 
-    visit('/settings/organization/brand')->on()->macbookAir()
+    visit('/settings/organization/identity')->on()->macbookAir()
         ->assertNoJavaScriptErrors()
-        ->assertScript($typed, 'https://acme.example');
+        ->assertScript($boxes, '1')
+        ->assertScript($typed, 'https://acme.example')
+        ->assertSee(importLabel('site_import.read'));
 });
 
 /**
@@ -62,7 +70,7 @@ it('starts the brandbook import from the website the contextbook knows', functio
 it('says which address it will actually read', function () {
     siteImportOwner();
 
-    visit('/settings/organization/brand')->on()->macbookAir()
+    visit('/settings/organization/identity')->on()->macbookAir()
         ->assertNoJavaScriptErrors()
         ->type('input[inputmode="url"]', 'acme.example')
         ->assertSee(str_replace('{url}', 'https://acme.example', importLabel('site_import.will_read')));
@@ -75,25 +83,9 @@ it('says which address it will actually read', function () {
 it('names the problem instead of blaming the site', function () {
     siteImportOwner();
 
-    visit('/settings/organization/brand')->on()->macbookAir()
+    visit('/settings/organization/identity')->on()->macbookAir()
         ->type('input[inputmode="url"]', 'javascript:alert(1)')
         ->click(importLabel('site_import.read'))
         ->assertSee(importLabel('site_import.reason.invalid_url'))
         ->assertNoJavaScriptErrors();
-});
-
-/** One URL on the Contextbook page: the stored field and the import are the same box. */
-it('drafts the contextbook from the website field itself', function () {
-    siteImportOwner('https://acme.example');
-
-    $boxes = <<<'JS'
-    function () {
-        return String(document.querySelectorAll('input[inputmode="url"]').length);
-    }
-    JS;
-
-    visit('/settings/organization/context')->on()->macbookAir()
-        ->assertNoJavaScriptErrors()
-        ->assertScript($boxes, '1')
-        ->assertSee(importLabel('site_import.read'));
 });

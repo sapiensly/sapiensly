@@ -5,39 +5,33 @@ namespace App\Http\Controllers\Settings;
 use App\Http\Controllers\Controller;
 use App\Http\Controllers\Settings\Concerns\AuthorizesOrganizationAdmin;
 use App\Models\Organization;
-use App\Models\OrganizationAiContext;
 use App\Services\Branding\BrandAssetImporter;
 use App\Services\Branding\BrandAssetImportFailed;
 use App\Services\Branding\PaletteProposalService;
-use App\Services\Site\SiteImportService;
 use App\Services\Storage\TenantStorage;
 use App\Support\Branding\AssetTone;
 use App\Support\Branding\ColorPalette;
 use App\Support\Branding\OrganizationBrand;
 use App\Support\Storage\TenantPath;
 use Illuminate\Http\JsonResponse;
-use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
-use Inertia\Inertia;
-use Inertia\Response;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
 /**
- * Manages the organization Brandbook (logo, icon, colours, font) — the central
- * theme every customizable surface inherits. Gated to organization admins (the
- * owner or a sysadmin), mirroring the rest of the organization settings.
+ * The Brandbook's own endpoints: assets (upload, adopt from a site, serve) and
+ * palettes (derive one, propose some). Reading and writing the book itself lives
+ * on the organization identity screen, which saves it alongside the Contextbook —
+ * see {@see OrganizationIdentityController}.
+ *
+ * Gated to organization admins (the owner or a sysadmin), mirroring the rest of
+ * the organization settings.
  */
 class OrganizationBrandController extends Controller
 {
     use AuthorizesOrganizationAdmin;
-
-    /** The brand fields accepted from the form, in canonical (stored) vocabulary. */
-    private const FIELDS = [
-        'logo_url', 'icon_url', 'logo_dark_url', 'icon_dark_url', 'accent_color', 'logo_bg_color', 'font', 'theme',
-    ];
 
     /** Upload extension → served Content-Type. We control the extension on write. */
     private const ASSET_MIME = [
@@ -50,25 +44,6 @@ class OrganizationBrandController extends Controller
     ];
 
     public function __construct(private readonly TenantStorage $tenantStorage) {}
-
-    public function show(Request $request, SiteImportService $import): Response
-    {
-        $organization = $this->authorizeOrganization($request, 'the brand');
-        $brand = $organization->brandbook();
-
-        return Inertia::render('settings/OrganizationBrand', [
-            'brand' => $brand->toArray(),
-            // The palette currently in effect (derived from the active accent) so
-            // the page can show it without waiting for AI proposals.
-            'palette' => ColorPalette::fromAccent($brand->effectiveAccent()),
-            // The site import starts from the website the Contextbook already
-            // knows: the Brandbook has no URL of its own, and asking the admin to
-            // retype the address they typed on the other page is asking twice for
-            // the same fact.
-            'website' => $this->knownWebsite($organization),
-            'lastImport' => $import->lastImport(),
-        ]);
-    }
 
     /**
      * Derive the palette for a given accent (the same deterministic expansion
@@ -90,31 +65,6 @@ class OrganizationBrandController extends Controller
             'accent' => $accent,
             'palette' => ColorPalette::fromAccent($accent),
         ]);
-    }
-
-    public function update(Request $request): RedirectResponse
-    {
-        $organization = $this->authorizeOrganization($request, 'the brand');
-
-        $validated = $request->validate([
-            'logo_url' => ['nullable', 'string', 'max:2000'],
-            'icon_url' => ['nullable', 'string', 'max:2000'],
-            'logo_dark_url' => ['nullable', 'string', 'max:2000'],
-            'icon_dark_url' => ['nullable', 'string', 'max:2000'],
-            'accent_color' => ['nullable', 'string', 'regex:/^#[0-9A-Fa-f]{6}$/'],
-            'logo_bg_color' => ['nullable', 'string', 'regex:/^#[0-9A-Fa-f]{6}$/'],
-            'font' => ['nullable', Rule::in(OrganizationBrand::FONTS)],
-            'theme' => ['nullable', Rule::in(OrganizationBrand::THEMES)],
-        ]);
-
-        // Merge only the submitted keys over the stored brand, then normalize, so a
-        // partial update leaves untouched fields intact and a cleared field clears.
-        $incoming = array_intersect_key($validated, array_flip(self::FIELDS));
-        $merged = array_merge($organization->brand ?? [], $incoming);
-        $organization->brand = OrganizationBrand::fromArray($merged)->toArray();
-        $organization->save();
-
-        return back()->with('success', __('Brandbook updated.'));
     }
 
     /**
@@ -281,14 +231,5 @@ class OrganizationBrandController extends Controller
             'Content-Type' => self::ASSET_MIME[$ext],
             'Cache-Control' => 'public, max-age=31536000, immutable',
         ]);
-    }
-
-    /** The organization's website as the Contextbook records it, if it has one. */
-    private function knownWebsite(Organization $organization): ?string
-    {
-        $profile = OrganizationAiContext::firstOrNew(['organization_id' => $organization->id])->profile ?? [];
-        $website = $profile['website'] ?? null;
-
-        return is_string($website) && $website !== '' ? $website : null;
     }
 }

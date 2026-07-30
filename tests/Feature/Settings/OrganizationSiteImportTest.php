@@ -187,20 +187,20 @@ it('recomputes the diff against what is stored, even on a reused draft', functio
         ->assertJsonPath('context.has_conflicts', true);
 });
 
-/** The Brandbook page has no URL of its own; it starts from the one the Contextbook knows. */
-it('offers the brandbook the website the contextbook already recorded', function () {
+/** One URL for both books: the box the identity screen reads from is the stored website. */
+it('starts the import from the website the organization already recorded', function () {
     $row = OrganizationAiContext::firstOrNew(['organization_id' => $this->org->id])
         ->setRelation('organization', $this->org);
     $row->fill(['profile' => ['website' => 'https://acme.example']])->recompile()->save();
 
     $this->actingAs($this->owner)
-        ->get('/settings/organization/brand')
+        ->get('/settings/organization/identity')
         ->assertOk()
-        ->assertInertia(fn ($page) => $page->where('website', 'https://acme.example'));
+        ->assertInertia(fn ($page) => $page->where('context.website', 'https://acme.example'));
 });
 
-/** Whichever page imported, the other one can offer that reading instead of asking again. */
-it('remembers the last import for the other book', function () {
+/** A reading survives a reload: the screen can offer it instead of asking again. */
+it('remembers the last import for the identity screen', function () {
     fakeSitePage();
     Ai::fakeAgent(ChatAgent::class, [json_encode(['descriptor' => 'Freight.'])]);
 
@@ -209,7 +209,7 @@ it('remembers the last import for the other book', function () {
         ->assertOk();
 
     $this->actingAs($this->owner)
-        ->get('/settings/organization/context')
+        ->get('/settings/organization/identity')
         ->assertOk()
         ->assertInertia(fn ($page) => $page->where('lastImport.url', 'https://acme.example'));
 });

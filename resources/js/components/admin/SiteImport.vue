@@ -1,7 +1,10 @@
 <script setup lang="ts">
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Link } from '@inertiajs/vue3';
+import type {
+    BookTab,
+    ImportStatus,
+} from '@/composables/useOrganizationIdentity';
 import {
     AlertCircle,
     ArrowRight,
@@ -14,58 +17,27 @@ import { computed } from 'vue';
 import { useI18n } from 'vue-i18n';
 
 /**
- * "Import from your website", shared by the Brandbook and the Contextbook.
+ * "Import from your website", the one reading both organization books are drafted
+ * from.
  *
- * Both books are read off the same home page, and they used to ask separately:
- * the admin typed the URL on one screen, then typed it again on the other, and
- * the site was downloaded — and drafted — twice. One endpoint now reads it once
- * and proposes both; this component is the face of that on either page.
+ * It used to live on two pages, and each of them applied its own half and pointed
+ * at the other with a link. Now the reading happens once, above the tabs, and what
+ * it filled in is reported here — including the decisions it left in each book,
+ * which is the only thing worth sending the user to a tab for.
  *
- * It is presentational on purpose. Applying a proposal is not the same job on
- * the two pages (the Brandbook has to copy remote images onto our own storage
- * first), so each page keeps its own apply logic and passes back what happened.
+ * Presentational on purpose: applying a proposal is not the same job for the two
+ * books (the Brandbook has to copy remote images onto our own storage first), so
+ * the identity screen keeps the apply logic and passes back what happened.
  */
-export interface ImportStatus {
-    /** The normalized URL that was actually read. */
-    url: string | null;
-    read: boolean;
-    /** Why the read failed — see SiteFetch on the server. */
-    reason: string;
-    /** Human labels of the fields that landed on the form without asking. */
-    applied: string[];
-    /** Fields the site proposed that clash with something already set. */
-    conflicts: number;
-    /** What the draft was built from: 'website', 'brief'. */
-    sources: string[];
-    /** How many fields the OTHER book got from this same reading. */
-    otherCount: number;
-    /** Free-form remarks from the proposal (why an accent was refused, etc.). */
-    notes: string[];
-    /**
-     * The page opened but had no words on it — a client-rendered site whose
-     * content we do not run. Only the Contextbook cares: the brand signals live
-     * in the markup and are read either way.
-     */
-    noProse?: boolean;
-}
-
 const props = defineProps<{
-    /** Which book this page is; decides the copy and where "the other book" points. */
-    book: 'brand' | 'context';
     url: string;
-    /**
-     * Field label for the URL box. The Contextbook passes one because that box
-     * is also the website it stores; the Brandbook only ever reads, so it has
-     * nothing to label.
-     */
+    /** Field label for the URL box — it is also the website we store. */
     label?: string;
-    /** Only the Contextbook drafts from a written brief as well as the page. */
-    brief?: string;
-    withBrief?: boolean;
+    brief: string;
     loading: boolean;
-    /** The outcome of the last import run on THIS page, or null before any run. */
+    /** The outcome of the last import run, or null before any run. */
     status: ImportStatus | null;
-    /** What was imported recently anywhere in the org, for the "you already read this" offer. */
+    /** What was imported recently, for the "you already read this" offer. */
     lastImport: { url: string | null; at: string } | null;
 }>();
 
@@ -73,16 +45,10 @@ const emit = defineEmits<{
     (e: 'update:url', value: string): void;
     (e: 'update:brief', value: string): void;
     (e: 'read'): void;
+    (e: 'open', tab: BookTab): void;
 }>();
 
 const { t, locale } = useI18n();
-
-const OTHER = {
-    brand: { href: '/settings/organization/context', key: 'context' },
-    context: { href: '/settings/organization/brand', key: 'brand' },
-} as const;
-
-const other = computed(() => OTHER[props.book]);
 
 /**
  * What the server will actually fetch, mirroring SiteUrl::normalize for the one
@@ -95,28 +61,46 @@ const normalizedUrl = computed<string | null>(() => {
     return `https://${typed.replace(/^\/+/, '')}`;
 });
 
-/** A failure the user can act on, rather than one message for four problems. */
+/**
+ * A failure the user can act on, rather than one message for four problems.
+ *
+ * A run with no address is not a failure when a written brief still produced a
+ * draft — that is the Contextbook working as intended — but a site that would not
+ * open is worth saying out loud even then, because the Brandbook needed the page.
+ */
 const failure = computed<string | null>(() => {
-    if (!props.status || props.status.read) return null;
+    const status = props.status;
+    if (!status || status.read) return null;
+    if (status.reason === 'no_url' && status.drafted) return null;
+
     const known = ['no_url', 'invalid_url', 'unreachable', 'not_html', 'empty'];
-    const reason = known.includes(props.status.reason)
-        ? props.status.reason
+    const reason = known.includes(status.reason)
+        ? status.reason
         : 'unreachable';
+
     return t(`site_import.reason.${reason}`);
 });
 
 /**
- * The reading worked and this book got nothing out of it. A field that came back
- * as a conflict is NOT nothing — it is a decision waiting below, and saying "no
- * icon, logo or colour we can use" above it contradicts the page.
+ * The reading worked and neither book got anything out of it. A field that came
+ * back as a conflict is NOT nothing — it is a decision waiting in a tab, and
+ * saying "nothing came of it" above that contradicts the page.
  */
-const emptyForBook = computed(
+const emptyRun = computed(
     () =>
         props.status !== null &&
         props.status.read &&
         props.status.applied.length === 0 &&
-        props.status.conflicts === 0 &&
+        props.status.pending.brand === 0 &&
+        props.status.pending.context === 0 &&
         props.status.notes.length === 0,
+);
+
+/** The books still owed a decision, so each one can be opened from here. */
+const pending = computed<{ book: BookTab; count: number }[]>(() =>
+    (['brand', 'context'] as BookTab[])
+        .map((book) => ({ book, count: props.status?.pending[book] ?? 0 }))
+        .filter((entry) => entry.count > 0),
 );
 
 function relativeTime(iso: string): string {
@@ -131,8 +115,8 @@ function relativeTime(iso: string): string {
 }
 
 /**
- * The offer to reuse a reading from the other page: only while this page has not
- * run its own import, and only when it points somewhere else than the box does.
+ * The offer to reuse an earlier reading: only while this page has not run its
+ * own import, and only when it points somewhere else than the box does.
  */
 const reusable = computed(() => {
     const last = props.lastImport;
@@ -149,7 +133,7 @@ function reuse(url: string): void {
 <template>
     <div class="space-y-3">
         <p class="text-xs text-ink-muted">
-            {{ t(`site_import.hint.${book}`) }}
+            {{ t('site_import.hint.both') }}
         </p>
 
         <Label v-if="label">{{ label }}</Label>
@@ -166,7 +150,7 @@ function reuse(url: string): void {
             />
             <button
                 type="button"
-                :disabled="loading || (!url.trim() && !brief?.trim())"
+                :disabled="loading || (!url.trim() && !brief.trim())"
                 class="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-xs border border-soft px-3 text-xs text-ink-muted transition-colors hover:bg-surface hover:text-ink disabled:opacity-50"
                 @click="emit('read')"
             >
@@ -181,8 +165,7 @@ function reuse(url: string): void {
         </p>
 
         <Input
-            v-if="withBrief"
-            :model-value="brief ?? ''"
+            :model-value="brief"
             maxlength="2000"
             :placeholder="t('site_import.brief_placeholder')"
             @update:model-value="emit('update:brief', String($event))"
@@ -221,7 +204,7 @@ function reuse(url: string): void {
             <p class="text-xs text-ink-muted">{{ failure }}</p>
         </div>
 
-        <template v-else-if="status">
+        <template v-if="status">
             <div
                 v-if="status.applied.length"
                 class="space-y-2 rounded-sp-sm border border-soft px-3 py-2"
@@ -248,15 +231,15 @@ function reuse(url: string): void {
                 </p>
             </div>
 
-            <p v-else-if="emptyForBook" class="text-xs text-ink-muted">
-                {{ t(`site_import.nothing.${book}`) }}
+            <p v-else-if="emptyRun" class="text-xs text-ink-muted">
+                {{ t('site_import.nothing.any') }}
             </p>
 
             <!-- The page opened and had no words on it. Saying so is the whole
                  point: an empty draft with no explanation reads as a broken
                  feature rather than as a client-rendered home page. -->
             <div
-                v-if="book === 'context' && status.noProse"
+                v-if="status.noProse"
                 class="flex items-start gap-2 rounded-sp-sm border border-soft px-3 py-2"
             >
                 <AlertCircle
@@ -269,10 +252,7 @@ function reuse(url: string): void {
 
             <!-- Where the draft came from: without this, a draft built from the
                  brief alone reads as a draft the website produced. -->
-            <p
-                v-if="book === 'context' && status.sources.length"
-                class="text-[11px] text-ink-muted"
-            >
+            <p v-if="status.sources.length" class="text-[11px] text-ink-muted">
                 {{
                     t('site_import.sources', {
                         sources: status.sources
@@ -281,6 +261,23 @@ function reuse(url: string): void {
                     })
                 }}
             </p>
+
+            <!-- The decisions the reading left behind, in the book that owns
+                 them. Every other outcome is already applied to the form. -->
+            <button
+                v-for="entry in pending"
+                :key="entry.book"
+                type="button"
+                class="flex items-center gap-1.5 text-xs text-accent-blue underline-offset-2 hover:underline"
+                @click="emit('open', entry.book)"
+            >
+                {{
+                    t(`site_import.pending.${entry.book}`, {
+                        count: entry.count,
+                    })
+                }}
+                <ArrowRight class="size-3.5" />
+            </button>
         </template>
 
         <p
@@ -290,23 +287,5 @@ function reuse(url: string): void {
         >
             {{ note }}
         </p>
-
-        <!-- The other half of the same reading, one click away and already paid for. -->
-        <Link
-            v-if="status?.read && status.otherCount"
-            :href="other.href"
-            class="inline-flex items-center gap-1.5 text-xs text-accent-blue underline-offset-2 hover:underline"
-        >
-            {{
-                t(`site_import.other.${other.key}`, {
-                    count: status.otherCount,
-                })
-            }}
-            <ArrowRight class="size-3.5" />
-        </Link>
-
-        <!-- Conflicts and per-field failures stay with the page that knows how to
-             apply them. -->
-        <slot />
     </div>
 </template>
