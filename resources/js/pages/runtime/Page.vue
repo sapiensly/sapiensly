@@ -3,6 +3,7 @@ import AppRenderer from '@/runtime/AppRenderer.vue';
 import BlockBreadcrumb from '@/runtime/blocks/BlockBreadcrumb.vue';
 import { manifestFontHrefs } from '@/runtime/fonts';
 import LandingChatbotBubble from '@/runtime/LandingChatbotBubble.vue';
+import RolePreviewBar from '@/runtime/RolePreviewBar.vue';
 import RuntimeChatPanel from '@/runtime/RuntimeChatPanel.vue';
 import { runtimeSettingsStyle } from '@/runtime/runtimeStyle';
 import SiteFooter from '@/runtime/SiteFooter.vue';
@@ -405,6 +406,11 @@ onMounted(() => {
         <!-- Top-header layout (default). -->
         <div v-else class="flex min-h-screen flex-col bg-navy-deep">
             <div class="px-5">
+                <RolePreviewBar
+                    v-if="props.rolePreview"
+                    :current="props.rolePreview.current"
+                    :roles="props.rolePreview.roles"
+                />
                 <SiteHeader
                     :brand="brand"
                     :pages="manifest.pages"

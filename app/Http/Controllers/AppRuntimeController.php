@@ -61,7 +61,22 @@ class AppRuntimeController extends Controller
         }
 
         // Resolve the user's app-role capabilities once; every gate below reads it.
-        $access = $this->accessResolver->resolve($app, $manifest, $user);
+        //
+        // `?as_role=` lets someone who would otherwise bypass every policy see
+        // the app as one of its roles instead. It is a preview, so it can only
+        // narrow — the resolver ignores it for anyone who is not already an
+        // administrator here.
+        $previewRole = (string) $request->query('as_role', '');
+        $access = $this->accessResolver->resolve($app, $manifest, $user, $previewRole ?: null);
+
+        // Whether this viewer may preview at all. Asked separately (and only
+        // while previewing) because $access is by then deliberately narrowed —
+        // reading `bypass` off it would hide the picker from the one person
+        // entitled to it, and showing it on the mere presence of ?as_role=
+        // would offer it to everyone else.
+        $canPreviewRoles = $previewRole === ''
+            ? $access->bypass
+            : $this->accessResolver->resolve($app, $manifest, $user)->bypass;
         if (! $access->hasAccess) {
             abort(403, 'You do not have access to this app.');
         }
@@ -188,6 +203,18 @@ class AppRuntimeController extends Controller
             'language' => $language,
             // The menu slug to highlight (a detail page lights its parent list).
             'activeSlug' => $activeSlug,
+            // The roles this viewer may preview as, and the one in effect. Only
+            // populated for an administrator — for everyone else the picker
+            // would be an offer the server refuses.
+            'rolePreview' => $canPreviewRoles
+                ? [
+                    'current' => $access->bypass ? null : ($access->roleSlugs[0] ?? null),
+                    'roles' => array_values(array_map(
+                        fn (array $r): array => ['slug' => $r['slug'], 'name' => $r['name']],
+                        $manifest['permissions']['roles'] ?? [],
+                    )),
+                ]
+                : null,
             // Deferred: the shell (nav, layout, filter bar, skeletons) paints
             // immediately; Inertia fetches the data in an automatic follow-up
             // request while the pooled connected reads resolve.

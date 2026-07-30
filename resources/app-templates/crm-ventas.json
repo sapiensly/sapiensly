@@ -1,0 +1,1062 @@
+{
+    "format": "sapiensly.app-package",
+    "format_version": 1,
+    "exported_at": "2026-07-30T00:00:00+00:00",
+    "app": {
+        "name": "CRM de ventas",
+        "description": "Clientes, oportunidades y actividades, con tablero de avance.",
+        "icon": "handshake",
+        "color": null,
+        "kind": "app"
+    },
+    "manifest": {
+        "schema_version": "1.0.0",
+        "name": "CRM de ventas",
+        "version": 1,
+        "objects": [
+            {
+                "id": "obj_01kytgcymkr9jd2jsn15g47edw",
+                "slug": "clientes",
+                "name": "Cliente",
+                "fields": [
+                    {
+                        "id": "fld_01kytgcymkr9jd2jsn15g47edq",
+                        "slug": "nombre",
+                        "name": "Nombre",
+                        "type": "string"
+                    },
+                    {
+                        "id": "fld_01kytgcymkr9jd2jsn15g47edr",
+                        "slug": "empresa",
+                        "name": "Empresa",
+                        "type": "string"
+                    },
+                    {
+                        "id": "fld_01kytgcymkr9jd2jsn15g47eds",
+                        "slug": "correo",
+                        "name": "Correo",
+                        "type": "string"
+                    },
+                    {
+                        "id": "fld_01kytgcymkr9jd2jsn15g47edt",
+                        "slug": "telefono",
+                        "name": "Telefono",
+                        "type": "string"
+                    },
+                    {
+                        "id": "fld_01kytgcymkr9jd2jsn15g47edv",
+                        "slug": "ciudad",
+                        "name": "Ciudad",
+                        "type": "string"
+                    },
+                    {
+                        "id": "fld_01kytgcymkr9jd2jsn15g47eec",
+                        "slug": "oportunidades",
+                        "name": "Oportunidad",
+                        "type": "relation",
+                        "target_object_id": "obj_01kytgcymkr9jd2jsn15g47ee6",
+                        "cardinality": "one_to_many",
+                        "inverse_field_id": "fld_01kytgcymkr9jd2jsn15g47eeb"
+                    },
+                    {
+                        "id": "fld_01kytgcymkr9jd2jsn15g47eed",
+                        "slug": "oportunidades_count",
+                        "name": "Oportunidad",
+                        "type": "rollup",
+                        "via_relation_field_id": "fld_01kytgcymkr9jd2jsn15g47eec",
+                        "aggregator": "count",
+                        "readonly": true
+                    },
+                    {
+                        "id": "fld_01kytgcymkr9jd2jsn15g47eee",
+                        "slug": "oportunidades_monto_total",
+                        "name": "Total Monto",
+                        "type": "rollup",
+                        "via_relation_field_id": "fld_01kytgcymkr9jd2jsn15g47eec",
+                        "aggregator": "sum",
+                        "target_field_id": "fld_01kytgcymkr9jd2jsn15g47edy",
+                        "readonly": true
+                    }
+                ]
+            },
+            {
+                "id": "obj_01kytgcymkr9jd2jsn15g47ee6",
+                "slug": "oportunidades",
+                "name": "Oportunidad",
+                "fields": [
+                    {
+                        "id": "fld_01kytgcymkr9jd2jsn15g47edx",
+                        "slug": "titulo",
+                        "name": "Titulo",
+                        "type": "string"
+                    },
+                    {
+                        "id": "fld_01kytgcymkr9jd2jsn15g47edy",
+                        "slug": "monto",
+                        "name": "Monto",
+                        "type": "currency",
+                        "currency_code": "MXN"
+                    },
+                    {
+                        "id": "fld_01kytgcymkr9jd2jsn15g47edz",
+                        "slug": "etapa",
+                        "name": "Etapa",
+                        "type": "single_select",
+                        "options": [
+                            {
+                                "id": "opt_01kytgcymkr9jd2jsn15g47ee0",
+                                "value": "prospecto",
+                                "label": "Prospecto",
+                                "color": "#0ea5e9"
+                            },
+                            {
+                                "id": "opt_01kytgcymkr9jd2jsn15g47ee1",
+                                "value": "propuesta",
+                                "label": "Propuesta",
+                                "color": "#f59e0b"
+                            },
+                            {
+                                "id": "opt_01kytgcymkr9jd2jsn15g47ee2",
+                                "value": "negociacion",
+                                "label": "Negociacion",
+                                "color": "#16a34a"
+                            },
+                            {
+                                "id": "opt_01kytgcymkr9jd2jsn15g47ee3",
+                                "value": "ganada",
+                                "label": "Ganada",
+                                "color": "#8b5cf6"
+                            },
+                            {
+                                "id": "opt_01kytgcymkr9jd2jsn15g47ee4",
+                                "value": "perdida",
+                                "label": "Perdida",
+                                "color": "#ef4444"
+                            }
+                        ]
+                    },
+                    {
+                        "id": "fld_01kytgcymkr9jd2jsn15g47ee5",
+                        "slug": "cierre_estimado",
+                        "name": "Cierre estimado",
+                        "type": "date"
+                    },
+                    {
+                        "id": "fld_01kytgcymkr9jd2jsn15g47eeb",
+                        "slug": "cliente",
+                        "name": "Cliente",
+                        "type": "relation",
+                        "target_object_id": "obj_01kytgcymkr9jd2jsn15g47edw",
+                        "cardinality": "many_to_one",
+                        "on_delete": "set_null",
+                        "inverse_field_id": "fld_01kytgcymkr9jd2jsn15g47eec"
+                    },
+                    {
+                        "id": "fld_01kytgcymkr9jd2jsn15g47eeg",
+                        "slug": "actividades",
+                        "name": "Actividad",
+                        "type": "relation",
+                        "target_object_id": "obj_01kytgcymkr9jd2jsn15g47eea",
+                        "cardinality": "one_to_many",
+                        "inverse_field_id": "fld_01kytgcymkr9jd2jsn15g47eef"
+                    },
+                    {
+                        "id": "fld_01kytgcymkr9jd2jsn15g47eeh",
+                        "slug": "actividades_count",
+                        "name": "Actividad",
+                        "type": "rollup",
+                        "via_relation_field_id": "fld_01kytgcymkr9jd2jsn15g47eeg",
+                        "aggregator": "count",
+                        "readonly": true
+                    }
+                ]
+            },
+            {
+                "id": "obj_01kytgcymkr9jd2jsn15g47eea",
+                "slug": "actividades",
+                "name": "Actividad",
+                "fields": [
+                    {
+                        "id": "fld_01kytgcymkr9jd2jsn15g47ee7",
+                        "slug": "asunto",
+                        "name": "Asunto",
+                        "type": "string"
+                    },
+                    {
+                        "id": "fld_01kytgcymkr9jd2jsn15g47ee8",
+                        "slug": "notas",
+                        "name": "Notas",
+                        "type": "long_text"
+                    },
+                    {
+                        "id": "fld_01kytgcymkr9jd2jsn15g47ee9",
+                        "slug": "fecha",
+                        "name": "Fecha",
+                        "type": "date"
+                    },
+                    {
+                        "id": "fld_01kytgcymkr9jd2jsn15g47eef",
+                        "slug": "oportunidad",
+                        "name": "Oportunidad",
+                        "type": "relation",
+                        "target_object_id": "obj_01kytgcymkr9jd2jsn15g47ee6",
+                        "cardinality": "many_to_one",
+                        "on_delete": "set_null",
+                        "inverse_field_id": "fld_01kytgcymkr9jd2jsn15g47eeg"
+                    }
+                ]
+            }
+        ],
+        "pages": [
+            {
+                "id": "pag_01kytgcymkr9jd2jsn15g47egs",
+                "slug": "dashboard",
+                "name": "Dashboard",
+                "path": "/",
+                "blocks": [
+                    {
+                        "id": "blk_01kytgcymkr9jd2jsn15g47egj",
+                        "type": "heading",
+                        "content": "CRM de ventas"
+                    },
+                    {
+                        "id": "blk_01kytgcymkr9jd2jsn15g47egk",
+                        "type": "metric_grid",
+                        "items": [
+                            {
+                                "id": "itm_01kytgcymkr9jd2jsn15g47egd",
+                                "label": "Cliente",
+                                "query": {
+                                    "object_id": "obj_01kytgcymkr9jd2jsn15g47edw"
+                                },
+                                "aggregation": "count"
+                            },
+                            {
+                                "id": "itm_01kytgcymkr9jd2jsn15g47ege",
+                                "label": "Oportunidad",
+                                "query": {
+                                    "object_id": "obj_01kytgcymkr9jd2jsn15g47ee6"
+                                },
+                                "aggregation": "count"
+                            },
+                            {
+                                "id": "itm_01kytgcymkr9jd2jsn15g47egf",
+                                "label": "Actividad",
+                                "query": {
+                                    "object_id": "obj_01kytgcymkr9jd2jsn15g47eea"
+                                },
+                                "aggregation": "count"
+                            },
+                            {
+                                "id": "itm_01kytgcymkr9jd2jsn15g47egg",
+                                "label": "Total Oportunidad",
+                                "query": {
+                                    "object_id": "obj_01kytgcymkr9jd2jsn15g47ee6"
+                                },
+                                "aggregation": "sum",
+                                "field_id": "fld_01kytgcymkr9jd2jsn15g47edy",
+                                "format": "currency"
+                            },
+                            {
+                                "id": "itm_01kytgcymkr9jd2jsn15g47egh",
+                                "label": "Promedio Oportunidad",
+                                "query": {
+                                    "object_id": "obj_01kytgcymkr9jd2jsn15g47ee6"
+                                },
+                                "aggregation": "avg",
+                                "field_id": "fld_01kytgcymkr9jd2jsn15g47edy",
+                                "format": "currency"
+                            }
+                        ]
+                    },
+                    {
+                        "id": "blk_01kytgcymkr9jd2jsn15g47egn",
+                        "type": "chart",
+                        "label": "Oportunidad por estado",
+                        "chart_type": "donut",
+                        "data_source": {
+                            "object_id": "obj_01kytgcymkr9jd2jsn15g47ee6",
+                            "limit": 500
+                        },
+                        "aggregation": "count",
+                        "group_by_field_id": "fld_01kytgcymkr9jd2jsn15g47edz"
+                    },
+                    {
+                        "id": "blk_01kytgcymkr9jd2jsn15g47egm",
+                        "type": "sparkline",
+                        "label": "Cliente en el tiempo",
+                        "data_source": {
+                            "object_id": "obj_01kytgcymkr9jd2jsn15g47edw",
+                            "limit": 500
+                        },
+                        "x_field_id": "sys_created_at",
+                        "aggregation": "count"
+                    },
+                    {
+                        "id": "blk_01kytgcymkr9jd2jsn15g47egq",
+                        "type": "sparkline",
+                        "label": "Oportunidad en el tiempo",
+                        "data_source": {
+                            "object_id": "obj_01kytgcymkr9jd2jsn15g47ee6",
+                            "limit": 500
+                        },
+                        "x_field_id": "sys_created_at",
+                        "aggregation": "count"
+                    },
+                    {
+                        "id": "blk_01kytgcymkr9jd2jsn15g47egr",
+                        "type": "sparkline",
+                        "label": "Actividad en el tiempo",
+                        "data_source": {
+                            "object_id": "obj_01kytgcymkr9jd2jsn15g47eea",
+                            "limit": 500
+                        },
+                        "x_field_id": "sys_created_at",
+                        "aggregation": "count"
+                    },
+                    {
+                        "id": "blk_01kytgcymkr9jd2jsn15g47egp",
+                        "type": "chart",
+                        "label": "Valor de Oportunidad por estado",
+                        "chart_type": "bar",
+                        "data_source": {
+                            "object_id": "obj_01kytgcymkr9jd2jsn15g47ee6",
+                            "limit": 500
+                        },
+                        "aggregation": "sum",
+                        "y_field_id": "fld_01kytgcymkr9jd2jsn15g47edy",
+                        "group_by_field_id": "fld_01kytgcymkr9jd2jsn15g47edz"
+                    }
+                ]
+            },
+            {
+                "id": "pag_01kytgcymkr9jd2jsn15g47eez",
+                "slug": "clientes",
+                "name": "Cliente",
+                "path": "/clientes",
+                "blocks": [
+                    {
+                        "id": "blk_01kytgcymkr9jd2jsn15g47eey",
+                        "type": "heading",
+                        "content": "Cliente"
+                    },
+                    {
+                        "id": "blk_01kytgcymkr9jd2jsn15g47eej",
+                        "type": "modal",
+                        "title": "Agregar Cliente",
+                        "blocks": [
+                            {
+                                "id": "blk_01kytgcymkr9jd2jsn15g47eek",
+                                "type": "form",
+                                "object_id": "obj_01kytgcymkr9jd2jsn15g47edw",
+                                "mode": "create",
+                                "fields": [
+                                    {
+                                        "field_id": "fld_01kytgcymkr9jd2jsn15g47edq"
+                                    },
+                                    {
+                                        "field_id": "fld_01kytgcymkr9jd2jsn15g47edr"
+                                    },
+                                    {
+                                        "field_id": "fld_01kytgcymkr9jd2jsn15g47eds"
+                                    },
+                                    {
+                                        "field_id": "fld_01kytgcymkr9jd2jsn15g47edt"
+                                    },
+                                    {
+                                        "field_id": "fld_01kytgcymkr9jd2jsn15g47edv"
+                                    }
+                                ],
+                                "submit_label": "Guardar",
+                                "on_submit": [
+                                    {
+                                        "type": "create_record",
+                                        "object_id": "obj_01kytgcymkr9jd2jsn15g47edw",
+                                        "values": {
+                                            "nombre": "{{form.nombre}}",
+                                            "empresa": "{{form.empresa}}",
+                                            "correo": "{{form.correo}}",
+                                            "telefono": "{{form.telefono}}",
+                                            "ciudad": "{{form.ciudad}}"
+                                        }
+                                    },
+                                    {
+                                        "type": "close_modal"
+                                    },
+                                    {
+                                        "type": "show_toast",
+                                        "level": "success",
+                                        "message": "Guardado"
+                                    },
+                                    {
+                                        "type": "refresh"
+                                    }
+                                ]
+                            }
+                        ]
+                    },
+                    {
+                        "id": "blk_01kytgcymkr9jd2jsn15g47eem",
+                        "type": "button",
+                        "label": "Agregar Cliente",
+                        "variant": "primary",
+                        "on_click": [
+                            {
+                                "type": "open_modal",
+                                "modal_block_id": "blk_01kytgcymkr9jd2jsn15g47eej"
+                            }
+                        ]
+                    },
+                    {
+                        "id": "blk_01kytgcymkr9jd2jsn15g47eex",
+                        "type": "table",
+                        "data_source": {
+                            "object_id": "obj_01kytgcymkr9jd2jsn15g47edw",
+                            "sort": [
+                                {
+                                    "field_id": "sys_created_at",
+                                    "direction": "desc"
+                                }
+                            ]
+                        },
+                        "columns": [
+                            {
+                                "id": "col_01kytgcymkr9jd2jsn15g47een",
+                                "field_id": "fld_01kytgcymkr9jd2jsn15g47edq"
+                            },
+                            {
+                                "id": "col_01kytgcymkr9jd2jsn15g47eep",
+                                "field_id": "fld_01kytgcymkr9jd2jsn15g47edr"
+                            },
+                            {
+                                "id": "col_01kytgcymkr9jd2jsn15g47eeq",
+                                "field_id": "fld_01kytgcymkr9jd2jsn15g47eds"
+                            },
+                            {
+                                "id": "col_01kytgcymkr9jd2jsn15g47eer",
+                                "field_id": "fld_01kytgcymkr9jd2jsn15g47edt"
+                            },
+                            {
+                                "id": "col_01kytgcymkr9jd2jsn15g47ees",
+                                "field_id": "fld_01kytgcymkr9jd2jsn15g47edv"
+                            },
+                            {
+                                "id": "col_01kytgcymkr9jd2jsn15g47eet",
+                                "field_id": "fld_01kytgcymkr9jd2jsn15g47eed"
+                            },
+                            {
+                                "id": "col_01kytgcymkr9jd2jsn15g47eev",
+                                "field_id": "fld_01kytgcymkr9jd2jsn15g47eee"
+                            },
+                            {
+                                "id": "col_01kytgcymkr9jd2jsn15g47eew",
+                                "field_id": "sys_created_at",
+                                "label_override": "Creado"
+                            },
+                            {
+                                "id": "col_01kytgcymkr9jd2jsn15g47eg3",
+                                "type": "action",
+                                "label": "Abrir",
+                                "icon": "arrow-right",
+                                "variant": "ghost",
+                                "on_click": [
+                                    {
+                                        "type": "navigate",
+                                        "to": "/clientes_detail?id={{row.id}}"
+                                    }
+                                ]
+                            }
+                        ]
+                    }
+                ]
+            },
+            {
+                "id": "pag_01kytgcymkr9jd2jsn15g47efe",
+                "slug": "oportunidades",
+                "name": "Oportunidad",
+                "path": "/oportunidades",
+                "blocks": [
+                    {
+                        "id": "blk_01kytgcymkr9jd2jsn15g47efb",
+                        "type": "heading",
+                        "content": "Oportunidad"
+                    },
+                    {
+                        "id": "blk_01kytgcymkr9jd2jsn15g47ef0",
+                        "type": "modal",
+                        "title": "Agregar Oportunidad",
+                        "blocks": [
+                            {
+                                "id": "blk_01kytgcymkr9jd2jsn15g47ef1",
+                                "type": "form",
+                                "object_id": "obj_01kytgcymkr9jd2jsn15g47ee6",
+                                "mode": "create",
+                                "fields": [
+                                    {
+                                        "field_id": "fld_01kytgcymkr9jd2jsn15g47edx"
+                                    },
+                                    {
+                                        "field_id": "fld_01kytgcymkr9jd2jsn15g47edy"
+                                    },
+                                    {
+                                        "field_id": "fld_01kytgcymkr9jd2jsn15g47edz"
+                                    },
+                                    {
+                                        "field_id": "fld_01kytgcymkr9jd2jsn15g47ee5"
+                                    },
+                                    {
+                                        "field_id": "fld_01kytgcymkr9jd2jsn15g47eeb"
+                                    }
+                                ],
+                                "submit_label": "Guardar",
+                                "on_submit": [
+                                    {
+                                        "type": "create_record",
+                                        "object_id": "obj_01kytgcymkr9jd2jsn15g47ee6",
+                                        "values": {
+                                            "titulo": "{{form.titulo}}",
+                                            "monto": "{{form.monto}}",
+                                            "etapa": "{{form.etapa}}",
+                                            "cierre_estimado": "{{form.cierre_estimado}}",
+                                            "cliente": "{{form.cliente}}"
+                                        }
+                                    },
+                                    {
+                                        "type": "close_modal"
+                                    },
+                                    {
+                                        "type": "show_toast",
+                                        "level": "success",
+                                        "message": "Guardado"
+                                    },
+                                    {
+                                        "type": "refresh"
+                                    }
+                                ]
+                            }
+                        ]
+                    },
+                    {
+                        "id": "blk_01kytgcymkr9jd2jsn15g47ef2",
+                        "type": "button",
+                        "label": "Agregar Oportunidad",
+                        "variant": "primary",
+                        "on_click": [
+                            {
+                                "type": "open_modal",
+                                "modal_block_id": "blk_01kytgcymkr9jd2jsn15g47ef0"
+                            }
+                        ]
+                    },
+                    {
+                        "id": "blk_01kytgcymkr9jd2jsn15g47efc",
+                        "type": "calendar",
+                        "data_source": {
+                            "object_id": "obj_01kytgcymkr9jd2jsn15g47ee6"
+                        },
+                        "date_field_id": "fld_01kytgcymkr9jd2jsn15g47ee5",
+                        "title_field_id": "fld_01kytgcymkr9jd2jsn15g47edx",
+                        "color_field_id": "fld_01kytgcymkr9jd2jsn15g47edz"
+                    },
+                    {
+                        "id": "blk_01kytgcymkr9jd2jsn15g47efd",
+                        "type": "kanban",
+                        "data_source": {
+                            "object_id": "obj_01kytgcymkr9jd2jsn15g47ee6"
+                        },
+                        "group_by_field_id": "fld_01kytgcymkr9jd2jsn15g47edz",
+                        "card_title_field_id": "fld_01kytgcymkr9jd2jsn15g47edx",
+                        "editable": true,
+                        "card_meta_fields": [
+                            {
+                                "field_id": "fld_01kytgcymkr9jd2jsn15g47edy"
+                            },
+                            {
+                                "field_id": "fld_01kytgcymkr9jd2jsn15g47ee5"
+                            }
+                        ]
+                    },
+                    {
+                        "id": "blk_01kytgcymkr9jd2jsn15g47efa",
+                        "type": "table",
+                        "data_source": {
+                            "object_id": "obj_01kytgcymkr9jd2jsn15g47ee6",
+                            "sort": [
+                                {
+                                    "field_id": "sys_created_at",
+                                    "direction": "desc"
+                                }
+                            ]
+                        },
+                        "columns": [
+                            {
+                                "id": "col_01kytgcymkr9jd2jsn15g47ef3",
+                                "field_id": "fld_01kytgcymkr9jd2jsn15g47edx"
+                            },
+                            {
+                                "id": "col_01kytgcymkr9jd2jsn15g47ef4",
+                                "field_id": "fld_01kytgcymkr9jd2jsn15g47edy"
+                            },
+                            {
+                                "id": "col_01kytgcymkr9jd2jsn15g47ef5",
+                                "field_id": "fld_01kytgcymkr9jd2jsn15g47edz"
+                            },
+                            {
+                                "id": "col_01kytgcymkr9jd2jsn15g47ef6",
+                                "field_id": "fld_01kytgcymkr9jd2jsn15g47ee5"
+                            },
+                            {
+                                "id": "col_01kytgcymkr9jd2jsn15g47ef7",
+                                "field_id": "fld_01kytgcymkr9jd2jsn15g47eeb"
+                            },
+                            {
+                                "id": "col_01kytgcymkr9jd2jsn15g47ef8",
+                                "field_id": "fld_01kytgcymkr9jd2jsn15g47eeh"
+                            },
+                            {
+                                "id": "col_01kytgcymkr9jd2jsn15g47ef9",
+                                "field_id": "sys_created_at",
+                                "label_override": "Creado"
+                            },
+                            {
+                                "id": "col_01kytgcymkr9jd2jsn15g47egc",
+                                "type": "action",
+                                "label": "Abrir",
+                                "icon": "arrow-right",
+                                "variant": "ghost",
+                                "on_click": [
+                                    {
+                                        "type": "navigate",
+                                        "to": "/oportunidades_detail?id={{row.id}}"
+                                    }
+                                ]
+                            }
+                        ]
+                    }
+                ]
+            },
+            {
+                "id": "pag_01kytgcymkr9jd2jsn15g47eft",
+                "slug": "actividades",
+                "name": "Actividad",
+                "path": "/actividades",
+                "blocks": [
+                    {
+                        "id": "blk_01kytgcymkr9jd2jsn15g47efr",
+                        "type": "heading",
+                        "content": "Actividad"
+                    },
+                    {
+                        "id": "blk_01kytgcymkr9jd2jsn15g47eff",
+                        "type": "modal",
+                        "title": "Agregar Actividad",
+                        "blocks": [
+                            {
+                                "id": "blk_01kytgcymkr9jd2jsn15g47efg",
+                                "type": "form",
+                                "object_id": "obj_01kytgcymkr9jd2jsn15g47eea",
+                                "mode": "create",
+                                "fields": [
+                                    {
+                                        "field_id": "fld_01kytgcymkr9jd2jsn15g47ee7"
+                                    },
+                                    {
+                                        "field_id": "fld_01kytgcymkr9jd2jsn15g47ee8"
+                                    },
+                                    {
+                                        "field_id": "fld_01kytgcymkr9jd2jsn15g47ee9"
+                                    },
+                                    {
+                                        "field_id": "fld_01kytgcymkr9jd2jsn15g47eef"
+                                    }
+                                ],
+                                "submit_label": "Guardar",
+                                "on_submit": [
+                                    {
+                                        "type": "create_record",
+                                        "object_id": "obj_01kytgcymkr9jd2jsn15g47eea",
+                                        "values": {
+                                            "asunto": "{{form.asunto}}",
+                                            "notas": "{{form.notas}}",
+                                            "fecha": "{{form.fecha}}",
+                                            "oportunidad": "{{form.oportunidad}}"
+                                        }
+                                    },
+                                    {
+                                        "type": "close_modal"
+                                    },
+                                    {
+                                        "type": "show_toast",
+                                        "level": "success",
+                                        "message": "Guardado"
+                                    },
+                                    {
+                                        "type": "refresh"
+                                    }
+                                ]
+                            }
+                        ]
+                    },
+                    {
+                        "id": "blk_01kytgcymkr9jd2jsn15g47efh",
+                        "type": "button",
+                        "label": "Agregar Actividad",
+                        "variant": "primary",
+                        "on_click": [
+                            {
+                                "type": "open_modal",
+                                "modal_block_id": "blk_01kytgcymkr9jd2jsn15g47eff"
+                            }
+                        ]
+                    },
+                    {
+                        "id": "blk_01kytgcymkr9jd2jsn15g47efs",
+                        "type": "calendar",
+                        "data_source": {
+                            "object_id": "obj_01kytgcymkr9jd2jsn15g47eea"
+                        },
+                        "date_field_id": "fld_01kytgcymkr9jd2jsn15g47ee9",
+                        "title_field_id": "fld_01kytgcymkr9jd2jsn15g47ee7"
+                    },
+                    {
+                        "id": "blk_01kytgcymkr9jd2jsn15g47efq",
+                        "type": "table",
+                        "data_source": {
+                            "object_id": "obj_01kytgcymkr9jd2jsn15g47eea",
+                            "sort": [
+                                {
+                                    "field_id": "sys_created_at",
+                                    "direction": "desc"
+                                }
+                            ]
+                        },
+                        "columns": [
+                            {
+                                "id": "col_01kytgcymkr9jd2jsn15g47efj",
+                                "field_id": "fld_01kytgcymkr9jd2jsn15g47ee7"
+                            },
+                            {
+                                "id": "col_01kytgcymkr9jd2jsn15g47efk",
+                                "field_id": "fld_01kytgcymkr9jd2jsn15g47ee8"
+                            },
+                            {
+                                "id": "col_01kytgcymkr9jd2jsn15g47efm",
+                                "field_id": "fld_01kytgcymkr9jd2jsn15g47ee9"
+                            },
+                            {
+                                "id": "col_01kytgcymkr9jd2jsn15g47efn",
+                                "field_id": "fld_01kytgcymkr9jd2jsn15g47eef"
+                            },
+                            {
+                                "id": "col_01kytgcymkr9jd2jsn15g47efp",
+                                "field_id": "sys_created_at",
+                                "label_override": "Creado"
+                            }
+                        ]
+                    }
+                ]
+            },
+            {
+                "id": "pag_01kytgcymkr9jd2jsn15g47eg2",
+                "slug": "clientes_detail",
+                "name": "Cliente",
+                "path": "/clientes_detail",
+                "blocks": [
+                    {
+                        "id": "blk_01kytgcymkr9jd2jsn15g47efv",
+                        "type": "breadcrumb",
+                        "items": [
+                            {
+                                "label": "Cliente",
+                                "href": "/clientes"
+                            },
+                            {
+                                "label": "Cliente"
+                            }
+                        ]
+                    },
+                    {
+                        "id": "blk_01kytgcymkr9jd2jsn15g47efw",
+                        "type": "record_detail",
+                        "label": "Cliente",
+                        "object_id": "obj_01kytgcymkr9jd2jsn15g47edw",
+                        "record_id_expression": "{{params.id}}",
+                        "fields": [
+                            {
+                                "field_id": "fld_01kytgcymkr9jd2jsn15g47edq"
+                            },
+                            {
+                                "field_id": "fld_01kytgcymkr9jd2jsn15g47edr"
+                            },
+                            {
+                                "field_id": "fld_01kytgcymkr9jd2jsn15g47eds"
+                            },
+                            {
+                                "field_id": "fld_01kytgcymkr9jd2jsn15g47edt"
+                            },
+                            {
+                                "field_id": "fld_01kytgcymkr9jd2jsn15g47edv"
+                            },
+                            {
+                                "field_id": "fld_01kytgcymkr9jd2jsn15g47eed"
+                            },
+                            {
+                                "field_id": "fld_01kytgcymkr9jd2jsn15g47eee"
+                            }
+                        ]
+                    },
+                    {
+                        "id": "blk_01kytgcymkr9jd2jsn15g47efy",
+                        "type": "heading",
+                        "level": 3,
+                        "content": "Oportunidad"
+                    },
+                    {
+                        "id": "blk_01kytgcymkr9jd2jsn15g47efx",
+                        "type": "modal",
+                        "title": "Agregar Oportunidad",
+                        "blocks": [
+                            {
+                                "id": "blk_01kytgcymkr9jd2jsn15g47efz",
+                                "type": "form",
+                                "object_id": "obj_01kytgcymkr9jd2jsn15g47ee6",
+                                "mode": "create",
+                                "fields": [
+                                    {
+                                        "field_id": "fld_01kytgcymkr9jd2jsn15g47edx"
+                                    },
+                                    {
+                                        "field_id": "fld_01kytgcymkr9jd2jsn15g47edy"
+                                    },
+                                    {
+                                        "field_id": "fld_01kytgcymkr9jd2jsn15g47edz"
+                                    },
+                                    {
+                                        "field_id": "fld_01kytgcymkr9jd2jsn15g47ee5"
+                                    }
+                                ],
+                                "submit_label": "Guardar",
+                                "on_submit": [
+                                    {
+                                        "type": "create_record",
+                                        "object_id": "obj_01kytgcymkr9jd2jsn15g47ee6",
+                                        "values": {
+                                            "cliente": "{{params.id}}",
+                                            "titulo": "{{form.titulo}}",
+                                            "monto": "{{form.monto}}",
+                                            "etapa": "{{form.etapa}}",
+                                            "cierre_estimado": "{{form.cierre_estimado}}"
+                                        }
+                                    },
+                                    {
+                                        "type": "close_modal"
+                                    },
+                                    {
+                                        "type": "show_toast",
+                                        "level": "success",
+                                        "message": "Guardado"
+                                    },
+                                    {
+                                        "type": "refresh"
+                                    }
+                                ]
+                            }
+                        ]
+                    },
+                    {
+                        "id": "blk_01kytgcymkr9jd2jsn15g47eg0",
+                        "type": "button",
+                        "label": "Agregar Oportunidad",
+                        "variant": "primary",
+                        "on_click": [
+                            {
+                                "type": "open_modal",
+                                "modal_block_id": "blk_01kytgcymkr9jd2jsn15g47efx"
+                            }
+                        ]
+                    },
+                    {
+                        "id": "blk_01kytgcymkr9jd2jsn15g47eg1",
+                        "type": "related_list",
+                        "object_id": "obj_01kytgcymkr9jd2jsn15g47ee6",
+                        "via_relation_field_id": "fld_01kytgcymkr9jd2jsn15g47eeb",
+                        "parent_id_expression": "{{params.id}}",
+                        "columns": [
+                            {
+                                "field_id": "fld_01kytgcymkr9jd2jsn15g47edx"
+                            },
+                            {
+                                "field_id": "fld_01kytgcymkr9jd2jsn15g47edy"
+                            },
+                            {
+                                "field_id": "fld_01kytgcymkr9jd2jsn15g47edz"
+                            },
+                            {
+                                "field_id": "fld_01kytgcymkr9jd2jsn15g47ee5"
+                            },
+                            {
+                                "field_id": "fld_01kytgcymkr9jd2jsn15g47eeh"
+                            }
+                        ]
+                    }
+                ]
+            },
+            {
+                "id": "pag_01kytgcymkr9jd2jsn15g47egb",
+                "slug": "oportunidades_detail",
+                "name": "Oportunidad",
+                "path": "/oportunidades_detail",
+                "blocks": [
+                    {
+                        "id": "blk_01kytgcymkr9jd2jsn15g47eg4",
+                        "type": "breadcrumb",
+                        "items": [
+                            {
+                                "label": "Oportunidad",
+                                "href": "/oportunidades"
+                            },
+                            {
+                                "label": "Oportunidad"
+                            }
+                        ]
+                    },
+                    {
+                        "id": "blk_01kytgcymkr9jd2jsn15g47eg5",
+                        "type": "record_detail",
+                        "label": "Oportunidad",
+                        "object_id": "obj_01kytgcymkr9jd2jsn15g47ee6",
+                        "record_id_expression": "{{params.id}}",
+                        "fields": [
+                            {
+                                "field_id": "fld_01kytgcymkr9jd2jsn15g47edx"
+                            },
+                            {
+                                "field_id": "fld_01kytgcymkr9jd2jsn15g47edy"
+                            },
+                            {
+                                "field_id": "fld_01kytgcymkr9jd2jsn15g47edz"
+                            },
+                            {
+                                "field_id": "fld_01kytgcymkr9jd2jsn15g47ee5"
+                            },
+                            {
+                                "field_id": "fld_01kytgcymkr9jd2jsn15g47eeb"
+                            },
+                            {
+                                "field_id": "fld_01kytgcymkr9jd2jsn15g47eeh"
+                            }
+                        ]
+                    },
+                    {
+                        "id": "blk_01kytgcymkr9jd2jsn15g47eg7",
+                        "type": "heading",
+                        "level": 3,
+                        "content": "Actividad"
+                    },
+                    {
+                        "id": "blk_01kytgcymkr9jd2jsn15g47eg6",
+                        "type": "modal",
+                        "title": "Agregar Actividad",
+                        "blocks": [
+                            {
+                                "id": "blk_01kytgcymkr9jd2jsn15g47eg8",
+                                "type": "form",
+                                "object_id": "obj_01kytgcymkr9jd2jsn15g47eea",
+                                "mode": "create",
+                                "fields": [
+                                    {
+                                        "field_id": "fld_01kytgcymkr9jd2jsn15g47ee7"
+                                    },
+                                    {
+                                        "field_id": "fld_01kytgcymkr9jd2jsn15g47ee8"
+                                    },
+                                    {
+                                        "field_id": "fld_01kytgcymkr9jd2jsn15g47ee9"
+                                    }
+                                ],
+                                "submit_label": "Guardar",
+                                "on_submit": [
+                                    {
+                                        "type": "create_record",
+                                        "object_id": "obj_01kytgcymkr9jd2jsn15g47eea",
+                                        "values": {
+                                            "oportunidad": "{{params.id}}",
+                                            "asunto": "{{form.asunto}}",
+                                            "notas": "{{form.notas}}",
+                                            "fecha": "{{form.fecha}}"
+                                        }
+                                    },
+                                    {
+                                        "type": "close_modal"
+                                    },
+                                    {
+                                        "type": "show_toast",
+                                        "level": "success",
+                                        "message": "Guardado"
+                                    },
+                                    {
+                                        "type": "refresh"
+                                    }
+                                ]
+                            }
+                        ]
+                    },
+                    {
+                        "id": "blk_01kytgcymkr9jd2jsn15g47eg9",
+                        "type": "button",
+                        "label": "Agregar Actividad",
+                        "variant": "primary",
+                        "on_click": [
+                            {
+                                "type": "open_modal",
+                                "modal_block_id": "blk_01kytgcymkr9jd2jsn15g47eg6"
+                            }
+                        ]
+                    },
+                    {
+                        "id": "blk_01kytgcymkr9jd2jsn15g47ega",
+                        "type": "related_list",
+                        "object_id": "obj_01kytgcymkr9jd2jsn15g47eea",
+                        "via_relation_field_id": "fld_01kytgcymkr9jd2jsn15g47eef",
+                        "parent_id_expression": "{{params.id}}",
+                        "columns": [
+                            {
+                                "field_id": "fld_01kytgcymkr9jd2jsn15g47ee7"
+                            },
+                            {
+                                "field_id": "fld_01kytgcymkr9jd2jsn15g47ee8"
+                            },
+                            {
+                                "field_id": "fld_01kytgcymkr9jd2jsn15g47ee9"
+                            }
+                        ]
+                    }
+                ]
+            }
+        ],
+        "permissions": {
+            "roles": [
+                {
+                    "id": "rol_01kytgcymkr9jd2jsn15g47edn",
+                    "slug": "admin",
+                    "name": "Admin",
+                    "is_default": false
+                },
+                {
+                    "id": "rol_01kytgcymkr9jd2jsn15g47edp",
+                    "slug": "user",
+                    "name": "User",
+                    "is_default": true
+                }
+            ]
+        },
+        "settings": {
+            "default_locale": "es-MX",
+            "default_timezone": "America/Mexico_City",
+            "default_currency": "MXN"
+        }
+    },
+    "portability": {
+        "removed": []
+    }
+}

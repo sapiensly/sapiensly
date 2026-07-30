@@ -171,6 +171,7 @@ class SapiensServer extends Server
         Tools\Build\RollbackAppTool::class,
         Tools\Build\DeleteAppTool::class,
         Tools\Build\ImportRecordsTool::class,
+        Tools\Build\ExportAppTool::class,
         Tools\Build\PublishLandingTool::class,
         Tools\Build\PublishPortalTool::class,
         Tools\Build\ManageLandingDomainTool::class,

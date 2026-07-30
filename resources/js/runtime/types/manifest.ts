@@ -317,6 +317,14 @@ export interface RuntimePageProps {
      * authenticated runtime); a public portal passes `/a/{public_slug}`.
      */
     mount?: string;
+    /**
+     * Role-preview affordance, present only for a viewer who would otherwise
+     * bypass every policy. `current` is the role in effect (null = unrestricted).
+     */
+    rolePreview?: {
+        current: string | null;
+        roles: Array<{ slug: string; name: string }>;
+    } | null;
     /** Head metadata resolved by the public landing controller. */
     seo?: { title?: string; description?: string; og_image?: string };
     /** True on the public (unauthenticated) landing surface — enables lead_form submits. */

@@ -7,8 +7,11 @@ use App\Http\Requests\App\StoreAppRequest;
 use App\Http\Requests\App\UpdateAppRequest;
 use App\Models\App;
 use App\Models\Record;
+use App\Services\Apps\AppPackage;
+use App\Services\Apps\AppTemplateCatalog;
 use App\Services\Manifest\AppManifestService;
 use App\Support\Apps\AppNaming;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -30,6 +33,9 @@ class AppController extends Controller
 
         return Inertia::render('apps/Index', [
             'apps' => $apps,
+            // Starter packages, so a new app can begin from something real
+            // instead of an empty page.
+            'templates' => app(AppTemplateCatalog::class)->all(),
         ]);
     }
 
@@ -208,6 +214,87 @@ class AppController extends Controller
         }
 
         return redirect()->route('apps.index');
+    }
+
+    /**
+     * Download the app as a portable package. What cannot travel — connected
+     * sources, workflows touching an integration or agent, a chatbot binding —
+     * is stripped and listed inside the file under `portability.removed`, so
+     * whoever installs it reads what needs re-wiring before wondering why.
+     */
+    public function export(Request $request, App $app): JsonResponse
+    {
+        $this->authorizeAccess($request, $app);
+
+        try {
+            $package = app(AppPackage::class)->export($app);
+        } catch (\InvalidArgumentException $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
+        }
+
+        return response()->json($package)->withHeaders([
+            'Content-Disposition' => 'attachment; filename="'.$app->slug.'.sapiensly.json"',
+        ]);
+    }
+
+    /** Install an uploaded package as a new app. */
+    public function import(Request $request): RedirectResponse
+    {
+        $data = $request->validate([
+            'package' => ['required', 'file', 'mimes:json,txt', 'max:4096'],
+            'name' => ['nullable', 'string', 'max:80'],
+        ]);
+
+        $decoded = json_decode((string) file_get_contents($data['package']->getRealPath()), true);
+        if (! is_array($decoded)) {
+            return back()->withErrors(['package' => 'That file is not valid JSON.']);
+        }
+
+        try {
+            $result = app(AppPackage::class)->import($decoded, $request->user(), $data['name'] ?? null);
+        } catch (\InvalidArgumentException $e) {
+            return back()->withErrors(['package' => $e->getMessage()]);
+        }
+
+        return redirect()
+            ->route('apps.builder', $result['app'])
+            ->with('import_notes', $result['notes']);
+    }
+
+    /** Copy an app in place — the same path an installed package takes. */
+    public function duplicate(Request $request, App $app): RedirectResponse
+    {
+        $this->authorizeAccess($request, $app);
+
+        try {
+            $result = app(AppPackage::class)->duplicate($app, $request->user());
+        } catch (\InvalidArgumentException $e) {
+            return back()->withErrors(['app' => $e->getMessage()]);
+        }
+
+        return redirect()
+            ->route('apps.builder', $result['app'])
+            ->with('import_notes', $result['notes']);
+    }
+
+    /** Install one of the built-in starter templates. */
+    public function createFromTemplate(Request $request): RedirectResponse
+    {
+        $data = $request->validate([
+            'template' => ['required', 'string', 'max:60'],
+            'name' => ['nullable', 'string', 'max:80'],
+        ]);
+
+        $package = app(AppTemplateCatalog::class)->package($data['template']);
+        if ($package === null) {
+            return back()->withErrors(['template' => 'No such template.']);
+        }
+
+        $result = app(AppPackage::class)->import($package, $request->user(), $data['name'] ?? null);
+
+        return redirect()
+            ->route('apps.builder', $result['app'])
+            ->with('import_notes', $result['notes']);
     }
 
     private function authorizeAccess(Request $request, App $app): void

@@ -1,0 +1,643 @@
+{
+    "format": "sapiensly.app-package",
+    "format_version": 1,
+    "exported_at": "2026-07-30T00:00:00+00:00",
+    "app": {
+        "name": "Mesa de ayuda",
+        "description": "Tickets de soporte con prioridad, estado y seguimiento.",
+        "icon": "life-buoy",
+        "color": null,
+        "kind": "app"
+    },
+    "manifest": {
+        "schema_version": "1.0.0",
+        "name": "Mesa de ayuda",
+        "version": 1,
+        "objects": [
+            {
+                "id": "obj_01kytgcyx8nx5cp8q0kv1s2ccv",
+                "slug": "tickets",
+                "name": "Ticket",
+                "fields": [
+                    {
+                        "id": "fld_01kytgcyx8nx5cp8q0kv1s2cce",
+                        "slug": "asunto",
+                        "name": "Asunto",
+                        "type": "string"
+                    },
+                    {
+                        "id": "fld_01kytgcyx8nx5cp8q0kv1s2ccf",
+                        "slug": "descripcion",
+                        "name": "Descripcion",
+                        "type": "long_text"
+                    },
+                    {
+                        "id": "fld_01kytgcyx8nx5cp8q0kv1s2ccg",
+                        "slug": "correo",
+                        "name": "Correo del solicitante",
+                        "type": "string"
+                    },
+                    {
+                        "id": "fld_01kytgcyx8nx5cp8q0kv1s2cch",
+                        "slug": "estado",
+                        "name": "Estado",
+                        "type": "single_select",
+                        "options": [
+                            {
+                                "id": "opt_01kytgcyx8nx5cp8q0kv1s2ccj",
+                                "value": "nuevo",
+                                "label": "Nuevo",
+                                "color": "#0ea5e9"
+                            },
+                            {
+                                "id": "opt_01kytgcyx8nx5cp8q0kv1s2cck",
+                                "value": "en_proceso",
+                                "label": "En proceso",
+                                "color": "#f59e0b"
+                            },
+                            {
+                                "id": "opt_01kytgcyx8nx5cp8q0kv1s2ccm",
+                                "value": "esperando_respuesta",
+                                "label": "Esperando respuesta",
+                                "color": "#16a34a"
+                            },
+                            {
+                                "id": "opt_01kytgcyx8nx5cp8q0kv1s2ccn",
+                                "value": "resuelto",
+                                "label": "Resuelto",
+                                "color": "#8b5cf6"
+                            }
+                        ]
+                    },
+                    {
+                        "id": "fld_01kytgcyx8nx5cp8q0kv1s2ccp",
+                        "slug": "prioridad",
+                        "name": "Prioridad",
+                        "type": "single_select",
+                        "options": [
+                            {
+                                "id": "opt_01kytgcyx8nx5cp8q0kv1s2ccq",
+                                "value": "baja",
+                                "label": "Baja",
+                                "color": "#0ea5e9"
+                            },
+                            {
+                                "id": "opt_01kytgcyx8nx5cp8q0kv1s2ccr",
+                                "value": "media",
+                                "label": "Media",
+                                "color": "#f59e0b"
+                            },
+                            {
+                                "id": "opt_01kytgcyx8nx5cp8q0kv1s2ccs",
+                                "value": "alta",
+                                "label": "Alta",
+                                "color": "#16a34a"
+                            },
+                            {
+                                "id": "opt_01kytgcyx8nx5cp8q0kv1s2cct",
+                                "value": "urgente",
+                                "label": "Urgente",
+                                "color": "#8b5cf6"
+                            }
+                        ]
+                    },
+                    {
+                        "id": "fld_01kytgcyx8nx5cp8q0kv1s2cd0",
+                        "slug": "respuestas",
+                        "name": "Respuesta",
+                        "type": "relation",
+                        "target_object_id": "obj_01kytgcyx8nx5cp8q0kv1s2ccy",
+                        "cardinality": "one_to_many",
+                        "inverse_field_id": "fld_01kytgcyx8nx5cp8q0kv1s2ccz"
+                    },
+                    {
+                        "id": "fld_01kytgcyx8nx5cp8q0kv1s2cd1",
+                        "slug": "respuestas_count",
+                        "name": "Respuesta",
+                        "type": "rollup",
+                        "via_relation_field_id": "fld_01kytgcyx8nx5cp8q0kv1s2cd0",
+                        "aggregator": "count",
+                        "readonly": true
+                    }
+                ]
+            },
+            {
+                "id": "obj_01kytgcyx8nx5cp8q0kv1s2ccy",
+                "slug": "respuestas",
+                "name": "Respuesta",
+                "fields": [
+                    {
+                        "id": "fld_01kytgcyx8nx5cp8q0kv1s2ccw",
+                        "slug": "mensaje",
+                        "name": "Mensaje",
+                        "type": "long_text"
+                    },
+                    {
+                        "id": "fld_01kytgcyx8nx5cp8q0kv1s2ccx",
+                        "slug": "fecha",
+                        "name": "Fecha",
+                        "type": "datetime"
+                    },
+                    {
+                        "id": "fld_01kytgcyx8nx5cp8q0kv1s2ccz",
+                        "slug": "ticket",
+                        "name": "Ticket",
+                        "type": "relation",
+                        "target_object_id": "obj_01kytgcyx8nx5cp8q0kv1s2ccv",
+                        "cardinality": "many_to_one",
+                        "on_delete": "set_null",
+                        "inverse_field_id": "fld_01kytgcyx8nx5cp8q0kv1s2cd0"
+                    }
+                ]
+            }
+        ],
+        "pages": [
+            {
+                "id": "pag_01kytgcyx8nx5cp8q0kv1s2ceb",
+                "slug": "dashboard",
+                "name": "Dashboard",
+                "path": "/",
+                "blocks": [
+                    {
+                        "id": "blk_01kytgcyx8nx5cp8q0kv1s2ce6",
+                        "type": "heading",
+                        "content": "Mesa de ayuda"
+                    },
+                    {
+                        "id": "blk_01kytgcyx8nx5cp8q0kv1s2ce7",
+                        "type": "metric_grid",
+                        "items": [
+                            {
+                                "id": "itm_01kytgcyx8nx5cp8q0kv1s2ce4",
+                                "label": "Ticket",
+                                "query": {
+                                    "object_id": "obj_01kytgcyx8nx5cp8q0kv1s2ccv"
+                                },
+                                "aggregation": "count"
+                            },
+                            {
+                                "id": "itm_01kytgcyx8nx5cp8q0kv1s2ce5",
+                                "label": "Respuesta",
+                                "query": {
+                                    "object_id": "obj_01kytgcyx8nx5cp8q0kv1s2ccy"
+                                },
+                                "aggregation": "count"
+                            }
+                        ]
+                    },
+                    {
+                        "id": "blk_01kytgcyx8nx5cp8q0kv1s2ce8",
+                        "type": "chart",
+                        "label": "Ticket por estado",
+                        "chart_type": "donut",
+                        "data_source": {
+                            "object_id": "obj_01kytgcyx8nx5cp8q0kv1s2ccv",
+                            "limit": 500
+                        },
+                        "aggregation": "count",
+                        "group_by_field_id": "fld_01kytgcyx8nx5cp8q0kv1s2cch"
+                    },
+                    {
+                        "id": "blk_01kytgcyx8nx5cp8q0kv1s2ce9",
+                        "type": "sparkline",
+                        "label": "Ticket en el tiempo",
+                        "data_source": {
+                            "object_id": "obj_01kytgcyx8nx5cp8q0kv1s2ccv",
+                            "limit": 500
+                        },
+                        "x_field_id": "sys_created_at",
+                        "aggregation": "count"
+                    },
+                    {
+                        "id": "blk_01kytgcyx8nx5cp8q0kv1s2cea",
+                        "type": "sparkline",
+                        "label": "Respuesta en el tiempo",
+                        "data_source": {
+                            "object_id": "obj_01kytgcyx8nx5cp8q0kv1s2ccy",
+                            "limit": 500
+                        },
+                        "x_field_id": "sys_created_at",
+                        "aggregation": "count"
+                    }
+                ]
+            },
+            {
+                "id": "pag_01kytgcyx8nx5cp8q0kv1s2cdf",
+                "slug": "tickets",
+                "name": "Ticket",
+                "path": "/tickets",
+                "blocks": [
+                    {
+                        "id": "blk_01kytgcyx8nx5cp8q0kv1s2cdd",
+                        "type": "heading",
+                        "content": "Ticket"
+                    },
+                    {
+                        "id": "blk_01kytgcyx8nx5cp8q0kv1s2cd2",
+                        "type": "modal",
+                        "title": "Agregar Ticket",
+                        "blocks": [
+                            {
+                                "id": "blk_01kytgcyx8nx5cp8q0kv1s2cd3",
+                                "type": "form",
+                                "object_id": "obj_01kytgcyx8nx5cp8q0kv1s2ccv",
+                                "mode": "create",
+                                "fields": [
+                                    {
+                                        "field_id": "fld_01kytgcyx8nx5cp8q0kv1s2cce"
+                                    },
+                                    {
+                                        "field_id": "fld_01kytgcyx8nx5cp8q0kv1s2ccf"
+                                    },
+                                    {
+                                        "field_id": "fld_01kytgcyx8nx5cp8q0kv1s2ccg"
+                                    },
+                                    {
+                                        "field_id": "fld_01kytgcyx8nx5cp8q0kv1s2cch"
+                                    },
+                                    {
+                                        "field_id": "fld_01kytgcyx8nx5cp8q0kv1s2ccp"
+                                    }
+                                ],
+                                "submit_label": "Guardar",
+                                "on_submit": [
+                                    {
+                                        "type": "create_record",
+                                        "object_id": "obj_01kytgcyx8nx5cp8q0kv1s2ccv",
+                                        "values": {
+                                            "asunto": "{{form.asunto}}",
+                                            "descripcion": "{{form.descripcion}}",
+                                            "correo": "{{form.correo}}",
+                                            "estado": "{{form.estado}}",
+                                            "prioridad": "{{form.prioridad}}"
+                                        }
+                                    },
+                                    {
+                                        "type": "close_modal"
+                                    },
+                                    {
+                                        "type": "show_toast",
+                                        "level": "success",
+                                        "message": "Guardado"
+                                    },
+                                    {
+                                        "type": "refresh"
+                                    }
+                                ]
+                            }
+                        ]
+                    },
+                    {
+                        "id": "blk_01kytgcyx8nx5cp8q0kv1s2cd4",
+                        "type": "button",
+                        "label": "Agregar Ticket",
+                        "variant": "primary",
+                        "on_click": [
+                            {
+                                "type": "open_modal",
+                                "modal_block_id": "blk_01kytgcyx8nx5cp8q0kv1s2cd2"
+                            }
+                        ]
+                    },
+                    {
+                        "id": "blk_01kytgcyx8nx5cp8q0kv1s2cde",
+                        "type": "kanban",
+                        "data_source": {
+                            "object_id": "obj_01kytgcyx8nx5cp8q0kv1s2ccv"
+                        },
+                        "group_by_field_id": "fld_01kytgcyx8nx5cp8q0kv1s2cch",
+                        "card_title_field_id": "fld_01kytgcyx8nx5cp8q0kv1s2cce",
+                        "editable": true,
+                        "card_meta_fields": [
+                            {
+                                "field_id": "fld_01kytgcyx8nx5cp8q0kv1s2ccf"
+                            },
+                            {
+                                "field_id": "fld_01kytgcyx8nx5cp8q0kv1s2ccg"
+                            }
+                        ]
+                    },
+                    {
+                        "id": "blk_01kytgcyx8nx5cp8q0kv1s2cdc",
+                        "type": "table",
+                        "data_source": {
+                            "object_id": "obj_01kytgcyx8nx5cp8q0kv1s2ccv",
+                            "sort": [
+                                {
+                                    "field_id": "sys_created_at",
+                                    "direction": "desc"
+                                }
+                            ]
+                        },
+                        "columns": [
+                            {
+                                "id": "col_01kytgcyx8nx5cp8q0kv1s2cd5",
+                                "field_id": "fld_01kytgcyx8nx5cp8q0kv1s2cce"
+                            },
+                            {
+                                "id": "col_01kytgcyx8nx5cp8q0kv1s2cd6",
+                                "field_id": "fld_01kytgcyx8nx5cp8q0kv1s2ccf"
+                            },
+                            {
+                                "id": "col_01kytgcyx8nx5cp8q0kv1s2cd7",
+                                "field_id": "fld_01kytgcyx8nx5cp8q0kv1s2ccg"
+                            },
+                            {
+                                "id": "col_01kytgcyx8nx5cp8q0kv1s2cd8",
+                                "field_id": "fld_01kytgcyx8nx5cp8q0kv1s2cch"
+                            },
+                            {
+                                "id": "col_01kytgcyx8nx5cp8q0kv1s2cd9",
+                                "field_id": "fld_01kytgcyx8nx5cp8q0kv1s2ccp"
+                            },
+                            {
+                                "id": "col_01kytgcyx8nx5cp8q0kv1s2cda",
+                                "field_id": "fld_01kytgcyx8nx5cp8q0kv1s2cd1"
+                            },
+                            {
+                                "id": "col_01kytgcyx8nx5cp8q0kv1s2cdb",
+                                "field_id": "sys_created_at",
+                                "label_override": "Creado"
+                            },
+                            {
+                                "id": "col_01kytgcyx8nx5cp8q0kv1s2ce3",
+                                "type": "action",
+                                "label": "Abrir",
+                                "icon": "arrow-right",
+                                "variant": "ghost",
+                                "on_click": [
+                                    {
+                                        "type": "navigate",
+                                        "to": "/tickets_detail?id={{row.id}}"
+                                    }
+                                ]
+                            }
+                        ]
+                    }
+                ]
+            },
+            {
+                "id": "pag_01kytgcyx8nx5cp8q0kv1s2cdt",
+                "slug": "respuestas",
+                "name": "Respuesta",
+                "path": "/respuestas",
+                "blocks": [
+                    {
+                        "id": "blk_01kytgcyx8nx5cp8q0kv1s2cdr",
+                        "type": "heading",
+                        "content": "Respuesta"
+                    },
+                    {
+                        "id": "blk_01kytgcyx8nx5cp8q0kv1s2cdg",
+                        "type": "modal",
+                        "title": "Agregar Respuesta",
+                        "blocks": [
+                            {
+                                "id": "blk_01kytgcyx8nx5cp8q0kv1s2cdh",
+                                "type": "form",
+                                "object_id": "obj_01kytgcyx8nx5cp8q0kv1s2ccy",
+                                "mode": "create",
+                                "fields": [
+                                    {
+                                        "field_id": "fld_01kytgcyx8nx5cp8q0kv1s2ccw"
+                                    },
+                                    {
+                                        "field_id": "fld_01kytgcyx8nx5cp8q0kv1s2ccx"
+                                    },
+                                    {
+                                        "field_id": "fld_01kytgcyx8nx5cp8q0kv1s2ccz"
+                                    }
+                                ],
+                                "submit_label": "Guardar",
+                                "on_submit": [
+                                    {
+                                        "type": "create_record",
+                                        "object_id": "obj_01kytgcyx8nx5cp8q0kv1s2ccy",
+                                        "values": {
+                                            "mensaje": "{{form.mensaje}}",
+                                            "fecha": "{{form.fecha}}",
+                                            "ticket": "{{form.ticket}}"
+                                        }
+                                    },
+                                    {
+                                        "type": "close_modal"
+                                    },
+                                    {
+                                        "type": "show_toast",
+                                        "level": "success",
+                                        "message": "Guardado"
+                                    },
+                                    {
+                                        "type": "refresh"
+                                    }
+                                ]
+                            }
+                        ]
+                    },
+                    {
+                        "id": "blk_01kytgcyx8nx5cp8q0kv1s2cdj",
+                        "type": "button",
+                        "label": "Agregar Respuesta",
+                        "variant": "primary",
+                        "on_click": [
+                            {
+                                "type": "open_modal",
+                                "modal_block_id": "blk_01kytgcyx8nx5cp8q0kv1s2cdg"
+                            }
+                        ]
+                    },
+                    {
+                        "id": "blk_01kytgcyx8nx5cp8q0kv1s2cds",
+                        "type": "calendar",
+                        "data_source": {
+                            "object_id": "obj_01kytgcyx8nx5cp8q0kv1s2ccy"
+                        },
+                        "date_field_id": "fld_01kytgcyx8nx5cp8q0kv1s2ccx",
+                        "title_field_id": "fld_01kytgcyx8nx5cp8q0kv1s2ccw"
+                    },
+                    {
+                        "id": "blk_01kytgcyx8nx5cp8q0kv1s2cdq",
+                        "type": "table",
+                        "data_source": {
+                            "object_id": "obj_01kytgcyx8nx5cp8q0kv1s2ccy",
+                            "sort": [
+                                {
+                                    "field_id": "sys_created_at",
+                                    "direction": "desc"
+                                }
+                            ]
+                        },
+                        "columns": [
+                            {
+                                "id": "col_01kytgcyx8nx5cp8q0kv1s2cdk",
+                                "field_id": "fld_01kytgcyx8nx5cp8q0kv1s2ccw"
+                            },
+                            {
+                                "id": "col_01kytgcyx8nx5cp8q0kv1s2cdm",
+                                "field_id": "fld_01kytgcyx8nx5cp8q0kv1s2ccx"
+                            },
+                            {
+                                "id": "col_01kytgcyx8nx5cp8q0kv1s2cdn",
+                                "field_id": "fld_01kytgcyx8nx5cp8q0kv1s2ccz"
+                            },
+                            {
+                                "id": "col_01kytgcyx8nx5cp8q0kv1s2cdp",
+                                "field_id": "sys_created_at",
+                                "label_override": "Creado"
+                            }
+                        ]
+                    }
+                ]
+            },
+            {
+                "id": "pag_01kytgcyx8nx5cp8q0kv1s2ce2",
+                "slug": "tickets_detail",
+                "name": "Ticket",
+                "path": "/tickets_detail",
+                "blocks": [
+                    {
+                        "id": "blk_01kytgcyx8nx5cp8q0kv1s2cdv",
+                        "type": "breadcrumb",
+                        "items": [
+                            {
+                                "label": "Ticket",
+                                "href": "/tickets"
+                            },
+                            {
+                                "label": "Ticket"
+                            }
+                        ]
+                    },
+                    {
+                        "id": "blk_01kytgcyx8nx5cp8q0kv1s2cdw",
+                        "type": "record_detail",
+                        "label": "Ticket",
+                        "object_id": "obj_01kytgcyx8nx5cp8q0kv1s2ccv",
+                        "record_id_expression": "{{params.id}}",
+                        "fields": [
+                            {
+                                "field_id": "fld_01kytgcyx8nx5cp8q0kv1s2cce"
+                            },
+                            {
+                                "field_id": "fld_01kytgcyx8nx5cp8q0kv1s2ccf"
+                            },
+                            {
+                                "field_id": "fld_01kytgcyx8nx5cp8q0kv1s2ccg"
+                            },
+                            {
+                                "field_id": "fld_01kytgcyx8nx5cp8q0kv1s2cch"
+                            },
+                            {
+                                "field_id": "fld_01kytgcyx8nx5cp8q0kv1s2ccp"
+                            },
+                            {
+                                "field_id": "fld_01kytgcyx8nx5cp8q0kv1s2cd1"
+                            }
+                        ]
+                    },
+                    {
+                        "id": "blk_01kytgcyx8nx5cp8q0kv1s2cdy",
+                        "type": "heading",
+                        "level": 3,
+                        "content": "Respuesta"
+                    },
+                    {
+                        "id": "blk_01kytgcyx8nx5cp8q0kv1s2cdx",
+                        "type": "modal",
+                        "title": "Agregar Respuesta",
+                        "blocks": [
+                            {
+                                "id": "blk_01kytgcyx8nx5cp8q0kv1s2cdz",
+                                "type": "form",
+                                "object_id": "obj_01kytgcyx8nx5cp8q0kv1s2ccy",
+                                "mode": "create",
+                                "fields": [
+                                    {
+                                        "field_id": "fld_01kytgcyx8nx5cp8q0kv1s2ccw"
+                                    },
+                                    {
+                                        "field_id": "fld_01kytgcyx8nx5cp8q0kv1s2ccx"
+                                    }
+                                ],
+                                "submit_label": "Guardar",
+                                "on_submit": [
+                                    {
+                                        "type": "create_record",
+                                        "object_id": "obj_01kytgcyx8nx5cp8q0kv1s2ccy",
+                                        "values": {
+                                            "ticket": "{{params.id}}",
+                                            "mensaje": "{{form.mensaje}}",
+                                            "fecha": "{{form.fecha}}"
+                                        }
+                                    },
+                                    {
+                                        "type": "close_modal"
+                                    },
+                                    {
+                                        "type": "show_toast",
+                                        "level": "success",
+                                        "message": "Guardado"
+                                    },
+                                    {
+                                        "type": "refresh"
+                                    }
+                                ]
+                            }
+                        ]
+                    },
+                    {
+                        "id": "blk_01kytgcyx8nx5cp8q0kv1s2ce0",
+                        "type": "button",
+                        "label": "Agregar Respuesta",
+                        "variant": "primary",
+                        "on_click": [
+                            {
+                                "type": "open_modal",
+                                "modal_block_id": "blk_01kytgcyx8nx5cp8q0kv1s2cdx"
+                            }
+                        ]
+                    },
+                    {
+                        "id": "blk_01kytgcyx8nx5cp8q0kv1s2ce1",
+                        "type": "related_list",
+                        "object_id": "obj_01kytgcyx8nx5cp8q0kv1s2ccy",
+                        "via_relation_field_id": "fld_01kytgcyx8nx5cp8q0kv1s2ccz",
+                        "parent_id_expression": "{{params.id}}",
+                        "columns": [
+                            {
+                                "field_id": "fld_01kytgcyx8nx5cp8q0kv1s2ccw"
+                            },
+                            {
+                                "field_id": "fld_01kytgcyx8nx5cp8q0kv1s2ccx"
+                            }
+                        ]
+                    }
+                ]
+            }
+        ],
+        "permissions": {
+            "roles": [
+                {
+                    "id": "rol_01kytgcyx8nx5cp8q0kv1s2ccc",
+                    "slug": "admin",
+                    "name": "Admin",
+                    "is_default": false
+                },
+                {
+                    "id": "rol_01kytgcyx8nx5cp8q0kv1s2ccd",
+                    "slug": "user",
+                    "name": "User",
+                    "is_default": true
+                }
+            ]
+        },
+        "settings": {
+            "default_locale": "es-MX",
+            "default_timezone": "America/Mexico_City",
+            "default_currency": "MXN"
+        }
+    },
+    "portability": {
+        "removed": []
+    }
+}

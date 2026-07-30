@@ -171,6 +171,49 @@ it('applies the row_filter and strips hidden fields for the member', function ()
         ->assertJsonMissingPath('props.blockData.'.$this->ids['blkTable'].'.rows.0.data.secret');
 });
 
+it('lets the owner look through a role\'s eyes, without a throwaway account', function () {
+    // Unqualified, the owner bypasses everything.
+    $this->actingAs($this->owner)
+        ->get('/r/policed')
+        ->assertInertia(fn ($page) => $page->has('manifest.pages', 2)->has('page.blocks', 2));
+
+    // Asked to see it as `user`, the SAME person gets that role's real context —
+    // one page, one block, the row_filter and the hidden field all applied.
+    $this->actingAs($this->owner)
+        ->get('/r/policed?as_role=user')
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->has('manifest.pages', 1)
+            ->has('page.blocks', 1)
+            ->where('rolePreview.current', 'user'),
+        );
+
+    // The admin-only page is now out of reach for them too.
+    $this->actingAs($this->owner)->get('/r/policed/admin?as_role=user')->assertForbidden();
+});
+
+it('offers the role preview to nobody who was not already unrestricted', function () {
+    // A plain member asking for a role they do not hold gets their OWN access,
+    // and no picker — the parameter is a preview for administrators, never a
+    // way to assume a role.
+    $this->actingAs($this->member)
+        ->get('/r/policed?as_role=admin')
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->has('manifest.pages', 1)
+            ->where('rolePreview', null),
+        );
+
+    $this->actingAs($this->member)->get('/r/policed/admin?as_role=admin')->assertForbidden();
+});
+
+it('ignores a preview role that does not exist, rather than locking anyone out', function () {
+    $this->actingAs($this->owner)
+        ->get('/r/policed?as_role=fantasma')
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page->has('manifest.pages', 2));
+});
+
 it('grants the app owner full bypass over every policy', function () {
     $this->actingAs($this->owner)
         ->get('/r/policed')

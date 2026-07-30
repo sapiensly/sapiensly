@@ -1,0 +1,1172 @@
+{
+    "format": "sapiensly.app-package",
+    "format_version": 1,
+    "exported_at": "2026-07-30T00:00:00+00:00",
+    "app": {
+        "name": "Inventario y pedidos",
+        "description": "Productos, pedidos y renglones, con totales calculados.",
+        "icon": "package",
+        "color": null,
+        "kind": "app"
+    },
+    "manifest": {
+        "schema_version": "1.0.0",
+        "name": "Inventario y pedidos",
+        "version": 1,
+        "objects": [
+            {
+                "id": "obj_01kytgcz1ck4197hqe4ky7k5n4",
+                "slug": "productos",
+                "name": "Producto",
+                "fields": [
+                    {
+                        "id": "fld_01kytgcz1ck4197hqe4ky7k5n0",
+                        "slug": "nombre",
+                        "name": "Nombre",
+                        "type": "string"
+                    },
+                    {
+                        "id": "fld_01kytgcz1ck4197hqe4ky7k5n1",
+                        "slug": "sku",
+                        "name": "SKU",
+                        "type": "string"
+                    },
+                    {
+                        "id": "fld_01kytgcz1ck4197hqe4ky7k5n2",
+                        "slug": "precio",
+                        "name": "Precio",
+                        "type": "currency",
+                        "currency_code": "MXN"
+                    },
+                    {
+                        "id": "fld_01kytgcz1ck4197hqe4ky7k5n3",
+                        "slug": "existencias",
+                        "name": "Existencias",
+                        "type": "number"
+                    },
+                    {
+                        "id": "fld_01kytgcz1ck4197hqe4ky7k5nk",
+                        "slug": "renglones",
+                        "name": "Renglon",
+                        "type": "relation",
+                        "target_object_id": "obj_01kytgcz1ck4197hqe4ky7k5ne",
+                        "cardinality": "one_to_many",
+                        "inverse_field_id": "fld_01kytgcz1ck4197hqe4ky7k5nj"
+                    },
+                    {
+                        "id": "fld_01kytgcz1ck4197hqe4ky7k5nm",
+                        "slug": "renglones_count",
+                        "name": "Renglon",
+                        "type": "rollup",
+                        "via_relation_field_id": "fld_01kytgcz1ck4197hqe4ky7k5nk",
+                        "aggregator": "count",
+                        "readonly": true
+                    }
+                ]
+            },
+            {
+                "id": "obj_01kytgcz1ck4197hqe4ky7k5nc",
+                "slug": "pedidos",
+                "name": "Pedido",
+                "fields": [
+                    {
+                        "id": "fld_01kytgcz1ck4197hqe4ky7k5n5",
+                        "slug": "folio",
+                        "name": "Folio",
+                        "type": "string"
+                    },
+                    {
+                        "id": "fld_01kytgcz1ck4197hqe4ky7k5n6",
+                        "slug": "fecha",
+                        "name": "Fecha",
+                        "type": "date"
+                    },
+                    {
+                        "id": "fld_01kytgcz1ck4197hqe4ky7k5n7",
+                        "slug": "estado",
+                        "name": "Estado",
+                        "type": "single_select",
+                        "options": [
+                            {
+                                "id": "opt_01kytgcz1ck4197hqe4ky7k5n8",
+                                "value": "borrador",
+                                "label": "Borrador",
+                                "color": "#0ea5e9"
+                            },
+                            {
+                                "id": "opt_01kytgcz1ck4197hqe4ky7k5n9",
+                                "value": "confirmado",
+                                "label": "Confirmado",
+                                "color": "#f59e0b"
+                            },
+                            {
+                                "id": "opt_01kytgcz1ck4197hqe4ky7k5na",
+                                "value": "enviado",
+                                "label": "Enviado",
+                                "color": "#16a34a"
+                            },
+                            {
+                                "id": "opt_01kytgcz1ck4197hqe4ky7k5nb",
+                                "value": "entregado",
+                                "label": "Entregado",
+                                "color": "#8b5cf6"
+                            }
+                        ]
+                    },
+                    {
+                        "id": "fld_01kytgcz1ck4197hqe4ky7k5ng",
+                        "slug": "renglones",
+                        "name": "Renglon",
+                        "type": "relation",
+                        "target_object_id": "obj_01kytgcz1ck4197hqe4ky7k5ne",
+                        "cardinality": "one_to_many",
+                        "inverse_field_id": "fld_01kytgcz1ck4197hqe4ky7k5nf"
+                    },
+                    {
+                        "id": "fld_01kytgcz1ck4197hqe4ky7k5nh",
+                        "slug": "renglones_count",
+                        "name": "Renglon",
+                        "type": "rollup",
+                        "via_relation_field_id": "fld_01kytgcz1ck4197hqe4ky7k5ng",
+                        "aggregator": "count",
+                        "readonly": true
+                    },
+                    {
+                        "id": "fld_01kytgcz1ck4197hqe4ky7k5nq",
+                        "slug": "total",
+                        "name": "Total",
+                        "type": "rollup",
+                        "via_relation_field_id": "fld_01kytgcz1ck4197hqe4ky7k5ng",
+                        "aggregator": "sum",
+                        "target_field_id": "fld_01kytgcz1ck4197hqe4ky7k5np",
+                        "readonly": true
+                    }
+                ]
+            },
+            {
+                "id": "obj_01kytgcz1ck4197hqe4ky7k5ne",
+                "slug": "renglones",
+                "name": "Renglon",
+                "fields": [
+                    {
+                        "id": "fld_01kytgcz1ck4197hqe4ky7k5nd",
+                        "slug": "cantidad",
+                        "name": "Cantidad",
+                        "type": "number"
+                    },
+                    {
+                        "id": "fld_01kytgcz1ck4197hqe4ky7k5nf",
+                        "slug": "pedido",
+                        "name": "Pedido",
+                        "type": "relation",
+                        "target_object_id": "obj_01kytgcz1ck4197hqe4ky7k5nc",
+                        "cardinality": "many_to_one",
+                        "on_delete": "set_null",
+                        "inverse_field_id": "fld_01kytgcz1ck4197hqe4ky7k5ng"
+                    },
+                    {
+                        "id": "fld_01kytgcz1ck4197hqe4ky7k5nj",
+                        "slug": "producto",
+                        "name": "Producto",
+                        "type": "relation",
+                        "target_object_id": "obj_01kytgcz1ck4197hqe4ky7k5n4",
+                        "cardinality": "many_to_one",
+                        "on_delete": "set_null",
+                        "inverse_field_id": "fld_01kytgcz1ck4197hqe4ky7k5nk"
+                    },
+                    {
+                        "id": "fld_01kytgcz1ck4197hqe4ky7k5nn",
+                        "slug": "precio_unitario",
+                        "name": "Precio unitario",
+                        "type": "lookup",
+                        "via_relation_field_id": "fld_01kytgcz1ck4197hqe4ky7k5nj",
+                        "target_field_id": "fld_01kytgcz1ck4197hqe4ky7k5n2",
+                        "readonly": true
+                    },
+                    {
+                        "id": "fld_01kytgcz1ck4197hqe4ky7k5np",
+                        "slug": "subtotal",
+                        "name": "Subtotal",
+                        "type": "formula",
+                        "expression": "{{cantidad * precio_unitario}}",
+                        "return_type": "number",
+                        "currency_code": "MXN",
+                        "readonly": true
+                    }
+                ]
+            }
+        ],
+        "pages": [
+            {
+                "id": "pag_01kytgcz1ck4197hqe4ky7k5ra",
+                "slug": "dashboard",
+                "name": "Dashboard",
+                "path": "/",
+                "blocks": [
+                    {
+                        "id": "blk_01kytgcz1ck4197hqe4ky7k5r4",
+                        "type": "heading",
+                        "content": "Inventario y pedidos"
+                    },
+                    {
+                        "id": "blk_01kytgcz1ck4197hqe4ky7k5r5",
+                        "type": "metric_grid",
+                        "items": [
+                            {
+                                "id": "itm_01kytgcz1ck4197hqe4ky7k5qz",
+                                "label": "Producto",
+                                "query": {
+                                    "object_id": "obj_01kytgcz1ck4197hqe4ky7k5n4"
+                                },
+                                "aggregation": "count"
+                            },
+                            {
+                                "id": "itm_01kytgcz1ck4197hqe4ky7k5r0",
+                                "label": "Pedido",
+                                "query": {
+                                    "object_id": "obj_01kytgcz1ck4197hqe4ky7k5nc"
+                                },
+                                "aggregation": "count"
+                            },
+                            {
+                                "id": "itm_01kytgcz1ck4197hqe4ky7k5r1",
+                                "label": "Renglon",
+                                "query": {
+                                    "object_id": "obj_01kytgcz1ck4197hqe4ky7k5ne"
+                                },
+                                "aggregation": "count"
+                            },
+                            {
+                                "id": "itm_01kytgcz1ck4197hqe4ky7k5r2",
+                                "label": "Total Producto",
+                                "query": {
+                                    "object_id": "obj_01kytgcz1ck4197hqe4ky7k5n4"
+                                },
+                                "aggregation": "sum",
+                                "field_id": "fld_01kytgcz1ck4197hqe4ky7k5n2",
+                                "format": "currency"
+                            },
+                            {
+                                "id": "itm_01kytgcz1ck4197hqe4ky7k5r3",
+                                "label": "Promedio Producto",
+                                "query": {
+                                    "object_id": "obj_01kytgcz1ck4197hqe4ky7k5n4"
+                                },
+                                "aggregation": "avg",
+                                "field_id": "fld_01kytgcz1ck4197hqe4ky7k5n2",
+                                "format": "currency"
+                            }
+                        ]
+                    },
+                    {
+                        "id": "blk_01kytgcz1ck4197hqe4ky7k5r7",
+                        "type": "chart",
+                        "label": "Pedido por estado",
+                        "chart_type": "donut",
+                        "data_source": {
+                            "object_id": "obj_01kytgcz1ck4197hqe4ky7k5nc",
+                            "limit": 500
+                        },
+                        "aggregation": "count",
+                        "group_by_field_id": "fld_01kytgcz1ck4197hqe4ky7k5n7"
+                    },
+                    {
+                        "id": "blk_01kytgcz1ck4197hqe4ky7k5r6",
+                        "type": "sparkline",
+                        "label": "Producto en el tiempo",
+                        "data_source": {
+                            "object_id": "obj_01kytgcz1ck4197hqe4ky7k5n4",
+                            "limit": 500
+                        },
+                        "x_field_id": "sys_created_at",
+                        "aggregation": "count"
+                    },
+                    {
+                        "id": "blk_01kytgcz1ck4197hqe4ky7k5r8",
+                        "type": "sparkline",
+                        "label": "Pedido en el tiempo",
+                        "data_source": {
+                            "object_id": "obj_01kytgcz1ck4197hqe4ky7k5nc",
+                            "limit": 500
+                        },
+                        "x_field_id": "sys_created_at",
+                        "aggregation": "count"
+                    },
+                    {
+                        "id": "blk_01kytgcz1ck4197hqe4ky7k5r9",
+                        "type": "sparkline",
+                        "label": "Renglon en el tiempo",
+                        "data_source": {
+                            "object_id": "obj_01kytgcz1ck4197hqe4ky7k5ne",
+                            "limit": 500
+                        },
+                        "x_field_id": "sys_created_at",
+                        "aggregation": "count"
+                    }
+                ]
+            },
+            {
+                "id": "pag_01kytgcz1ck4197hqe4ky7k5qv",
+                "slug": "pos",
+                "name": "Punto de venta",
+                "path": "/pos",
+                "blocks": [
+                    {
+                        "id": "blk_01kytgcz1ck4197hqe4ky7k5qw",
+                        "type": "heading",
+                        "content": "Punto de venta"
+                    },
+                    {
+                        "id": "blk_01kytgcz1ck4197hqe4ky7k5qx",
+                        "type": "button",
+                        "label": "Nueva orden",
+                        "variant": "primary",
+                        "icon": "plus",
+                        "on_click": [
+                            {
+                                "type": "create_record",
+                                "object_id": "obj_01kytgcz1ck4197hqe4ky7k5nc",
+                                "values": {
+                                    "estado": "borrador"
+                                }
+                            },
+                            {
+                                "type": "navigate",
+                                "to": "/pos?order={{record.id}}"
+                            }
+                        ]
+                    },
+                    {
+                        "id": "blk_01kytgcz1ck4197hqe4ky7k5qy",
+                        "type": "split_view",
+                        "left_fraction": 7,
+                        "left_blocks": [
+                            {
+                                "id": "blk_01kytgcz1ck4197hqe4ky7k5qg",
+                                "type": "card_grid",
+                                "data_source": {
+                                    "object_id": "obj_01kytgcz1ck4197hqe4ky7k5n4"
+                                },
+                                "columns": 3,
+                                "title_field_id": "fld_01kytgcz1ck4197hqe4ky7k5n0",
+                                "meta_fields": [
+                                    {
+                                        "field_id": "fld_01kytgcz1ck4197hqe4ky7k5n2"
+                                    }
+                                ],
+                                "action_icon": "plus",
+                                "on_click": [
+                                    {
+                                        "type": "create_record",
+                                        "object_id": "obj_01kytgcz1ck4197hqe4ky7k5ne",
+                                        "values": {
+                                            "pedido": "{{params.order}}",
+                                            "producto": "{{row.id}}",
+                                            "cantidad": 1
+                                        }
+                                    },
+                                    {
+                                        "type": "refresh"
+                                    }
+                                ]
+                            }
+                        ],
+                        "right_blocks": [
+                            {
+                                "id": "blk_01kytgcz1ck4197hqe4ky7k5qh",
+                                "type": "heading",
+                                "level": 3,
+                                "content": "Pedido"
+                            },
+                            {
+                                "id": "blk_01kytgcz1ck4197hqe4ky7k5qj",
+                                "type": "alert",
+                                "variant": "info",
+                                "title": "Pedido",
+                                "body": "Abre una orden y agrega productos.",
+                                "visibility": {
+                                    "expression": "{{not params.order}}"
+                                }
+                            },
+                            {
+                                "id": "blk_01kytgcz1ck4197hqe4ky7k5qk",
+                                "type": "record_detail",
+                                "object_id": "obj_01kytgcz1ck4197hqe4ky7k5nc",
+                                "record_id_expression": "{{params.order}}",
+                                "fields": [
+                                    {
+                                        "field_id": "fld_01kytgcz1ck4197hqe4ky7k5n7"
+                                    },
+                                    {
+                                        "field_id": "fld_01kytgcz1ck4197hqe4ky7k5nq"
+                                    }
+                                ],
+                                "visibility": {
+                                    "expression": "{{params.order}}"
+                                }
+                            },
+                            {
+                                "id": "blk_01kytgcz1ck4197hqe4ky7k5qm",
+                                "type": "table",
+                                "empty_state_message": "Abre una orden y agrega productos.",
+                                "visibility": {
+                                    "expression": "{{params.order}}"
+                                },
+                                "data_source": {
+                                    "object_id": "obj_01kytgcz1ck4197hqe4ky7k5ne",
+                                    "filter": {
+                                        "op": "eq",
+                                        "field_id": "fld_01kytgcz1ck4197hqe4ky7k5nf",
+                                        "value_expression": "{{params.order}}"
+                                    }
+                                },
+                                "columns": [
+                                    {
+                                        "id": "col_01kytgcz1ck4197hqe4ky7k5qn",
+                                        "field_id": "fld_01kytgcz1ck4197hqe4ky7k5nj"
+                                    },
+                                    {
+                                        "id": "col_01kytgcz1ck4197hqe4ky7k5qp",
+                                        "field_id": "fld_01kytgcz1ck4197hqe4ky7k5nd"
+                                    },
+                                    {
+                                        "id": "col_01kytgcz1ck4197hqe4ky7k5qq",
+                                        "field_id": "fld_01kytgcz1ck4197hqe4ky7k5np"
+                                    },
+                                    {
+                                        "id": "col_01kytgcz1ck4197hqe4ky7k5qr",
+                                        "type": "action",
+                                        "label": "−",
+                                        "variant": "secondary",
+                                        "on_click": [
+                                            {
+                                                "type": "update_record",
+                                                "object_id": "obj_01kytgcz1ck4197hqe4ky7k5ne",
+                                                "record_id_expression": "{{row.id}}",
+                                                "values": {
+                                                    "cantidad": "{{row.data.cantidad - 1}}"
+                                                }
+                                            },
+                                            {
+                                                "type": "refresh"
+                                            }
+                                        ]
+                                    },
+                                    {
+                                        "id": "col_01kytgcz1ck4197hqe4ky7k5qs",
+                                        "type": "action",
+                                        "label": "+",
+                                        "variant": "secondary",
+                                        "on_click": [
+                                            {
+                                                "type": "update_record",
+                                                "object_id": "obj_01kytgcz1ck4197hqe4ky7k5ne",
+                                                "record_id_expression": "{{row.id}}",
+                                                "values": {
+                                                    "cantidad": "{{row.data.cantidad + 1}}"
+                                                }
+                                            },
+                                            {
+                                                "type": "refresh"
+                                            }
+                                        ]
+                                    },
+                                    {
+                                        "id": "col_01kytgcz1ck4197hqe4ky7k5qt",
+                                        "type": "action",
+                                        "label": "×",
+                                        "variant": "danger",
+                                        "on_click": [
+                                            {
+                                                "type": "delete_record",
+                                                "object_id": "obj_01kytgcz1ck4197hqe4ky7k5ne",
+                                                "record_id_expression": "{{row.id}}"
+                                            },
+                                            {
+                                                "type": "refresh"
+                                            }
+                                        ]
+                                    }
+                                ]
+                            }
+                        ]
+                    }
+                ]
+            },
+            {
+                "id": "pag_01kytgcz1ck4197hqe4ky7k5p3",
+                "slug": "productos",
+                "name": "Producto",
+                "path": "/productos",
+                "blocks": [
+                    {
+                        "id": "blk_01kytgcz1ck4197hqe4ky7k5p2",
+                        "type": "heading",
+                        "content": "Producto"
+                    },
+                    {
+                        "id": "blk_01kytgcz1ck4197hqe4ky7k5nr",
+                        "type": "modal",
+                        "title": "Agregar Producto",
+                        "blocks": [
+                            {
+                                "id": "blk_01kytgcz1ck4197hqe4ky7k5ns",
+                                "type": "form",
+                                "object_id": "obj_01kytgcz1ck4197hqe4ky7k5n4",
+                                "mode": "create",
+                                "fields": [
+                                    {
+                                        "field_id": "fld_01kytgcz1ck4197hqe4ky7k5n0"
+                                    },
+                                    {
+                                        "field_id": "fld_01kytgcz1ck4197hqe4ky7k5n1"
+                                    },
+                                    {
+                                        "field_id": "fld_01kytgcz1ck4197hqe4ky7k5n2"
+                                    },
+                                    {
+                                        "field_id": "fld_01kytgcz1ck4197hqe4ky7k5n3"
+                                    }
+                                ],
+                                "submit_label": "Guardar",
+                                "on_submit": [
+                                    {
+                                        "type": "create_record",
+                                        "object_id": "obj_01kytgcz1ck4197hqe4ky7k5n4",
+                                        "values": {
+                                            "nombre": "{{form.nombre}}",
+                                            "sku": "{{form.sku}}",
+                                            "precio": "{{form.precio}}",
+                                            "existencias": "{{form.existencias}}"
+                                        }
+                                    },
+                                    {
+                                        "type": "close_modal"
+                                    },
+                                    {
+                                        "type": "show_toast",
+                                        "level": "success",
+                                        "message": "Guardado"
+                                    },
+                                    {
+                                        "type": "refresh"
+                                    }
+                                ]
+                            }
+                        ]
+                    },
+                    {
+                        "id": "blk_01kytgcz1ck4197hqe4ky7k5nt",
+                        "type": "button",
+                        "label": "Agregar Producto",
+                        "variant": "primary",
+                        "on_click": [
+                            {
+                                "type": "open_modal",
+                                "modal_block_id": "blk_01kytgcz1ck4197hqe4ky7k5nr"
+                            }
+                        ]
+                    },
+                    {
+                        "id": "blk_01kytgcz1ck4197hqe4ky7k5p1",
+                        "type": "table",
+                        "data_source": {
+                            "object_id": "obj_01kytgcz1ck4197hqe4ky7k5n4",
+                            "sort": [
+                                {
+                                    "field_id": "sys_created_at",
+                                    "direction": "desc"
+                                }
+                            ]
+                        },
+                        "columns": [
+                            {
+                                "id": "col_01kytgcz1ck4197hqe4ky7k5nv",
+                                "field_id": "fld_01kytgcz1ck4197hqe4ky7k5n0"
+                            },
+                            {
+                                "id": "col_01kytgcz1ck4197hqe4ky7k5nw",
+                                "field_id": "fld_01kytgcz1ck4197hqe4ky7k5n1"
+                            },
+                            {
+                                "id": "col_01kytgcz1ck4197hqe4ky7k5nx",
+                                "field_id": "fld_01kytgcz1ck4197hqe4ky7k5n2"
+                            },
+                            {
+                                "id": "col_01kytgcz1ck4197hqe4ky7k5ny",
+                                "field_id": "fld_01kytgcz1ck4197hqe4ky7k5n3"
+                            },
+                            {
+                                "id": "col_01kytgcz1ck4197hqe4ky7k5nz",
+                                "field_id": "fld_01kytgcz1ck4197hqe4ky7k5nm"
+                            },
+                            {
+                                "id": "col_01kytgcz1ck4197hqe4ky7k5p0",
+                                "field_id": "sys_created_at",
+                                "label_override": "Creado"
+                            },
+                            {
+                                "id": "col_01kytgcz1ck4197hqe4ky7k5qf",
+                                "type": "action",
+                                "label": "Abrir",
+                                "icon": "arrow-right",
+                                "variant": "ghost",
+                                "on_click": [
+                                    {
+                                        "type": "navigate",
+                                        "to": "/productos_detail?id={{row.id}}"
+                                    }
+                                ]
+                            }
+                        ]
+                    }
+                ]
+            },
+            {
+                "id": "pag_01kytgcz1ck4197hqe4ky7k5ph",
+                "slug": "pedidos",
+                "name": "Pedido",
+                "path": "/pedidos",
+                "blocks": [
+                    {
+                        "id": "blk_01kytgcz1ck4197hqe4ky7k5pe",
+                        "type": "heading",
+                        "content": "Pedido"
+                    },
+                    {
+                        "id": "blk_01kytgcz1ck4197hqe4ky7k5p4",
+                        "type": "modal",
+                        "title": "Agregar Pedido",
+                        "blocks": [
+                            {
+                                "id": "blk_01kytgcz1ck4197hqe4ky7k5p5",
+                                "type": "form",
+                                "object_id": "obj_01kytgcz1ck4197hqe4ky7k5nc",
+                                "mode": "create",
+                                "fields": [
+                                    {
+                                        "field_id": "fld_01kytgcz1ck4197hqe4ky7k5n5"
+                                    },
+                                    {
+                                        "field_id": "fld_01kytgcz1ck4197hqe4ky7k5n6"
+                                    },
+                                    {
+                                        "field_id": "fld_01kytgcz1ck4197hqe4ky7k5n7"
+                                    }
+                                ],
+                                "submit_label": "Guardar",
+                                "on_submit": [
+                                    {
+                                        "type": "create_record",
+                                        "object_id": "obj_01kytgcz1ck4197hqe4ky7k5nc",
+                                        "values": {
+                                            "folio": "{{form.folio}}",
+                                            "fecha": "{{form.fecha}}",
+                                            "estado": "{{form.estado}}"
+                                        }
+                                    },
+                                    {
+                                        "type": "close_modal"
+                                    },
+                                    {
+                                        "type": "show_toast",
+                                        "level": "success",
+                                        "message": "Guardado"
+                                    },
+                                    {
+                                        "type": "refresh"
+                                    }
+                                ]
+                            }
+                        ]
+                    },
+                    {
+                        "id": "blk_01kytgcz1ck4197hqe4ky7k5p6",
+                        "type": "button",
+                        "label": "Agregar Pedido",
+                        "variant": "primary",
+                        "on_click": [
+                            {
+                                "type": "open_modal",
+                                "modal_block_id": "blk_01kytgcz1ck4197hqe4ky7k5p4"
+                            }
+                        ]
+                    },
+                    {
+                        "id": "blk_01kytgcz1ck4197hqe4ky7k5pf",
+                        "type": "calendar",
+                        "data_source": {
+                            "object_id": "obj_01kytgcz1ck4197hqe4ky7k5nc"
+                        },
+                        "date_field_id": "fld_01kytgcz1ck4197hqe4ky7k5n6",
+                        "title_field_id": "fld_01kytgcz1ck4197hqe4ky7k5n5",
+                        "color_field_id": "fld_01kytgcz1ck4197hqe4ky7k5n7"
+                    },
+                    {
+                        "id": "blk_01kytgcz1ck4197hqe4ky7k5pg",
+                        "type": "kanban",
+                        "data_source": {
+                            "object_id": "obj_01kytgcz1ck4197hqe4ky7k5nc"
+                        },
+                        "group_by_field_id": "fld_01kytgcz1ck4197hqe4ky7k5n7",
+                        "card_title_field_id": "fld_01kytgcz1ck4197hqe4ky7k5n5",
+                        "editable": true,
+                        "card_meta_fields": [
+                            {
+                                "field_id": "fld_01kytgcz1ck4197hqe4ky7k5n6"
+                            },
+                            {
+                                "field_id": "fld_01kytgcz1ck4197hqe4ky7k5nh"
+                            }
+                        ]
+                    },
+                    {
+                        "id": "blk_01kytgcz1ck4197hqe4ky7k5pd",
+                        "type": "table",
+                        "data_source": {
+                            "object_id": "obj_01kytgcz1ck4197hqe4ky7k5nc",
+                            "sort": [
+                                {
+                                    "field_id": "sys_created_at",
+                                    "direction": "desc"
+                                }
+                            ]
+                        },
+                        "columns": [
+                            {
+                                "id": "col_01kytgcz1ck4197hqe4ky7k5p7",
+                                "field_id": "fld_01kytgcz1ck4197hqe4ky7k5n5"
+                            },
+                            {
+                                "id": "col_01kytgcz1ck4197hqe4ky7k5p8",
+                                "field_id": "fld_01kytgcz1ck4197hqe4ky7k5n6"
+                            },
+                            {
+                                "id": "col_01kytgcz1ck4197hqe4ky7k5p9",
+                                "field_id": "fld_01kytgcz1ck4197hqe4ky7k5n7"
+                            },
+                            {
+                                "id": "col_01kytgcz1ck4197hqe4ky7k5pa",
+                                "field_id": "fld_01kytgcz1ck4197hqe4ky7k5nh"
+                            },
+                            {
+                                "id": "col_01kytgcz1ck4197hqe4ky7k5pb",
+                                "field_id": "fld_01kytgcz1ck4197hqe4ky7k5nq"
+                            },
+                            {
+                                "id": "col_01kytgcz1ck4197hqe4ky7k5pc",
+                                "field_id": "sys_created_at",
+                                "label_override": "Creado"
+                            },
+                            {
+                                "id": "col_01kytgcz1ck4197hqe4ky7k5q6",
+                                "type": "action",
+                                "label": "Abrir",
+                                "icon": "arrow-right",
+                                "variant": "ghost",
+                                "on_click": [
+                                    {
+                                        "type": "navigate",
+                                        "to": "/pedidos_detail?id={{row.id}}"
+                                    }
+                                ]
+                            }
+                        ]
+                    }
+                ]
+            },
+            {
+                "id": "pag_01kytgcz1ck4197hqe4ky7k5px",
+                "slug": "renglones",
+                "name": "Renglon",
+                "path": "/renglones",
+                "blocks": [
+                    {
+                        "id": "blk_01kytgcz1ck4197hqe4ky7k5pw",
+                        "type": "heading",
+                        "content": "Renglon"
+                    },
+                    {
+                        "id": "blk_01kytgcz1ck4197hqe4ky7k5pj",
+                        "type": "modal",
+                        "title": "Agregar Renglon",
+                        "blocks": [
+                            {
+                                "id": "blk_01kytgcz1ck4197hqe4ky7k5pk",
+                                "type": "form",
+                                "object_id": "obj_01kytgcz1ck4197hqe4ky7k5ne",
+                                "mode": "create",
+                                "fields": [
+                                    {
+                                        "field_id": "fld_01kytgcz1ck4197hqe4ky7k5nd"
+                                    },
+                                    {
+                                        "field_id": "fld_01kytgcz1ck4197hqe4ky7k5nf"
+                                    },
+                                    {
+                                        "field_id": "fld_01kytgcz1ck4197hqe4ky7k5nj"
+                                    }
+                                ],
+                                "submit_label": "Guardar",
+                                "on_submit": [
+                                    {
+                                        "type": "create_record",
+                                        "object_id": "obj_01kytgcz1ck4197hqe4ky7k5ne",
+                                        "values": {
+                                            "cantidad": "{{form.cantidad}}",
+                                            "pedido": "{{form.pedido}}",
+                                            "producto": "{{form.producto}}"
+                                        }
+                                    },
+                                    {
+                                        "type": "close_modal"
+                                    },
+                                    {
+                                        "type": "show_toast",
+                                        "level": "success",
+                                        "message": "Guardado"
+                                    },
+                                    {
+                                        "type": "refresh"
+                                    }
+                                ]
+                            }
+                        ]
+                    },
+                    {
+                        "id": "blk_01kytgcz1ck4197hqe4ky7k5pm",
+                        "type": "button",
+                        "label": "Agregar Renglon",
+                        "variant": "primary",
+                        "on_click": [
+                            {
+                                "type": "open_modal",
+                                "modal_block_id": "blk_01kytgcz1ck4197hqe4ky7k5pj"
+                            }
+                        ]
+                    },
+                    {
+                        "id": "blk_01kytgcz1ck4197hqe4ky7k5pv",
+                        "type": "table",
+                        "data_source": {
+                            "object_id": "obj_01kytgcz1ck4197hqe4ky7k5ne",
+                            "sort": [
+                                {
+                                    "field_id": "sys_created_at",
+                                    "direction": "desc"
+                                }
+                            ]
+                        },
+                        "columns": [
+                            {
+                                "id": "col_01kytgcz1ck4197hqe4ky7k5pn",
+                                "field_id": "fld_01kytgcz1ck4197hqe4ky7k5nd"
+                            },
+                            {
+                                "id": "col_01kytgcz1ck4197hqe4ky7k5pp",
+                                "field_id": "fld_01kytgcz1ck4197hqe4ky7k5nf"
+                            },
+                            {
+                                "id": "col_01kytgcz1ck4197hqe4ky7k5pq",
+                                "field_id": "fld_01kytgcz1ck4197hqe4ky7k5nj"
+                            },
+                            {
+                                "id": "col_01kytgcz1ck4197hqe4ky7k5pr",
+                                "field_id": "fld_01kytgcz1ck4197hqe4ky7k5nn"
+                            },
+                            {
+                                "id": "col_01kytgcz1ck4197hqe4ky7k5ps",
+                                "field_id": "fld_01kytgcz1ck4197hqe4ky7k5np"
+                            },
+                            {
+                                "id": "col_01kytgcz1ck4197hqe4ky7k5pt",
+                                "field_id": "sys_created_at",
+                                "label_override": "Creado"
+                            }
+                        ]
+                    }
+                ]
+            },
+            {
+                "id": "pag_01kytgcz1ck4197hqe4ky7k5q5",
+                "slug": "pedidos_detail",
+                "name": "Pedido",
+                "path": "/pedidos_detail",
+                "blocks": [
+                    {
+                        "id": "blk_01kytgcz1ck4197hqe4ky7k5py",
+                        "type": "breadcrumb",
+                        "items": [
+                            {
+                                "label": "Pedido",
+                                "href": "/pedidos"
+                            },
+                            {
+                                "label": "Pedido"
+                            }
+                        ]
+                    },
+                    {
+                        "id": "blk_01kytgcz1ck4197hqe4ky7k5pz",
+                        "type": "record_detail",
+                        "label": "Pedido",
+                        "object_id": "obj_01kytgcz1ck4197hqe4ky7k5nc",
+                        "record_id_expression": "{{params.id}}",
+                        "fields": [
+                            {
+                                "field_id": "fld_01kytgcz1ck4197hqe4ky7k5n5"
+                            },
+                            {
+                                "field_id": "fld_01kytgcz1ck4197hqe4ky7k5n6"
+                            },
+                            {
+                                "field_id": "fld_01kytgcz1ck4197hqe4ky7k5n7"
+                            },
+                            {
+                                "field_id": "fld_01kytgcz1ck4197hqe4ky7k5nh"
+                            },
+                            {
+                                "field_id": "fld_01kytgcz1ck4197hqe4ky7k5nq"
+                            }
+                        ]
+                    },
+                    {
+                        "id": "blk_01kytgcz1ck4197hqe4ky7k5q1",
+                        "type": "heading",
+                        "level": 3,
+                        "content": "Renglon"
+                    },
+                    {
+                        "id": "blk_01kytgcz1ck4197hqe4ky7k5q0",
+                        "type": "modal",
+                        "title": "Agregar Renglon",
+                        "blocks": [
+                            {
+                                "id": "blk_01kytgcz1ck4197hqe4ky7k5q2",
+                                "type": "form",
+                                "object_id": "obj_01kytgcz1ck4197hqe4ky7k5ne",
+                                "mode": "create",
+                                "fields": [
+                                    {
+                                        "field_id": "fld_01kytgcz1ck4197hqe4ky7k5nd"
+                                    },
+                                    {
+                                        "field_id": "fld_01kytgcz1ck4197hqe4ky7k5nj"
+                                    }
+                                ],
+                                "submit_label": "Guardar",
+                                "on_submit": [
+                                    {
+                                        "type": "create_record",
+                                        "object_id": "obj_01kytgcz1ck4197hqe4ky7k5ne",
+                                        "values": {
+                                            "pedido": "{{params.id}}",
+                                            "cantidad": "{{form.cantidad}}",
+                                            "producto": "{{form.producto}}"
+                                        }
+                                    },
+                                    {
+                                        "type": "close_modal"
+                                    },
+                                    {
+                                        "type": "show_toast",
+                                        "level": "success",
+                                        "message": "Guardado"
+                                    },
+                                    {
+                                        "type": "refresh"
+                                    }
+                                ]
+                            }
+                        ]
+                    },
+                    {
+                        "id": "blk_01kytgcz1ck4197hqe4ky7k5q3",
+                        "type": "button",
+                        "label": "Agregar Renglon",
+                        "variant": "primary",
+                        "on_click": [
+                            {
+                                "type": "open_modal",
+                                "modal_block_id": "blk_01kytgcz1ck4197hqe4ky7k5q0"
+                            }
+                        ]
+                    },
+                    {
+                        "id": "blk_01kytgcz1ck4197hqe4ky7k5q4",
+                        "type": "related_list",
+                        "object_id": "obj_01kytgcz1ck4197hqe4ky7k5ne",
+                        "via_relation_field_id": "fld_01kytgcz1ck4197hqe4ky7k5nf",
+                        "parent_id_expression": "{{params.id}}",
+                        "columns": [
+                            {
+                                "field_id": "fld_01kytgcz1ck4197hqe4ky7k5nd"
+                            },
+                            {
+                                "field_id": "fld_01kytgcz1ck4197hqe4ky7k5nj"
+                            },
+                            {
+                                "field_id": "fld_01kytgcz1ck4197hqe4ky7k5nn"
+                            },
+                            {
+                                "field_id": "fld_01kytgcz1ck4197hqe4ky7k5np"
+                            }
+                        ]
+                    }
+                ]
+            },
+            {
+                "id": "pag_01kytgcz1ck4197hqe4ky7k5qe",
+                "slug": "productos_detail",
+                "name": "Producto",
+                "path": "/productos_detail",
+                "blocks": [
+                    {
+                        "id": "blk_01kytgcz1ck4197hqe4ky7k5q7",
+                        "type": "breadcrumb",
+                        "items": [
+                            {
+                                "label": "Producto",
+                                "href": "/productos"
+                            },
+                            {
+                                "label": "Producto"
+                            }
+                        ]
+                    },
+                    {
+                        "id": "blk_01kytgcz1ck4197hqe4ky7k5q8",
+                        "type": "record_detail",
+                        "label": "Producto",
+                        "object_id": "obj_01kytgcz1ck4197hqe4ky7k5n4",
+                        "record_id_expression": "{{params.id}}",
+                        "fields": [
+                            {
+                                "field_id": "fld_01kytgcz1ck4197hqe4ky7k5n0"
+                            },
+                            {
+                                "field_id": "fld_01kytgcz1ck4197hqe4ky7k5n1"
+                            },
+                            {
+                                "field_id": "fld_01kytgcz1ck4197hqe4ky7k5n2"
+                            },
+                            {
+                                "field_id": "fld_01kytgcz1ck4197hqe4ky7k5n3"
+                            },
+                            {
+                                "field_id": "fld_01kytgcz1ck4197hqe4ky7k5nm"
+                            }
+                        ]
+                    },
+                    {
+                        "id": "blk_01kytgcz1ck4197hqe4ky7k5qa",
+                        "type": "heading",
+                        "level": 3,
+                        "content": "Renglon"
+                    },
+                    {
+                        "id": "blk_01kytgcz1ck4197hqe4ky7k5q9",
+                        "type": "modal",
+                        "title": "Agregar Renglon",
+                        "blocks": [
+                            {
+                                "id": "blk_01kytgcz1ck4197hqe4ky7k5qb",
+                                "type": "form",
+                                "object_id": "obj_01kytgcz1ck4197hqe4ky7k5ne",
+                                "mode": "create",
+                                "fields": [
+                                    {
+                                        "field_id": "fld_01kytgcz1ck4197hqe4ky7k5nd"
+                                    },
+                                    {
+                                        "field_id": "fld_01kytgcz1ck4197hqe4ky7k5nf"
+                                    }
+                                ],
+                                "submit_label": "Guardar",
+                                "on_submit": [
+                                    {
+                                        "type": "create_record",
+                                        "object_id": "obj_01kytgcz1ck4197hqe4ky7k5ne",
+                                        "values": {
+                                            "producto": "{{params.id}}",
+                                            "cantidad": "{{form.cantidad}}",
+                                            "pedido": "{{form.pedido}}"
+                                        }
+                                    },
+                                    {
+                                        "type": "close_modal"
+                                    },
+                                    {
+                                        "type": "show_toast",
+                                        "level": "success",
+                                        "message": "Guardado"
+                                    },
+                                    {
+                                        "type": "refresh"
+                                    }
+                                ]
+                            }
+                        ]
+                    },
+                    {
+                        "id": "blk_01kytgcz1ck4197hqe4ky7k5qc",
+                        "type": "button",
+                        "label": "Agregar Renglon",
+                        "variant": "primary",
+                        "on_click": [
+                            {
+                                "type": "open_modal",
+                                "modal_block_id": "blk_01kytgcz1ck4197hqe4ky7k5q9"
+                            }
+                        ]
+                    },
+                    {
+                        "id": "blk_01kytgcz1ck4197hqe4ky7k5qd",
+                        "type": "related_list",
+                        "object_id": "obj_01kytgcz1ck4197hqe4ky7k5ne",
+                        "via_relation_field_id": "fld_01kytgcz1ck4197hqe4ky7k5nj",
+                        "parent_id_expression": "{{params.id}}",
+                        "columns": [
+                            {
+                                "field_id": "fld_01kytgcz1ck4197hqe4ky7k5nd"
+                            },
+                            {
+                                "field_id": "fld_01kytgcz1ck4197hqe4ky7k5nf"
+                            },
+                            {
+                                "field_id": "fld_01kytgcz1ck4197hqe4ky7k5nn"
+                            },
+                            {
+                                "field_id": "fld_01kytgcz1ck4197hqe4ky7k5np"
+                            }
+                        ]
+                    }
+                ]
+            }
+        ],
+        "permissions": {
+            "roles": [
+                {
+                    "id": "rol_01kytgcz1ck4197hqe4ky7k5my",
+                    "slug": "admin",
+                    "name": "Admin",
+                    "is_default": false
+                },
+                {
+                    "id": "rol_01kytgcz1ck4197hqe4ky7k5mz",
+                    "slug": "user",
+                    "name": "User",
+                    "is_default": true
+                }
+            ]
+        },
+        "settings": {
+            "default_locale": "es-MX",
+            "default_timezone": "America/Mexico_City",
+            "default_currency": "MXN"
+        }
+    },
+    "portability": {
+        "removed": []
+    }
+}

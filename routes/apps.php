@@ -23,6 +23,16 @@ Route::middleware([
     // grid with empty apps. No-op (redirect only) once the app has any content.
     Route::delete('/apps/{app}/discard-empty', [AppController::class, 'discardEmpty'])->name('apps.discard-empty');
 
+    // Portability: an app as a file. Import and duplicate both go through
+    // AppPackage, so a copy is built by exactly the path an installed package
+    // takes and cannot drift from it.
+    Route::get('/apps/{app}/export', [AppController::class, 'export'])->name('apps.export');
+    Route::post('/apps/{app}/duplicate', [AppController::class, 'duplicate'])->name('apps.duplicate');
+    Route::post('/apps/import', [AppController::class, 'import'])
+        ->middleware('throttle:20,1')
+        ->name('apps.import');
+    Route::post('/apps/from-template', [AppController::class, 'createFromTemplate'])->name('apps.from-template');
+
     // Builder AI surface — chat that edits the manifest via JSON Patches.
     Route::get('/apps/{app}/builder', [AppBuilderController::class, 'show'])->name('apps.builder');
     Route::post('/apps/{app}/builder/conversations', [AppBuilderController::class, 'startNewConversation'])->name('apps.builder.conversations.new');

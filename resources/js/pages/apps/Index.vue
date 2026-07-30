@@ -4,7 +4,7 @@ import PageHeader from '@/components/app-v2/PageHeader.vue';
 import AppCard from '@/components/apps/AppCard.vue';
 import AppLayoutV2 from '@/layouts/AppLayoutV2.vue';
 import { Head, router } from '@inertiajs/vue3';
-import { AppWindow, Plus } from '@lucide/vue';
+import { AppWindow, Plus, Upload } from '@lucide/vue';
 import { ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 
@@ -38,6 +38,16 @@ interface AppItem {
     } | null;
 }
 
+interface Template {
+    slug: string;
+    name: string;
+    description: string;
+    icon: string | null;
+    kind: string;
+    objects: number;
+    pages: number;
+}
+
 interface Props {
     apps: {
         data: AppItem[];
@@ -45,11 +55,34 @@ interface Props {
         last_page: number;
         total: number;
     };
+    templates?: Template[];
 }
 
-defineProps<Props>();
+const props = defineProps<Props>();
 
 const { t } = useI18n();
+
+// Start from a template instead of an empty page. It installs through the same
+// package path an uploaded file takes, so what you get is a real app you can
+// immediately export again.
+function useTemplate(slug: string): void {
+    if (creating.value) return;
+    creating.value = true;
+    router.post(
+        '/apps/from-template',
+        { template: slug },
+        { onFinish: () => (creating.value = false) },
+    );
+}
+
+// Install an app someone exported. Anything the package could not carry is
+// reported on the other side, in the Builder.
+const importInput = ref<HTMLInputElement | null>(null);
+function importPackage(event: Event): void {
+    const file = (event.target as HTMLInputElement).files?.[0];
+    if (!file) return;
+    router.post('/apps/import', { package: file }, { forceFormData: true });
+}
 </script>
 
 <template>
@@ -62,6 +95,23 @@ const { t } = useI18n();
                 :description="t('apps.index.description')"
             >
                 <template #actions>
+                    <!-- Install an app someone exported. -->
+                    <button
+                        type="button"
+                        class="inline-flex items-center gap-1.5 rounded-pill border border-medium bg-surface px-3.5 py-1.5 text-xs text-ink-muted transition-colors hover:text-ink"
+                        @click="importInput?.click()"
+                    >
+                        <Upload class="size-3.5" />
+                        {{ t('apps.index.import') }}
+                    </button>
+                    <input
+                        ref="importInput"
+                        type="file"
+                        accept=".json,application/json"
+                        class="hidden"
+                        @change="importPackage"
+                    />
+
                     <button
                         type="button"
                         @click="createApp"
@@ -73,6 +123,42 @@ const { t } = useI18n();
                     </button>
                 </template>
             </PageHeader>
+
+            <!-- Starter templates. Shown above the grid so the first thing a
+                 new account sees is something real to start from, not an empty
+                 page and a blinking prompt. -->
+            <section v-if="props.templates?.length" class="space-y-3">
+                <h2
+                    class="text-xs font-medium tracking-wide text-ink-muted uppercase"
+                >
+                    {{ t('apps.index.templates') }}
+                </h2>
+                <div class="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
+                    <button
+                        v-for="tpl in props.templates"
+                        :key="tpl.slug"
+                        type="button"
+                        :disabled="creating"
+                        class="rounded-sp-sm border border-soft bg-navy/40 px-4 py-3 text-left transition-colors hover:border-accent-blue/40 disabled:opacity-50"
+                        @click="useTemplate(tpl.slug)"
+                    >
+                        <p class="text-sm font-medium text-ink">
+                            {{ tpl.name }}
+                        </p>
+                        <p class="mt-0.5 text-xs text-ink-muted">
+                            {{ tpl.description }}
+                        </p>
+                        <p class="mt-2 text-[11px] text-ink-muted">
+                            {{
+                                t('apps.index.template_contents', {
+                                    objects: tpl.objects,
+                                    pages: tpl.pages,
+                                })
+                            }}
+                        </p>
+                    </button>
+                </div>
+            </section>
 
             <div
                 v-if="apps.data.length > 0"

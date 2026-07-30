@@ -24,10 +24,22 @@ class AppAccessResolver
     /**
      * @param  array<string, mixed>  $manifest
      */
-    public function resolve(App $app, array $manifest, ?User $user): AppAccessContext
+    public function resolve(App $app, array $manifest, ?User $user, ?string $previewRoleSlug = null): AppAccessContext
     {
         // 1. Administrators bypass all app policies.
         if ($user !== null && $this->isAdministrator($app, $user)) {
+            // …unless they asked to SEE the app as one of its roles. This is
+            // the only way to check what a role actually gets without creating
+            // a throwaway account, and it can only ever narrow: it is offered
+            // exclusively to someone who already had unrestricted access, and
+            // it hands them a real role's context instead.
+            if ($previewRoleSlug !== null && $previewRoleSlug !== '') {
+                $preview = $this->resolveForRole($manifest, $previewRoleSlug);
+                if ($preview->hasAccess) {
+                    return $preview;
+                }
+            }
+
             return AppAccessContext::bypass();
         }
 
