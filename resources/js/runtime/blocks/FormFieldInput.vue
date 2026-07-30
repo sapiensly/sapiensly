@@ -92,6 +92,21 @@ function patchRange(side: 'from' | 'to', ev: Event) {
 const uploadProgress = ref(0);
 const uploadError = ref<string | null>(null);
 
+/**
+ * Where uploads go. The runtime is mounted at /r/{slug} when signed in and at
+ * /a/{public_slug} on a public portal, and only the URL knows which — a form on
+ * a portal that posted to /r/ would 401 on every attachment.
+ */
+function uploadMount(): string {
+    if (typeof window !== 'undefined') {
+        const m = window.location.pathname.match(
+            /^\/(r|a)\/([a-z0-9][a-z0-9_-]*)/,
+        );
+        if (m) return `/${m[1]}/${m[2]}`;
+    }
+    return `/r/${props.appSlug}`;
+}
+
 async function onFileSelected(ev: Event) {
     const input = ev.target as HTMLInputElement;
     const file = input.files?.[0];
@@ -102,7 +117,7 @@ async function onFileSelected(ev: Event) {
         const form = new FormData();
         form.append('file', file);
         const { data } = await axios.post<UploadedFile>(
-            `/r/${props.appSlug}/uploads`,
+            `${uploadMount()}/uploads`,
             form,
             {
                 headers: { 'Content-Type': 'multipart/form-data' },

@@ -10,6 +10,7 @@ use App\Models\User;
 use App\Services\Apps\PortalPublisher;
 use App\Services\Manifest\AppManifestService;
 use Database\Seeders\RolesAndPermissionsSeeder;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Str;
 use Spatie\Permission\PermissionRegistrar;
 
@@ -312,4 +313,34 @@ it('stops serving the portal after it is unpublished', function () {
     app(PortalPublisher::class)->unpublish($this->testApp);
 
     $this->get("/a/{$slug}")->assertNotFound();
+});
+
+it('refuses an upload while the portal is read-only', function () {
+    $slug = publishPortal($this);
+    $path = tempnam(sys_get_temp_dir(), 'up').'.pdf';
+    file_put_contents($path, '%PDF-1.4 test');
+
+    $this->post("/a/{$slug}/uploads", [
+        'file' => new UploadedFile($path, 'orden.pdf', 'application/pdf', null, true),
+    ], ['Accept' => 'application/json'])->assertStatus(403)->assertJsonPath('error', 'read_only');
+});
+
+it('refuses a file type a stranger has no business uploading', function () {
+    app(AppManifestService::class)->createVersion(
+        $this->testApp,
+        portalManifest($this->testApp->id, $this->ids, allowWrites: true),
+        $this->owner,
+    );
+    $slug = publishPortal($this);
+
+    $path = tempnam(sys_get_temp_dir(), 'up').'.php';
+    file_put_contents($path, '<?php echo 1;');
+
+    // "Whatever the browser labelled it" is not a type check, and a scriptable
+    // file on tenant storage is the worst thing a portal could accept.
+    // Accept: JSON — the browser's uploader is axios, so a rejection is a 422
+    // it can read, not a redirect to a page that does not exist.
+    $this->post("/a/{$slug}/uploads", [
+        'file' => new UploadedFile($path, 'shell.php', 'text/plain', null, true),
+    ], ['Accept' => 'application/json'])->assertStatus(422);
 });

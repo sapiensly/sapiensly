@@ -238,3 +238,43 @@ it('stores only a hash, so the token can never be read back', function () {
         ->and($minted['key']->toArray())->not->toHaveKey('token_hash')
         ->and($minted['token'])->toStartWith('sap_');
 });
+
+it('filters by a field slug, and never by one the role hides', function () {
+    Record::create([
+        'app_id' => $this->testApp->id, 'object_definition_id' => $this->ids['objPedidos'],
+        'data' => ['cliente' => 'Globex', 'margen' => 7],
+    ]);
+    $headers = apiKeyFor($this);
+
+    $this->getJson('/api/apps/v1/objects/pedidos/records?filter[cliente]=Globex', $headers)
+        ->assertOk()
+        ->assertJsonPath('total', 1)
+        ->assertJsonPath('data.0.data.cliente', 'Globex');
+
+    // `margen` is hidden for this role. Filtering on it would let a caller
+    // binary-search a value it may not read, so the filter is dropped and the
+    // query answers unfiltered rather than leaking one bit at a time.
+    $this->getJson('/api/apps/v1/objects/pedidos/records?filter[margen][gte]=40', $headers)
+        ->assertOk()
+        ->assertJsonPath('total', 2);
+});
+
+it('sorts by a slug, descending with a leading minus', function () {
+    Record::create([
+        'app_id' => $this->testApp->id, 'object_definition_id' => $this->ids['objPedidos'],
+        'data' => ['cliente' => 'Zebra', 'margen' => 1],
+    ]);
+    $headers = apiKeyFor($this);
+
+    $ascending = $this->getJson('/api/apps/v1/objects/pedidos/records?sort=cliente', $headers)->assertOk();
+    expect($ascending->json('data.0.data.cliente'))->toBe('Acme');
+
+    $descending = $this->getJson('/api/apps/v1/objects/pedidos/records?sort=-cliente', $headers)->assertOk();
+    expect($descending->json('data.0.data.cliente'))->toBe('Zebra');
+});
+
+it('ignores a filter or sort naming a field that does not exist', function () {
+    $this->getJson('/api/apps/v1/objects/pedidos/records?filter[fantasma]=x&sort=-tampoco', apiKeyFor($this))
+        ->assertOk()
+        ->assertJsonPath('total', 1);
+});

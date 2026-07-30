@@ -3,8 +3,10 @@
 namespace App\Services\Apps;
 
 use App\Models\App;
+use App\Models\Record;
 use App\Models\User;
 use App\Services\Manifest\AppManifestService;
+use App\Services\Records\RecordWriteService;
 use App\Support\Apps\AppNaming;
 use App\Support\Apps\ManifestIdRemap;
 use InvalidArgumentException;
@@ -39,6 +41,9 @@ class AppPackage
 
     public const FORMAT_VERSION = 1;
 
+    /** Seed rows carried per object when an export asks for data. */
+    public const MAX_RECORDS_PER_OBJECT = 500;
+
     public function __construct(
         private readonly AppManifestService $manifests,
     ) {}
@@ -48,7 +53,7 @@ class AppPackage
      *
      * @throws InvalidArgumentException when the app has nothing to export
      */
-    public function export(App $app): array
+    public function export(App $app, bool $includeRecords = false): array
     {
         $manifest = $this->manifests->getActiveManifest($app);
         if ($manifest === null) {
@@ -74,8 +79,44 @@ class AppPackage
                 'kind' => $app->kind->value,
             ],
             'manifest' => $manifest,
+            // Rows travel only when ASKED for. A package is a schema by
+            // default: shipping someone's customer list inside a template is
+            // the kind of mistake that is discovered by the wrong person.
+            'records' => $includeRecords ? $this->exportRecords($app, $manifest) : null,
             'portability' => ['removed' => $notes],
         ];
+    }
+
+    /**
+     * Seed rows, keyed by object slug, bounded per object.
+     *
+     * Bounded because this is a starter payload, not a backup: an export that
+     * quietly grew to a hundred megabytes would be a worse answer than a clear
+     * limit. Ids are dropped — the install mints its own — and only objects the
+     * manifest still declares are included.
+     *
+     * @param  array<string, mixed>  $manifest
+     * @return array<string, list<array<string, mixed>>>
+     */
+    private function exportRecords(App $app, array $manifest): array
+    {
+        $out = [];
+
+        foreach ($manifest['objects'] ?? [] as $object) {
+            $rows = Record::query()
+                ->where('app_id', $app->id)
+                ->where('object_definition_id', $object['id'])
+                ->orderBy('created_at')
+                ->limit(self::MAX_RECORDS_PER_OBJECT)
+                ->pluck('data')
+                ->all();
+
+            if ($rows !== []) {
+                $out[$object['slug']] = $rows;
+            }
+        }
+
+        return $out;
     }
 
     /**
@@ -133,8 +174,67 @@ class AppPackage
         $manifest['version'] = 1;
 
         $this->manifests->createVersion($app, $manifest, $user, 'Imported from a package');
+        $app->refresh();
 
-        return ['app' => $app->refresh(), 'notes' => $notes];
+        $seeded = $this->importRecords($app, $manifest, $package['records'] ?? null, $user, $notes);
+        if ($seeded > 0) {
+            $notes[] = "{$seeded} record(s) came with the package.";
+        }
+
+        return ['app' => $app, 'notes' => $notes];
+    }
+
+    /**
+     * Write the package's seed rows through the normal validated write path, so
+     * data that arrives in a file obeys the same rules as data anyone types.
+     *
+     * A row that does not validate is SKIPPED and counted rather than failing
+     * the install: the schema is the valuable part, and refusing to install an
+     * app because one sample row is malformed helps nobody.
+     *
+     * @param  array<string, mixed>  $manifest
+     * @param  array<string, mixed>|null  $records
+     * @param  list<string>  $notes
+     */
+    private function importRecords(App $app, array $manifest, ?array $records, ?User $user, array &$notes): int
+    {
+        if (! is_array($records) || $records === []) {
+            return 0;
+        }
+
+        $idBySlug = [];
+        foreach ($manifest['objects'] ?? [] as $object) {
+            $idBySlug[$object['slug']] = $object['id'];
+        }
+
+        $writer = app(RecordWriteService::class);
+        $written = 0;
+        $skipped = 0;
+
+        foreach ($records as $slug => $rows) {
+            $objectId = $idBySlug[$slug] ?? null;
+            if ($objectId === null || ! is_array($rows)) {
+                continue;
+            }
+
+            foreach (array_slice($rows, 0, self::MAX_RECORDS_PER_OBJECT) as $values) {
+                if (! is_array($values)) {
+                    continue;
+                }
+                try {
+                    $writer->create($app, $manifest, $objectId, $values, $user);
+                    $written++;
+                } catch (\Throwable) {
+                    $skipped++;
+                }
+            }
+        }
+
+        if ($skipped > 0) {
+            $notes[] = "{$skipped} record(s) in the package did not fit this app's rules and were skipped.";
+        }
+
+        return $written;
     }
 
     /**
@@ -144,10 +244,10 @@ class AppPackage
      *
      * @return array{app: App, notes: list<string>}
      */
-    public function duplicate(App $app, User $user, ?string $name = null): array
+    public function duplicate(App $app, User $user, ?string $name = null, bool $includeRecords = false): array
     {
         return $this->import(
-            $this->export($app),
+            $this->export($app, $includeRecords),
             $user,
             $name ?? $app->name.' (copia)',
         );

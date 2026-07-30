@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import * as AppController from '@/actions/App/Http/Controllers/AppController';
-import { Link } from '@inertiajs/vue3';
+import { Link, router } from '@inertiajs/vue3';
 import {
     AppWindow,
     Building2,
+    Copy,
+    Download,
     Globe,
     History,
     LayoutDashboard,
@@ -32,6 +34,20 @@ interface AppCardData {
 }
 
 const props = defineProps<{ app: AppCardData }>();
+
+// Card actions. Both sit inside a <Link>, so each stops the click from also
+// navigating into the app — the whole card is a link and these are not it.
+function exportApp(event: Event): void {
+    event.preventDefault();
+    event.stopPropagation();
+    window.location.href = `/apps/${props.app.id}/export`;
+}
+
+function duplicateApp(event: Event): void {
+    event.preventDefault();
+    event.stopPropagation();
+    router.post(`/apps/${props.app.id}/duplicate`);
+}
 
 const { t } = useI18n();
 
@@ -165,7 +181,7 @@ const versionPill = computed<PillStyle>(() => {
                 {{ app.description }}
             </p>
 
-            <footer class="mt-auto flex items-center justify-between">
+            <footer class="mt-auto flex items-center justify-between gap-2">
                 <span
                     :class="[
                         'inline-flex items-center gap-1 rounded-pill border px-2 py-0.5 text-[10px] tracking-wider uppercase',
@@ -175,6 +191,31 @@ const versionPill = computed<PillStyle>(() => {
                     <component :is="versionPill.icon" class="size-3" />
                     {{ versionPill.label }}
                 </span>
+
+                <!-- Revealed on hover: portability belongs where people look
+                     for it, without competing with the app's own identity. -->
+                <div
+                    class="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100"
+                >
+                    <button
+                        type="button"
+                        class="rounded-md p-1 text-ink-subtle transition-colors hover:text-ink"
+                        :title="t('apps.card.duplicate')"
+                        :aria-label="t('apps.card.duplicate')"
+                        @click="duplicateApp"
+                    >
+                        <Copy class="size-3.5" />
+                    </button>
+                    <button
+                        type="button"
+                        class="rounded-md p-1 text-ink-subtle transition-colors hover:text-ink"
+                        :title="t('apps.card.export')"
+                        :aria-label="t('apps.card.export')"
+                        @click="exportApp"
+                    >
+                        <Download class="size-3.5" />
+                    </button>
+                </div>
             </footer>
         </article>
     </Link>

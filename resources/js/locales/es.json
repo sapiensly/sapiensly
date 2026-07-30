@@ -398,6 +398,8 @@
     "apps.index.import": "Importar",
     "apps.index.templates": "Empieza desde una plantilla",
     "apps.index.template_contents": "{objects} objetos · {pages} páginas",
+    "apps.card.duplicate": "Duplicar",
+    "apps.card.export": "Exportar",
     "apps.index.no_apps": "Aún no hay Apps",
     "apps.index.no_apps_description": "Crea tu primera App dándole un nombre y un slug. El Builder AI puede tomarlo desde ahí.",
     "apps.index.create_first": "Crea tu primera App",

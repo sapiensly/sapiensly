@@ -2,6 +2,7 @@
 
 use App\Models\App;
 use App\Models\Organization;
+use App\Models\Record;
 use App\Models\User;
 use App\Services\Apps\AppPackage;
 use App\Services\Apps\AppTemplateCatalog;
@@ -241,4 +242,37 @@ it('refuses a template slug that tries to leave the directory', function () {
 
     expect($catalog->package('../../../.env'))->toBeNull()
         ->and($catalog->package('no-existe'))->toBeNull();
+});
+
+it('carries no records unless the export asks for them', function () {
+    Record::create([
+        'app_id' => $this->testApp->id,
+        'object_definition_id' => $this->ids['obj'],
+        'data' => ['nombre' => 'Acme'],
+    ]);
+
+    expect($this->packages->export($this->testApp)['records'])->toBeNull();
+
+    $withData = $this->packages->export($this->testApp, includeRecords: true);
+    expect($withData['records'])->toBe(['clientes' => [['nombre' => 'Acme']]]);
+});
+
+it('writes seed rows through the same validated path as a typed one', function () {
+    Record::create([
+        'app_id' => $this->testApp->id,
+        'object_definition_id' => $this->ids['obj'],
+        'data' => ['nombre' => 'Acme'],
+    ]);
+
+    $package = $this->packages->export($this->testApp, includeRecords: true);
+    // A row that cannot exist in this schema must not block the install: the
+    // schema is the valuable part.
+    $package['records']['clientes'][] = ['campo_inventado' => 'x'];
+
+    $result = $this->packages->import($package, $this->owner, 'Con datos');
+
+    $rows = Record::where('app_id', $result['app']->id)->get();
+    expect($rows)->toHaveCount(1)
+        ->and($rows->first()->data['nombre'])->toBe('Acme')
+        ->and(collect($result['notes'])->implode(' '))->toContain('skipped');
 });

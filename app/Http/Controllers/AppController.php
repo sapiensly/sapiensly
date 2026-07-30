@@ -227,7 +227,13 @@ class AppController extends Controller
         $this->authorizeAccess($request, $app);
 
         try {
-            $package = app(AppPackage::class)->export($app);
+            // ?with_records=1 carries seed rows. Off by default: a package is a
+            // schema, and shipping a customer list inside one by accident is the
+            // kind of mistake the wrong person discovers.
+            $package = app(AppPackage::class)->export(
+                $app,
+                $request->boolean('with_records'),
+            );
         } catch (\InvalidArgumentException $e) {
             return response()->json(['message' => $e->getMessage()], 422);
         }
@@ -267,7 +273,11 @@ class AppController extends Controller
         $this->authorizeAccess($request, $app);
 
         try {
-            $result = app(AppPackage::class)->duplicate($app, $request->user());
+            $result = app(AppPackage::class)->duplicate(
+                $app,
+                $request->user(),
+                includeRecords: $request->boolean('with_records'),
+            );
         } catch (\InvalidArgumentException $e) {
             return back()->withErrors(['app' => $e->getMessage()]);
         }

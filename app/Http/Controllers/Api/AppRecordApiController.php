@@ -34,6 +34,16 @@ class AppRecordApiController extends Controller
 
     private const MAX_LIMIT = 200;
 
+    /** Comparisons a caller may ask for, mirroring the manifest's own grammar. */
+    private const FILTER_OPS = [
+        'eq', 'neq', 'gt', 'gte', 'lt', 'lte',
+        'in', 'not_in', 'contains', 'starts_with', 'ends_with',
+        'is_null', 'is_not_null',
+    ];
+
+    /** Implicit fields every object carries; addressable by their own name. */
+    private const SYSTEM_FIELDS = ['id', 'sys_created_at', 'sys_updated_at'];
+
     public function __construct(
         private readonly RecordQueryService $records,
         private readonly RecordWriteService $writer,
@@ -89,13 +99,24 @@ class AppRecordApiController extends Controller
             self::MAX_LIMIT,
         );
 
+        $query = [
+            'object_id' => $object['id'],
+            'limit' => $limit,
+            'offset' => max((int) $request->query('offset', '0'), 0),
+        ];
+
+        $filter = $this->filterFrom($request, $object, $access);
+        if ($filter !== null) {
+            $query['filter'] = $filter;
+        }
+        $sort = $this->sortFrom($request, $object, $access);
+        if ($sort !== []) {
+            $query['sort'] = $sort;
+        }
+
         $result = $this->records->queryWithMeta(
             $app,
-            [
-                'object_id' => $object['id'],
-                'limit' => $limit,
-                'offset' => max((int) $request->query('offset', '0'), 0),
-            ],
+            $query,
             $manifest,
             $this->context($access),
         );
@@ -204,6 +225,121 @@ class AppRecordApiController extends Controller
         $this->writer->delete($record, $app, $manifest, null);
 
         return response()->json(['deleted' => $recordId]);
+    }
+
+    /**
+     * Translate `?filter[slug]=value` / `?filter[slug][op]=value` into the
+     * manifest's own filter grammar.
+     *
+     * Callers address fields by SLUG because that is what the discovery
+     * endpoint gave them; the grammar addresses them by id. Anything that does
+     * not resolve to a real, visible field is DROPPED rather than passed along:
+     * a filter on a hidden field would otherwise let a caller probe values it is
+     * not allowed to read, one comparison at a time.
+     *
+     * Whatever survives is ANDed under the role's own row_filter downstream, so
+     * a filter can only ever narrow what the key could already see.
+     *
+     * @param  array<string, mixed>  $object
+     * @return array<string, mixed>|null
+     */
+    private function filterFrom(Request $request, array $object, AppAccessContext $access): ?array
+    {
+        $raw = $request->query('filter');
+        if (! is_array($raw) || $raw === []) {
+            return null;
+        }
+
+        $byId = $this->visibleFields($object, $access);
+        $conditions = [];
+
+        foreach ($raw as $slug => $criterion) {
+            $fieldId = $byId[$slug] ?? null;
+            if ($fieldId === null) {
+                continue;
+            }
+
+            if (! is_array($criterion)) {
+                $conditions[] = ['op' => 'eq', 'field_id' => $fieldId, 'value' => $criterion];
+
+                continue;
+            }
+
+            foreach ($criterion as $op => $value) {
+                if (! in_array($op, self::FILTER_OPS, true)) {
+                    continue;
+                }
+                $conditions[] = in_array($op, ['is_null', 'is_not_null'], true)
+                    ? ['op' => $op, 'field_id' => $fieldId]
+                    : ['op' => $op, 'field_id' => $fieldId, 'value' => $value];
+            }
+        }
+
+        if ($conditions === []) {
+            return null;
+        }
+
+        // Always a group, even for one condition: the grammar takes a single
+        // object, and wrapping keeps the shape identical whatever arrived.
+        return count($conditions) === 1
+            ? $conditions[0]
+            : ['op' => 'and', 'conditions' => $conditions];
+    }
+
+    /**
+     * `?sort=slug` ascending, `?sort=-slug` descending, comma-separated for
+     * several. Unknown or hidden fields are dropped, same reasoning as filters.
+     *
+     * @param  array<string, mixed>  $object
+     * @return list<array{field_id: string, direction: string}>
+     */
+    private function sortFrom(Request $request, array $object, AppAccessContext $access): array
+    {
+        $raw = trim((string) $request->query('sort', ''));
+        if ($raw === '') {
+            return [];
+        }
+
+        $byId = $this->visibleFields($object, $access);
+        $sort = [];
+
+        foreach (explode(',', $raw) as $token) {
+            $token = trim($token);
+            $descending = str_starts_with($token, '-');
+            $slug = ltrim($token, '-+');
+
+            $fieldId = $byId[$slug] ?? null;
+            if ($fieldId !== null) {
+                $sort[] = ['field_id' => $fieldId, 'direction' => $descending ? 'desc' : 'asc'];
+            }
+        }
+
+        return $sort;
+    }
+
+    /**
+     * slug => field id, for the fields this key may actually see. The implicit
+     * system fields are addressable too — "newest first" is the commonest thing
+     * an integration asks for and there is no declared field for it.
+     *
+     * @param  array<string, mixed>  $object
+     * @return array<string, string>
+     */
+    private function visibleFields(array $object, AppAccessContext $access): array
+    {
+        $hidden = $access->hiddenFieldSlugs($object['id']);
+
+        $map = [];
+        foreach (self::SYSTEM_FIELDS as $slug) {
+            $map[$slug] = $slug;
+        }
+        foreach ($object['fields'] ?? [] as $field) {
+            if (! in_array($field['slug'], $hidden, true)) {
+                $map[$field['slug']] = $field['id'];
+            }
+        }
+
+        return $map;
     }
 
     /**

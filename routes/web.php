@@ -4,6 +4,7 @@ use App\Http\Controllers\AccountSwitchController;
 use App\Http\Controllers\LandingRenderController;
 use App\Http\Controllers\PublicAppActionController;
 use App\Http\Controllers\PublicAppController;
+use App\Http\Controllers\PublicAppFileController;
 use App\Http\Controllers\PublicLandingController;
 use App\Http\Controllers\PublicLeadController;
 use App\Http\Controllers\Settings\OrganizationBrandController;
@@ -83,6 +84,20 @@ Route::post('a/{public_slug}/actions', PublicAppActionController::class)
     ->where('public_slug', '[a-z0-9][a-z0-9_-]*')
     ->middleware([BindPublicAppContext::class, 'throttle:20,1'])
     ->name('portal.public.actions');
+
+// Portal file upload/serve. Writable storage reachable by anyone is the most
+// abusable surface here, so the controller bounds it hard: writes must be on,
+// 10MB, an extension allowlist, and everything downloads rather than renders.
+Route::post('a/{public_slug}/uploads', [PublicAppFileController::class, 'upload'])
+    ->where('public_slug', '[a-z0-9][a-z0-9_-]*')
+    ->middleware([BindPublicAppContext::class, 'throttle:10,1'])
+    ->name('portal.public.uploads');
+
+Route::get('a/{public_slug}/files/{file_id}', [PublicAppFileController::class, 'show'])
+    ->where('public_slug', '[a-z0-9][a-z0-9_-]*')
+    ->where('file_id', 'fil_[a-z0-9]+')
+    ->middleware([BindPublicAppContext::class, 'throttle:120,1'])
+    ->name('portal.public.files');
 
 // Signed headless-render of an owner's landing (published OR draft) for
 // HeadlessLandingShot's Browsershot capture. No session — the tenant scope
