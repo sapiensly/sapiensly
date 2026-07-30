@@ -35,6 +35,17 @@ class RemoteSheetFetcher
      */
     public function fetch(string $url): SheetData
     {
+        return $this->reader->readBytes($this->fetchRaw($url), $url);
+    }
+
+    /**
+     * The downloaded BYTES, before any parsing — what a queued import needs to
+     * park on disk for the job to read later.
+     *
+     * @throws RuntimeException when the URL cannot be fetched
+     */
+    public function fetchRaw(string $url): string
+    {
         $url = trim($url);
         if (preg_match('#^https?://#i', $url) !== 1) {
             throw new RuntimeException('The link must start with http:// or https://.');
@@ -73,7 +84,7 @@ class RemoteSheetFetcher
             );
         }
 
-        return $this->reader->readBytes($body, $url);
+        return $body;
     }
 
     /**

@@ -3,6 +3,8 @@
 use App\Enums\MembershipRole;
 use App\Enums\MembershipStatus;
 use App\Jobs\RunSpreadsheetImportJob;
+use App\Mcp\Servers\SapiensServer;
+use App\Mcp\Tools\Build\ImportRecordsTool;
 use App\Models\App;
 use App\Models\AppImport;
 use App\Models\Organization;
@@ -15,6 +17,7 @@ use Database\Seeders\RolesAndPermissionsSeeder;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Str;
+use Laravel\Mcp\Request;
 use Spatie\Permission\PermissionRegistrar;
 
 /**
@@ -176,4 +179,32 @@ it('rewrites a Google Sheets link to its CSV export, keeping the chosen tab', fu
 it('refuses a link that is not http(s) before any request is made', function () {
     expect(fn () => app(RemoteSheetFetcher::class)->fetch('file:///etc/passwd'))
         ->toThrow(RuntimeException::class, 'must start with http');
+});
+
+it('queues an MCP import too, and reports its progress by id', function () {
+    SapiensServer::actingAs($this->owner)
+        ->tool(ImportRecordsTool::class, [
+            'app_slug' => $this->testApp->slug,
+            'content' => "Nombre;Precio\nAcme;1.200,50\nGlobex;900,00\n",
+            'object_name' => 'Clientes',
+        ])
+        ->assertOk()
+        // Queued, not done: an agent importing thousands of rows must not
+        // block its own call on the write path, same as the browser.
+        ->assertSee('queued');
+
+    // The run it just created — the id the response handed the agent.
+    $import = AppImport::where('app_id', $this->testApp->id)->firstOrFail();
+
+    // The queue runs inline in tests, so polling by id already finds it done —
+    // the same call an agent makes, just without the waiting.
+    SapiensServer::actingAs($this->owner)
+        ->tool(ImportRecordsTool::class, [
+            'app_slug' => $this->testApp->slug,
+            'import_id' => $import->id,
+        ])
+        ->assertOk()
+        ->assertSee('finished');
+
+    expect(Record::where('app_id', $this->testApp->id)->count())->toBe(2);
 });

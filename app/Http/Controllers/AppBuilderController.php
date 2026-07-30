@@ -2782,17 +2782,13 @@ class AppBuilderController extends Controller
 
         // The file is parked so the JOB can read it: an import of thousands of
         // rows goes through the full validated write path and cannot finish
-        // inside this request. The tenant disk is preferred because a queue
-        // worker is frequently not the machine that took the upload; `local`
-        // is the single-host fallback when no tenant storage is configured.
-        try {
-            $disk = $this->tenantStorage->diskName($app);
-        } catch (\Throwable) {
-            $disk = 'local';
-        }
-
-        $path = 'imports/'.$app->id.'/'.Str::ulid().'.'.($file->getClientOriginalExtension() ?: 'csv');
-        Storage::disk($disk)->put($path, (string) file_get_contents($file->getRealPath()));
+        // inside this request. Where it lands is the service's call, shared with
+        // every other surface that starts an import.
+        $stashed = app(ImportService::class)->stash(
+            $app,
+            (string) file_get_contents($file->getRealPath()),
+            (string) ($file->getClientOriginalExtension() ?: 'csv'),
+        );
 
         $import = AppImport::create([
             'organization_id' => $app->organization_id,
@@ -2805,8 +2801,8 @@ class AppBuilderController extends Controller
             $import->id,
             $app->id,
             $request->user()?->id,
-            $disk,
-            $path,
+            $stashed['disk'],
+            $stashed['path'],
             $file->getClientOriginalName(),
             $data['object_slug'] ?? null,
             $data['object_name'] ?? pathinfo((string) $file->getClientOriginalName(), PATHINFO_FILENAME),

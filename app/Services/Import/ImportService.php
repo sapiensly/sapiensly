@@ -5,6 +5,9 @@ namespace App\Services\Import;
 use App\Models\App;
 use App\Models\User;
 use App\Services\Manifest\AppManifestService;
+use App\Services\Storage\TenantStorage;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 use InvalidArgumentException;
 
 /**
@@ -42,6 +45,32 @@ class ImportService
     public function readBytes(string $contents, ?string $originalName = null): SheetData
     {
         return $this->reader->readBytes($contents, $originalName);
+    }
+
+    /**
+     * Park a file where the import JOB can read it, and say where.
+     *
+     * The tenant disk is preferred because a queue worker is frequently not the
+     * machine that took the upload; `local` is the single-host fallback when no
+     * tenant storage is configured. Shared by every surface that starts an
+     * import so they cannot disagree about where files live.
+     *
+     * @return array{disk: string, path: string}
+     */
+    public function stash(App $app, string $contents, string $extension = 'csv'): array
+    {
+        try {
+            $disk = app(TenantStorage::class)->diskName($app);
+        } catch (\Throwable) {
+            $disk = 'local';
+        }
+
+        $extension = strtolower((string) preg_replace('/[^a-zA-Z0-9]/', '', $extension)) ?: 'csv';
+        $path = 'imports/'.$app->id.'/'.Str::ulid().'.'.$extension;
+
+        Storage::disk($disk)->put($path, $contents);
+
+        return ['disk' => $disk, 'path' => $path];
     }
 
     /**
