@@ -755,7 +755,7 @@
     "apps.builder.wireframe.tab_url": "URL",
     "apps.builder.wireframe.tab_html": "HTML",
     "apps.builder.wireframe.image_hint": "Sube un screenshot del wireframe (PNG, JPG, WebP o GIF, máximo 5 MB).",
-    "apps.builder.wireframe.url_hint": "Pega un link de Figma, claude.ai/share, una página web o un screenshot público. Intentamos extraer la imagen de preview y el texto visible.",
+    "apps.builder.wireframe.url_hint": "Dirección de la página a importar. Las páginas que se construyen en el navegador se abren y renderizan antes de leerlas, así que un sitio en React o Vue funciona.",
     "apps.builder.wireframe.url_placeholder": "https://www.figma.com/design/...",
     "apps.builder.wireframe.html_hint": "Sube un export .html completo, o pega el markup. Una página diseñada se reconstruye como landing; el mockup de una pantalla se vuelve una app.",
     "apps.builder.wireframe.html_placeholder": "<html>...</html>",
@@ -3099,5 +3099,12 @@
     "site_import.hint.both": "Lee los dos libros de tu propio sitio web: el icono, logo, color de marca y tipografía para el Brandbook, y a qué se dedica el negocio para el Contextbook. Solo se llenan los campos que dejaste vacíos, y nada se guarda hasta que presiones Guardar.",
     "site_import.nothing.any": "De esa lectura no salió nada nuevo — todo lo que encontró ya lo tenías.",
     "site_import.pending.brand": "{count} decisión(es) pendiente(s) en tu Brandbook",
-    "site_import.pending.context": "{count} decisión(es) pendiente(s) en tu Contextbook"
+    "site_import.pending.context": "{count} decisión(es) pendiente(s) en tu Contextbook",
+    "apps.builder.wireframe.mode_label": "¿Qué hago con esto?",
+    "apps.builder.wireframe.mode_auto": "Automático",
+    "apps.builder.wireframe.mode_auto_hint": "Lo decido por lo que importes: una página diseñada se copia, una pantalla llena de datos se convierte en app.",
+    "apps.builder.wireframe.mode_replica": "Réplica",
+    "apps.builder.wireframe.mode_replica_hint": "Copio la página lo más fiel que pueda — mismas secciones, mismo texto, mismo look. Se construye como landing.",
+    "apps.builder.wireframe.mode_inspiration": "Inspiración",
+    "apps.builder.wireframe.mode_inspiration_hint": "Construyo una app que funcione como esta: objetos, páginas y bloques, tomando el layout y el look como referencia."
 }

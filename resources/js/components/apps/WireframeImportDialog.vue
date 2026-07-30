@@ -1,7 +1,23 @@
 <script setup lang="ts">
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+} from '@/components/ui/dialog';
+import {
+    Copy,
+    FileImage,
+    Lightbulb,
+    Link2 as LinkIcon,
+    Loader2,
+    Upload,
+    Wand2,
+    X,
+} from '@lucide/vue';
 import axios from 'axios';
-import { FileImage, Link2 as LinkIcon, Loader2, Upload, X } from '@lucide/vue';
 import { computed, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 
@@ -27,6 +43,15 @@ const { t } = useI18n();
 
 type SourceTab = 'image' | 'url' | 'html';
 const tab = ref<SourceTab>('image');
+
+/**
+ * What to do with what we import. The two answers build opposite manifests — a
+ * replica is a landing whose sections are hand-written html, an inspiration is
+ * an app of objects and data blocks — and letting the artifact decide guesses
+ * badly on a URL, where the evidence only exists once the page has rendered.
+ */
+type ImportMode = 'auto' | 'replica' | 'inspiration';
+const mode = ref<ImportMode>('auto');
 const businessContext = ref('');
 const url = ref('');
 const html = ref('');
@@ -40,7 +65,9 @@ const errorText = ref<string | null>(null);
 
 const htmlFileSize = computed(() => {
     const bytes = htmlFile.value?.size ?? 0;
-    return bytes >= 1024 * 1024 ? `${(bytes / 1024 / 1024).toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1024))} KB`;
+    return bytes >= 1024 * 1024
+        ? `${(bytes / 1024 / 1024).toFixed(1)} MB`
+        : `${Math.max(1, Math.round(bytes / 1024))} KB`;
 });
 
 // Reset every time the dialog re-opens so a previous attempt doesn't leak
@@ -62,6 +89,7 @@ watch(
             businessContext.value = '';
             errorText.value = null;
             tab.value = 'image';
+            mode.value = 'auto';
         }
     },
 );
@@ -140,7 +168,8 @@ const submitDisabled = computed(() => {
     if (submitting.value) return true;
     if (tab.value === 'image') return file.value === null;
     if (tab.value === 'url') return url.value.trim() === '';
-    if (tab.value === 'html') return htmlFile.value === null && html.value.trim() === '';
+    if (tab.value === 'html')
+        return htmlFile.value === null && html.value.trim() === '';
     return true;
 });
 
@@ -155,6 +184,7 @@ async function submit() {
     const form = new FormData();
     form.append('conversation_id', props.conversationId);
     form.append('source', tab.value);
+    form.append('mode', mode.value);
     if (businessContext.value.trim() !== '') {
         form.append('business_context', businessContext.value.trim());
     }
@@ -187,12 +217,17 @@ async function submit() {
     } catch (e) {
         const err = e as {
             message?: string;
-            response?: { status?: number; data?: { message?: string; error?: string } };
+            response?: {
+                status?: number;
+                data?: { message?: string; error?: string };
+            };
         };
         const status = err.response?.status;
         const body = err.response?.data?.message ?? err.response?.data?.error;
-        errorText.value = status ? `HTTP ${status}${body ? ' — ' + body : ''}` : (err.message ?? t('apps.builder.wireframe.network_error'));
-         
+        errorText.value = status
+            ? `HTTP ${status}${body ? ' — ' + body : ''}`
+            : (err.message ?? t('apps.builder.wireframe.network_error'));
+
         console.error('Wireframe import failed:', e);
     } finally {
         submitting.value = false;
@@ -200,18 +235,58 @@ async function submit() {
 }
 
 const tabs: { id: SourceTab; labelKey: string; icon: typeof Upload }[] = [
-    { id: 'image', labelKey: 'apps.builder.wireframe.tab_image', icon: FileImage },
+    {
+        id: 'image',
+        labelKey: 'apps.builder.wireframe.tab_image',
+        icon: FileImage,
+    },
     { id: 'url', labelKey: 'apps.builder.wireframe.tab_url', icon: LinkIcon },
     { id: 'html', labelKey: 'apps.builder.wireframe.tab_html', icon: Upload },
 ];
+
+const modes: {
+    id: ImportMode;
+    labelKey: string;
+    hintKey: string;
+    icon: typeof Upload;
+}[] = [
+    {
+        id: 'auto',
+        labelKey: 'apps.builder.wireframe.mode_auto',
+        hintKey: 'apps.builder.wireframe.mode_auto_hint',
+        icon: Wand2,
+    },
+    {
+        id: 'replica',
+        labelKey: 'apps.builder.wireframe.mode_replica',
+        hintKey: 'apps.builder.wireframe.mode_replica_hint',
+        icon: Copy,
+    },
+    {
+        id: 'inspiration',
+        labelKey: 'apps.builder.wireframe.mode_inspiration',
+        hintKey: 'apps.builder.wireframe.mode_inspiration_hint',
+        icon: Lightbulb,
+    },
+];
+
+const modeHint = computed(
+    () =>
+        modes.find((m) => m.id === mode.value)?.hintKey ??
+        'apps.builder.wireframe.mode_auto_hint',
+);
 </script>
 
 <template>
     <Dialog :open="open" @update:open="emit('update:open', $event)">
         <DialogContent class="sm:max-w-xl">
             <DialogHeader>
-                <DialogTitle>{{ t('apps.builder.wireframe.title') }}</DialogTitle>
-                <DialogDescription>{{ t('apps.builder.wireframe.description') }}</DialogDescription>
+                <DialogTitle>{{
+                    t('apps.builder.wireframe.title')
+                }}</DialogTitle>
+                <DialogDescription>{{
+                    t('apps.builder.wireframe.description')
+                }}</DialogDescription>
             </DialogHeader>
 
             <div class="space-y-4">
@@ -236,7 +311,9 @@ const tabs: { id: SourceTab; labelKey: string; icon: typeof Upload }[] = [
 
                 <!-- IMAGE tab -->
                 <div v-if="tab === 'image'" class="space-y-2">
-                    <p class="text-xs text-ink-muted">{{ t('apps.builder.wireframe.image_hint') }}</p>
+                    <p class="text-xs text-ink-muted">
+                        {{ t('apps.builder.wireframe.image_hint') }}
+                    </p>
                     <input
                         ref="fileInput"
                         type="file"
@@ -268,7 +345,9 @@ const tabs: { id: SourceTab; labelKey: string; icon: typeof Upload }[] = [
                             alt=""
                             class="size-16 rounded object-cover"
                         />
-                        <div class="flex-1 truncate text-xs text-ink-muted">{{ file.name }}</div>
+                        <div class="flex-1 truncate text-xs text-ink-muted">
+                            {{ file.name }}
+                        </div>
                         <button
                             type="button"
                             @click="clearFile"
@@ -282,26 +361,43 @@ const tabs: { id: SourceTab; labelKey: string; icon: typeof Upload }[] = [
 
                 <!-- URL tab -->
                 <div v-else-if="tab === 'url'" class="space-y-2">
-                    <p class="text-xs text-ink-muted">{{ t('apps.builder.wireframe.url_hint') }}</p>
+                    <p class="text-xs text-ink-muted">
+                        {{ t('apps.builder.wireframe.url_hint') }}
+                    </p>
                     <input
                         v-model="url"
                         type="url"
-                        :placeholder="t('apps.builder.wireframe.url_placeholder')"
+                        :placeholder="
+                            t('apps.builder.wireframe.url_placeholder')
+                        "
                         class="h-9 w-full rounded-md border border-medium bg-surface px-3 text-sm text-ink placeholder:text-ink-subtle"
                     />
                 </div>
 
                 <!-- HTML tab -->
                 <div v-else class="space-y-2">
-                    <p class="text-xs text-ink-muted">{{ t('apps.builder.wireframe.html_hint') }}</p>
+                    <p class="text-xs text-ink-muted">
+                        {{ t('apps.builder.wireframe.html_hint') }}
+                    </p>
 
                     <!-- A standalone export runs to hundreds of KB, which is
                          nobody's idea of a paste. File first, textarea after. -->
-                    <div v-if="htmlFile" class="flex items-center justify-between gap-2 rounded-md border border-medium bg-surface px-3 py-2">
-                        <span class="truncate font-mono text-[11px] text-ink">{{ htmlFile.name }}</span>
+                    <div
+                        v-if="htmlFile"
+                        class="flex items-center justify-between gap-2 rounded-md border border-medium bg-surface px-3 py-2"
+                    >
+                        <span class="truncate font-mono text-[11px] text-ink">{{
+                            htmlFile.name
+                        }}</span>
                         <div class="flex shrink-0 items-center gap-2">
-                            <span class="text-[11px] text-ink-subtle">{{ htmlFileSize }}</span>
-                            <button type="button" @click="clearHtmlFile" class="text-ink-muted transition-colors hover:text-ink">
+                            <span class="text-[11px] text-ink-subtle">{{
+                                htmlFileSize
+                            }}</span>
+                            <button
+                                type="button"
+                                @click="clearHtmlFile"
+                                class="text-ink-muted transition-colors hover:text-ink"
+                            >
                                 <X class="size-3.5" />
                             </button>
                         </div>
@@ -315,30 +411,72 @@ const tabs: { id: SourceTab; labelKey: string; icon: typeof Upload }[] = [
                         <Upload class="size-3.5" />
                         {{ t('apps.builder.wireframe.html_pick_file') }}
                     </button>
-                    <input ref="htmlFileInput" type="file" accept=".html,.htm,text/html" class="hidden" @change="onHtmlFileChange" />
+                    <input
+                        ref="htmlFileInput"
+                        type="file"
+                        accept=".html,.htm,text/html"
+                        class="hidden"
+                        @change="onHtmlFileChange"
+                    />
 
                     <textarea
                         v-if="!htmlFile"
                         v-model="html"
-                        :placeholder="t('apps.builder.wireframe.html_placeholder')"
+                        :placeholder="
+                            t('apps.builder.wireframe.html_placeholder')
+                        "
                         rows="6"
                         class="w-full rounded-md border border-medium bg-surface px-3 py-2 font-mono text-[11px] leading-relaxed text-ink placeholder:text-ink-subtle"
                     />
                 </div>
 
+                <!-- What to do with it — shared across all tabs, because the
+                     answer changes the manifest, not the source. -->
+                <div class="space-y-1.5">
+                    <label class="text-xs text-ink-muted">{{
+                        t('apps.builder.wireframe.mode_label')
+                    }}</label>
+                    <div class="flex gap-1 rounded-md bg-surface p-1">
+                        <button
+                            v-for="opt in modes"
+                            :key="opt.id"
+                            type="button"
+                            @click="mode = opt.id"
+                            :class="[
+                                'inline-flex flex-1 items-center justify-center gap-1.5 rounded-pill px-3 py-1.5 text-xs transition-colors',
+                                mode === opt.id
+                                    ? 'bg-accent-blue/15 text-accent-blue'
+                                    : 'text-ink-muted hover:text-ink',
+                            ]"
+                        >
+                            <component :is="opt.icon" class="size-3.5" />
+                            {{ t(opt.labelKey) }}
+                        </button>
+                    </div>
+                    <p class="text-[11px] text-ink-subtle">{{ t(modeHint) }}</p>
+                </div>
+
                 <!-- Business context — shared across all tabs. -->
                 <div class="space-y-1.5">
-                    <label class="text-xs text-ink-muted">{{ t('apps.builder.wireframe.business_label') }}</label>
+                    <label class="text-xs text-ink-muted">{{
+                        t('apps.builder.wireframe.business_label')
+                    }}</label>
                     <textarea
                         v-model="businessContext"
-                        :placeholder="t('apps.builder.wireframe.business_placeholder')"
+                        :placeholder="
+                            t('apps.builder.wireframe.business_placeholder')
+                        "
                         rows="2"
                         class="w-full rounded-md border border-medium bg-surface px-3 py-2 text-xs text-ink placeholder:text-ink-subtle"
                     />
-                    <p class="text-[11px] text-ink-subtle">{{ t('apps.builder.wireframe.business_hint') }}</p>
+                    <p class="text-[11px] text-ink-subtle">
+                        {{ t('apps.builder.wireframe.business_hint') }}
+                    </p>
                 </div>
 
-                <p v-if="errorText" class="text-[11px] text-red-400">{{ errorText }}</p>
+                <p v-if="errorText" class="text-[11px] text-red-400">
+                    {{ errorText }}
+                </p>
             </div>
 
             <DialogFooter>
@@ -356,7 +494,11 @@ const tabs: { id: SourceTab; labelKey: string; icon: typeof Upload }[] = [
                     class="inline-flex items-center gap-1.5 rounded-pill bg-accent-blue px-3.5 py-1.5 text-xs font-medium text-white shadow-btn-primary transition-colors hover:bg-accent-blue-hover disabled:opacity-50"
                 >
                     <Loader2 v-if="submitting" class="size-3.5 animate-spin" />
-                    {{ submitting ? t('apps.builder.wireframe.submitting') : t('apps.builder.wireframe.submit') }}
+                    {{
+                        submitting
+                            ? t('apps.builder.wireframe.submitting')
+                            : t('apps.builder.wireframe.submit')
+                    }}
                 </button>
             </DialogFooter>
         </DialogContent>

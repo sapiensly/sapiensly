@@ -13,6 +13,7 @@ use App\Services\Apps\AppNamer;
 use App\Services\Builder\BuilderAiService;
 use App\Services\Builder\ImportedPageRenderer;
 use App\Services\Manifest\AppManifestService;
+use App\Services\Security\Ssrf\DnsResolver;
 use App\Support\Apps\AppNaming;
 use App\Support\Branding\ColorPalette;
 use App\Support\Builder\FineTuneStyles;
@@ -1829,13 +1830,20 @@ it('a hero title cannot be emptied — the schema requires a headline', function
  * without this the three tests below quietly spend ninety seconds launching a
  * browser to render a fixture whose markup they already know.
  */
-function stubPageRenderer(): void
+function stubPageRenderer(?array $result = null): void
 {
-    app()->bind(ImportedPageRenderer::class, fn () => new class extends ImportedPageRenderer
+    app()->bind(ImportedPageRenderer::class, fn () => new class($result) extends ImportedPageRenderer
     {
+        public function __construct(private ?array $result) {}
+
         public function render(string $html): ?array
         {
-            return null;
+            return $this->result;
+        }
+
+        public function renderUrl(string $url, array $resolvedIps = []): ?array
+        {
+            return $this->result;
         }
     });
 }
@@ -2055,4 +2063,185 @@ it('falls back to the typed context when the import has no title', function () {
         ])->assertOk();
 
     expect($this->testApp->fresh()->name)->not->toBe(AppNaming::UNTITLED);
+});
+
+/**
+ * Importing a live URL. Most of the web now serves a mount point and builds the
+ * page in the browser, which is where this used to fall over: the import carried
+ * `<div id="root"></div>` and the model, given nothing, replied that it cannot
+ * browse the web and asked the user for a screenshot.
+ */
+/**
+ * Clear the SSRF guard for a host that does not exist: it resolves DNS for real,
+ * and a fixture domain is NXDOMAIN, which it (correctly) refuses.
+ */
+function fakePublicDns(): void
+{
+    app()->bind(DnsResolver::class, fn () => new class implements DnsResolver
+    {
+        public function resolve(string $host): array
+        {
+            return ['93.184.216.34'];
+        }
+    });
+}
+
+function spaShellPage(): string
+{
+    return '<!doctype html><html><head><title>Robok — AI Agency</title>'
+        .'<script type="module" src="/assets/index.js"></script>'
+        .'</head><body><div id="root"></div></body></html>';
+}
+
+it('wireframe-import renders a client-rendered url and imports the page it built', function () {
+    Queue::fake();
+    fakeTenantS3();
+
+    $shot = storage_path('app/tmp/test-shot-'.Str::random(6).'.jpg');
+    @mkdir(dirname($shot), 0755, true);
+    file_put_contents($shot, 'jpeg-bytes');
+
+    fakePublicDns();
+    stubPageRenderer([
+        'html' => '<section class="hero"><h1>Agentes que ejecutan</h1></section><section class="pricing"><h2>Precios</h2></section>',
+        'styles' => null,
+        'css' => ':root{--brand:#5b5bd6}.hero{background:var(--brand)}',
+        'fonts' => ['Sora'],
+        'screenshot_path' => $shot,
+    ]);
+
+    Http::fake(['robok.example/*' => Http::response(spaShellPage(), 200, ['Content-Type' => 'text/html'])]);
+
+    $conv = BuilderConversation::create([
+        'app_id' => $this->testApp->id,
+        'user_id' => $this->user->id,
+        'status' => 'active',
+    ]);
+
+    $this->actingAs($this->user)
+        ->post("/apps/{$this->testApp->id}/builder/wireframe-import", [
+            'conversation_id' => $conv->id,
+            'source' => 'url',
+            'url' => 'https://robok.example/',
+            'mode' => 'replica',
+        ])
+        ->assertOk();
+
+    $userMsg = BuilderMessage::query()
+        ->where('conversation_id', $conv->id)
+        ->where('role', 'user')
+        ->latest('created_at')
+        ->first();
+
+    expect($userMsg->content)->toContain('Agentes que ejecutan')
+        ->and($userMsg->content)->not->toContain('id="root"')
+        // The design came off the stylesheets the live page fetched.
+        ->and($userMsg->content)->toContain('--brand:#5b5bd6')
+        ->and($userMsg->content)->toContain('Sora')
+        // Assets point at the original, and saying so is what stops the model
+        // "fixing" them into local paths that 404.
+        ->and($userMsg->content)->toContain('URL absoluta')
+        // The picture of the page it rendered is the best evidence in the import.
+        ->and($userMsg->attachment_path)->not->toBeNull();
+
+    Storage::disk('s3')->assertExists($userMsg->attachment_path);
+    expect(is_file($shot))->toBeFalse();
+});
+
+it('wireframe-import refuses a url that yielded nothing instead of billing a turn', function () {
+    Queue::fake();
+    fakePublicDns();
+    // The render failed (no browser, a page that never mounts, a login wall) and
+    // the shell it fell back to says nothing at all.
+    stubPageRenderer(null);
+
+    Http::fake(['robok.example/*' => Http::response(spaShellPage(), 200, ['Content-Type' => 'text/html'])]);
+
+    $conv = BuilderConversation::create([
+        'app_id' => $this->testApp->id,
+        'user_id' => $this->user->id,
+        'status' => 'active',
+    ]);
+
+    $this->actingAs($this->user)
+        ->postJson("/apps/{$this->testApp->id}/builder/wireframe-import", [
+            'conversation_id' => $conv->id,
+            'source' => 'url',
+            'url' => 'https://robok.example/',
+        ])
+        ->assertStatus(422)
+        ->assertJsonPath('error', 'wireframe_url_empty');
+
+    Queue::assertNothingPushed();
+    expect(BuilderMessage::query()->where('conversation_id', $conv->id)->count())->toBe(0);
+});
+
+it('wireframe-import copies a page the detector would have called an app mockup', function () {
+    Queue::fake();
+    stubPageRenderer();
+
+    $conv = BuilderConversation::create([
+        'app_id' => $this->testApp->id,
+        'user_id' => $this->user->id,
+        'status' => 'active',
+    ]);
+
+    // A data grid with a sidebar: every signal says "app". The user said copy it.
+    $html = '<!doctype html><html><head><title>Pricing table</title><style>.cell{padding:4px}</style></head>'
+        .'<body><div class="sidebar-nav">Menu</div><table><thead><tr><th>Plan</th></tr></thead>'
+        .'<tbody><tr><td>Pro</td></tr></tbody></table></body></html>';
+
+    $this->actingAs($this->user)
+        ->post("/apps/{$this->testApp->id}/builder/wireframe-import", [
+            'conversation_id' => $conv->id,
+            'source' => 'html',
+            'html' => $html,
+            'mode' => 'replica',
+        ])
+        ->assertOk();
+
+    $userMsg = BuilderMessage::query()
+        ->where('conversation_id', $conv->id)
+        ->where('role', 'user')
+        ->latest('created_at')
+        ->first();
+
+    expect($userMsg->content)->toContain('LANDING de Sapiensly')
+        ->and($userMsg->content)->not->toContain('manifest de Sapiensly Apps');
+
+    Queue::assertPushed(RunBuilderAiJob::class, fn ($job) => $job->isLanding === true);
+});
+
+it('wireframe-import builds an app from a designed page when asked for inspiration', function () {
+    Queue::fake();
+    stubPageRenderer();
+
+    $conv = BuilderConversation::create([
+        'app_id' => $this->testApp->id,
+        'user_id' => $this->user->id,
+        'status' => 'active',
+    ]);
+
+    $this->actingAs($this->user)
+        ->post("/apps/{$this->testApp->id}/builder/wireframe-import", [
+            'conversation_id' => $conv->id,
+            'source' => 'html',
+            'html' => designedLandingExport(),
+            'mode' => 'inspiration',
+        ])
+        ->assertOk();
+
+    $userMsg = BuilderMessage::query()
+        ->where('conversation_id', $conv->id)
+        ->where('role', 'user')
+        ->latest('created_at')
+        ->first();
+
+    expect($userMsg->content)->toContain('manifest de Sapiensly Apps')
+        ->and($userMsg->content)->not->toContain('LANDING de Sapiensly')
+        // The stylesheet belongs to a reproduction, not to a brief that only
+        // takes the look as a reference.
+        ->and($userMsg->content)->not->toContain('```css');
+
+    Queue::assertPushed(RunBuilderAiJob::class, fn ($job) => $job->isLanding === false);
 });

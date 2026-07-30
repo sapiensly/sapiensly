@@ -44,6 +44,7 @@ use App\Support\Branding\ColorPalette;
 use App\Support\Branding\OrganizationBrand;
 use App\Support\Builder\FineTuneStyles;
 use App\Support\Builder\LandingLinks;
+use App\Support\Builder\WireframeImportMode;
 use App\Support\Css\ScopedAppCss;
 use App\Support\Manifest\PageNavigation;
 use App\Support\Storage\TenantPath;
@@ -705,7 +706,12 @@ class AppBuilderController extends Controller
             'html' => ['nullable', 'string', 'max:2000000'],
             'html_file' => ['nullable', 'file', 'mimetypes:text/html,text/plain', 'max:5120'],
             'business_context' => ['nullable', 'string', 'max:1000'],
+            // Copy this page, or build an app that works like it. Absent = decide
+            // from the artifact, which is all this had to go on before.
+            'mode' => ['nullable', 'string', Rule::enum(WireframeImportMode::class)],
         ]);
+
+        $mode = WireframeImportMode::fromRequest($data['mode'] ?? null);
 
         $conversation = $this->loadConversation($app, $data['conversation_id'], $request->user()->id);
 
@@ -738,7 +744,7 @@ class AppBuilderController extends Controller
                 throw new HttpException(422, 'A URL is required when source=url.');
             }
             try {
-                $parsed = $this->wireframes->fromUrl($data['url']);
+                $parsed = $this->wireframes->fromUrl($data['url'], $mode);
             } catch (\InvalidArgumentException $e) {
                 return response()->json(['error' => 'wireframe_url_failed', 'message' => $e->getMessage()], 422);
             }
@@ -748,14 +754,40 @@ class AppBuilderController extends Controller
             $extractedHtml = $parsed['cleaned_html'];
             $extractedCss = $parsed['stylesheet'];
             $extractedIsLanding = $parsed['is_landing'];
+            $extractedFonts = $parsed['fonts'];
+            $extractedElementStyles = $parsed['element_styles'];
             $sourceLabel = 'URL ('.($parsed['source_url'] ?? $data['url']).')';
 
-            if ($parsed['image_url'] !== null) {
+            // A page that builds itself in the browser was rendered headlessly to
+            // recover its markup, and the same pass photographed it. That picture
+            // is the best evidence in the whole import — for a page whose static
+            // body is a mount point it is the ONLY evidence — so it outranks the
+            // og:image the site advertises.
+            if ($parsed['screenshot_path'] !== null) {
+                $attachmentBytes = (string) file_get_contents($parsed['screenshot_path']);
+                $attachmentMime = 'image/jpeg';
+                $this->pageRenderer->cleanup($parsed['screenshot_path']);
+            } elseif ($parsed['image_url'] !== null) {
                 $download = $this->wireframes->downloadImage($parsed['image_url']);
                 if ($download !== null) {
                     $attachmentBytes = $download['bytes'];
                     $attachmentMime = $download['mime'];
                 }
+            }
+
+            // Nothing was recovered: no picture, and markup with no words in it.
+            // A mount point is not evidence — `<div id="root"></div>` parses
+            // fine and says nothing — so the test is what a reader could learn
+            // from it, not whether a string came back. Sending that to the model
+            // buys a paid turn whose only possible answer is to ask the user for
+            // a screenshot, which is exactly what a URL import of an SPA did.
+            $readable = trim(strip_tags((string) $extractedHtml)) !== '' || $extractedText !== null;
+
+            if ($attachmentBytes === null && ! $readable) {
+                return response()->json([
+                    'error' => 'wireframe_url_empty',
+                    'message' => 'That page could not be read: it returned no markup we could use and no screenshot could be taken of it. If it needs a login, or blocks automated visits, upload a screenshot or its HTML instead.',
+                ], 422);
             }
         } else { // html
             $htmlFilename = null;
@@ -768,7 +800,7 @@ class AppBuilderController extends Controller
             if (trim($rawHtml) === '') {
                 throw new HttpException(422, 'HTML content or a file is required when source=html.');
             }
-            $parsed = $this->wireframes->fromHtml($rawHtml);
+            $parsed = $this->wireframes->fromHtml($rawHtml, $mode);
             $extractedTitle = $parsed['title'];
             $extractedDescription = $parsed['description'];
             $extractedText = $parsed['text'];
@@ -817,10 +849,12 @@ class AppBuilderController extends Controller
 
         // A designed page and an app mockup want OPPOSITE manifests, and the
         // app framing below asks for exactly the blocks ManifestValidator
-        // rejects on a landing surface. Decide from the artifact (a
-        // self-contained styled document is something a designer authored) or
-        // from the app already being a landing — never from the model's mood.
-        $isLanding = $app->kind === AppKind::Landing || $extractedIsLanding;
+        // rejects on a landing surface. The user says which they want; without a
+        // choice it is decided from the artifact (a self-contained styled
+        // document is something a designer authored) — never from the model's
+        // mood. An app that is ALREADY a landing settles it either way: the
+        // surface cannot hold the blocks the app framing would ask for.
+        $isLanding = $mode->reproducesDesign($extractedIsLanding, $app->kind === AppKind::Landing);
 
         $userText = $isLanding
             ? $this->buildLandingImportPrompt(
@@ -835,6 +869,7 @@ class AppBuilderController extends Controller
                 extractedMotion: $extractedMotion,
                 extractedElementStyles: $extractedElementStyles,
                 hasImage: $attachmentBytes !== null,
+                fromLiveUrl: $data['source'] === 'url',
             )
             : $this->buildWireframePrompt(
                 sourceLabel: (string) $sourceLabel,
@@ -970,6 +1005,7 @@ class AppBuilderController extends Controller
         ?string $extractedMotion,
         ?string $extractedElementStyles,
         bool $hasImage,
+        bool $fromLiveUrl = false,
     ): string {
         $lines = [];
         $lines[] = 'Te adjunto una página web ya diseñada. Quiero que la reconstruyas como una LANDING de Sapiensly, lo más fiel posible al original.';
@@ -1035,6 +1071,13 @@ class AppBuilderController extends Controller
         $lines[] = '2) Una sección del original = UN bloque `html` con tus propias clases. NUNCA uses los bloques genéricos (hero, feature_grid, cta, testimonials, pricing, faq, stat_band): el validador los rechaza en una landing.';
         $lines[] = '3) Todo el estilo va en settings.custom_css, partiendo del CSS original. Escríbelo por partes con {op:"append", path:"/settings/custom_css"} — nunca un replace gigante. El presupuesto es de 200.000 caracteres: es amplio a propósito, porque aquí el CSS también carga los hovers y transiciones que el original hacía con JS — no compactes para ahorrar sitio, y no sacrifiques la regla base de un grid por dejar solo su override en @media. Las variables CSS van en TU propia clase envolvente, no en :root/body.';
         $lines[] = '4) Conserva el TEXTO literal del original (titulares, copy, precios, nombres). No lo reescribas ni lo "mejores": es una reconstrucción, no un rediseño.';
+        if ($fromLiveUrl) {
+            // The DOM came off the live page, where a relative src means the
+            // original's server. They were rewritten to absolute URLs on the way
+            // out — kept as they are, the images show; "improved" into a local
+            // path, the rebuild is a page of broken frames.
+            $lines[] = '4a) LAS IMÁGENES ya vienen con URL absoluta al sitio original: cópialas tal cual en el src. No las cambies por rutas locales ni por placeholders, y no inventes imágenes que el original no tiene. Si alguna no carga, dilo en tu resumen.';
+        }
         $lines[] = '4b) COPIA LOS ICONOS. El HTML de arriba trae los <svg> en línea del original: reprodúcelos tal cual (path/circle/rect + viewBox, fill, stroke). Se permiten; lo que se elimina al guardar es <script>/<style>/<foreignObject>/<use>/href/style=/on*= dentro del svg. Un recuadro vacío donde el original tenía un glifo es lo que más delata una reconstrucción a medias.';
         $lines[] = '5) Tipografía: si el original usa una familia que no está en el catálogo self-hosted, decláratela en settings.fonts (máx. 4). Nunca @import.';
         $lines[] = '';

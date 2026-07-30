@@ -755,7 +755,7 @@
     "apps.builder.wireframe.tab_url": "URL",
     "apps.builder.wireframe.tab_html": "HTML",
     "apps.builder.wireframe.image_hint": "Upload a screenshot of the wireframe (PNG, JPG, WebP or GIF, 5 MB max).",
-    "apps.builder.wireframe.url_hint": "Paste a Figma link, claude.ai/share URL, a regular web page or a public screenshot. We try to pull the preview image and visible text.",
+    "apps.builder.wireframe.url_hint": "Address of the page to import. Pages that build themselves in the browser are opened and rendered before reading them, so a React or Vue site works.",
     "apps.builder.wireframe.url_placeholder": "https://www.figma.com/design/...",
     "apps.builder.wireframe.html_hint": "Upload a standalone .html export, or paste the markup. A full designed page is rebuilt as a landing; a screen mockup becomes an app.",
     "apps.builder.wireframe.html_placeholder": "<html>...</html>",
@@ -3099,5 +3099,12 @@
     "site_import.hint.both": "Read both books off your own website: the icon, logo, brand colour and typeface for the Brandbook, and what the business does for the Contextbook. Only fields you left empty are filled, and nothing is saved until you press Save.",
     "site_import.nothing.any": "Nothing new came out of that reading — everything it found, you already had.",
     "site_import.pending.brand": "{count} decision(s) waiting in your Brandbook",
-    "site_import.pending.context": "{count} decision(s) waiting in your Contextbook"
+    "site_import.pending.context": "{count} decision(s) waiting in your Contextbook",
+    "apps.builder.wireframe.mode_label": "What should I do with it?",
+    "apps.builder.wireframe.mode_auto": "Automatic",
+    "apps.builder.wireframe.mode_auto_hint": "I decide from what you import: a designed page gets copied, a screen full of data becomes an app.",
+    "apps.builder.wireframe.mode_replica": "Replica",
+    "apps.builder.wireframe.mode_replica_hint": "Copy this page as faithfully as I can — same sections, same text, same look. It becomes a landing.",
+    "apps.builder.wireframe.mode_inspiration": "Inspiration",
+    "apps.builder.wireframe.mode_inspiration_hint": "Build an app that works like this one: objects, pages and blocks, taking the layout and the look as a reference."
 }

@@ -2,6 +2,7 @@
 
 namespace App\Services\Builder;
 
+use App\Services\Security\Ssrf\SsrfGuard;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Process;
 use Illuminate\Support\Str;
@@ -46,48 +47,18 @@ class ImportedPageRenderer
     private const MAX_STYLES = 60000;
 
     /**
-     * @return array{html: string, styles: ?string, screenshot_path: ?string}|null Null when nothing rendered.
+     * Render a document we were handed. Airgapped — see page-renderer.mjs.
+     *
+     * @return array{html: string, styles: ?string, css: ?string, fonts: array<int, string>, screenshot_path: ?string}|null Null when nothing rendered.
      */
     public function render(string $html): ?array
     {
         $source = null;
-        $shotPath = storage_path('app/tmp/import-shot-'.strtolower((string) Str::ulid()).'.jpg');
 
         try {
             $source = $this->materialise($html);
 
-            $result = Process::timeout($this->timeoutSeconds + 20)->run([
-                (string) config('services.node.binary', 'node'),
-                resource_path('sandbox/page-renderer.mjs'),
-                $source,
-                (string) ($this->timeoutSeconds * 1000),
-                $shotPath,
-            ]);
-
-            if (! $result->successful()) {
-                Log::warning('ImportedPageRenderer: headless render failed', [
-                    'error' => mb_substr(trim($result->errorOutput()), 0, 500),
-                ]);
-
-                return null;
-            }
-
-            $decoded = json_decode($result->output(), true);
-            $rendered = is_array($decoded) ? (string) ($decoded['html'] ?? '') : '';
-            if (trim($rendered) === '') {
-                return null;
-            }
-
-            $styles = is_array($decoded) ? trim((string) ($decoded['styles'] ?? '')) : '';
-
-            return [
-                'html' => $this->trim($rendered),
-                // The page's own inline styles, hoisted into rules the model can
-                // transcribe instead of re-deriving from 500 style attributes
-                // the sanitiser strips anyway.
-                'styles' => $styles === '' ? null : mb_substr($styles, 0, self::MAX_STYLES),
-                'screenshot_path' => is_file($shotPath) ? $shotPath : null,
-            ];
+            return $this->run($source);
         } catch (\Throwable $e) {
             Log::warning('ImportedPageRenderer: headless render errored', ['error' => $e->getMessage()]);
 
@@ -97,6 +68,122 @@ class ImportedPageRenderer
                 @unlink($source);
             }
         }
+    }
+
+    /**
+     * Render a live page at its own address, with the network open.
+     *
+     * A URL cannot be rendered airgapped the way a paste is: an SPA that cannot
+     * fetch its own bundle produces the empty mount point that made this method
+     * necessary in the first place. The caller MUST have cleared the URL through
+     * {@see SsrfGuard} and passes the IP it resolved,
+     * which is pinned in the browser so the name cannot point somewhere else by
+     * the time Chrome connects. Everything the page then requests is judged on
+     * the address it asks for (private space is refused) inside the renderer.
+     *
+     * @param  list<string>  $resolvedIps  from the SSRF guard, for the host pin
+     * @return array{html: string, styles: ?string, css: ?string, fonts: array<int, string>, screenshot_path: ?string}|null
+     */
+    public function renderUrl(string $url, array $resolvedIps = []): ?array
+    {
+        try {
+            $flags = [];
+
+            $host = parse_url($url, PHP_URL_HOST);
+            if (is_string($host) && $resolvedIps !== []) {
+                $flags[] = '--pin='.$host.':'.$resolvedIps[0];
+            }
+
+            // The guard being off is a deliberate environment choice (local work,
+            // tests against a dev server); the renderer follows it rather than
+            // blocking an address the rest of the stack just allowed.
+            if (! config('security.ssrf.enabled', true)) {
+                $flags[] = '--allow-private';
+            }
+
+            return $this->run($url, $flags);
+        } catch (\Throwable $e) {
+            Log::warning('ImportedPageRenderer: headless url render errored', [
+                'url' => $url,
+                'error' => $e->getMessage(),
+            ]);
+
+            return null;
+        }
+    }
+
+    /**
+     * @param  list<string>  $flags
+     * @return array{html: string, styles: ?string, css: ?string, fonts: array<int, string>, screenshot_path: ?string}|null
+     */
+    private function run(string $source, array $flags = []): ?array
+    {
+        $shotPath = storage_path('app/tmp/import-shot-'.strtolower((string) Str::ulid()).'.jpg');
+        if (! is_dir(dirname($shotPath))) {
+            mkdir(dirname($shotPath), 0755, true);
+        }
+
+        $result = Process::timeout($this->timeoutSeconds + 20)->run([
+            (string) config('services.node.binary', 'node'),
+            resource_path('sandbox/page-renderer.mjs'),
+            $source,
+            (string) ($this->timeoutSeconds * 1000),
+            $shotPath,
+            ...$flags,
+        ]);
+
+        if (! $result->successful()) {
+            Log::warning('ImportedPageRenderer: headless render failed', [
+                'error' => mb_substr(trim($result->errorOutput()), 0, 500),
+            ]);
+
+            return null;
+        }
+
+        $decoded = json_decode($result->output(), true);
+        $rendered = is_array($decoded) ? (string) ($decoded['html'] ?? '') : '';
+        if (trim($rendered) === '') {
+            return null;
+        }
+
+        $styles = is_array($decoded) ? trim((string) ($decoded['styles'] ?? '')) : '';
+        $css = is_array($decoded) ? trim((string) ($decoded['css'] ?? '')) : '';
+        $fonts = is_array($decoded) && is_array($decoded['fonts'] ?? null)
+            ? array_values(array_filter(array_map('strval', $decoded['fonts'])))
+            : [];
+
+        return [
+            'html' => $this->trim($rendered),
+            // The page's own inline styles, hoisted into rules the model can
+            // transcribe instead of re-deriving from 500 style attributes
+            // the sanitiser strips anyway.
+            'styles' => $styles === '' ? null : mb_substr($styles, 0, self::MAX_STYLES),
+            // The rules a LIVE page actually wears, pulled out of the stylesheets
+            // it fetched — the design that static extraction can never see
+            // because it lives in a separate file.
+            'css' => $css === '' ? null : $this->capCss($css),
+            'fonts' => $fonts,
+            'screenshot_path' => is_file($shotPath) ? $shotPath : null,
+        ];
+    }
+
+    /**
+     * Trim collected CSS to the prompt budget, on a rule boundary.
+     *
+     * A real page runs well past it — the site this was built against wears
+     * 149 KB of rules — and a cut in the middle of a declaration hands the model
+     * a broken rule to transcribe, which it will faithfully transcribe.
+     */
+    private function capCss(string $css): string
+    {
+        if (mb_strlen($css) <= self::MAX_STYLES) {
+            return $css;
+        }
+
+        $cut = mb_substr($css, 0, self::MAX_STYLES);
+        $lastRule = mb_strrpos($cut, '}');
+
+        return $lastRule === false ? '' : mb_substr($cut, 0, $lastRule + 1);
     }
 
     /**

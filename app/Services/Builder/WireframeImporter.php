@@ -5,6 +5,7 @@ namespace App\Services\Builder;
 use App\Services\Security\Ssrf\SafeHttpClient;
 use App\Services\Security\Ssrf\SsrfBlockedException;
 use App\Services\Security\Ssrf\SsrfGuard;
+use App\Support\Builder\WireframeImportMode;
 use App\Support\Landing\BundledDesign;
 use App\Support\Landing\BundledMotion;
 use App\Support\Landing\LandingArtifact;
@@ -77,9 +78,9 @@ class WireframeImporter
     /**
      * @return array{image_url: ?string, title: ?string, description: ?string, text: ?string, cleaned_html: ?string, screenshot_path: ?string, fonts: array<int, string>, motion: ?string, element_styles: ?string, stylesheet: ?string, is_landing: bool, source_url: ?string}
      */
-    public function fromUrl(string $url): array
+    public function fromUrl(string $url, WireframeImportMode $mode = WireframeImportMode::Auto): array
     {
-        $this->assertSafeUrl($url);
+        $resolvedIps = $this->assertSafeUrl($url);
 
         try {
             // SafeHttpClient re-validates and pins the connection, and follows
@@ -133,22 +134,32 @@ class WireframeImporter
 
         $html = substr((string) $response->body(), 0, self::MAX_HTML_BYTES);
 
-        return $this->extract($html, $response->effectiveUri()?->__toString() ?? $url);
+        return $this->extract(
+            $html,
+            $response->effectiveUri()?->__toString() ?? $url,
+            $mode,
+            $resolvedIps,
+        );
     }
 
     /**
      * @return array{image_url: ?string, title: ?string, description: ?string, text: ?string, cleaned_html: ?string, screenshot_path: ?string, fonts: array<int, string>, motion: ?string, element_styles: ?string, stylesheet: ?string, is_landing: bool, source_url: ?string}
      */
-    public function fromHtml(string $html): array
+    public function fromHtml(string $html, WireframeImportMode $mode = WireframeImportMode::Auto): array
     {
-        return $this->extract(substr($html, 0, self::MAX_HTML_BYTES), null);
+        return $this->extract(substr($html, 0, self::MAX_HTML_BYTES), null, $mode);
     }
 
     /**
+     * @param  list<string>  $resolvedIps  cleared IPs for `$baseUrl`, for the render pin
      * @return array{image_url: ?string, title: ?string, description: ?string, text: ?string, cleaned_html: ?string, screenshot_path: ?string, fonts: array<int, string>, motion: ?string, element_styles: ?string, stylesheet: ?string, is_landing: bool, source_url: ?string}
      */
-    private function extract(string $html, ?string $baseUrl): array
-    {
+    private function extract(
+        string $html,
+        ?string $baseUrl,
+        WireframeImportMode $mode = WireframeImportMode::Auto,
+        array $resolvedIps = [],
+    ): array {
         // A self-extracting bundle has no page in it — the loader shell would
         // parse as "This page requires JavaScript to display". Recover the real
         // document (head, SEO, design tokens) and parse THAT instead; the markup
@@ -159,7 +170,11 @@ class WireframeImporter
         // Decide what KIND of artifact this is: a designed page and an app
         // wireframe want different evidence out of the same parse (see
         // LandingArtifact). A design bundle is a designed page by construction.
-        $isLanding = $bundle !== null || LandingArtifact::isLandingHtml($html);
+        // The user's chosen mode overrides the guess — on a URL the guess is made
+        // before the evidence exists, which is how a marketing page rendered in
+        // the browser used to look like an unstyled fragment.
+        $detectedLanding = $bundle !== null || LandingArtifact::isLandingHtml($html);
+        $isLanding = $mode->wantsDesignEvidence($detectedLanding);
 
         $crawler = new Crawler($parseTarget);
 
@@ -232,17 +247,57 @@ class WireframeImporter
         }
 
         // Client-rendered documents have no markup until their JavaScript runs.
-        // A bundle always needs the render; so does any landing whose static body
+        // A bundle always needs the render; so does anything whose static body
         // came back nearly empty while the document is full of scripts — that is
         // an SPA, and parsing it statically yields a mount point.
+        //
+        // This is NOT gated on the artifact being a designed page any more. The
+        // gate was the bug: an app you want to model on a React site parses to
+        // `<div id="root"></div>` exactly like a marketing one does, so the
+        // import arrived with no evidence at all and the model, given nothing,
+        // answered that it cannot browse the web.
         $screenshotPath = null;
         $hoistedStyles = null;
-        if ($bundle !== null || ($isLanding && $this->looksClientRendered($html, $text))) {
-            $rendered = $this->renderer->render($html);
+        $renderedCss = null;
+        $renderedFonts = [];
+        // A reproduction of a LIVE page always renders, even one whose markup
+        // parsed perfectly: its design is in stylesheets it fetched and its
+        // proof is a picture, and static extraction has neither.
+        $mustSeeIt = $baseUrl !== null && $mode === WireframeImportMode::Replica;
+
+        if ($bundle !== null || $mustSeeIt || $this->looksClientRendered($html, $text)) {
+            // A live URL has to render at its own address: its bundle, styles and
+            // images are fetched relative to it, and a copy of the document on
+            // our disk resolves none of them.
+            $rendered = $baseUrl !== null
+                ? $this->renderer->renderUrl($baseUrl, $resolvedIps)
+                : $this->renderer->render($html);
+
             if ($rendered !== null) {
-                $cleanedHtml = $rendered['html'];
+                // A reproduction gets the whole DOM (the renderer's own ceiling);
+                // inferring an app from it does not need — or want to pay for —
+                // more markup than the structural budget.
+                $cleanedHtml = $isLanding
+                    ? $rendered['html']
+                    : $this->cap($rendered['html'], false);
                 $screenshotPath = $rendered['screenshot_path'];
                 $hoistedStyles = $rendered['styles'];
+                $renderedCss = $rendered['css'] ?? null;
+                $renderedFonts = $rendered['fonts'] ?? [];
+
+                // The text dump was taken from the shell; the page it stood in
+                // for exists now, so re-take it from what actually rendered.
+                $text = $this->textOf($cleanedHtml) ?? $text;
+
+                // And now the artifact can finally be judged: everything the
+                // detector reads (sections, copy, styling) only existed after
+                // the browser built it.
+                if ($mode === WireframeImportMode::Auto) {
+                    $detectedLanding = $detectedLanding || LandingArtifact::isLandingHtml(
+                        '<!doctype html><html><head><style>'.((string) $renderedCss).'</style></head><body>'.$cleanedHtml.'</body></html>'
+                    );
+                    $isLanding = $detectedLanding;
+                }
             }
         }
 
@@ -253,7 +308,7 @@ class WireframeImporter
             'text' => $text,
             'cleaned_html' => $cleanedHtml,
             'screenshot_path' => $screenshotPath,
-            'fonts' => $bundle['fonts'] ?? [],
+            'fonts' => $bundle['fonts'] ?? $renderedFonts,
             // The rendered DOM is one frame; the movement lives in the sources.
             'motion' => $bundle !== null ? BundledMotion::brief($html) : null,
             // The page's own per-element styles, already deduplicated into
@@ -267,10 +322,34 @@ class WireframeImporter
             // the model rebuilds the look instead of inventing one.
             'stylesheet' => $bundle !== null
                 ? $bundle['stylesheet']
-                : ($isLanding ? $this->extractStylesheet($html) : null),
+                // A live page keeps its design in stylesheets it fetched, so the
+                // rules come back from the render (already narrowed to what the
+                // page actually wears); a pasted document carries its own inline.
+                : ($isLanding ? ($renderedCss ?? $this->extractStylesheet($html)) : null),
             'is_landing' => $isLanding,
             'source_url' => $baseUrl,
         ];
+    }
+
+    /** Trim rendered markup to the budget this kind of import is allowed. */
+    private function cap(string $html, bool $isLanding): string
+    {
+        $budget = $isLanding ? self::MAX_CLEANED_HTML_LANDING : self::MAX_CLEANED_HTML;
+
+        return strlen($html) > $budget ? substr($html, 0, $budget).'…' : $html;
+    }
+
+    /** The visible words of a markup string, for the plain-text fallback. */
+    private function textOf(string $html): ?string
+    {
+        $text = trim(preg_replace('/\s+/u', ' ', strip_tags($html)) ?? '');
+        if ($text === '') {
+            return null;
+        }
+
+        return strlen($text) > self::MAX_EXTRACTED_TEXT
+            ? substr($text, 0, self::MAX_EXTRACTED_TEXT).'…'
+            : $text;
     }
 
     /**
@@ -387,11 +466,23 @@ class WireframeImporter
      * central SsrfGuard, which resolves DNS and validates the resolved IP — so
      * a hostname pointing at an internal IP is caught too (the actual fetch
      * additionally pins the connection, closing the rebinding window).
+     *
+     * Returns the cleared IPs so a headless render of the same URL can pin the
+     * host to them instead of resolving the name a second time.
+     *
+     * @return list<string>
      */
-    private function assertSafeUrl(string $url): void
+    private function assertSafeUrl(string $url): array
     {
+        // Same operational kill-switch SafeHttpClient honours, so an environment
+        // that deliberately turned the guard off (a dev box importing from a
+        // local server) is not half-blocked here and allowed one line later.
+        if (! config('security.ssrf.enabled', true)) {
+            return [];
+        }
+
         try {
-            $this->ssrf->inspect($url);
+            return $this->ssrf->inspect($url)->ips;
         } catch (SsrfBlockedException $e) {
             throw new InvalidArgumentException('That URL points to a disallowed destination.');
         }
