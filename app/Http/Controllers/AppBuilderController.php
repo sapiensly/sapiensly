@@ -24,6 +24,7 @@ use App\Services\Apps\AppAccessResolver;
 use App\Services\Apps\AppNamer;
 use App\Services\Apps\BlockVisibilityFilter;
 use App\Services\Apps\PortalPublisher;
+use App\Services\Apps\PortalUserDirectory;
 use App\Services\Builder\BuilderAiService;
 use App\Services\Builder\BuilderCancellation;
 use App\Services\Builder\BuildPlan;
@@ -2579,6 +2580,49 @@ class AppBuilderController extends Controller
         app(LandingPublisher::class)->unpublish($app);
 
         return response()->json(['published' => false]);
+    }
+
+    /**
+     * Who may sign in to this app's portal — and adding them.
+     *
+     * Without this, `signup: "invite"` is a mode that accepts every request and
+     * mails nobody: an invite-only portal only ever mails addresses added here.
+     */
+    public function portalUsers(Request $request, App $app): JsonResponse
+    {
+        $this->assertCanAccess($request, $app);
+
+        return response()->json(['portal_users' => app(PortalUserDirectory::class)->list($app)]);
+    }
+
+    public function managePortalUser(Request $request, App $app): JsonResponse
+    {
+        $this->assertCanAccess($request, $app);
+
+        $data = $request->validate([
+            'action' => ['required', 'string', 'in:invite,block,unblock,remove'],
+            'email' => ['required', 'string', 'max:320'],
+            'name' => ['nullable', 'string', 'max:120'],
+        ]);
+
+        $directory = app(PortalUserDirectory::class);
+
+        try {
+            $result = match ($data['action']) {
+                'invite' => $directory->invite($app, $data['email'], $data['name'] ?? null),
+                'block' => $directory->block($app, $data['email']),
+                'unblock' => $directory->unblock($app, $data['email']),
+                'remove' => $directory->remove($app, $data['email']),
+            };
+        } catch (\InvalidArgumentException $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
+        }
+
+        if ($result === null || $result === false) {
+            return response()->json(['message' => 'No portal user with that address.'], 404);
+        }
+
+        return response()->json(['portal_users' => $directory->list($app)]);
     }
 
     /** The app's API keys, with the token itself absent — it is unrecoverable by design. */

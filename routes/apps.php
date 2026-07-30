@@ -77,6 +77,10 @@ Route::middleware([
     Route::post('/apps/{app}/builder/api-keys', [AppBuilderController::class, 'createApiKey'])->name('apps.builder.api-keys.create');
     Route::delete('/apps/{app}/builder/api-keys/{key}', [AppBuilderController::class, 'revokeApiKey'])->name('apps.builder.api-keys.revoke');
 
+    // Who may sign in to the portal. Invite mode is unusable without this.
+    Route::get('/apps/{app}/builder/portal-users', [AppBuilderController::class, 'portalUsers'])->name('apps.builder.portal-users');
+    Route::post('/apps/{app}/builder/portal-users', [AppBuilderController::class, 'managePortalUser'])->name('apps.builder.portal-users.manage');
+
     Route::post('/apps/{app}/builder/publish-portal', [AppBuilderController::class, 'publishPortal'])->name('apps.builder.publish-portal');
     Route::post('/apps/{app}/builder/unpublish-portal', [AppBuilderController::class, 'unpublishPortal'])->name('apps.builder.unpublish-portal');
     Route::post('/apps/{app}/builder/landing-domain/connect', [AppBuilderController::class, 'landingDomainConnect'])->name('apps.builder.landing-domain.connect');

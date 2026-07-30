@@ -174,6 +174,7 @@ class SapiensServer extends Server
         Tools\Build\ExportAppTool::class,
         Tools\Build\PublishLandingTool::class,
         Tools\Build\PublishPortalTool::class,
+        Tools\Build\ManagePortalUsersTool::class,
         Tools\Build\ManageLandingDomainTool::class,
         Tools\Build\CritiqueLandingDesignTool::class,
         Tools\Build\RenderLandingTool::class,

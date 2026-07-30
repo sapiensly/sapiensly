@@ -23,6 +23,7 @@ class ExportAppTool extends SapiensTool
             'package' => ['sometimes', 'nullable', 'array'],
             'duplicate_of' => ['sometimes', 'nullable', 'string'],
             'name' => ['sometimes', 'nullable', 'string', 'max:80'],
+            'with_records' => ['sometimes', 'boolean'],
         ]);
 
         /** @var User $user */
@@ -35,6 +36,7 @@ class ExportAppTool extends SapiensTool
                     $this->resolveApp($validated['duplicate_of'], $user),
                     $user,
                     $validated['name'] ?? null,
+                    includeRecords: (bool) ($validated['with_records'] ?? false),
                 );
 
                 return Response::json([
@@ -61,7 +63,10 @@ class ExportAppTool extends SapiensTool
             }
 
             return Response::json(
-                $packages->export($this->resolveApp($validated['app_slug'], $user)),
+                $packages->export(
+                    $this->resolveApp($validated['app_slug'], $user),
+                    (bool) ($validated['with_records'] ?? false),
+                ),
             );
         } catch (ModelNotFoundException) {
             return Response::error('No app by that slug is visible to you.');
@@ -80,6 +85,7 @@ class ExportAppTool extends SapiensTool
             'package' => $schema->object()->description('A package to install as a new app (the object a previous export returned).'),
             'duplicate_of' => $schema->string()->description('Copy this app in place — export and install in one step.'),
             'name' => $schema->string()->description('Name for the newly installed app. Defaults to the package\'s own.'),
+            'with_records' => $schema->boolean()->description('Carry seed rows (bounded per object). Off by default — a package is a schema, and shipping a customer list inside one by accident is the mistake the wrong person discovers.'),
         ];
     }
 }

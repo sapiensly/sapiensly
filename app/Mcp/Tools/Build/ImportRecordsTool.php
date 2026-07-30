@@ -27,6 +27,8 @@ class ImportRecordsTool extends SapiensTool
             'object_slug' => ['sometimes', 'nullable', 'string'],
             'object_name' => ['sometimes', 'nullable', 'string'],
             'upsert_key_column' => ['sometimes', 'nullable', 'string'],
+            'column_overrides' => ['sometimes', 'nullable', 'array'],
+            'column_overrides.*' => ['string'],
             'dry_run' => ['sometimes', 'boolean'],
         ]);
 
@@ -67,6 +69,7 @@ class ImportRecordsTool extends SapiensTool
                 $app,
                 $sheet,
                 objectSlug: $objectSlug !== '' ? $objectSlug : null,
+                overrides: $validated['column_overrides'] ?? [],
                 upsertKeyHeader: $upsertColumn !== '' ? $upsertColumn : null,
                 objectName: trim((string) ($validated['object_name'] ?? '')) ?: null,
             );
@@ -110,6 +113,7 @@ class ImportRecordsTool extends SapiensTool
             'object_slug' => $schema->string()->description('Import into this existing object. Omit to create a new object from the file.'),
             'object_name' => $schema->string()->description('Name for the object being created. Ignored when object_slug is set.'),
             'upsert_key_column' => $schema->string()->description('Column NAME from the file identifying an existing record — matching rows are updated, not duplicated.'),
+            'column_overrides' => $schema->object()->description('Correct a wrong auto-match: {"<column name in the file>": "<field slug>"}. Read the dry run first, then override only what it got wrong.'),
             'dry_run' => $schema->boolean()->description('true to return the inferred schema and mapping without writing.'),
         ];
     }

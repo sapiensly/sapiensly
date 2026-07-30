@@ -273,3 +273,55 @@ it('keeps a portal session out of every other portal', function () {
     $this->get("/a/{$otherSlug}")
         ->assertInertia(fn ($page) => $page->where('portalAuth.user', null));
 });
+
+it('lets an invited address in, and only an invited one', function () {
+    app(AppManifestService::class)->createVersion(
+        $this->testApp,
+        identityManifest($this->testApp->id, $this->ids, signup: 'invite'),
+        $this->owner,
+    );
+
+    // Before the invite, invite mode mails nobody — which is exactly why the
+    // directory has to exist: without it the mode is unusable.
+    $this->postJson("/a/{$this->slug}/auth/request", ['email' => 'cliente@example.com'])->assertOk();
+    Mail::assertNothingSent();
+
+    $this->actingAs($this->owner)->postJson(
+        "/apps/{$this->testApp->id}/builder/portal-users",
+        ['action' => 'invite', 'email' => 'cliente@example.com', 'name' => 'Cliente'],
+    )->assertOk()->assertJsonPath('portal_users.0.status', 'invited');
+
+    signInPortal($this, 'cliente@example.com');
+
+    $this->get("/a/{$this->slug}")
+        ->assertInertia(fn ($page) => $page->where('portalAuth.user.email', 'cliente@example.com'));
+});
+
+it('blocks someone without losing the records their id scopes', function () {
+    $ana = signInPortal($this, 'ana@example.com');
+    Record::create(['app_id' => $this->testApp->id, 'object_definition_id' => $this->ids['obj'],
+        'data' => ['referencia' => 'A-1', 'cliente_id' => $ana->id]]);
+
+    $this->actingAs($this->owner)->postJson(
+        "/apps/{$this->testApp->id}/builder/portal-users",
+        ['action' => 'block', 'email' => 'ana@example.com'],
+    )->assertOk();
+
+    // The identity survives, so the row still has an owner…
+    expect(PortalUser::find($ana->id))->not->toBeNull()
+        ->and(Record::where('app_id', $this->testApp->id)->count())->toBe(1);
+
+    // …and her pending link died with the decision.
+    expect(PortalUser::find($ana->id)->login_token_hash)->toBeNull();
+});
+
+it('keeps another organization out of the portal directory', function () {
+    $stranger = User::factory()->create(['email_verified_at' => now()]);
+
+    $this->actingAs($stranger)->postJson(
+        "/apps/{$this->testApp->id}/builder/portal-users",
+        ['action' => 'invite', 'email' => 'colado@example.com'],
+    )->assertStatus(403);
+
+    expect(PortalUser::where('app_id', $this->testApp->id)->count())->toBe(0);
+});
