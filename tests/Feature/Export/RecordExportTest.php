@@ -7,6 +7,7 @@ use App\Models\Organization;
 use App\Models\OrganizationMembership;
 use App\Models\Record;
 use App\Models\User;
+use App\Services\Export\RecordExporter;
 use App\Services\Manifest\AppManifestService;
 use Database\Seeders\RolesAndPermissionsSeeder;
 use Illuminate\Support\Str;
@@ -198,4 +199,68 @@ it('holds a large export in flat memory, not in one result set', function () {
     // magnitude.
     expect(substr_count($body, "\n"))->toBeGreaterThan(10000)
         ->and($grew)->toBeLessThan(32);
+});
+
+it('prepares a large export in the background and hands over the file', function () {
+    $response = $this->actingAs($this->owner)
+        ->postJson('/r/ventas/objects/pedidos/export/queue')
+        ->assertStatus(202)
+        ->assertJsonPath('export.status', 'queued');
+
+    $id = $response->json('export.id');
+
+    // The queue runs inline in tests, so by here the job has been through.
+    $this->actingAs($this->owner)
+        ->getJson("/r/ventas/objects/pedidos/export/{$id}")
+        ->assertOk()
+        ->assertJsonPath('export.status', 'completed')
+        ->assertJsonPath('export.downloadable', true)
+        ->assertJsonPath('export.rows', 2);
+
+    $download = $this->actingAs($this->owner)
+        ->get("/r/ventas/objects/pedidos/export/{$id}/download")
+        ->assertOk();
+
+    expect($download->streamedContent())->toContain('Acme');
+});
+
+it('builds a prepared export as the role it was asked for, not as its requester', function () {
+    $response = $this->actingAs($this->owner)
+        ->postJson('/r/ventas/objects/pedidos/export/queue?as_role=user')
+        ->assertStatus(202);
+
+    $id = $response->json('export.id');
+    $body = $this->actingAs($this->owner)
+        ->get("/r/ventas/objects/pedidos/export/{$id}/download")
+        ->streamedContent();
+
+    // Narrowed exactly like the live download: hidden column gone, rows scoped
+    // to the requester's own id.
+    expect($body)->not->toContain('Margen')
+        ->and($body)->toContain('Globex')
+        ->and($body)->not->toContain('Acme');
+});
+
+it('will not hand a prepared file to another organization', function () {
+    $id = $this->actingAs($this->owner)
+        ->postJson('/r/ventas/objects/pedidos/export/queue')
+        ->json('export.id');
+
+    $stranger = User::factory()->create(['email_verified_at' => now()]);
+
+    $this->actingAs($stranger)
+        ->get("/r/ventas/objects/pedidos/export/{$id}/download")
+        ->assertNotFound();
+});
+
+it('refuses a direct download too large for one request, instead of half-writing it', function () {
+    // The ceiling is about the clock, not memory — so the answer is a pointer
+    // to the prepared route, never a truncated file.
+    $exporter = Mockery::mock(RecordExporter::class)->makePartial();
+    $exporter->shouldReceive('countFor')->andReturn(RecordExporter::DIRECT_MAX_ROWS + 1);
+    app()->instance(RecordExporter::class, $exporter);
+
+    $this->actingAs($this->owner)
+        ->get('/r/ventas/objects/pedidos/export')
+        ->assertStatus(422);
 });

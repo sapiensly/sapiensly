@@ -213,11 +213,27 @@ Route::middleware([
 
     // Download an object's records. Same access context as the page, so an
     // export can never return more than the table showed.
-    Route::get('/r/{app_slug}/objects/{object_slug}/export', AppExportController::class)
+    Route::get('/r/{app_slug}/objects/{object_slug}/export', [AppExportController::class, '__invoke'])
         ->where('app_slug', '[a-z][a-z0-9_]*')
         ->where('object_slug', '[a-z][a-z0-9_]*')
         ->middleware('throttle:20,1')
         ->name('apps.runtime.export');
+
+    // Prepared exports: for volumes where the request timeout, not memory, is
+    // what would fail. Start one, poll it, collect the file.
+    Route::post('/r/{app_slug}/objects/{object_slug}/export/queue', [AppExportController::class, 'queue'])
+        ->where('app_slug', '[a-z][a-z0-9_]*')
+        ->where('object_slug', '[a-z][a-z0-9_]*')
+        ->middleware('throttle:10,1')
+        ->name('apps.runtime.export.queue');
+
+    Route::get('/r/{app_slug}/objects/{object_slug}/export/{exportId}', [AppExportController::class, 'status'])
+        ->where(['app_slug' => '[a-z][a-z0-9_]*', 'object_slug' => '[a-z][a-z0-9_]*', 'exportId' => 'exp_[a-z0-9]+'])
+        ->name('apps.runtime.export.status');
+
+    Route::get('/r/{app_slug}/objects/{object_slug}/export/{exportId}/download', [AppExportController::class, 'download'])
+        ->where(['app_slug' => '[a-z][a-z0-9_]*', 'object_slug' => '[a-z][a-z0-9_]*', 'exportId' => 'exp_[a-z0-9]+'])
+        ->name('apps.runtime.export.download');
 
     Route::get('/r/{app_slug}/files/{file_id}', [AppFileController::class, 'show'])
         ->where('app_slug', '[a-z][a-z0-9_]*')

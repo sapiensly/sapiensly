@@ -35,9 +35,24 @@ class RecordExporter
     /** Ceiling for XLSX, which PhpSpreadsheet materialises in memory. */
     public const XLSX_MAX_ROWS = 20000;
 
+    /**
+     * Rows a DIRECT download will produce inside the request. Memory is flat at
+     * any size, so this is purely about the clock: past here the request timeout
+     * becomes the real risk and the caller is sent to the queued route instead.
+     */
+    public const DIRECT_MAX_ROWS = 100000;
+
     public function __construct(
         private readonly RecordQueryService $records,
     ) {}
+
+    /**
+     * @param  array<string, mixed>  $object
+     */
+    public static function filename(array $object, string $format): string
+    {
+        return ($object['slug'] ?? 'datos').'-'.now()->format('Y-m-d').'.'.($format === 'xlsx' ? 'xlsx' : 'csv');
+    }
 
     /**
      * @param  array<string, mixed>  $object  the manifest object definition
@@ -56,20 +71,29 @@ class RecordExporter
         array $query = [],
     ): StreamedResponse {
         $columns = $this->columns($object, $context);
-        $filename = ($object['slug'] ?? 'datos').'-'.now()->format('Y-m-d').'.'.($format === 'xlsx' ? 'xlsx' : 'csv');
+        $filename = self::filename($object, $format);
 
         if ($format === 'xlsx') {
-            $total = $this->records->count($app, ['object_id' => $object['id']] + $query, $manifest, $context);
-            if ($total > self::XLSX_MAX_ROWS) {
-                throw new InvalidArgumentException(
-                    "That is {$total} rows — more than a spreadsheet file can hold here (".self::XLSX_MAX_ROWS.'). Export as CSV, or filter first.',
-                );
-            }
+            $this->assertXlsxFits($app, $object, $manifest, $context, $query);
 
             return $this->streamXlsx($app, $object, $manifest, $context, $query, $columns, $filename);
         }
 
         return $this->streamCsv($app, $object, $manifest, $context, $query, $columns, $filename);
+    }
+
+    /**
+     * How many rows this export would produce for this role — what the caller
+     * needs to decide between downloading now and queueing.
+     *
+     * @param  array<string, mixed>  $object
+     * @param  array<string, mixed>  $manifest
+     * @param  array<string, mixed>  $context
+     * @param  array<string, mixed>  $query
+     */
+    public function countFor(App $app, array $object, array $manifest, array $context, array $query = []): int
+    {
+        return $this->records->count($app, ['object_id' => $object['id']] + $query, $manifest, $context);
     }
 
     /**
@@ -149,34 +173,144 @@ class RecordExporter
     {
         return response()->streamDownload(function () use ($app, $object, $manifest, $context, $query, $columns): void {
             $handle = fopen('php://output', 'w');
-
-            // The BOM is what makes Excel open a UTF-8 CSV without turning
-            // every accent into mojibake — the same failure this codebase
-            // already handles on the way in, seen from the other side.
-            fwrite($handle, "\xEF\xBB\xBF");
-
-            fputcsv($handle, array_values($columns));
-
-            $written = 0;
-            foreach ($this->rows($app, $object, $manifest, $context, $query) as $data) {
-                fputcsv($handle, array_map(
-                    fn (string $slug): string => $this->scalar($data[$slug] ?? null),
-                    array_keys($columns),
-                ));
-
-                // Push the bytes out every page. Without this the "stream" only
-                // streams as far as PHP's output buffer: the client waits for
-                // the last row before seeing the first, an idle proxy can time
-                // the connection out, and the memory the generator was written
-                // to save accumulates in the buffer instead of the result set.
-                if (++$written % self::PAGE === 0) {
-                    $this->flush($handle);
-                }
-            }
-
-            $this->flush($handle);
+            $this->writeCsv($handle, $app, $object, $manifest, $context, $query, $columns, flushing: true);
             fclose($handle);
         }, $filename, ['Content-Type' => 'text/csv; charset=UTF-8']);
+    }
+
+    /**
+     * Write the whole file to a stream. Shared by the direct download and the
+     * queued job, so a file produced in the background is byte-for-byte the one
+     * the browser would have got — there is no second code path to drift.
+     *
+     * `$flushing` only differs by WHERE the bytes are going: pushing them out
+     * matters for a live response and is meaningless writing to a temp file.
+     *
+     * @param  resource  $handle
+     * @param  array<string, mixed>  $object
+     * @param  array<string, mixed>  $manifest
+     * @param  array<string, mixed>  $context
+     * @param  array<string, mixed>  $query
+     * @param  array<string, string>  $columns
+     * @return int rows written
+     */
+    private function writeCsv(mixed $handle, App $app, array $object, array $manifest, array $context, array $query, array $columns, bool $flushing): int
+    {
+        // The BOM is what makes Excel open a UTF-8 CSV without turning every
+        // accent into mojibake — the same failure this codebase already handles
+        // on the way in, seen from the other side.
+        fwrite($handle, "\xEF\xBB\xBF");
+        fputcsv($handle, array_values($columns));
+
+        $written = 0;
+        foreach ($this->rows($app, $object, $manifest, $context, $query) as $data) {
+            fputcsv($handle, array_map(
+                fn (string $slug): string => $this->scalar($data[$slug] ?? null),
+                array_keys($columns),
+            ));
+
+            // Push the bytes out every page. Without this the "stream" only
+            // streams as far as PHP's output buffer: the client waits for the
+            // last row before seeing the first, an idle proxy can time the
+            // connection out, and the memory the generator was written to save
+            // accumulates in the buffer instead of the result set.
+            if ($flushing && ++$written % self::PAGE === 0) {
+                $this->flush($handle);
+            } elseif (! $flushing) {
+                $written++;
+            }
+        }
+
+        if ($flushing) {
+            $this->flush($handle);
+        }
+
+        return $written;
+    }
+
+    /**
+     * Produce the file at a local path — what the queued job needs, since there
+     * is no response to stream into.
+     *
+     * @param  array<string, mixed>  $object
+     * @param  array<string, mixed>  $manifest
+     * @param  array<string, mixed>  $context
+     * @param  array<string, mixed>  $query
+     * @return int rows written
+     *
+     * @throws InvalidArgumentException when XLSX is asked for beyond its ceiling
+     */
+    public function toFile(
+        string $path,
+        App $app,
+        array $object,
+        array $manifest,
+        array $context,
+        string $format = 'csv',
+        array $query = [],
+    ): int {
+        $columns = $this->columns($object, $context);
+
+        if ($format === 'xlsx') {
+            $this->assertXlsxFits($app, $object, $manifest, $context, $query);
+            $book = $this->buildXlsx($app, $object, $manifest, $context, $query, $columns);
+            (new XlsxWriter($book))->save($path);
+            $rows = $book->getActiveSheet()->getHighestRow() - 1;
+            $book->disconnectWorksheets();
+
+            return max(0, $rows);
+        }
+
+        $handle = fopen($path, 'w');
+        $written = $this->writeCsv($handle, $app, $object, $manifest, $context, $query, $columns, flushing: false);
+        fclose($handle);
+
+        return $written;
+    }
+
+    /**
+     * @param  array<string, mixed>  $object
+     * @param  array<string, mixed>  $manifest
+     * @param  array<string, mixed>  $context
+     * @param  array<string, mixed>  $query
+     *
+     * @throws InvalidArgumentException
+     */
+    private function assertXlsxFits(App $app, array $object, array $manifest, array $context, array $query): void
+    {
+        $total = $this->records->count($app, ['object_id' => $object['id']] + $query, $manifest, $context);
+        if ($total > self::XLSX_MAX_ROWS) {
+            throw new InvalidArgumentException(
+                "That is {$total} rows — more than a spreadsheet file can hold here (".self::XLSX_MAX_ROWS.'). Export as CSV, or filter first.',
+            );
+        }
+    }
+
+    /**
+     * @param  array<string, mixed>  $object
+     * @param  array<string, mixed>  $manifest
+     * @param  array<string, mixed>  $context
+     * @param  array<string, mixed>  $query
+     * @param  array<string, string>  $columns
+     */
+    private function buildXlsx(App $app, array $object, array $manifest, array $context, array $query, array $columns): Spreadsheet
+    {
+        $book = new Spreadsheet;
+        $sheet = $book->getActiveSheet();
+        $sheet->setTitle(mb_substr((string) ($object['name'] ?? 'Datos'), 0, 31));
+        $sheet->fromArray(array_values($columns), null, 'A1');
+
+        $row = 2;
+        foreach ($this->rows($app, $object, $manifest, $context, $query) as $data) {
+            $sheet->fromArray(
+                array_map(fn (string $slug) => $data[$slug] ?? null, array_keys($columns)),
+                null,
+                'A'.$row,
+            );
+            $row++;
+        }
+
+        return $book;
     }
 
     /**
@@ -189,22 +323,7 @@ class RecordExporter
     private function streamXlsx(App $app, array $object, array $manifest, array $context, array $query, array $columns, string $filename): StreamedResponse
     {
         return response()->streamDownload(function () use ($app, $object, $manifest, $context, $query, $columns): void {
-            $book = new Spreadsheet;
-            $sheet = $book->getActiveSheet();
-            $sheet->setTitle(mb_substr((string) ($object['name'] ?? 'Datos'), 0, 31));
-
-            $sheet->fromArray(array_values($columns), null, 'A1');
-
-            $row = 2;
-            foreach ($this->rows($app, $object, $manifest, $context, $query) as $data) {
-                $sheet->fromArray(
-                    array_map(fn (string $slug) => $data[$slug] ?? null, array_keys($columns)),
-                    null,
-                    'A'.$row,
-                );
-                $row++;
-            }
-
+            $book = $this->buildXlsx($app, $object, $manifest, $context, $query, $columns);
             (new XlsxWriter($book))->save('php://output');
             $book->disconnectWorksheets();
         }, $filename, [

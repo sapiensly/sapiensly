@@ -56,6 +56,58 @@ const exportHref = computed<string | null>(() => {
     return `/r/${appSlug}/objects/${object.value.slug}/export?${params.toString()}`;
 });
 
+/**
+ * One request, both outcomes: the file when it fits, a prepared export when it
+ * does not. Above the direct ceiling the server refuses with 422 rather than
+ * handing back a download that might die half-written.
+ *
+ * Deliberately not a HEAD probe first — a HEAD on the download route would run
+ * the whole export and throw the bytes away.
+ */
+const exportLabel = ref('CSV');
+
+async function onExportClick(event: MouseEvent) {
+    if (!object.value?.slug || !appSlug || !exportHref.value) return;
+    event.preventDefault();
+
+    exportLabel.value = 'Descargando…';
+    const res = await fetch(exportHref.value).catch(() => null);
+
+    if (res?.ok) {
+        const url = URL.createObjectURL(await res.blob());
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${object.value.slug}.csv`;
+        a.click();
+        URL.revokeObjectURL(url);
+        exportLabel.value = 'CSV';
+        return;
+    }
+
+    if (res?.status !== 422) {
+        exportLabel.value = 'No se pudo';
+        return;
+    }
+
+    // Too many rows for one request: prepare it instead.
+    exportLabel.value = 'Preparando…';
+    const queued = await fetch(
+        `/r/${appSlug}/objects/${object.value.slug}/export/queue${window.location.search}`,
+        {
+            method: 'POST',
+            headers: {
+                'X-CSRF-TOKEN':
+                    document
+                        .querySelector('meta[name="csrf-token"]')
+                        ?.getAttribute('content') ?? '',
+                Accept: 'application/json',
+            },
+        },
+    ).catch(() => null);
+
+    exportLabel.value = queued?.ok ? 'Preparándose…' : 'No se pudo';
+}
+
 interface DataColumn {
     kind: 'data';
     id: string;
@@ -265,9 +317,10 @@ function richTextCell(value: unknown): string {
                     t.textMuted,
                 ]"
                 title="Descargar CSV"
+                @click="onExportClick"
             >
                 <Download class="size-3" />
-                CSV
+                {{ exportLabel }}
             </a>
         </div>
         <table class="w-full border-collapse text-sm">

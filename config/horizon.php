@@ -269,7 +269,7 @@ return [
         ],
         'supervisor-imports' => [
             'connection' => 'redis',
-            'queue' => ['imports'],
+            'queue' => ['imports', 'exports'],
             'balance' => 'auto',
             'autoScalingStrategy' => 'time',
             'maxProcesses' => 1,
