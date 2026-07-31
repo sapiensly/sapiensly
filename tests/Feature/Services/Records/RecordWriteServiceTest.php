@@ -505,3 +505,92 @@ it('accepts an empty optional contact field', function () {
 
     expect($record->data['correo'] ?? null)->toBeNull();
 });
+
+/*
+|--------------------------------------------------------------------------
+| Declared defaults
+|--------------------------------------------------------------------------
+|
+| `default` used to be inert on write: the engine ignored it and the form
+| honoured it for three field types only, so an app could declare a status
+| default and still save every record with no status.
+|
+*/
+
+it('applies a declared default when the field is missing on create', function () {
+    $estado = fieldOf('estado', 'single_select', [
+        'default' => 'nuevo',
+        'options' => [
+            ['id' => wid('opt'), 'value' => 'nuevo', 'label' => 'Nuevo'],
+            ['id' => wid('opt'), 'value' => 'resuelto', 'label' => 'Resuelto'],
+        ],
+    ]);
+    $object = objectOf('tickets', [fieldOf('asunto', 'string'), $estado]);
+    $manifest = wmanifest([$object]);
+
+    $record = $this->service->create($this->testApp, $manifest, $object['id'], ['asunto' => 'Falla']);
+
+    expect($record->data['estado'])->toBe('nuevo');
+});
+
+it('applies it to a blank too — a form posts every field it renders', function () {
+    $estado = fieldOf('estado', 'single_select', [
+        'default' => 'nuevo',
+        'options' => [['id' => wid('opt'), 'value' => 'nuevo', 'label' => 'Nuevo']],
+    ]);
+    $object = objectOf('tickets', [fieldOf('asunto', 'string'), $estado]);
+    $manifest = wmanifest([$object]);
+
+    $record = $this->service->create($this->testApp, $manifest, $object['id'], [
+        'asunto' => 'Falla',
+        'estado' => '',
+    ]);
+
+    expect($record->data['estado'])->toBe('nuevo');
+});
+
+it('never lets a default overwrite a value the caller chose', function () {
+    $estado = fieldOf('estado', 'single_select', [
+        'default' => 'nuevo',
+        'options' => [
+            ['id' => wid('opt'), 'value' => 'nuevo', 'label' => 'Nuevo'],
+            ['id' => wid('opt'), 'value' => 'resuelto', 'label' => 'Resuelto'],
+        ],
+    ]);
+    $object = objectOf('tickets', [fieldOf('asunto', 'string'), $estado]);
+    $manifest = wmanifest([$object]);
+
+    $record = $this->service->create($this->testApp, $manifest, $object['id'], [
+        'asunto' => 'Falla',
+        'estado' => 'resuelto',
+    ]);
+
+    expect($record->data['estado'])->toBe('resuelto');
+});
+
+it('does not resurrect a default when a field is cleared on update', function () {
+    $estado = fieldOf('estado', 'single_select', [
+        'default' => 'nuevo',
+        'options' => [['id' => wid('opt'), 'value' => 'nuevo', 'label' => 'Nuevo']],
+    ]);
+    $object = objectOf('tickets', [fieldOf('asunto', 'string'), $estado]);
+    $manifest = wmanifest([$object]);
+
+    $record = $this->service->create($this->testApp, $manifest, $object['id'], ['asunto' => 'Falla']);
+    $updated = $this->service->update($this->testApp, $manifest, $record, ['estado' => null]);
+
+    // Clearing on update is deliberate — the default is a creation-time answer.
+    expect($updated->data['estado'])->toBeNull();
+});
+
+it('validates a default like any other value, so a bad one fails loudly', function () {
+    $estado = fieldOf('estado', 'single_select', [
+        'default' => 'inventado',
+        'options' => [['id' => wid('opt'), 'value' => 'nuevo', 'label' => 'Nuevo']],
+    ]);
+    $object = objectOf('tickets', [fieldOf('asunto', 'string'), $estado]);
+    $manifest = wmanifest([$object]);
+
+    expect(fn () => $this->service->create($this->testApp, $manifest, $object['id'], ['asunto' => 'Falla']))
+        ->toThrow(RecordValidationException::class);
+});

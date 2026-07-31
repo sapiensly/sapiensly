@@ -168,6 +168,22 @@ class RecordWriteService
                 continue;
             }
 
+            // A field's declared `default` is what "blank on create" means. It
+            // was inert before: the write path ignored it entirely and the form
+            // only honoured it for rating/slider/rich_text, so a generated app
+            // could declare estado: "nuevo" and still save every ticket with no
+            // status — the exact null the board groups by. Applied to a blank
+            // as well as a missing key, because a form posts every field it
+            // renders, so "absent" alone would never fire for the surface that
+            // matters. Not on update: clearing a field there is deliberate.
+            if ($mode === 'create'
+                && ($raw === null || $raw === '')
+                && empty($field['readonly'])
+                && ($field['default'] ?? null) !== null
+            ) {
+                $raw = $field['default'];
+            }
+
             // required
             if (! empty($field['required']) && ($raw === null || $raw === '')) {
                 $errors[$slug][] = "{$field['name']} is required.";
