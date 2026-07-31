@@ -23,7 +23,7 @@ trait AuthorizesOrganizationAdmin
         $user = $request->user();
 
         abort_unless(
-            $user->organization_id !== null && ($user->hasRole('owner') || $user->hasRole('sysadmin')),
+            $user->organization_id !== null && ($user->hasRole('owner') || $user->isSysAdmin()),
             403,
             "Only an organization administrator can manage {$subject}.",
         );

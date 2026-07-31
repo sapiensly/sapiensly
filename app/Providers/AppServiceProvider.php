@@ -4,6 +4,7 @@ namespace App\Providers;
 
 use App\Ai\Gateway\CachingAnthropicGateway;
 use App\Models\OrganizationMembership;
+use App\Models\User;
 use App\Observers\OrganizationMembershipObserver;
 use App\Services\Security\Ssrf\DnsResolver;
 use App\Services\Security\Ssrf\IpRangeMatcher;
@@ -123,9 +124,12 @@ class AppServiceProvider extends ServiceProvider
         // requests OAuth access via the MCP server's Passport flow.
         Passport::authorizationView(fn ($parameters) => view('mcp.authorize', $parameters));
 
-        // SysAdmin bypasses all authorization gates and policies
+        // SysAdmin bypasses all authorization gates and policies.
+        // isSysAdmin(), not hasRole(): the role is global while spatie's check is
+        // scoped to the active organization's team, so the bypass would
+        // silently stop applying to any sysadmin who belongs to an org.
         Gate::before(function ($user, $ability) {
-            if ($user->hasRole('sysadmin')) {
+            if ($user instanceof User && $user->isSysAdmin()) {
                 return true;
             }
         });

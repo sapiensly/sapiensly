@@ -42,7 +42,7 @@ class ImportOrganizationBooksTool extends SapiensTool
         if ($user->organization_id === null) {
             return Response::error('This connection is not bound to an organization.');
         }
-        if (! $user->hasRole('owner') && ! $user->hasRole('sysadmin')) {
+        if (! $user->hasRole('owner') && ! $user->isSysAdmin()) {
             return Response::error('Only an organization owner or sysadmin can import the organization books.');
         }
 

@@ -88,6 +88,6 @@ class IntegrationPolicy
 
     public function manageGlobal(User $user): bool
     {
-        return $user->hasRole('sysadmin');
+        return $user->isSysAdmin();
     }
 }

@@ -13,7 +13,8 @@ interface Props {
     value: string;
     label: string;
     caption?: string;
-    delta?: number;
+    /** null when there is no baseline to compare against — the badge is hidden. */
+    delta?: number | null;
     /** 'up' = good when green, 'down' = good when red (e.g. error rate). */
     deltaDir?: 'up' | 'down';
     series?: number[];
@@ -28,7 +29,7 @@ const props = withDefaults(defineProps<Props>(), {
 });
 
 const deltaPositive = computed(() => {
-    if (props.delta === undefined) return true;
+    if (props.delta == null) return true;
     // 'up' means the metric increasing is good. For deltaDir='up' a positive
     // delta is green; for deltaDir='down' a negative delta is green.
     return props.deltaDir === 'up' ? props.delta >= 0 : props.delta <= 0;
@@ -39,7 +40,7 @@ const deltaColorClass = computed(() =>
 );
 
 const deltaSign = computed(() =>
-    props.delta === undefined ? '' : props.delta > 0 ? '+' : '',
+    props.delta == null ? '' : props.delta > 0 ? '+' : '',
 );
 </script>
 
@@ -69,7 +70,7 @@ const deltaSign = computed(() =>
             </div>
 
             <span
-                v-if="delta !== undefined"
+                v-if="delta != null"
                 :class="[
                     'inline-flex items-center gap-1 text-xs font-semibold',
                     deltaColorClass,

@@ -52,7 +52,8 @@ export interface DashboardStat {
     display?: string;
     /** Secondary line under the value — "p95 2.1s", "$712 MTD", "124 organizations". */
     caption?: string;
-    delta?: number;
+    /** null when there is no baseline to compare against — no delta is shown. */
+    delta?: number | null;
     /** 'up' = good when green, 'down' = good when red (e.g. error rate). */
     deltaDir?: 'up' | 'down';
     series?: number[];

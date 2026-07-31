@@ -136,9 +136,15 @@ class User extends Authenticatable implements HasLocalePreference, MustVerifyEma
      * the roles relation to the current team (`organization_id`), while the
      * sysadmin role is assigned globally with a null team (see SysAdminSeeder).
      * So the moment a team is set — every MCP request pins one, and so does
-     * SetPermissionsTeam on the web — the check silently returns false. This
-     * evaluates the assignment against the null team it was actually made under,
-     * then restores the caller's team so nothing downstream sees a changed scope.
+     * SetPermissionsTeam on the web — the check silently returns false.
+     *
+     * This reads the assignment straight from the pivot, deliberately ignoring
+     * the team scope rather than temporarily changing it. Swapping the global
+     * team id would work, but this runs inside `Gate::before` on every
+     * authorization check: it must not mutate shared state, and it must not
+     * disturb an already-eager-loaded `roles` relation (unsetting it there would
+     * turn one eager load into an N+1 across the request). Memoized per
+     * instance, so it costs at most one small query per user object.
      */
     public function isSysAdmin(): bool
     {
@@ -146,17 +152,23 @@ class User extends Authenticatable implements HasLocalePreference, MustVerifyEma
             return $this->sysAdminMemo;
         }
 
-        $previousTeam = getPermissionsTeamId();
+        $pivot = config('permission.table_names.model_has_roles', 'model_has_roles');
+        $roles = config('permission.table_names.roles', 'roles');
+        $morphKey = config('permission.column_names.model_morph_key', 'model_id');
 
-        try {
-            setPermissionsTeamId(null);
-            $this->unsetRelation('roles');
+        return $this->sysAdminMemo = $this->newQuery()->getConnection()
+            ->table($pivot)
+            ->join($roles, $roles.'.id', '=', $pivot.'.role_id')
+            ->where($pivot.'.'.$morphKey, $this->getKey())
+            ->where($pivot.'.model_type', $this->getMorphClass())
+            ->where($roles.'.name', self::SYSADMIN_ROLE)
+            ->exists();
+    }
 
-            return $this->sysAdminMemo = $this->hasRole(self::SYSADMIN_ROLE);
-        } finally {
-            setPermissionsTeamId($previousTeam);
-            $this->unsetRelation('roles');
-        }
+    /** Forget the memoized sysadmin answer (after granting/revoking the role). */
+    public function forgetSysAdminMemo(): void
+    {
+        $this->sysAdminMemo = null;
     }
 
     /**

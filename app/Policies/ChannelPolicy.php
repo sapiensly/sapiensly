@@ -34,7 +34,7 @@ class ChannelPolicy
     public function update(User $user, Channel $channel): bool
     {
         if ($channel->visibility === Visibility::Global) {
-            return $user->hasRole('sysadmin');
+            return $user->isSysAdmin();
         }
 
         if (! $user->organization_id) {

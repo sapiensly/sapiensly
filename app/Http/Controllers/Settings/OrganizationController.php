@@ -43,7 +43,7 @@ class OrganizationController extends Controller
         return Inertia::render('settings/Organization', [
             'organization' => $organization,
             'members' => $members,
-            'isAdmin' => $user->hasRole('owner') || $user->hasRole('sysadmin'),
+            'isAdmin' => $user->hasRole('owner') || $user->isSysAdmin(),
             'isOwner' => $this->isOwner($user, $organization),
         ]);
     }

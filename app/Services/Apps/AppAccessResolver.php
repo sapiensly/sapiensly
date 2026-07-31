@@ -202,7 +202,7 @@ class AppAccessResolver
 
     private function isAdministrator(App $app, User $user): bool
     {
-        if ($user->hasRole('sysadmin')) {
+        if ($user->isSysAdmin()) {
             return true;
         }
         if ($app->isOwnedBy($user)) {

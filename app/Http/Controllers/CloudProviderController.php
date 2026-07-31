@@ -329,7 +329,7 @@ class CloudProviderController extends Controller
      */
     private function userCanManage(User $user, ?Organization $organization): bool
     {
-        if ($user->hasRole('sysadmin')) {
+        if ($user->isSysAdmin()) {
             return true;
         }
 

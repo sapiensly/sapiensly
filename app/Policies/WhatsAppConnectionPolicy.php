@@ -56,7 +56,7 @@ class WhatsAppConnectionPolicy
         }
 
         if ($channel->visibility === Visibility::Global) {
-            return $user->hasRole('sysadmin');
+            return $user->isSysAdmin();
         }
 
         if (! $user->organization_id) {
