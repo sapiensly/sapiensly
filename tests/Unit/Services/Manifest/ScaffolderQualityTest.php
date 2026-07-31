@@ -871,3 +871,103 @@ it('accepts email through the typed add_field path too', function () {
     expect($field['type'])->toBe('email')
         ->and($coercions)->toBe([]);
 });
+
+/*
+|--------------------------------------------------------------------------
+| Integrity the model is never asked for
+|--------------------------------------------------------------------------
+|
+| The spec the model returns is name/slug/type/options — no `required`, no
+| `default` — so a generated app used to accept a record with every field
+| null, and a board grouped by a status nobody had set.
+|
+*/
+
+it('requires the field that labels the record', function () {
+    $manifest = scaffoldFor('es-MX');
+    $fields = collect($manifest['objects'][0]['fields']);
+
+    // Folio is the first string field: it titles every card and table row.
+    expect($fields->firstWhere('slug', 'folio')['required'] ?? false)->toBeTrue()
+        // Nothing else is forced — the scaffold does not guess the business.
+        ->and($fields->firstWhere('slug', 'total')['required'] ?? false)->toBeFalse();
+});
+
+it('defaults the status the board groups by to its first option', function () {
+    $manifest = scaffoldFor('es-MX');
+    $estado = collect($manifest['objects'][0]['fields'])->firstWhere('slug', 'estado');
+
+    expect($estado['default'])->toBe('abierta');
+
+    // …which is exactly the field the kanban groups by, so a new record lands
+    // in a column instead of outside the board.
+    $page = pageBySlug($manifest, 'comandas');
+    $kanban = collect($page['blocks'])->firstWhere('type', 'kanban');
+    expect($kanban['group_by_field_id'])->toBe($estado['id']);
+});
+
+it('leaves a second select alone — a default there would be an opinion', function () {
+    $base = [
+        'schema_version' => '1.0.0',
+        'id' => 'app_scaffold_int',
+        'slug' => 'tickets',
+        'name' => 'Tickets',
+        'version' => 1,
+        'objects' => [],
+        'pages' => [],
+        'permissions' => ['roles' => [['id' => 'rol_admin00001', 'slug' => 'admin', 'name' => 'Admin', 'is_default' => true]]],
+        'settings' => ['default_locale' => 'es-MX', 'default_currency' => 'MXN'],
+    ];
+
+    $manifest = app(AppScaffolder::class)->assemble($base, [
+        'objects' => [[
+            'name' => 'Tickets',
+            'slug' => 'tickets',
+            'fields' => [
+                ['name' => 'Asunto', 'slug' => 'asunto', 'type' => 'string', 'options' => null],
+                ['name' => 'Estado', 'slug' => 'estado', 'type' => 'single_select', 'options' => [
+                    ['value' => 'nuevo', 'label' => 'Nuevo'],
+                    ['value' => 'resuelto', 'label' => 'Resuelto'],
+                ]],
+                ['name' => 'Prioridad', 'slug' => 'prioridad', 'type' => 'single_select', 'options' => [
+                    ['value' => 'baja', 'label' => 'Baja'],
+                    ['value' => 'urgente', 'label' => 'Urgente'],
+                ]],
+            ],
+        ]],
+        'links' => [],
+    ]);
+
+    $fields = collect($manifest['objects'][0]['fields']);
+
+    expect($fields->firstWhere('slug', 'estado')['default'])->toBe('nuevo')
+        ->and($fields->firstWhere('slug', 'prioridad'))->not->toHaveKey('default')
+        ->and((new ManifestValidator)->validate($manifest)->errors)->toBe([]);
+});
+
+it('never overrides a value the typed path set explicitly', function () {
+    $base = [
+        'schema_version' => '1.0.0',
+        'id' => 'app_scaffold_exp',
+        'slug' => 'notes',
+        'name' => 'Notes',
+        'version' => 1,
+        'objects' => [],
+        'pages' => [],
+        'permissions' => ['roles' => [['id' => 'rol_admin00001', 'slug' => 'admin', 'name' => 'Admin', 'is_default' => true]]],
+        'settings' => ['default_locale' => 'en', 'default_currency' => 'USD'],
+    ];
+
+    $manifest = app(AppScaffolder::class)->assemble($base, [
+        'objects' => [[
+            'name' => 'Notes',
+            'slug' => 'notes',
+            'fields' => [
+                ['name' => 'Title', 'slug' => 'title', 'type' => 'string', 'options' => null, 'config' => ['required' => false]],
+            ],
+        ]],
+        'links' => [],
+    ]);
+
+    expect($manifest['objects'][0]['fields'][0]['required'])->toBeFalse();
+});

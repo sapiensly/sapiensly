@@ -626,6 +626,7 @@ class AppScaffolder
      */
     public function buildObject(array $object, string $currency): array
     {
+        /** @var list<array<string, mixed>> $fields */
         $fields = [];
         $fieldIndex = [];
 
@@ -635,12 +636,63 @@ class AppScaffolder
             $fieldIndex[] = $indexEntry;
         }
 
+        $this->applyIntegrityDefaults($fields);
+
         return [[
             'id' => $this->id('obj'),
             'slug' => $object['slug'],
             'name' => $object['name'],
             'fields' => $fields,
         ], $fieldIndex];
+    }
+
+    /**
+     * The two guarantees a generated object owes its own screens.
+     *
+     * The model is never asked for `required` or `default` — its spec is
+     * name/slug/type/options — so every scaffolded app used to accept a record
+     * with EVERY field null. That is not a hypothetical: on a freshly generated
+     * help desk, a ticket saved blank and a ticket saved with no status, and the
+     * board groups by exactly that field, so the card lands outside all four
+     * columns and the donut counts a slice with no name.
+     *
+     * Deterministic on purpose. Asking the model for these would spend tokens on
+     * a judgement that has one right answer:
+     *   - the field that LABELS the record (same rule as titleField) is required
+     *     — a row whose title is blank is unreadable in every table and card;
+     *   - the field the kanban groups by (the first single_select, same rule as
+     *     buildKanban) defaults to its first option — that is what "new" means.
+     * Only the grouping select: a default on `priority` would be an opinion
+     * about the business, not a structural need. An explicit value from the
+     * typed add_field path always wins.
+     *
+     * @param  list<array<string, mixed>>  $fields
+     */
+    private function applyIntegrityDefaults(array &$fields): void
+    {
+        $titleIndex = null;
+        $statusIndex = null;
+        foreach ($fields as $i => $field) {
+            if ($titleIndex === null && ($field['type'] ?? null) === 'string') {
+                $titleIndex = $i;
+            }
+            if ($statusIndex === null && ($field['type'] ?? null) === 'single_select') {
+                $statusIndex = $i;
+            }
+        }
+        // Mirrors titleField(): the first string, else whatever labels the record.
+        $titleIndex ??= array_key_first($fields);
+
+        if ($titleIndex !== null && ! array_key_exists('required', $fields[$titleIndex])) {
+            $fields[$titleIndex]['required'] = true;
+        }
+
+        if ($statusIndex !== null && ! array_key_exists('default', $fields[$statusIndex])) {
+            $first = $fields[$statusIndex]['options'][0]['value'] ?? null;
+            if (is_string($first) && $first !== '') {
+                $fields[$statusIndex]['default'] = $first;
+            }
+        }
     }
 
     /**
