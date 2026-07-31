@@ -108,6 +108,7 @@ class ScaffoldAppTool extends SapiensTool
             'pages' => array_map(fn (array $p): string => $p['path'], $manifest['pages']),
             'url' => route('apps.runtime', ['app_slug' => $app->slug]),
             'next' => 'Open the app to use it, or refine it with read_manifest + propose_change.',
+            'automation' => $this->automationSuggestions($manifest),
         ];
         if ($seeded !== []) {
             $payload['seeded'] = $seeded;
@@ -122,6 +123,55 @@ class ScaffoldAppTool extends SapiensTool
         $this->rememberIdempotent($user, $validated['idempotency_key'] ?? null, $payload);
 
         return Response::json($payload);
+    }
+
+    /**
+     * The automation this app is shaped for, named concretely — never authored.
+     *
+     * A scaffolded app ships zero workflows, and that is the right default: a
+     * useful one needs a recipient, a condition or a deadline the description
+     * does not contain, and a half-configured workflow is clutter that has to
+     * be found and deleted. But answering nothing left the caller believing the
+     * platform had no automation at all, which is how every generated app in
+     * the audit ended up with `workflows_by_object: []` for good.
+     *
+     * So: point at the trigger this particular schema affords, with the real ids
+     * the author would need, and let a human (or the model) decide whether it is
+     * worth having.
+     *
+     * @param  array<string, mixed>  $manifest
+     * @return list<string>
+     */
+    private function automationSuggestions(array $manifest): array
+    {
+        $suggestions = [];
+
+        foreach ($manifest['objects'] ?? [] as $object) {
+            $status = null;
+            $date = null;
+            foreach ($object['fields'] ?? [] as $field) {
+                if ($status === null && ($field['type'] ?? null) === 'single_select') {
+                    $status = $field;
+                }
+                if ($date === null && in_array($field['type'] ?? null, ['date', 'datetime'], true)) {
+                    $date = $field;
+                }
+            }
+
+            if ($status !== null) {
+                $suggestions[] = "A `record.updated` workflow on \"{$object['name']}\" (object_id {$object['id']}), filtered on {$status['name']} (field_id {$status['id']}), is how a status change notifies someone or stamps a timestamp.";
+            }
+            if ($date !== null) {
+                $suggestions[] = "\"{$object['name']}\" has a date ({$date['name']}, field_id {$date['id']}): a `record.date_reached` trigger fires N days before or after it — reminders, SLAs, follow-ups.";
+            }
+        }
+
+        $first = $manifest['objects'][0] ?? null;
+        if ($first !== null) {
+            array_unshift($suggestions, "Nothing runs by itself yet — this app has no workflows. A `record.created` trigger on \"{$first['name']}\" (object_id {$first['id']}) is the usual first one; see list_available_triggers / list_available_steps, then author it with propose_change.");
+        }
+
+        return array_slice($suggestions, 0, 4);
     }
 
     /**

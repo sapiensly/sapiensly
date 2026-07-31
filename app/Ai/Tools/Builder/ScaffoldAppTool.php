@@ -294,6 +294,17 @@ DESC;
             ['op' => 'replace', 'path' => '/pages', 'value' => $assembled['pages']],
         ];
 
+        // The policies the assembler wrote for those objects. Without this op
+        // they would be assembled and dropped on the floor, and an app built in
+        // the chat would ship with roles that mean nothing while the same app
+        // built over MCP ships with roles that do.
+        $policies = $assembled['permissions']['object_policies'] ?? [];
+        if ($policies !== []) {
+            // `add`, not `replace`: a cold-start manifest has no object_policies
+            // member yet, and RFC 6902 replace requires the target to exist.
+            $ops[] = ['op' => 'add', 'path' => '/permissions/object_policies', 'value' => $policies];
+        }
+
         $count = count($assembled['objects']);
         $summary = "Generé {$count} ".($count === 1 ? 'objeto' : 'objetos').' con sus relaciones, cálculos y páginas';
 

@@ -406,3 +406,28 @@ it('scaffold_app leaves no app behind when the model is unreachable', function (
     // Not an empty app the user has to discover is empty.
     expect(App::where('user_id', $this->user->id)->where('slug', 'fantasma')->exists())->toBeFalse();
 });
+
+it('scaffold_app names the automation the schema affords, without authoring it', function () {
+    Ai::fakeAgent(ChatAgent::class, [
+        '{"objects":[{"name":"Tickets","slug":"tickets","fields":['
+        .'{"name":"Asunto","slug":"asunto","type":"string"},'
+        .'{"name":"Estado","slug":"estado","type":"single_select","options":['
+        .'{"value":"nuevo","label":"Nuevo"},{"value":"resuelto","label":"Resuelto"}]},'
+        .'{"name":"Vence","slug":"vence","type":"date"}]}],"links":[]}',
+    ]);
+
+    SapiensServer::actingAs($this->user)
+        ->tool(ScaffoldAppTool::class, [
+            'name' => 'Con Automatizacion',
+            'description' => 'Mesa de ayuda con tickets.',
+        ])
+        ->assertOk()
+        ->assertSee('record.created')
+        ->assertSee('record.updated')
+        ->assertSee('record.date_reached');
+
+    // Suggested, never authored: a workflow needs a recipient or a deadline the
+    // description does not contain, and a half-configured one is clutter.
+    $app = App::where('user_id', $this->user->id)->where('slug', 'con_automatizacion')->firstOrFail();
+    expect($app->versions()->first()->manifest['workflows'] ?? [])->toBe([]);
+});

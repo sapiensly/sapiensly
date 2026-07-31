@@ -4,6 +4,7 @@ use App\Models\App;
 use App\Models\AppUserRole;
 use App\Models\User;
 use App\Services\Apps\AppAccessResolver;
+use App\Services\Manifest\AppScaffolder;
 
 /**
  * Builds a manifest with two roles (admin / default user), one object with a
@@ -138,4 +139,49 @@ it('denies an anonymous user on an allowlist app and gives default role on an op
 
     expect(resolver()->resolve($app, accessManifest(['access_mode' => 'allowlist']), null)->hasAccess)->toBeFalse();
     expect(resolver()->resolve($app, accessManifest(), null)->roleSlugs)->toBe(['user']);
+});
+
+it('gives a scaffolded app roles that actually bite', function () {
+    // The end of the chain the scaffolder now writes: a member who was never
+    // assigned anything falls to `user` and works the records without being
+    // able to erase them, while an assigned `admin` can. Before the matrix
+    // existed both could delete everything, and the roles were decoration.
+    $base = [
+        'schema_version' => '1.0.0',
+        'id' => 'app_policy_e2e',
+        'slug' => 'helpdesk',
+        'name' => 'Helpdesk',
+        'version' => 1,
+        'objects' => [],
+        'pages' => [],
+        'permissions' => ['roles' => [
+            ['id' => 'rol_admin0000001', 'slug' => 'admin', 'name' => 'Admin', 'is_default' => false],
+            ['id' => 'rol_user00000001', 'slug' => 'user', 'name' => 'User', 'is_default' => true],
+        ]],
+        'settings' => ['default_locale' => 'es-MX', 'default_currency' => 'MXN'],
+    ];
+
+    $manifest = app(AppScaffolder::class)->assemble($base, [
+        'objects' => [['name' => 'Tickets', 'slug' => 'tickets', 'fields' => [
+            ['name' => 'Asunto', 'slug' => 'asunto', 'type' => 'string', 'options' => null],
+        ]]],
+        'links' => [],
+    ]);
+
+    $objectId = $manifest['objects'][0]['id'];
+    $app = App::factory()->create(['user_id' => User::factory()->create()->id]);
+
+    $member = User::factory()->create();
+    $ctx = resolver()->resolve($app, $manifest, $member);
+
+    expect($ctx->roleSlugs)->toBe(['user'])
+        ->and($ctx->can($objectId, 'create'))->toBeTrue()
+        ->and($ctx->can($objectId, 'read'))->toBeTrue()
+        ->and($ctx->can($objectId, 'update'))->toBeTrue()
+        ->and($ctx->can($objectId, 'delete'))->toBeFalse();
+
+    $lead = User::factory()->create();
+    AppUserRole::factory()->create(['app_id' => $app->id, 'assigned_user_id' => $lead->id, 'role_slug' => 'admin']);
+
+    expect(resolver()->resolve($app, $manifest, $lead)->can($objectId, 'delete'))->toBeTrue();
 });

@@ -971,3 +971,124 @@ it('never overrides a value the typed path set explicitly', function () {
 
     expect($manifest['objects'][0]['fields'][0]['required'])->toBeFalse();
 });
+
+/*
+|--------------------------------------------------------------------------
+| Roles that mean something
+|--------------------------------------------------------------------------
+|
+| The scaffold shipped `admin` + `user` and zero policies, and an app with
+| no object policies is open-within-visibility: every member could delete
+| every record while the Access panel promised a distinction.
+|
+*/
+
+/**
+ * A base with the two roles a real app is created with (initialManifest), which
+ * the fixtures above deliberately do not have.
+ *
+ * @return array<string, mixed>
+ */
+function twoRoleBase(): array
+{
+    return [
+        'schema_version' => '1.0.0',
+        'id' => 'app_scaffold_pol',
+        'slug' => 'helpdesk',
+        'name' => 'Helpdesk',
+        'version' => 1,
+        'objects' => [],
+        'pages' => [],
+        'permissions' => ['roles' => [
+            ['id' => 'rol_admin0000001', 'slug' => 'admin', 'name' => 'Admin', 'is_default' => false],
+            ['id' => 'rol_user00000001', 'slug' => 'user', 'name' => 'User', 'is_default' => true],
+        ]],
+        'settings' => ['default_locale' => 'es-MX', 'default_currency' => 'MXN'],
+    ];
+}
+
+/**
+ * @return array<string, mixed>
+ */
+function scaffoldWithRoles(): array
+{
+    return app(AppScaffolder::class)->assemble(twoRoleBase(), [
+        'objects' => [
+            ['name' => 'Tickets', 'slug' => 'tickets', 'fields' => [
+                ['name' => 'Asunto', 'slug' => 'asunto', 'type' => 'string', 'options' => null],
+            ]],
+            ['name' => 'Respuestas', 'slug' => 'respuestas', 'fields' => [
+                ['name' => 'Mensaje', 'slug' => 'mensaje', 'type' => 'long_text', 'options' => null],
+            ]],
+        ],
+        'links' => [['from' => 'respuestas', 'to' => 'tickets', 'name' => 'ticket']],
+    ]);
+}
+
+it('states what each role may do, on every object', function () {
+    $manifest = scaffoldWithRoles();
+    $policies = collect($manifest['permissions']['object_policies'] ?? []);
+    $rolesById = collect($manifest['permissions']['roles'])->keyBy('id');
+
+    // Complete: an object with ANY policy denies every role that has no row on
+    // it, so a partial matrix would lock people out of half the app.
+    expect($policies)->toHaveCount(2 * 2);
+
+    $byRole = $policies->groupBy(fn (array $p): string => $rolesById[$p['role_id']]['slug']);
+
+    expect($byRole['admin']->every(fn (array $p): bool => in_array('delete', $p['actions'], true)))->toBeTrue()
+        ->and($byRole['user']->every(fn (array $p): bool => ! in_array('delete', $p['actions'], true)))->toBeTrue()
+        ->and($byRole['user']->every(fn (array $p): bool => in_array('create', $p['actions'], true)))->toBeTrue()
+        ->and((new ManifestValidator)->validate($manifest)->errors)->toBe([]);
+});
+
+it('never widens a role an author narrowed, and covers a new object with what it already had', function () {
+    $manifest = scaffoldWithRoles();
+
+    // The author cuts `user` down to read-only…
+    $manifest['permissions']['object_policies'] = collect($manifest['permissions']['object_policies'])
+        ->map(function (array $p): array {
+            if ($p['role_id'] === 'rol_user00000001') {
+                $p['actions'] = ['read'];
+            }
+
+            return $p;
+        })->values()->all();
+
+    // …then a third object arrives.
+    $manifest['objects'][] = [
+        'id' => 'obj_later0000001',
+        'slug' => 'notas',
+        'name' => 'Notas',
+        'fields' => [['id' => 'fld_later0000001', 'slug' => 'texto', 'name' => 'Texto', 'type' => 'string']],
+    ];
+
+    $updated = app(AppScaffolder::class)->ensureObjectPolicies($manifest);
+    $forNew = collect($updated['permissions']['object_policies'])->where('object_id', 'obj_later0000001');
+
+    expect($forNew)->toHaveCount(2)
+        ->and($forNew->firstWhere('role_id', 'rol_user00000001')['actions'])->toBe(['read'])
+        ->and($forNew->firstWhere('role_id', 'rol_admin0000001')['actions'])->toContain('delete');
+});
+
+it('does not hand a portal role anything it was not explicitly given', function () {
+    $manifest = scaffoldWithRoles();
+    $visitor = ['id' => 'rol_visitor00001', 'slug' => 'visitante', 'name' => 'Visitante', 'is_default' => false];
+    $manifest['permissions']['roles'][] = $visitor;
+    $manifest['permissions']['public'] = ['enabled' => true, 'role_id' => $visitor['id']];
+
+    $manifest['objects'][] = [
+        'id' => 'obj_public00001',
+        'slug' => 'publicas',
+        'name' => 'Publicas',
+        'fields' => [['id' => 'fld_public00001', 'slug' => 'texto', 'name' => 'Texto', 'type' => 'string']],
+    ];
+
+    $updated = app(AppScaffolder::class)->ensureObjectPolicies($manifest);
+    $forNew = collect($updated['permissions']['object_policies'])->where('object_id', 'obj_public00001');
+
+    // Deny-by-default is the whole point of a portal role: automation must
+    // never be what puts tenant data in front of strangers.
+    expect($forNew->firstWhere('role_id', $visitor['id']))->toBeNull()
+        ->and($forNew)->toHaveCount(2);
+});

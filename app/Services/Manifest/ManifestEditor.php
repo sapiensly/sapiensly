@@ -48,6 +48,11 @@ class ManifestEditor
 
         $manifest['objects'][] = $objectDef;
 
+        // Keep the policy matrix complete. An object with no policy row is open
+        // to everyone while its siblings are governed — the app's access rules
+        // would quietly stop applying to whatever was added last.
+        $manifest = $this->scaffolder->ensureObjectPolicies($manifest);
+
         if ($withPage) {
             $pageSlug = $this->uniqueSlug($objectSlug, array_column($manifest['pages'] ?? [], 'slug'), 'page');
             $manifest['pages'][] = $this->scaffolder->buildPage(

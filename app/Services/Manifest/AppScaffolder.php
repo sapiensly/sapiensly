@@ -629,7 +629,95 @@ class AppScaffolder
         $base['objects'] = $objects;
         $base['pages'] = $pages;
 
-        return $base;
+        return $this->ensureObjectPolicies($base);
+    }
+
+    /**
+     * State what each role may do, for every object, so the roles the scaffold
+     * ships are not decorative.
+     *
+     * A generated app declared `admin` and `user` and not one policy, and an app
+     * with no object policies is open-within-visibility: every member could
+     * delete every record, and the role picker in the Access panel promised a
+     * distinction the app did not have. Naming a role Admin and giving it
+     * nothing is worse than shipping one role, because it reads as configured.
+     *
+     * The matrix must stay COMPLETE: once an object has any policy, a role with
+     * no entry on it gets nothing (deny-by-default, per object). So every role
+     * gets a row on every object — except the roles a public portal hands to
+     * strangers, which are deny-by-default ON PURPOSE and must never be widened
+     * by automation.
+     *
+     * Existing rows are never touched: an author who narrowed a role keeps it,
+     * and a new object inherits what that role already has elsewhere.
+     *
+     * @param  array<string, mixed>  $manifest
+     * @return array<string, mixed>
+     */
+    public function ensureObjectPolicies(array $manifest): array
+    {
+        $roles = $manifest['permissions']['roles'] ?? [];
+        $objects = $manifest['objects'] ?? [];
+        if ($roles === [] || $objects === []) {
+            return $manifest;
+        }
+
+        $public = $manifest['permissions']['public'] ?? [];
+        $portalRoleIds = array_filter([$public['role_id'] ?? null, $public['member_role_id'] ?? null]);
+
+        $policies = array_values($manifest['permissions']['object_policies'] ?? []);
+        $covered = [];
+        foreach ($policies as $policy) {
+            $covered[(string) ($policy['object_id'] ?? '')] = true;
+        }
+
+        foreach ($objects as $object) {
+            if (isset($covered[$object['id']])) {
+                continue;
+            }
+            foreach ($roles as $role) {
+                if (in_array($role['id'] ?? null, $portalRoleIds, true)) {
+                    continue;
+                }
+                $policies[] = [
+                    'object_id' => $object['id'],
+                    'role_id' => $role['id'],
+                    'actions' => $this->actionsForRole($role, $policies),
+                ];
+            }
+        }
+
+        $manifest['permissions']['object_policies'] = $policies;
+
+        return $manifest;
+    }
+
+    /**
+     * What a role may do on an object it has no policy for yet: whatever it
+     * already holds elsewhere in this app — so a role an author narrowed stays
+     * narrow as the app grows — else the meaning of its name. `admin` is the
+     * only role the scaffold grants delete: everyone else works the records
+     * (create/read/update) without being able to erase them.
+     *
+     * @param  array<string, mixed>  $role
+     * @param  list<array<string, mixed>>  $existing
+     * @return list<string>
+     */
+    private function actionsForRole(array $role, array $existing): array
+    {
+        $held = [];
+        foreach ($existing as $policy) {
+            if (($policy['role_id'] ?? null) === ($role['id'] ?? null)) {
+                $held = array_merge($held, $policy['actions'] ?? []);
+            }
+        }
+        if ($held !== []) {
+            return array_values(array_unique($held));
+        }
+
+        return ($role['slug'] ?? null) === 'admin'
+            ? ['create', 'read', 'update', 'delete']
+            : ['create', 'read', 'update'];
     }
 
     /**
