@@ -3,6 +3,7 @@
 use App\Enums\MembershipRole;
 use App\Enums\MembershipStatus;
 use App\Models\App;
+use App\Models\AppExport;
 use App\Models\Organization;
 use App\Models\OrganizationMembership;
 use App\Models\Record;
@@ -10,6 +11,7 @@ use App\Models\User;
 use App\Services\Export\RecordExporter;
 use App\Services\Manifest\AppManifestService;
 use Database\Seeders\RolesAndPermissionsSeeder;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Spatie\Permission\PermissionRegistrar;
 
@@ -263,4 +265,49 @@ it('refuses a direct download too large for one request, instead of half-writing
     $this->actingAs($this->owner)
         ->get('/r/ventas/objects/pedidos/export')
         ->assertStatus(422);
+});
+
+it('sweeps an expired export file but keeps the run as history', function () {
+    $id = $this->actingAs($this->owner)
+        ->postJson('/r/ventas/objects/pedidos/export/queue')
+        ->json('export.id');
+
+    $export = AppExport::findOrFail($id);
+    expect(Storage::disk($export->disk)->exists($export->storage_path))->toBeTrue();
+
+    // Age it past its window and sweep.
+    $export->forceFill(['expires_at' => now()->subHour()])->save();
+    $this->artisan('exports:prune')->assertExitCode(0);
+
+    $export->refresh();
+
+    // The bytes are gone; "you exported this" survives.
+    expect($export->storage_path)->toBeNull()
+        ->and($export->status)->toBe('completed')
+        ->and($export->isDownloadable())->toBeFalse();
+
+    $this->actingAs($this->owner)
+        ->get("/r/ventas/objects/pedidos/export/{$id}/download")
+        ->assertNotFound();
+});
+
+it('leaves a live export alone', function () {
+    $id = $this->actingAs($this->owner)
+        ->postJson('/r/ventas/objects/pedidos/export/queue')
+        ->json('export.id');
+
+    $this->artisan('exports:prune')->assertExitCode(0);
+
+    expect(AppExport::findOrFail($id)->isDownloadable())->toBeTrue();
+});
+
+it('drops a run once its history stops being useful', function () {
+    $id = $this->actingAs($this->owner)
+        ->postJson('/r/ventas/objects/pedidos/export/queue')
+        ->json('export.id');
+
+    AppExport::findOrFail($id)->forceFill(['created_at' => now()->subDays(45)])->save();
+    $this->artisan('exports:prune --days=30')->assertExitCode(0);
+
+    expect(AppExport::find($id))->toBeNull();
 });

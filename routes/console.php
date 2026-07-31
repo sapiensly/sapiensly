@@ -20,6 +20,14 @@ Schedule::command('integrations:prune-executions')
     ->withoutOverlapping()
     ->runInBackground();
 
+// Expired export files are copies of tenant data living outside the database.
+// Sweeping them nightly is what keeps a download from becoming a second,
+// unmanaged store of the same rows.
+Schedule::command('exports:prune')
+    ->dailyAt('03:20')
+    ->withoutOverlapping()
+    ->runInBackground();
+
 // Emit AI spend budget threshold alerts.
 Schedule::command('ai-spend:check-budgets')
     ->dailyAt('03:00')

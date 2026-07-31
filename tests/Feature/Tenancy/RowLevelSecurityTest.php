@@ -447,3 +447,48 @@ it('is fail-closed for app_templates when no tenant scope is set', function () {
     scopeTenant(null, null);
     expect(tenantAppTemplateCount())->toBe(0);
 });
+
+/* ---------------- the scope a scheduled command has to establish ---------------- */
+
+function seedAppExport(?string $orgId, ?int $userId, string $appId): void
+{
+    DB::connection('owner_commit')->table('tenant.app_exports')->insert([
+        'id' => 'exp_'.uniqid(),
+        'organization_id' => $orgId,
+        'user_id' => $userId,
+        'app_id' => $appId,
+        'object_id' => 'obj_'.uniqid(),
+        'format' => 'csv',
+        'status' => 'completed',
+        'created_at' => now(),
+        'updated_at' => now(),
+    ]);
+}
+
+function tenantAppExportCount(): int
+{
+    return DB::connection('tenant_app_real')->table('tenant.app_exports')->count();
+}
+
+it('shows a scheduled command nothing until it scopes itself to a tenant', function () {
+    $owner = makeOwner();
+    $orgA = makeRlsOrg('A');
+    $orgB = makeRlsOrg('B');
+
+    seedAppExport($orgA->id, null, makeApp($orgA->id, $owner->id)->id);
+    seedAppExport($orgA->id, null, makeApp($orgA->id, $owner->id)->id);
+    seedAppExport($orgB->id, null, makeApp($orgB->id, $owner->id)->id);
+
+    // This is the failure mode the sweeper is built around, and the one that
+    // let a pruner report "0 pruned" for months while looking healthy: with no
+    // scope the tenant role sees NOTHING, so the work silently does not happen.
+    scopeTenant(null, null);
+    expect(tenantAppExportCount())->toBe(0);
+
+    // Scoped per tenant, the rows are there — and only that tenant's.
+    scopeTenant($orgA->id, null);
+    expect(tenantAppExportCount())->toBe(2);
+
+    scopeTenant($orgB->id, null);
+    expect(tenantAppExportCount())->toBe(1);
+});
