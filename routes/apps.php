@@ -4,6 +4,7 @@ use App\Http\Controllers\AppAccessController;
 use App\Http\Controllers\AppActionController;
 use App\Http\Controllers\AppBuilderController;
 use App\Http\Controllers\AppController;
+use App\Http\Controllers\AppExportController;
 use App\Http\Controllers\AppFileController;
 use App\Http\Controllers\AppNotificationController;
 use App\Http\Controllers\AppRuntimeAgentController;
@@ -209,6 +210,14 @@ Route::middleware([
     Route::post('/r/{app_slug}/notifications/read', [AppNotificationController::class, 'markRead'])
         ->where('app_slug', '[a-z][a-z0-9_]*')
         ->name('apps.runtime.notifications.read');
+
+    // Download an object's records. Same access context as the page, so an
+    // export can never return more than the table showed.
+    Route::get('/r/{app_slug}/objects/{object_slug}/export', AppExportController::class)
+        ->where('app_slug', '[a-z][a-z0-9_]*')
+        ->where('object_slug', '[a-z][a-z0-9_]*')
+        ->middleware('throttle:20,1')
+        ->name('apps.runtime.export');
 
     Route::get('/r/{app_slug}/files/{file_id}', [AppFileController::class, 'show'])
         ->where('app_slug', '[a-z][a-z0-9_]*')

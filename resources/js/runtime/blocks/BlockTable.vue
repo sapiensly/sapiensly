@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { Download } from '@lucide/vue';
 import DOMPurify from 'dompurify';
 import { computed, inject, ref } from 'vue';
 import RuntimeIcon from '../RuntimeIcon.vue';
@@ -33,6 +34,27 @@ function deriveSlugFromUrl(): string {
 const object = computed<ObjectDef | undefined>(() =>
     props.objects.find((o) => o.id === props.block.data_source.object_id),
 );
+
+/**
+ * Download what this table shows.
+ *
+ * Offered whenever the table is object-backed and we are on the authenticated
+ * runtime — the server re-checks the role's read permission, so this is an
+ * affordance rather than a grant, and every existing app gets it without an
+ * author having to opt in. Absent on a portal, where a read grant is a licence
+ * to browse and not to take the object in one request. The current query string
+ * rides along, so the file is the rows on screen, not the whole object.
+ */
+const exportHref = computed<string | null>(() => {
+    if (!object.value?.slug || !appSlug) return null;
+    if (typeof window === 'undefined') return null;
+    if (!window.location.pathname.startsWith('/r/')) return null;
+
+    const params = new URLSearchParams(window.location.search);
+    params.set('format', 'csv');
+
+    return `/r/${appSlug}/objects/${object.value.slug}/export?${params.toString()}`;
+});
 
 interface DataColumn {
     kind: 'data';
@@ -232,6 +254,22 @@ function richTextCell(value: unknown): string {
 
 <template>
     <div :class="['overflow-hidden rounded-sp-sm border', t.surface]">
+        <div
+            v-if="exportHref"
+            :class="['flex justify-end border-b px-3 py-1.5', t.divider]"
+        >
+            <a
+                :href="exportHref"
+                :class="[
+                    'inline-flex items-center gap-1.5 rounded-pill px-2.5 py-1 text-[11px] transition-opacity',
+                    t.textMuted,
+                ]"
+                title="Descargar CSV"
+            >
+                <Download class="size-3" />
+                CSV
+            </a>
+        </div>
         <table class="w-full border-collapse text-sm">
             <thead>
                 <tr :class="['border-b', t.divider, t.headerRow]">
