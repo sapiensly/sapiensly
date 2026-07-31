@@ -5,6 +5,7 @@ use App\Models\User;
 use App\Services\Ai\AiDefaults;
 use App\Services\AiProviderService;
 use App\Services\Manifest\AppScaffolder;
+use App\Services\Manifest\ScaffoldFailedException;
 use Laravel\Ai\Ai;
 
 function cfgBaseManifest(): array
@@ -100,4 +101,35 @@ it('reports no downgrade for the contact types the prompt offers', function () {
 
     expect($manifest['objects'][0]['fields'][0]['type'])->toBe('email')
         ->and($coercions)->toBe([]);
+});
+
+it('fails loudly when the model cannot be reached', function () {
+    // It used to answer an empty spec, which the caller saved: "app created"
+    // with no objects and no pages, the real cause buried in a log line.
+    $providers = Mockery::mock(AiProviderService::class);
+    $providers->shouldReceive('applyRuntimeConfig')->andReturnNull();
+    $providers->shouldReceive('resolveProviderForCatalogModel')->andReturnNull();
+
+    Ai::fakeAgent(ChatAgent::class, [
+        fn () => throw new RuntimeException('no API key configured'),
+    ]);
+
+    $scaffolder = new AppScaffolder(app(AiDefaults::class), $providers);
+
+    expect(fn () => $scaffolder->scaffold(cfgBaseManifest(), 'A help desk.', User::factory()->create()))
+        ->toThrow(ScaffoldFailedException::class, 'no API key configured');
+});
+
+it('still returns an empty app when the model answers with no objects', function () {
+    // A model that ANSWERS "there is nothing here" is not a failure — only an
+    // unreachable one is. Pinned so the throw above never widens into this.
+    $providers = Mockery::mock(AiProviderService::class);
+    $providers->shouldReceive('applyRuntimeConfig')->andReturnNull();
+    $providers->shouldReceive('resolveProviderForCatalogModel')->andReturnNull();
+
+    Ai::fakeAgent(ChatAgent::class, ['{"objects":[],"links":[]}']);
+
+    $scaffolder = new AppScaffolder(app(AiDefaults::class), $providers);
+
+    expect($scaffolder->scaffold(cfgBaseManifest(), 'Anything.', User::factory()->create())['objects'])->toBe([]);
 });

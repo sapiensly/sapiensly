@@ -159,6 +159,8 @@ class AppScaffolder
      * @param  array<string, mixed>  $baseManifest  the app's initial manifest (schema_version, id, slug, name, version, permissions, settings)
      * @param  list<string>  $coercions  Out: every change made to the model's spec to keep it valid. The caller is expected to SHOW these — a scaffold that quietly downgrades a field leaves the author believing they got what they asked for.
      * @return array<string, mixed>
+     *
+     * @throws ScaffoldFailedException when the model that designs the app cannot be reached
      */
     public function scaffold(array $baseManifest, string $description, ?User $user = null, array &$coercions = []): array
     {
@@ -214,7 +216,17 @@ class AppScaffolder
         } catch (\Throwable $e) {
             Log::warning('App scaffold: model call failed', ['error' => $e->getMessage()]);
 
-            return ['objects' => []];
+            // Loudly. Swallowing this returned an object-less spec, and the
+            // caller went on to save it: "app created" with nothing in it, the
+            // real cause visible only in the log. That is precisely how a
+            // missing API key on the MCP route shipped as a feature that
+            // "worked" — see the credentials comment above, which exists
+            // because of it. An app the user has to discover is empty is worse
+            // than an error that says why.
+            throw new ScaffoldFailedException(
+                'the model that designs the app could not be reached: '.$e->getMessage(),
+                previous: $e,
+            );
         }
     }
 

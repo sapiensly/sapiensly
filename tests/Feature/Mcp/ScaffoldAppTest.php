@@ -390,3 +390,19 @@ it('bills the scaffold call to the app it created', function () {
         ->and($event->organization_id)->toBe($this->user->organization_id)
         ->and($event->model)->toBe(app(AiDefaults::class)->model('flows'));
 });
+
+it('scaffold_app leaves no app behind when the model is unreachable', function () {
+    Ai::fakeAgent(ChatAgent::class, [
+        fn () => throw new RuntimeException('no API key configured'),
+    ]);
+
+    SapiensServer::actingAs($this->user)
+        ->tool(ScaffoldAppTool::class, [
+            'name' => 'Fantasma',
+            'description' => 'Mesa de ayuda con tickets.',
+        ])
+        ->assertHasErrors();
+
+    // Not an empty app the user has to discover is empty.
+    expect(App::where('user_id', $this->user->id)->where('slug', 'fantasma')->exists())->toBeFalse();
+});
