@@ -3,6 +3,7 @@
 use App\Ai\ChatAgent;
 use App\Mcp\Servers\SapiensServer;
 use App\Mcp\Tools\Build\ScaffoldAppTool;
+use App\Models\AiUsageEvent;
 use App\Models\App;
 use App\Models\Record;
 use App\Models\User;
@@ -364,4 +365,28 @@ it('scaffold_app keeps an email field the model asked for', function () {
     // email input. Storing a requester's address as free text is how a help desk
     // ends up unable to reply to its own tickets.
     expect($correo['type'])->toBe('email');
+});
+
+it('bills the scaffold call to the app it created', function () {
+    // Creating an app was the one billable model call the ledger never saw:
+    // get_build_cost answered $0 for every scaffolded app, and an org whose AI
+    // budget was spent could still scaffold, because nothing counted it.
+    Ai::fakeAgent(ChatAgent::class, [
+        '{"objects":[{"name":"Tickets","slug":"tickets","fields":['
+        .'{"name":"Asunto","slug":"asunto","type":"string"}]}],"links":[]}',
+    ]);
+
+    SapiensServer::actingAs($this->user)
+        ->tool(ScaffoldAppTool::class, [
+            'name' => 'Contabilizado',
+            'description' => 'Mesa de ayuda con tickets.',
+        ])
+        ->assertOk();
+
+    $app = App::where('user_id', $this->user->id)->where('slug', 'contabilizado')->firstOrFail();
+    $event = AiUsageEvent::where('app_id', $app->id)->where('module', 'scaffold')->first();
+
+    expect($event)->not->toBeNull()
+        ->and($event->organization_id)->toBe($this->user->organization_id)
+        ->and($event->model)->toBe(app(AiDefaults::class)->model('flows'));
 });

@@ -6,6 +6,7 @@ use App\Ai\ChatAgent;
 use App\Ai\Tools\Builder\PlanDashboardTool;
 use App\Models\User;
 use App\Services\Ai\AiDefaults;
+use App\Services\Ai\AiUsageRecorder;
 use App\Services\AiProviderService;
 use App\Services\Express\SemanticProfile;
 use App\Support\Icons\IconCatalog;
@@ -161,16 +162,18 @@ class AppScaffolder
      */
     public function scaffold(array $baseManifest, string $description, ?User $user = null, array &$coercions = []): array
     {
-        $spec = $this->extractSpec($description, $user, $coercions);
+        $appId = ($id = (string) ($baseManifest['id'] ?? '')) !== '' ? $id : null;
+        $spec = $this->extractSpec($description, $user, $coercions, $appId);
 
         return $this->assemble($baseManifest, $spec);
     }
 
     /**
      * @param  list<string>  $coercions  Out: notes for any change made to stay valid.
+     * @param  string|null  $appId  The app this spend belongs to, so it lands in get_build_cost.
      * @return array{objects: array<int, array{name: string, slug: string, fields: array<int, array<string, mixed>>}>}
      */
-    private function extractSpec(string $description, ?User $user, array &$coercions = []): array
+    private function extractSpec(string $description, ?User $user, array &$coercions = [], ?string $appId = null): array
     {
         // Load the tenant's AI provider credentials into runtime config, the same
         // as every other AI service does (ChatAiService, BuilderAiService,
@@ -189,6 +192,23 @@ class AppScaffolder
         try {
             $agent = new ChatAgent(instructions: self::SYSTEM, messages: [], tools: []);
             $response = $agent->prompt(Str::limit($description, 2000), provider: $provider, model: $model, timeout: (int) config('ai.request_timeout', 180));
+
+            // Creating an app is a billable model call like any other, and it was
+            // the only one in the product that reached nobody: not the tenant
+            // meter, not the platform ledger, not get_build_cost — which reported
+            // $0 for every scaffolded app while promising "every model call
+            // tagged with this app". An org with its AI budget spent could still
+            // scaffold, because nothing counted this. Best-effort, like every
+            // other call site: accounting must not cost the caller their app.
+            try {
+                app(AiUsageRecorder::class)->record(
+                    'scaffold', $model, $user, $user?->organization_id,
+                    $response->usage ?? null,
+                    appId: $appId,
+                );
+            } catch (\Throwable) {
+                // Usage accounting is best-effort.
+            }
 
             return $this->normalizeSpec($this->decodeJson((string) ($response->text ?? '')), $coercions);
         } catch (\Throwable $e) {

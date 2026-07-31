@@ -344,7 +344,7 @@ class AiUsageReport
     {
         return match ($module) {
             'chat' => 'Chat',
-            'builder', 'runtime_agent', 'workflow', 'express' => 'Apps',
+            'builder', 'runtime_agent', 'workflow', 'express', 'scaffold' => 'Apps',
             'landing_director' => 'Landing Director',
             'agent' => 'Agents',
             'chatbot' => 'Chatbots',
