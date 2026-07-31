@@ -157,13 +157,24 @@ class RecordExporter
 
             fputcsv($handle, array_values($columns));
 
+            $written = 0;
             foreach ($this->rows($app, $object, $manifest, $context, $query) as $data) {
                 fputcsv($handle, array_map(
                     fn (string $slug): string => $this->scalar($data[$slug] ?? null),
                     array_keys($columns),
                 ));
+
+                // Push the bytes out every page. Without this the "stream" only
+                // streams as far as PHP's output buffer: the client waits for
+                // the last row before seeing the first, an idle proxy can time
+                // the connection out, and the memory the generator was written
+                // to save accumulates in the buffer instead of the result set.
+                if (++$written % self::PAGE === 0) {
+                    $this->flush($handle);
+                }
             }
 
+            $this->flush($handle);
             fclose($handle);
         }, $filename, ['Content-Type' => 'text/csv; charset=UTF-8']);
     }
@@ -199,6 +210,23 @@ class RecordExporter
         }, $filename, [
             'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
         ]);
+    }
+
+    /**
+     * Hand the bytes written so far to the client. Guarded because a closed or
+     * absent buffer is normal under some SAPIs and test harnesses, and an
+     * export must not die over the plumbing of its own progress.
+     *
+     * @param  resource  $handle
+     */
+    private function flush(mixed $handle): void
+    {
+        fflush($handle);
+
+        if (ob_get_level() > 0) {
+            @ob_flush();
+        }
+        @flush();
     }
 
     /**

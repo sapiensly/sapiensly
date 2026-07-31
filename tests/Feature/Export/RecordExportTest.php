@@ -92,13 +92,17 @@ beforeEach(function () {
         'data' => ['cliente' => 'Globex', 'margen' => 7, 'duenio' => (string) $this->owner->id]]);
 });
 
-/** Pull the streamed body out, BOM stripped. */
+/**
+ * The streamed body, BOM stripped.
+ *
+ * Read through Laravel's own streamedContent() rather than by wrapping
+ * sendContent() in an output buffer: the exporter flushes as it writes, so a
+ * hand-rolled buffer would be emptied out from under the test — which is the
+ * behaviour we want in production and an unreadable response here.
+ */
 function csvBody($response): string
 {
-    ob_start();
-    $response->sendContent();
-
-    return ltrim((string) ob_get_clean(), "\xEF\xBB\xBF");
+    return ltrim($response->streamedContent(), "\xEF\xBB\xBF");
 }
 
 it('downloads what the owner sees, headers and all', function () {
@@ -163,4 +167,35 @@ it('flattens a multi-value cell into something a spreadsheet can hold', function
     // No JSON braces anywhere: a cell is a value a person can read.
     expect($body)->not->toContain('{')
         ->and($body)->not->toContain('[');
+});
+
+it('holds a large export in flat memory, not in one result set', function () {
+    // The guard that matters if someone ever swaps the generator for a ->get():
+    // memory here is a function of the PAGE size, never of the row count.
+    $rows = [];
+    for ($i = 0; $i < 10000; $i++) {
+        $rows[] = [
+            'id' => 'rec_'.strtolower((string) Str::ulid()),
+            'organization_id' => $this->org->id,
+            'app_id' => $this->testApp->id,
+            'object_definition_id' => $this->ids['obj'],
+            'data' => json_encode(['cliente' => "Cliente {$i}", 'margen' => $i, 'duenio' => (string) $this->owner->id]),
+            'created_at' => now(), 'updated_at' => now(),
+        ];
+        if (count($rows) === 2000) {
+            Record::insert($rows);
+            $rows = [];
+        }
+    }
+    Record::insert($rows);
+
+    $before = memory_get_peak_usage(true);
+    $body = csvBody($this->actingAs($this->owner)->get('/r/ventas/objects/pedidos/export'));
+    $grew = (memory_get_peak_usage(true) - $before) / 1048576;
+
+    // 10k rows out; the test itself holds the whole body, so the ceiling is
+    // generous — a non-streaming implementation blows past it by an order of
+    // magnitude.
+    expect(substr_count($body, "\n"))->toBeGreaterThan(10000)
+        ->and($grew)->toBeLessThan(32);
 });
