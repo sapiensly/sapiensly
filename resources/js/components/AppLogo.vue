@@ -32,9 +32,12 @@ const wordmarkClass = computed(() =>
             class="size-7 fill-transparent text-white dark:text-black"
         />
     </div>
+    <!-- The mark is filled white on light chrome and black on dark, and the
+         dark glyph reads a touch tighter against the wordmark — so the text
+         gets 5px of breathing room back in dark mode only. -->
     <div
         v-if="!collapsed"
-        class="ml-1 grid flex-1 text-left text-sm"
+        class="ml-1 grid flex-1 text-left text-sm dark:pl-[5px]"
         :class="wordmarkClass"
         :style="{ fontFamily: 'Montserrat, sans-serif' }"
     >

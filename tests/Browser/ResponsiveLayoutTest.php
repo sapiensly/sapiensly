@@ -615,7 +615,9 @@ it('does not offer the workflow editor on a phone', function () {
     ], $user);
 
     // A node canvas needs a pointer; the tab is withdrawn rather than left to
-    // open something unusable.
+    // open something unusable. Counted with the options menu OPEN — the header
+    // collapses behind it at every width, so a closed menu would report 0 on
+    // both devices and the test would pass without proving anything.
     $tabCount = <<<'JS'
     function () {
         return String([...document.querySelectorAll('button')]
@@ -624,8 +626,105 @@ it('does not offer the workflow editor on a phone', function () {
     }
     JS;
 
-    visit("/apps/{$app->id}/builder")->on()->iPhone15()->assertScript($tabCount, '0');
-    visit("/apps/{$app->id}/builder")->on()->macbookAir()->assertScript($tabCount, '1');
+    visit("/apps/{$app->id}/builder")->on()->iPhone15()
+        ->click(builderLabel('apps.builder.header_menu'))
+        ->assertScript($tabCount, '0');
+    visit("/apps/{$app->id}/builder")->on()->macbookAir()
+        ->click(builderLabel('apps.builder.header_menu'))
+        ->assertScript($tabCount, '1');
+});
+
+/**
+ * The header row is settings — pickers, panels and view switches — and it read
+ * as eleven equal pills on a desktop, with the one control that DOES something
+ * ("Run") the last of them. It collapses behind the options menu at every
+ * width; Run is the single exception and stays on the header.
+ */
+it('keeps only Run on the desktop header and hides the rest behind the options menu', function () {
+    $this->seed(RolesAndPermissionsSeeder::class);
+    $user = mcpMember($org = mcpOrg());
+    $this->actingAs($user);
+
+    $app = App::factory()->create(['user_id' => $user->id, 'organization_id' => $org->id]);
+    app(AppManifestService::class)->createVersion($app, [
+        'schema_version' => '1.0.0',
+        'id' => $app->id, 'slug' => 'collapsed', 'name' => 'Collapsed', 'version' => 1,
+        'objects' => [], 'pages' => [],
+        'permissions' => ['roles' => [['id' => 'rol_'.strtolower((string) Str::ulid()), 'slug' => 'admin', 'name' => 'Admin']]],
+    ], $user);
+
+    // Is a header control on show? Measured from the box, not inferred from
+    // classes — `hidden` and "scrolled off behind a panel" are not the same.
+    $onShow = fn (string $label): string => <<<JS
+    function () {
+        return [...document.querySelectorAll('header button, header a')]
+            .filter(el => el.getBoundingClientRect().width > 0)
+            .some(el => (el.textContent || '').includes({$label}))
+            ? 'visible' : 'hidden';
+    }
+    JS;
+
+    $run = json_encode(builderLabel('apps.builder.run'));
+    $layers = json_encode(builderLabel('apps.builder.layers'));
+    $apiKeys = json_encode(builderLabel('apps.builder.api.button'));
+
+    visit("/apps/{$app->id}/builder")->on()->macbookAir()
+        ->assertNoJavaScriptErrors()
+        // Closed: Run is on the header, the settings pills are not.
+        ->assertScript($onShow($run), 'visible')
+        ->assertScript($onShow($layers), 'hidden')
+        ->assertScript($onShow($apiKeys), 'hidden')
+        // Open: the whole row is reachable, one click deep, as a menu — items
+        // stacked on one left edge, not a second wall of pills somewhere else.
+        ->click(builderLabel('apps.builder.header_menu'))
+        ->assertScript($onShow($layers), 'visible')
+        ->assertScript($onShow($apiKeys), 'visible')
+        ->assertScript($onShow($run), 'visible')
+        ->assertScript(<<<'JS'
+        function () {
+            const items = [...document.querySelectorAll('[role="menu"] [role="menuitem"]')];
+            if (items.length < 4) return 'not a menu';
+            const lefts = new Set(items.map(el => Math.round(el.getBoundingClientRect().left)));
+            return lefts.size === 1 ? 'stacked' : 'scattered';
+        }
+        JS, 'stacked');
+});
+
+/**
+ * A landing has no Run — its surface is the public /l URL — so the seat next to
+ * the options menu carries publishing instead. Burying the primary act of a
+ * landing one click deep is exactly what the collapse must not do.
+ */
+it('keeps publish on the header of a landing', function () {
+    $this->seed(RolesAndPermissionsSeeder::class);
+    $user = mcpMember($org = mcpOrg());
+    $this->actingAs($user);
+
+    $app = App::factory()->create(['user_id' => $user->id, 'organization_id' => $org->id]);
+    app(AppManifestService::class)->createVersion($app, [
+        'schema_version' => '1.0.0',
+        'id' => $app->id, 'slug' => 'unshipped', 'name' => 'Unshipped', 'version' => 1,
+        'objects' => [], 'pages' => [],
+        'permissions' => ['roles' => [['id' => 'rol_'.strtolower((string) Str::ulid()), 'slug' => 'admin', 'name' => 'Admin']]],
+        'settings' => ['surface' => 'landing'],
+    ], $user);
+
+    $onShow = fn (string $label): string => <<<JS
+    function () {
+        return [...document.querySelectorAll('header button, header a')]
+            .filter(el => el.getBoundingClientRect().width > 0)
+            .some(el => (el.textContent || '').includes({$label}))
+            ? 'visible' : 'hidden';
+    }
+    JS;
+
+    visit("/apps/{$app->id}/builder")->on()->macbookAir()
+        ->assertNoJavaScriptErrors()
+        // Menu closed, and publish is still right there.
+        ->assertScript($onShow(json_encode(builderLabel('apps.builder.publish_landing'))), 'visible')
+        ->assertScript($onShow(json_encode(builderLabel('apps.builder.layers'))), 'hidden')
+        // Run belongs to app surfaces, not to a landing.
+        ->assertScript($onShow(json_encode(builderLabel('apps.builder.run'))), 'hidden');
 });
 
 it('hides the fine-tune toggle on a phone and keeps it on desktop', function () {

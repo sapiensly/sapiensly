@@ -42,21 +42,6 @@ function landingWithLinks(): string
     return $app->id;
 }
 
-/**
- * The UI renders in the request locale, so the labels the test clicks have to
- * come from the same dictionary the page does.
- */
-function builderLabel(string $key): string
-{
-    $file = resource_path('js/locales/'.app()->getLocale().'.json');
-    $messages = json_decode(
-        (string) file_get_contents(file_exists($file) ? $file : resource_path('js/locales/en.json')),
-        true,
-    );
-
-    return $messages[$key] ?? $key;
-}
-
 it('lists every link grouped by destination, broken ones first', function () {
     $this->seed(RolesAndPermissionsSeeder::class);
     $appId = landingWithLinks();
@@ -80,6 +65,9 @@ it('lists every link grouped by destination, broken ones first', function () {
 
     visit("/apps/{$appId}/builder")->on()->macbookAir()
         ->assertNoJavaScriptErrors()
+        // The header's controls are collapsed behind the options menu at every
+        // width now, so fine-tune is one click deeper than it used to be.
+        ->click(builderLabel('apps.builder.header_menu'))
         ->click(builderLabel('apps.builder.panel_mode_manual'))
         ->click(builderLabel('apps.builder.links_button'))
         ->assertSee(builderLabel('apps.builder.links_title'))
@@ -100,6 +88,9 @@ it('warns that a <button> cannot navigate on a landing', function () {
     JS;
 
     visit("/apps/{$appId}/builder")->on()->macbookAir()
+        // The header's controls are collapsed behind the options menu at every
+        // width now, so fine-tune is one click deeper than it used to be.
+        ->click(builderLabel('apps.builder.header_menu'))
         ->click(builderLabel('apps.builder.panel_mode_manual'))
         ->click(builderLabel('apps.builder.links_button'))
         ->assertScript($warning, 'warned');
@@ -143,6 +134,9 @@ it('retargets a whole group from the panel', function () {
     JS;
 
     visit("/apps/{$appId}/builder")->on()->macbookAir()
+        // The header's controls are collapsed behind the options menu at every
+        // width now, so fine-tune is one click deeper than it used to be.
+        ->click(builderLabel('apps.builder.header_menu'))
         ->click(builderLabel('apps.builder.panel_mode_manual'))
         ->click(builderLabel('apps.builder.links_button'))
         ->assertScript($openEditor, 'opened')

@@ -114,6 +114,22 @@ function mcpMember(
     return $user;
 }
 
+/**
+ * A UI label as the browser will actually render it. The pages render in the
+ * request locale, so a test that clicks a hard-coded English string passes or
+ * fails on the machine's locale rather than on the behaviour under test.
+ */
+function builderLabel(string $key): string
+{
+    $file = resource_path('js/locales/'.app()->getLocale().'.json');
+    $messages = json_decode(
+        (string) file_get_contents(file_exists($file) ? $file : resource_path('js/locales/en.json')),
+        true,
+    );
+
+    return $messages[$key] ?? $key;
+}
+
 function mcpToken(Organization $org, User $user, array $attrs = []): string
 {
     $plain = McpAccessToken::generateToken();

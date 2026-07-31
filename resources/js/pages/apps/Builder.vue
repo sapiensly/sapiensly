@@ -595,8 +595,45 @@ function setPaletteMode(mode: string) {
 }
 
 const panelMode = ref<'chat' | 'manual'>('chat');
-// Collapsed by default: on a phone the header's pills are four rows of chrome.
+// Collapsed by default at EVERY width: the header's pills are a settings row,
+// not a task bar. On a phone they were four lines of chrome; on a desktop they
+// were eleven pills competing with the one control that is actually used ("Run").
+// Everything lives behind this one control now; only Run stays outside it.
 const headerMenuOpen = ref(false);
+const headerMenuEl = ref<HTMLElement | null>(null);
+
+// One row shape for every entry in that menu: it reads as a menu now, not as a
+// wall of pills in a box.
+const MENU_ITEM =
+    'flex w-full items-center gap-2.5 rounded-xs px-3 py-2 text-left text-xs transition-colors';
+const MENU_ITEM_IDLE = 'text-ink-muted hover:bg-surface hover:text-ink';
+const MENU_ITEM_ACTIVE = 'bg-accent-blue/10 text-accent-blue';
+
+/** Run a menu action and close the menu, the way a menu is expected to behave. */
+function runFromMenu(action: () => void) {
+    action();
+    headerMenuOpen.value = false;
+}
+
+/**
+ * Close the options menu on a click anywhere outside it — except inside a
+ * popper the menu itself opened (the palette picker teleports its content to
+ * the body, so a plain `contains` check would read as "outside" and close the
+ * menu the moment the user picked a palette).
+ */
+function onDocumentPointerDown(event: Event) {
+    if (!headerMenuOpen.value) return;
+    const target = event.target as Element | null;
+    if (!target) return;
+    if (headerMenuEl.value?.contains(target)) return;
+    if (
+        typeof target.closest === 'function' &&
+        target.closest('[data-reka-popper-content-wrapper],[role="menu"]')
+    ) {
+        return;
+    }
+    headerMenuOpen.value = false;
+}
 
 // ---- Manual adjust: selection, drawer, on-grid resize ----------------------
 const selectedBlockId = ref<string | null>(null);
@@ -1248,6 +1285,13 @@ async function toggleFullscreen(panel: 'chat' | 'work') {
 }
 
 function onWindowKeydown(event: KeyboardEvent) {
+    if (
+        event.key === 'Escape' &&
+        headerMenuOpen.value &&
+        !slashMenuOpen.value
+    ) {
+        headerMenuOpen.value = false;
+    }
     if (event.key === 'Escape' && fullscreenPanel.value !== null) {
         // Don't steal Escape from the slash menu — it has its own handler
         // that runs before this one (onComposerKeydown intercepts in the
@@ -2042,6 +2086,12 @@ const viewTabs = computed(() => {
         ? tabs
         : tabs.filter((m) => m.id !== 'workflows');
 });
+
+// The view tabs live inside the options menu now, so the trigger carries the
+// active one: otherwise "which pane am I looking at?" costs a click.
+const activeViewLabel = computed(
+    () => viewTabs.value.find((m) => m.id === viewMode.value)?.label ?? '',
+);
 watch(previewIsLanding, (landing) => {
     if (landing && !viewTabs.value.some((m) => m.id === viewMode.value)) {
         viewMode.value = 'preview';
@@ -3580,6 +3630,7 @@ onMounted(() => {
     subscribe();
     nextTick(() => scrollToBottom('instant'));
     window.addEventListener('keydown', onWindowKeydown);
+    document.addEventListener('pointerdown', onDocumentPointerDown);
     document.addEventListener('fullscreenchange', onNativeFullscreenChange);
 
     // Track the lg breakpoint (Tailwind's 1024px) to decide whether the
@@ -3606,6 +3657,7 @@ onMounted(() => {
 onUnmounted(() => {
     unsubscribe();
     window.removeEventListener('keydown', onWindowKeydown);
+    document.removeEventListener('pointerdown', onDocumentPointerDown);
     document.removeEventListener('fullscreenchange', onNativeFullscreenChange);
     if (mediaQuery) {
         mediaQuery.removeEventListener('change', handleMediaChange);
@@ -3863,290 +3915,79 @@ function statusTone(status: Message['status']): string {
                     </div>
                 </div>
 
-                <!-- On a phone this row wraps into four lines of pills and
-                     eats the screen before the chat starts. Below `lg` it
-                     collapses behind one control, closed by default. The row
-                     itself is untouched: these are pickers and panels with their
-                     own state, and re-authoring them as menu items would risk
-                     real behaviour for a presentation change. -->
-                <button
-                    type="button"
-                    @click="headerMenuOpen = !headerMenuOpen"
-                    :aria-expanded="headerMenuOpen"
-                    class="inline-flex items-center gap-1.5 rounded-pill border border-medium bg-surface px-3 py-1.5 text-xs text-ink-muted transition-colors hover:border-strong hover:text-ink lg:hidden"
-                >
-                    <SlidersHorizontal class="size-3.5" />
-                    {{ t('apps.builder.header_menu') }}
-                    <ChevronDown
-                        class="size-3.5 transition-transform"
-                        :class="headerMenuOpen && 'rotate-180'"
-                    />
-                </button>
-
+                <!-- The header used to carry the settings themselves: eleven
+                     pills that wrapped into four lines on a phone and competed
+                     with each other on a desktop. They are a menu now — closed
+                     by default at every width, one control per row. Only Run
+                     stays on the header: it is the one that DOES something.
+                     The two rows that own a form (accent swatches, custom
+                     domain) expand inside the menu instead of closing it. -->
                 <div
-                    :class="[
-                        'flex-wrap items-center gap-2',
-                        headerMenuOpen ? 'flex' : 'hidden',
-                        'w-full justify-start lg:flex lg:w-auto lg:justify-end',
-                    ]"
+                    ref="headerMenuEl"
+                    class="relative flex flex-wrap items-center justify-end gap-2"
                 >
-                    <!-- Dashboard toolbar: palette source + panel mode + Run. -->
-                    <template v-if="app.kind === 'dashboard'">
-                        <DropdownMenu>
-                            <DropdownMenuTrigger as-child>
-                                <button
-                                    type="button"
-                                    class="inline-flex items-center gap-1.5 rounded-pill border border-medium bg-surface px-3 py-1.5 text-xs text-ink-muted transition-colors hover:text-ink"
-                                >
-                                    <Palette class="size-3.5" />
-                                    {{ t('apps.builder.palette_button') }}
-                                    <span class="text-[10px] opacity-60">{{
-                                        activePaletteModeLabel
-                                    }}</span>
-                                </button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                                <DropdownMenuItem
-                                    v-for="m in PALETTE_MODES"
-                                    :key="m.id"
-                                    class="flex items-center justify-between gap-3"
-                                    @select="setPaletteMode(m.id)"
-                                >
-                                    {{ t(m.labelKey) }}
-                                    <Check
-                                        v-if="paletteMode === m.id"
-                                        class="size-3.5 text-accent-blue"
-                                    />
-                                </DropdownMenuItem>
-                            </DropdownMenuContent>
-                        </DropdownMenu>
-
-                        <span class="h-5 w-px bg-current opacity-15" />
-
-                        <div
-                            class="inline-flex items-center rounded-pill border border-medium bg-surface p-0.5"
-                        >
-                            <button
-                                v-for="m in [
-                                    {
-                                        id: 'chat',
-                                        label: t(
-                                            'apps.builder.panel_mode_chat',
-                                        ),
-                                    },
-                                    {
-                                        id: 'manual',
-                                        label: t(
-                                            'apps.builder.panel_mode_manual',
-                                        ),
-                                    },
-                                ] as const"
-                                :key="m.id"
-                                type="button"
-                                @click="panelMode = m.id"
-                                :class="[
-                                    'rounded-pill px-3 py-1 text-xs transition-colors',
-                                    panelMode === m.id
-                                        ? 'bg-accent-blue/15 text-accent-blue'
-                                        : 'text-ink-muted hover:text-ink',
-                                ]"
-                            >
-                                {{ m.label }}
-                            </button>
-                        </div>
-                    </template>
-
-                    <!-- Accent colour: brand colour for buttons / links / highlights.
-                         Collapsed to just the label until clicked; clicking it
-                         again closes the swatch row. -->
-                    <div
-                        v-if="
-                            viewMode === 'preview' && app.kind !== 'dashboard'
-                        "
-                        class="inline-flex items-center gap-1 rounded-pill border border-medium bg-surface px-2 py-1"
-                    >
-                        <button
-                            type="button"
-                            class="flex items-center gap-1.5 rounded-pill px-0.5 text-[11px] text-ink-muted transition-colors hover:text-ink"
-                            :title="
-                                accentOpen
-                                    ? t('apps.builder.accent_close')
-                                    : t('apps.builder.accent_hint')
-                            "
-                            :aria-expanded="accentOpen"
-                            @click="accentOpen = !accentOpen"
-                        >
-                            <span
-                                class="size-3 rounded-full border border-soft"
-                                :style="{
-                                    background: effectiveAccent ?? '#0096ff',
-                                }"
-                            />
-                            {{ t('apps.builder.accent_label') }}
-                        </button>
-                        <template v-if="accentOpen">
-                            <button
-                                v-for="c in ACCENT_PRESETS"
-                                :key="c"
-                                type="button"
-                                class="size-4 rounded-full border border-soft transition-transform hover:scale-110"
-                                :class="
-                                    effectiveAccent?.toLowerCase() === c
-                                        ? 'ring-2 ring-ink ring-offset-1 ring-offset-navy'
-                                        : ''
-                                "
-                                :style="{ background: c }"
-                                :title="c"
-                                @click="setAccent(c)"
-                            />
-                            <label
-                                class="ml-0.5 size-5 cursor-pointer rounded-full border border-soft"
-                                :style="{
-                                    background: effectiveAccent ?? '#0096ff',
-                                }"
-                                :title="
-                                    t('apps.builder.accent_custom') +
-                                    ' ' +
-                                    (effectiveAccent ?? '#0096ff')
-                                "
-                            >
-                                <input
-                                    type="color"
-                                    class="size-0 opacity-0"
-                                    :value="effectiveAccent ?? '#0096ff'"
-                                    @input="
-                                        setAccent(
-                                            ($event.target as HTMLInputElement)
-                                                .value,
-                                        )
-                                    "
-                                />
-                            </label>
-                        </template>
-                    </div>
-
-                    <!-- Adopt the organization Brandbook in one click. -->
                     <button
-                        v-if="
-                            app.kind !== 'dashboard' &&
-                            viewMode === 'preview' &&
-                            hasOrgBrand
-                        "
                         type="button"
-                        class="inline-flex items-center gap-1.5 rounded-pill border border-medium bg-surface px-3 py-1.5 text-xs text-ink-muted transition-colors hover:border-accent-blue/40 hover:bg-accent-blue/10 hover:text-accent-blue"
-                        :title="t('apps.builder.use_brand_hint')"
-                        @click="useOrgBrand"
-                    >
-                        <Sparkles class="size-3.5" />
-                        {{ t('apps.builder.use_brand') }}
-                    </button>
-
-                    <!-- Layers: every part of the app, one click away for consultation. -->
-                    <button
-                        v-if="app.kind !== 'dashboard'"
-                        type="button"
+                        @click="headerMenuOpen = !headerMenuOpen"
+                        :aria-expanded="headerMenuOpen"
+                        aria-haspopup="menu"
                         class="inline-flex items-center gap-1.5 rounded-pill border border-medium bg-surface px-3 py-1.5 text-xs text-ink-muted transition-colors hover:border-strong hover:text-ink"
-                        @click="layersOpen = true"
                     >
-                        <Layers class="size-3.5" />
-                        {{ t('apps.builder.layers') }}
+                        <SlidersHorizontal class="size-3.5" />
+                        {{ t('apps.builder.header_menu') }}
+                        <!-- The trigger carries the state the row used to show at
+                             a glance: which pane you are on, or (on a dashboard,
+                             which has no panes) which palette is applied. -->
+                        <span
+                            v-if="app.kind === 'dashboard'"
+                            class="text-[10px] opacity-60"
+                            >{{ activePaletteModeLabel }}</span
+                        >
+                        <span
+                            v-else-if="activeViewLabel"
+                            class="text-[10px] opacity-60"
+                            >{{ activeViewLabel }}</span
+                        >
+                        <ChevronDown
+                            class="size-3.5 transition-transform"
+                            :class="headerMenuOpen && 'rotate-180'"
+                        />
                     </button>
 
-                    <div
-                        v-if="app.kind !== 'dashboard'"
-                        class="inline-flex items-center rounded-pill border border-medium bg-surface p-0.5"
+                    <!-- Run the app in its real runtime, in a fresh tab. Uses the
+                         LIVE slug (appMeta), not the page prop: the first prompt
+                         renames the app and changes its slug, so `app.slug` from
+                         the initial props points at the old (untitled) slug and
+                         404s until a reload. Hidden for landings — their real
+                         surface is the public /l URL (the "En vivo" chip). -->
+                    <a
+                        v-if="!previewIsLanding"
+                        :href="`/r/${appMeta.slug}`"
+                        target="_blank"
+                        rel="noopener"
+                        class="inline-flex items-center gap-1.5 rounded-pill border border-accent-blue/30 bg-accent-blue/10 px-3 py-1.5 text-xs font-medium text-accent-blue transition-colors hover:bg-accent-blue/20"
                     >
-                        <button
-                            v-for="m in viewTabs"
-                            :key="m.id"
-                            type="button"
-                            @click="viewMode = m.id"
-                            :class="[
-                                'inline-flex items-center gap-1.5 rounded-pill px-2.5 py-1 text-xs transition-colors sm:px-3',
-                                viewMode === m.id
-                                    ? 'bg-accent-blue/15 text-accent-blue'
-                                    : 'text-ink-muted hover:text-ink',
-                            ]"
-                        >
-                            <component :is="m.icon" class="size-3.5" />
-                            <!-- Five labelled tabs need 699px; the icons alone
-                                 need ~170. The label returns as soon as there
-                                 is room for it. -->
-                            <span class="hidden sm:inline">{{ m.label }}</span>
-                        </button>
-                    </div>
+                        <Play class="size-3.5" />
+                        {{ t('apps.builder.run') }}
+                    </a>
 
-                    <!-- Landing publish controls: publish to /l/{slug}, then a
-                         live-URL chip + unpublish. Same server path as the MCP
-                         publish_landing tool. -->
-                    <template v-if="previewIsLanding">
-                        <!-- Fine-tuning: flip between the AI builder (chat) and
-                             manual click-and-edit on the landing sections. -->
-                        <!-- Hidden below lg: fine-tune IS the drag-and-drop
-                             canvas, and a finger on a 390px viewport cannot
-                             work it. The rest of the builder is responsive; this
-                             one mode stays a desktop tool, and says so (see the
-                             notice on the pane) if a session lands in it anyway. -->
-                        <div
-                            v-if="viewMode === 'preview'"
-                            class="hidden items-center rounded-pill border border-medium bg-surface p-0.5 lg:inline-flex"
+                    <!-- A landing has no Run — its real surface is the public /l
+                         URL — so the same seat carries publishing: the primary
+                         act on a landing, and the one thing you look for on that
+                         header. Unpublish and the custom domain stay in the menu
+                         with the rest of the settings. -->
+                    <template v-else>
+                        <a
+                            v-if="landingPublicSlug"
+                            :href="`/l/${landingPublicSlug}`"
+                            target="_blank"
+                            rel="noopener"
+                            class="inline-flex items-center gap-1.5 rounded-pill border border-accent-blue/30 bg-accent-blue/10 px-3 py-1.5 text-xs font-medium text-accent-blue transition-colors hover:bg-accent-blue/20"
+                            :title="`/l/${landingPublicSlug}`"
                         >
-                            <button
-                                v-for="m in [
-                                    {
-                                        id: 'chat',
-                                        label: t(
-                                            'apps.builder.panel_mode_chat',
-                                        ),
-                                    },
-                                    {
-                                        id: 'manual',
-                                        label: t(
-                                            'apps.builder.panel_mode_manual',
-                                        ),
-                                    },
-                                ] as const"
-                                :key="m.id"
-                                type="button"
-                                @click="panelMode = m.id"
-                                :class="[
-                                    'inline-flex items-center gap-1 rounded-pill px-3 py-1 text-xs transition-colors',
-                                    panelMode === m.id
-                                        ? 'bg-accent-blue/15 text-accent-blue'
-                                        : 'text-ink-muted hover:text-ink',
-                                ]"
-                            >
-                                <SlidersHorizontal
-                                    v-if="m.id === 'manual'"
-                                    class="size-3"
-                                />
-                                {{ m.label }}
-                            </button>
-                        </div>
-                        <span
-                            v-if="viewMode === 'preview'"
-                            class="hidden h-5 w-px bg-current opacity-15 lg:inline-block"
-                        />
-                        <template v-if="landingPublicSlug">
-                            <a
-                                :href="`/l/${landingPublicSlug}`"
-                                target="_blank"
-                                rel="noopener"
-                                class="inline-flex items-center gap-1.5 rounded-pill border border-accent-blue/30 bg-accent-blue/10 px-3 py-1.5 text-xs font-medium text-accent-blue transition-colors hover:bg-accent-blue/20"
-                                :title="`/l/${landingPublicSlug}`"
-                            >
-                                <Rocket class="size-3.5" />
-                                {{ t('apps.builder.landing_live') }}
-                            </a>
-                            <button
-                                type="button"
-                                :disabled="publishBusy"
-                                class="inline-flex items-center rounded-pill border border-medium bg-surface px-3 py-1.5 text-xs text-ink-muted transition-colors hover:text-ink disabled:opacity-50"
-                                @click="unpublishLanding"
-                            >
-                                {{ t('apps.builder.unpublish_landing') }}
-                            </button>
-                        </template>
+                            <Rocket class="size-3.5" />
+                            {{ t('apps.builder.landing_live') }}
+                        </a>
                         <button
                             v-else
                             type="button"
@@ -4158,244 +3999,568 @@ function statusTone(status: Message['status']): string {
                             <Rocket class="size-3.5" />
                             {{ t('apps.builder.publish_landing') }}
                         </button>
-
-                        <!-- Custom domain: connect the tenant's own hostname.
-                             Only meaningful once the landing is published. -->
-                        <div v-if="landingPublicSlug" class="relative">
-                            <button
-                                type="button"
-                                class="inline-flex items-center gap-1.5 rounded-pill border border-medium bg-surface px-3 py-1.5 text-xs text-ink-muted transition-colors hover:text-ink"
-                                :aria-expanded="domainPanelOpen"
-                                @click="domainPanelOpen = !domainPanelOpen"
-                            >
-                                <Link2 class="size-3.5" />
-                                {{
-                                    landingDomain
-                                        ? landingDomain.hostname
-                                        : t('apps.builder.domain_button')
-                                }}
-                                <span
-                                    v-if="landingDomain"
-                                    :class="[
-                                        'rounded-pill px-1.5 py-0.5 text-[10px] uppercase',
-                                        landingDomain.status === 'active'
-                                            ? 'bg-accent-blue/15 text-accent-blue'
-                                            : 'bg-surface-hover text-ink-subtle',
-                                    ]"
-                                >
-                                    {{
-                                        landingDomain.status === 'active'
-                                            ? t('apps.builder.domain_active')
-                                            : t('apps.builder.domain_pending')
-                                    }}
-                                </span>
-                            </button>
-
-                            <div
-                                v-if="domainPanelOpen"
-                                class="absolute right-0 z-50 mt-2 w-80 rounded-sp-sm border border-medium bg-navy p-4 shadow-xl"
-                            >
-                                <p
-                                    class="mb-2 text-xs font-semibold tracking-wide text-ink uppercase"
-                                >
-                                    {{ t('apps.builder.domain_title') }}
-                                </p>
-
-                                <template v-if="!landingDomain">
-                                    <input
-                                        v-model="domainHostnameInput"
-                                        type="text"
-                                        :placeholder="
-                                            t('apps.builder.domain_placeholder')
-                                        "
-                                        class="mb-2 w-full rounded-xs border border-medium bg-surface px-2.5 py-1.5 text-xs text-ink"
-                                        @keydown.enter.prevent="
-                                            connectLandingDomain
-                                        "
-                                    />
-                                    <button
-                                        type="button"
-                                        :disabled="
-                                            domainBusy ||
-                                            !domainHostnameInput.trim()
-                                        "
-                                        class="w-full rounded-pill border border-accent-blue/30 bg-accent-blue/10 px-3 py-1.5 text-xs font-medium text-accent-blue transition-colors hover:bg-accent-blue/20 disabled:opacity-50"
-                                        @click="connectLandingDomain"
-                                    >
-                                        {{ t('apps.builder.domain_connect') }}
-                                    </button>
-                                </template>
-
-                                <template v-else>
-                                    <p class="mb-1 text-xs text-ink">
-                                        {{ landingDomain.hostname }}
-                                    </p>
-                                    <p
-                                        v-if="
-                                            landingDomain.status !== 'active' &&
-                                            landingDomain.cname_target
-                                        "
-                                        class="mb-2 rounded-xs bg-surface px-2 py-1.5 font-mono text-[11px] text-ink-muted"
-                                    >
-                                        CNAME: {{ landingDomain.hostname }} →
-                                        {{ landingDomain.cname_target }}
-                                    </p>
-                                    <ul
-                                        v-if="Object.keys(domainChecks).length"
-                                        class="mb-2 space-y-1 text-[11px] text-ink-muted"
-                                    >
-                                        <li
-                                            v-for="(msg, check) in domainChecks"
-                                            :key="check"
-                                        >
-                                            <b class="uppercase">{{ check }}</b
-                                            >: {{ msg }}
-                                        </li>
-                                    </ul>
-                                    <div class="flex gap-2">
-                                        <button
-                                            v-if="
-                                                landingDomain.status !==
-                                                'active'
-                                            "
-                                            type="button"
-                                            :disabled="domainBusy"
-                                            class="flex-1 rounded-pill border border-accent-blue/30 bg-accent-blue/10 px-3 py-1.5 text-xs font-medium text-accent-blue transition-colors hover:bg-accent-blue/20 disabled:opacity-50"
-                                            @click="verifyLandingDomain"
-                                        >
-                                            {{
-                                                t('apps.builder.domain_verify')
-                                            }}
-                                        </button>
-                                        <a
-                                            v-else
-                                            :href="`https://${landingDomain.hostname}`"
-                                            target="_blank"
-                                            rel="noopener"
-                                            class="flex-1 rounded-pill border border-accent-blue/30 bg-accent-blue/10 px-3 py-1.5 text-center text-xs font-medium text-accent-blue transition-colors hover:bg-accent-blue/20"
-                                        >
-                                            {{ t('apps.builder.landing_live') }}
-                                            →
-                                        </a>
-                                        <button
-                                            type="button"
-                                            :disabled="domainBusy"
-                                            class="rounded-pill border border-medium bg-surface px-3 py-1.5 text-xs text-ink-muted transition-colors hover:text-ink disabled:opacity-50"
-                                            @click="disconnectLandingDomain"
-                                        >
-                                            {{
-                                                t(
-                                                    'apps.builder.domain_disconnect',
-                                                )
-                                            }}
-                                        </button>
-                                    </div>
-                                </template>
-
-                                <p
-                                    v-if="domainError"
-                                    class="mt-2 text-[11px] text-red-400"
-                                >
-                                    {{ domainError }}
-                                </p>
-                            </div>
-                        </div>
                     </template>
 
-                    <!-- Public PORTAL controls: shown only once the manifest
-                         actually declares one, so the button to put tenant data
-                         on the internet never appears by accident. The chip
-                         states what a visitor gets — the role, read vs write,
-                         and how many pages they reach (a portal is
-                         deny-by-default, so zero is a real and silent outcome). -->
-                    <template v-else-if="portal">
-                        <span
-                            class="hidden h-5 w-px bg-current opacity-15 lg:inline-block"
-                        />
-                        <template v-if="portalPublicSlug">
-                            <a
-                                :href="`/a/${portalPublicSlug}`"
-                                target="_blank"
-                                rel="noopener"
-                                class="inline-flex items-center gap-1.5 rounded-pill border border-accent-blue/30 bg-accent-blue/10 px-3 py-1.5 text-xs font-medium text-accent-blue transition-colors hover:bg-accent-blue/20"
-                                :title="`/a/${portalPublicSlug}`"
+                    <!-- The options menu itself: a plain vertical menu, one
+                         action per row, grouped by hairlines. It replaced a
+                         wrapped panel of the same pills, which was the header's
+                         crowding moved somewhere else rather than fixed. -->
+                    <div
+                        v-if="headerMenuOpen"
+                        role="menu"
+                        class="absolute top-full right-0 z-50 mt-2 w-64 max-w-[calc(100vw-1.5rem)] rounded-sp-sm border border-medium bg-navy p-1 shadow-xl"
+                    >
+                        <!-- Dashboard: palette source, then the panel mode. -->
+                        <template v-if="app.kind === 'dashboard'">
+                            <p
+                                class="px-3 pt-2 pb-1 text-[10px] font-semibold tracking-wider text-ink-subtle uppercase"
                             >
-                                <Rocket class="size-3.5" />
-                                {{ t('apps.builder.portal_live') }}
-                            </a>
+                                {{ t('apps.builder.palette_button') }}
+                            </p>
                             <button
+                                v-for="m in PALETTE_MODES"
+                                :key="m.id"
                                 type="button"
-                                :disabled="publishBusy"
-                                class="inline-flex items-center rounded-pill border border-medium bg-surface px-3 py-1.5 text-xs text-ink-muted transition-colors hover:text-ink disabled:opacity-50"
-                                @click="unpublishPortal"
+                                role="menuitem"
+                                :class="[
+                                    MENU_ITEM,
+                                    paletteMode === m.id
+                                        ? MENU_ITEM_ACTIVE
+                                        : MENU_ITEM_IDLE,
+                                ]"
+                                @click="runFromMenu(() => setPaletteMode(m.id))"
                             >
-                                {{ t('apps.builder.unpublish_portal') }}
+                                <Palette class="size-3.5 shrink-0" />
+                                {{ t(m.labelKey) }}
+                                <Check
+                                    v-if="paletteMode === m.id"
+                                    class="ml-auto size-3.5"
+                                />
+                            </button>
+
+                            <div class="my-1 h-px bg-current opacity-10" />
+
+                            <button
+                                v-for="m in [
+                                    {
+                                        id: 'chat',
+                                        label: t(
+                                            'apps.builder.panel_mode_chat',
+                                        ),
+                                    },
+                                    {
+                                        id: 'manual',
+                                        label: t(
+                                            'apps.builder.panel_mode_manual',
+                                        ),
+                                    },
+                                ] as const"
+                                :key="m.id"
+                                type="button"
+                                role="menuitem"
+                                :class="[
+                                    MENU_ITEM,
+                                    panelMode === m.id
+                                        ? MENU_ITEM_ACTIVE
+                                        : MENU_ITEM_IDLE,
+                                ]"
+                                @click="runFromMenu(() => (panelMode = m.id))"
+                            >
+                                <SlidersHorizontal class="size-3.5 shrink-0" />
+                                {{ m.label }}
+                                <Check
+                                    v-if="panelMode === m.id"
+                                    class="ml-auto size-3.5"
+                                />
                             </button>
                         </template>
-                        <button
-                            v-else
-                            type="button"
-                            :disabled="publishBusy || !portal.enabled"
-                            class="inline-flex items-center gap-1.5 rounded-pill border border-accent-blue/30 bg-accent-blue/10 px-3 py-1.5 text-xs font-medium text-accent-blue transition-colors hover:bg-accent-blue/20 disabled:opacity-50"
-                            :title="publishError || undefined"
-                            @click="publishPortal"
-                        >
-                            <Rocket class="size-3.5" />
-                            {{ t('apps.builder.publish_portal') }}
-                        </button>
-                        <span class="text-[11px] text-ink-muted">
-                            {{
-                                t('apps.builder.portal_scope', {
-                                    role: portal.role ?? '—',
-                                    pages: portal.pages,
-                                    mode: portal.allow_writes
-                                        ? t('apps.builder.portal_writes')
-                                        : t('apps.builder.portal_read_only'),
-                                })
-                            }}
-                        </span>
-                    </template>
 
-                    <!-- Run the app in its real runtime, in a fresh tab. Uses the
-                         LIVE slug (appMeta), not the page prop: the first prompt
-                         renames the app and changes its slug, so `app.slug` from
-                         the initial props points at the old (untitled) slug and
-                         404s until a reload. Hidden for landings — their real
-                         surface is the public /l URL (the "En vivo" chip). -->
-                    <!-- Load the user's real data. Hidden on a landing, which
-                         has no objects to import into. -->
-                    <button
-                        v-if="!previewIsLanding"
-                        type="button"
-                        class="inline-flex items-center gap-1.5 rounded-pill border border-medium bg-surface px-3 py-1.5 text-xs text-ink-muted transition-colors hover:text-ink"
-                        @click="importOpen = true"
-                    >
-                        <FileSpreadsheet class="size-3.5" />
-                        {{ t('apps.builder.import.button') }}
-                    </button>
+                        <!-- Which pane the right-hand side shows. -->
+                        <template v-if="app.kind !== 'dashboard'">
+                            <button
+                                v-for="m in viewTabs"
+                                :key="m.id"
+                                type="button"
+                                role="menuitem"
+                                :class="[
+                                    MENU_ITEM,
+                                    viewMode === m.id
+                                        ? MENU_ITEM_ACTIVE
+                                        : MENU_ITEM_IDLE,
+                                ]"
+                                @click="runFromMenu(() => (viewMode = m.id))"
+                            >
+                                <component
+                                    :is="m.icon"
+                                    class="size-3.5 shrink-0"
+                                />
+                                {{ m.label }}
+                                <Check
+                                    v-if="viewMode === m.id"
+                                    class="ml-auto size-3.5"
+                                />
+                            </button>
 
-                    <!-- Credentials for the app's REST data API. Issuing one is
-                         a human act: the token is shown once and never again. -->
-                    <button
-                        v-if="!previewIsLanding"
-                        type="button"
-                        class="inline-flex items-center gap-1.5 rounded-pill border border-medium bg-surface px-3 py-1.5 text-xs text-ink-muted transition-colors hover:text-ink"
-                        @click="apiKeysOpen = true"
-                    >
-                        <KeyRound class="size-3.5" />
-                        {{ t('apps.builder.api.button') }}
-                    </button>
+                            <div class="my-1 h-px bg-current opacity-10" />
 
-                    <a
-                        v-if="!previewIsLanding"
-                        :href="`/r/${appMeta.slug}`"
-                        target="_blank"
-                        rel="noopener"
-                        class="inline-flex items-center gap-1.5 rounded-pill border border-accent-blue/30 bg-accent-blue/10 px-3 py-1.5 text-xs font-medium text-accent-blue transition-colors hover:bg-accent-blue/20"
-                    >
-                        <Play class="size-3.5" />
-                        {{ t('apps.builder.run') }}
-                    </a>
+                            <!-- Accent colour: brand colour for buttons / links /
+                                 highlights. The swatches open in place, under the
+                                 row, so picking one never closes the menu. -->
+                            <button
+                                v-if="viewMode === 'preview'"
+                                type="button"
+                                role="menuitem"
+                                :class="[MENU_ITEM, MENU_ITEM_IDLE]"
+                                :title="
+                                    accentOpen
+                                        ? t('apps.builder.accent_close')
+                                        : t('apps.builder.accent_hint')
+                                "
+                                :aria-expanded="accentOpen"
+                                @click="accentOpen = !accentOpen"
+                            >
+                                <span
+                                    class="size-3.5 shrink-0 rounded-full border border-soft"
+                                    :style="{
+                                        background:
+                                            effectiveAccent ?? '#0096ff',
+                                    }"
+                                />
+                                {{ t('apps.builder.accent_label') }}
+                                <ChevronDown
+                                    class="ml-auto size-3.5 transition-transform"
+                                    :class="accentOpen && 'rotate-180'"
+                                />
+                            </button>
+                            <div
+                                v-if="accentOpen && viewMode === 'preview'"
+                                class="flex flex-wrap items-center gap-1.5 px-3 pt-1 pb-2"
+                            >
+                                <button
+                                    v-for="c in ACCENT_PRESETS"
+                                    :key="c"
+                                    type="button"
+                                    class="size-4 rounded-full border border-soft transition-transform hover:scale-110"
+                                    :class="
+                                        effectiveAccent?.toLowerCase() === c
+                                            ? 'ring-2 ring-ink ring-offset-1 ring-offset-navy'
+                                            : ''
+                                    "
+                                    :style="{ background: c }"
+                                    :title="c"
+                                    @click="setAccent(c)"
+                                />
+                                <label
+                                    class="ml-0.5 size-5 cursor-pointer rounded-full border border-soft"
+                                    :style="{
+                                        background:
+                                            effectiveAccent ?? '#0096ff',
+                                    }"
+                                    :title="
+                                        t('apps.builder.accent_custom') +
+                                        ' ' +
+                                        (effectiveAccent ?? '#0096ff')
+                                    "
+                                >
+                                    <input
+                                        type="color"
+                                        class="size-0 opacity-0"
+                                        :value="effectiveAccent ?? '#0096ff'"
+                                        @input="
+                                            setAccent(
+                                                (
+                                                    $event.target as HTMLInputElement
+                                                ).value,
+                                            )
+                                        "
+                                    />
+                                </label>
+                            </div>
+
+                            <!-- Adopt the organization Brandbook in one click. -->
+                            <button
+                                v-if="viewMode === 'preview' && hasOrgBrand"
+                                type="button"
+                                role="menuitem"
+                                :class="[MENU_ITEM, MENU_ITEM_IDLE]"
+                                :title="t('apps.builder.use_brand_hint')"
+                                @click="runFromMenu(useOrgBrand)"
+                            >
+                                <Sparkles class="size-3.5 shrink-0" />
+                                {{ t('apps.builder.use_brand') }}
+                            </button>
+
+                            <!-- Layers: every part of the app, one click away for
+                                 consultation. -->
+                            <button
+                                type="button"
+                                role="menuitem"
+                                :class="[MENU_ITEM, MENU_ITEM_IDLE]"
+                                @click="runFromMenu(() => (layersOpen = true))"
+                            >
+                                <Layers class="size-3.5 shrink-0" />
+                                {{ t('apps.builder.layers') }}
+                            </button>
+                        </template>
+
+                        <!-- Landing controls that are NOT the publish button:
+                             fine-tune, unpublish, custom domain. Publishing and
+                             the live URL sit on the header. -->
+                        <template v-if="previewIsLanding">
+                            <!-- Only when the group below it has something in it:
+                                 an unpublished landing on a non-preview tab has
+                                 nothing here, and a lone hairline reads as a
+                                 section that failed to render. -->
+                            <div
+                                v-if="
+                                    viewMode === 'preview' || landingPublicSlug
+                                "
+                                class="my-1 h-px bg-current opacity-10"
+                            />
+
+                            <!-- Fine-tuning: flip between the AI builder (chat) and
+                                 manual click-and-edit on the landing sections.
+                                 Hidden below lg: fine-tune IS the drag-and-drop
+                                 canvas, and a finger on a 390px viewport cannot
+                                 work it. The rest of the builder is responsive; this
+                                 one mode stays a desktop tool, and says so (see the
+                                 notice on the pane) if a session lands in it anyway. -->
+                            <template v-if="viewMode === 'preview'">
+                                <button
+                                    v-for="m in [
+                                        {
+                                            id: 'chat',
+                                            label: t(
+                                                'apps.builder.panel_mode_chat',
+                                            ),
+                                        },
+                                        {
+                                            id: 'manual',
+                                            label: t(
+                                                'apps.builder.panel_mode_manual',
+                                            ),
+                                        },
+                                    ] as const"
+                                    :key="m.id"
+                                    type="button"
+                                    role="menuitem"
+                                    :class="[
+                                        MENU_ITEM,
+                                        'hidden lg:flex',
+                                        panelMode === m.id
+                                            ? MENU_ITEM_ACTIVE
+                                            : MENU_ITEM_IDLE,
+                                    ]"
+                                    @click="
+                                        runFromMenu(() => (panelMode = m.id))
+                                    "
+                                >
+                                    <SlidersHorizontal
+                                        class="size-3.5 shrink-0"
+                                    />
+                                    {{ m.label }}
+                                    <Check
+                                        v-if="panelMode === m.id"
+                                        class="ml-auto size-3.5"
+                                    />
+                                </button>
+                            </template>
+
+                            <!-- Publishing itself is on the header; taking a live
+                                 landing back down is not something to put a
+                                 thumb's width from it. -->
+                            <button
+                                v-if="landingPublicSlug"
+                                type="button"
+                                role="menuitem"
+                                :disabled="publishBusy"
+                                :class="[
+                                    MENU_ITEM,
+                                    MENU_ITEM_IDLE,
+                                    'disabled:opacity-50',
+                                ]"
+                                @click="unpublishLanding"
+                            >
+                                <Rocket class="size-3.5 shrink-0" />
+                                {{ t('apps.builder.unpublish_landing') }}
+                            </button>
+
+                            <!-- Custom domain: connect the tenant's own hostname.
+                                 Only meaningful once the landing is published.
+                                 Its form opens inside the menu — it has an input
+                                 and a verify step, so it cannot be a row that
+                                 closes on click. -->
+                            <template v-if="landingPublicSlug">
+                                <button
+                                    type="button"
+                                    role="menuitem"
+                                    :class="[MENU_ITEM, MENU_ITEM_IDLE]"
+                                    :aria-expanded="domainPanelOpen"
+                                    @click="domainPanelOpen = !domainPanelOpen"
+                                >
+                                    <Link2 class="size-3.5 shrink-0" />
+                                    <span class="truncate">
+                                        {{
+                                            landingDomain
+                                                ? landingDomain.hostname
+                                                : t(
+                                                      'apps.builder.domain_button',
+                                                  )
+                                        }}
+                                    </span>
+                                    <span
+                                        v-if="landingDomain"
+                                        :class="[
+                                            'ml-auto rounded-pill px-1.5 py-0.5 text-[10px] uppercase',
+                                            landingDomain.status === 'active'
+                                                ? 'bg-accent-blue/15 text-accent-blue'
+                                                : 'bg-surface-hover text-ink-subtle',
+                                        ]"
+                                    >
+                                        {{
+                                            landingDomain.status === 'active'
+                                                ? t(
+                                                      'apps.builder.domain_active',
+                                                  )
+                                                : t(
+                                                      'apps.builder.domain_pending',
+                                                  )
+                                        }}
+                                    </span>
+                                    <ChevronDown
+                                        v-else
+                                        class="ml-auto size-3.5 transition-transform"
+                                        :class="domainPanelOpen && 'rotate-180'"
+                                    />
+                                </button>
+
+                                <div
+                                    v-if="domainPanelOpen"
+                                    class="mx-1 mb-1 rounded-xs border border-medium bg-surface p-3"
+                                >
+                                    <p
+                                        class="mb-2 text-xs font-semibold tracking-wide text-ink uppercase"
+                                    >
+                                        {{ t('apps.builder.domain_title') }}
+                                    </p>
+
+                                    <template v-if="!landingDomain">
+                                        <input
+                                            v-model="domainHostnameInput"
+                                            type="text"
+                                            :placeholder="
+                                                t(
+                                                    'apps.builder.domain_placeholder',
+                                                )
+                                            "
+                                            class="mb-2 w-full rounded-xs border border-medium bg-navy px-2.5 py-1.5 text-xs text-ink"
+                                            @keydown.enter.prevent="
+                                                connectLandingDomain
+                                            "
+                                        />
+                                        <button
+                                            type="button"
+                                            :disabled="
+                                                domainBusy ||
+                                                !domainHostnameInput.trim()
+                                            "
+                                            class="w-full rounded-pill border border-accent-blue/30 bg-accent-blue/10 px-3 py-1.5 text-xs font-medium text-accent-blue transition-colors hover:bg-accent-blue/20 disabled:opacity-50"
+                                            @click="connectLandingDomain"
+                                        >
+                                            {{
+                                                t('apps.builder.domain_connect')
+                                            }}
+                                        </button>
+                                    </template>
+
+                                    <template v-else>
+                                        <p class="mb-1 text-xs text-ink">
+                                            {{ landingDomain.hostname }}
+                                        </p>
+                                        <p
+                                            v-if="
+                                                landingDomain.status !==
+                                                    'active' &&
+                                                landingDomain.cname_target
+                                            "
+                                            class="mb-2 rounded-xs bg-navy px-2 py-1.5 font-mono text-[11px] break-all text-ink-muted"
+                                        >
+                                            CNAME:
+                                            {{ landingDomain.hostname }} →
+                                            {{ landingDomain.cname_target }}
+                                        </p>
+                                        <ul
+                                            v-if="
+                                                Object.keys(domainChecks).length
+                                            "
+                                            class="mb-2 space-y-1 text-[11px] text-ink-muted"
+                                        >
+                                            <li
+                                                v-for="(
+                                                    msg, check
+                                                ) in domainChecks"
+                                                :key="check"
+                                            >
+                                                <b class="uppercase">{{
+                                                    check
+                                                }}</b
+                                                >: {{ msg }}
+                                            </li>
+                                        </ul>
+                                        <div class="flex gap-2">
+                                            <button
+                                                v-if="
+                                                    landingDomain.status !==
+                                                    'active'
+                                                "
+                                                type="button"
+                                                :disabled="domainBusy"
+                                                class="flex-1 rounded-pill border border-accent-blue/30 bg-accent-blue/10 px-3 py-1.5 text-xs font-medium text-accent-blue transition-colors hover:bg-accent-blue/20 disabled:opacity-50"
+                                                @click="verifyLandingDomain"
+                                            >
+                                                {{
+                                                    t(
+                                                        'apps.builder.domain_verify',
+                                                    )
+                                                }}
+                                            </button>
+                                            <a
+                                                v-else
+                                                :href="`https://${landingDomain.hostname}`"
+                                                target="_blank"
+                                                rel="noopener"
+                                                class="flex-1 rounded-pill border border-accent-blue/30 bg-accent-blue/10 px-3 py-1.5 text-center text-xs font-medium text-accent-blue transition-colors hover:bg-accent-blue/20"
+                                            >
+                                                {{
+                                                    t(
+                                                        'apps.builder.landing_live',
+                                                    )
+                                                }}
+                                                →
+                                            </a>
+                                            <button
+                                                type="button"
+                                                :disabled="domainBusy"
+                                                class="rounded-pill border border-medium bg-navy px-3 py-1.5 text-xs text-ink-muted transition-colors hover:text-ink disabled:opacity-50"
+                                                @click="disconnectLandingDomain"
+                                            >
+                                                {{
+                                                    t(
+                                                        'apps.builder.domain_disconnect',
+                                                    )
+                                                }}
+                                            </button>
+                                        </div>
+                                    </template>
+
+                                    <p
+                                        v-if="domainError"
+                                        class="mt-2 text-[11px] text-red-400"
+                                    >
+                                        {{ domainError }}
+                                    </p>
+                                </div>
+                            </template>
+                        </template>
+
+                        <!-- Public PORTAL controls: shown only once the manifest
+                             actually declares one, so the button to put tenant data
+                             on the internet never appears by accident. The note
+                             states what a visitor gets — the role, read vs write,
+                             and how many pages they reach (a portal is
+                             deny-by-default, so zero is a real and silent outcome). -->
+                        <template v-else-if="portal">
+                            <div class="my-1 h-px bg-current opacity-10" />
+
+                            <template v-if="portalPublicSlug">
+                                <a
+                                    :href="`/a/${portalPublicSlug}`"
+                                    target="_blank"
+                                    rel="noopener"
+                                    role="menuitem"
+                                    :class="[
+                                        MENU_ITEM,
+                                        'font-medium text-accent-blue hover:bg-accent-blue/10',
+                                    ]"
+                                    :title="`/a/${portalPublicSlug}`"
+                                >
+                                    <Rocket class="size-3.5 shrink-0" />
+                                    {{ t('apps.builder.portal_live') }}
+                                </a>
+                                <button
+                                    type="button"
+                                    role="menuitem"
+                                    :disabled="publishBusy"
+                                    :class="[
+                                        MENU_ITEM,
+                                        MENU_ITEM_IDLE,
+                                        'disabled:opacity-50',
+                                    ]"
+                                    @click="unpublishPortal"
+                                >
+                                    <Rocket class="size-3.5 shrink-0" />
+                                    {{ t('apps.builder.unpublish_portal') }}
+                                </button>
+                            </template>
+                            <button
+                                v-else
+                                type="button"
+                                role="menuitem"
+                                :disabled="publishBusy || !portal.enabled"
+                                :class="[
+                                    MENU_ITEM,
+                                    'font-medium text-accent-blue hover:bg-accent-blue/10 disabled:opacity-50',
+                                ]"
+                                :title="publishError || undefined"
+                                @click="publishPortal"
+                            >
+                                <Rocket class="size-3.5 shrink-0" />
+                                {{ t('apps.builder.publish_portal') }}
+                            </button>
+                            <p class="px-3 pb-2 text-[11px] text-ink-muted">
+                                {{
+                                    t('apps.builder.portal_scope', {
+                                        role: portal.role ?? '—',
+                                        pages: portal.pages,
+                                        mode: portal.allow_writes
+                                            ? t('apps.builder.portal_writes')
+                                            : t(
+                                                  'apps.builder.portal_read_only',
+                                              ),
+                                    })
+                                }}
+                            </p>
+                        </template>
+
+                        <template v-if="!previewIsLanding">
+                            <div class="my-1 h-px bg-current opacity-10" />
+
+                            <!-- Load the user's real data. Hidden on a landing,
+                                 which has no objects to import into. -->
+                            <button
+                                type="button"
+                                role="menuitem"
+                                :class="[MENU_ITEM, MENU_ITEM_IDLE]"
+                                @click="runFromMenu(() => (importOpen = true))"
+                            >
+                                <FileSpreadsheet class="size-3.5 shrink-0" />
+                                {{ t('apps.builder.import.button') }}
+                            </button>
+
+                            <!-- Credentials for the app's REST data API. Issuing one
+                                 is a human act: the token is shown once and never
+                                 again. -->
+                            <button
+                                type="button"
+                                role="menuitem"
+                                :class="[MENU_ITEM, MENU_ITEM_IDLE]"
+                                @click="runFromMenu(() => (apiKeysOpen = true))"
+                            >
+                                <KeyRound class="size-3.5 shrink-0" />
+                                {{ t('apps.builder.api.button') }}
+                            </button>
+                        </template>
+                    </div>
                 </div>
             </header>
 
@@ -4541,23 +4706,10 @@ function statusTone(status: Message['status']): string {
                             <p class="mt-2 text-xs text-ink-muted">
                                 {{ t('apps.builder.empty_prompt') }}
                             </p>
-                            <!-- Quick-start prompts: never a blank box — show what
-                                 you can ask, one click pre-fills the composer. -->
-                            <div
-                                v-if="chipSuggestions.length"
-                                class="mt-3 flex flex-wrap gap-2"
-                            >
-                                <button
-                                    v-for="s in chipSuggestions.slice(0, 5)"
-                                    :key="s.id"
-                                    type="button"
-                                    class="inline-flex items-center gap-1.5 rounded-pill border border-medium bg-navy px-3 py-1.5 text-xs text-ink-muted transition-colors hover:border-strong hover:text-ink"
-                                    @click="applyChip(s)"
-                                >
-                                    <component :is="s.icon" class="size-3.5" />
-                                    {{ s.label }}
-                                </button>
-                            </div>
+                            <!-- The quick-start chips used to sit here. They cost
+                                 the top of the transcript to say what the same
+                                 suggestions already say from the composer's
+                                 lightbulb, which stays. -->
                         </div>
 
                         <article
