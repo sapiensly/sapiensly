@@ -277,10 +277,11 @@ DESC;
      */
     private function scaffoldFullApp(array $objectsSpec, mixed $links, array $base): string
     {
+        $coercions = [];
         $spec = $this->scaffolder->normalizeSpec([
             'objects' => $objectsSpec,
             'links' => is_array($links) ? $links : [],
-        ]);
+        ], $coercions);
 
         if (($spec['objects'] ?? []) === []) {
             return $this->fail('Every object spec was missing a name.');
@@ -304,6 +305,12 @@ DESC;
                 $assembled['objects'],
             );
             $result['pages'] = array_map(fn (array $p): string => $p['slug'], $assembled['pages']);
+            // Downgrades the normalizer applied on the way in. The model needs to
+            // read them back: a field it asked for as a select or an email may
+            // have landed as plain text, and only it can decide to fix that.
+            if ($coercions !== []) {
+                $result['notes'] = array_merge($result['notes'] ?? [], $coercions);
+            }
             $result['message'] = 'Full app scaffolded: objects, belongs-to relations, derived fields (counts/totals + any lookup/subtotal), a page per object, master-detail pages, a dashboard, and a POS screen when the data fits. Refine details with propose_change using the returned ids.';
         }
 

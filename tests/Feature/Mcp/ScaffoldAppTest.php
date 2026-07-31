@@ -1,5 +1,6 @@
 <?php
 
+use App\Ai\ChatAgent;
 use App\Mcp\Servers\SapiensServer;
 use App\Mcp\Tools\Build\ScaffoldAppTool;
 use App\Models\App;
@@ -10,6 +11,7 @@ use App\Services\AiProviderService;
 use App\Services\Manifest\AppScaffolder;
 use App\Services\Manifest\ManifestValidator;
 use Illuminate\Support\Str;
+use Laravel\Ai\Ai;
 
 beforeEach(function () {
     $this->user = User::factory()->create(['email_verified_at' => now()]);
@@ -318,4 +320,48 @@ it('assembles a valid manifest with the create-modal wiring', function () {
     $button = collect($page['blocks'])->firstWhere('type', 'button');
     $modal = collect($page['blocks'])->firstWhere('type', 'modal');
     expect($button['on_click'][0]['modal_block_id'])->toBe($modal['id']);
+});
+
+it('scaffold_app hands the caller every downgrade it applied', function () {
+    // Runs the REAL scaffolder with only the model faked, so the coercion is
+    // produced by the same normalizer the product uses. A downgrade the caller
+    // never sees is a field they believe they asked for and did not get.
+    Ai::fakeAgent(ChatAgent::class, [
+        '{"objects":[{"name":"Tickets","slug":"tickets","fields":['
+        .'{"name":"Asunto","slug":"asunto","type":"string"},'
+        .'{"name":"Adjunto","slug":"adjunto","type":"file"}]}],"links":[]}',
+    ]);
+
+    SapiensServer::actingAs($this->user)
+        ->tool(ScaffoldAppTool::class, [
+            'name' => 'Soporte',
+            'description' => 'Mesa de ayuda con tickets.',
+        ])
+        ->assertOk()
+        ->assertSee('warnings')
+        ->assertSee('is not available here');
+});
+
+it('scaffold_app keeps an email field the model asked for', function () {
+    Ai::fakeAgent(ChatAgent::class, [
+        '{"objects":[{"name":"Tickets","slug":"tickets","fields":['
+        .'{"name":"Asunto","slug":"asunto","type":"string"},'
+        .'{"name":"Correo","slug":"correo","type":"email"}]}],"links":[]}',
+    ]);
+
+    SapiensServer::actingAs($this->user)
+        ->tool(ScaffoldAppTool::class, [
+            'name' => 'Soporte Correo',
+            'description' => 'Mesa de ayuda con el correo del solicitante.',
+        ])
+        ->assertOk();
+
+    $app = App::where('user_id', $this->user->id)->where('slug', 'soporte_correo')->firstOrFail();
+    $correo = collect($app->versions()->first()->manifest['objects'][0]['fields'])
+        ->firstWhere('slug', 'correo');
+
+    // Not a plain string: the type carries server-side validation and renders an
+    // email input. Storing a requester's address as free text is how a help desk
+    // ends up unable to reply to its own tickets.
+    expect($correo['type'])->toBe('email');
 });

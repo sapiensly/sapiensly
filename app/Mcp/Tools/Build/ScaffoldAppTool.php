@@ -71,11 +71,14 @@ class ScaffoldAppTool extends SapiensTool
             'visibility' => isset($validated['visibility']) ? Visibility::from($validated['visibility']) : Visibility::Private,
         ]);
 
+        $coercions = [];
+
         try {
             $manifest = app(AppScaffolder::class)->scaffold(
                 $manifestService->initialManifest($app),
                 $validated['description'],
                 $user,
+                $coercions,
             );
 
             $version = $manifestService->createVersion($app, $manifest, $user, 'Scaffolded from description');
@@ -108,6 +111,13 @@ class ScaffoldAppTool extends SapiensTool
         ];
         if ($seeded !== []) {
             $payload['seeded'] = $seeded;
+        }
+        // Every downgrade the normalizer applied to the model's spec. Silence
+        // here is how a field the author asked for (an `email`, a select) comes
+        // back as plain text with nobody the wiser — the typed add_field path
+        // has always reported these, and this one used to drop them.
+        if ($coercions !== []) {
+            $payload['warnings'] = $coercions;
         }
         $this->rememberIdempotent($user, $validated['idempotency_key'] ?? null, $payload);
 

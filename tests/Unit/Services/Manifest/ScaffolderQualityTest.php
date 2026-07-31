@@ -797,3 +797,77 @@ it('truncates beyond 40 fields but never silently — it emits a coercion note',
     expect($fields)->toHaveCount(40)
         ->and(collect($coercions)->contains(fn ($c) => str_contains($c, 'dropped')))->toBeTrue();
 });
+
+/*
+|--------------------------------------------------------------------------
+| Contact field types
+|--------------------------------------------------------------------------
+|
+| The SYSTEM prompt asks the model for email/url/phone by name and explains
+| that they validate the format. The model obliges — and the normalizer used
+| to throw the answer away, so every generated app stored contact data as
+| free text. These pin the whole round trip.
+|
+*/
+
+it('keeps the contact types the prompt asks the model for', function () {
+    $spec = app(AppScaffolder::class)->normalizeSpec([
+        'objects' => [[
+            'name' => 'Tickets',
+            'slug' => 'tickets',
+            'fields' => [
+                ['name' => 'Asunto', 'slug' => 'asunto', 'type' => 'string'],
+                ['name' => 'Correo del solicitante', 'slug' => 'correo', 'type' => 'email'],
+                ['name' => 'Sitio', 'slug' => 'sitio', 'type' => 'url'],
+                ['name' => 'Teléfono', 'slug' => 'telefono', 'type' => 'phone'],
+            ],
+        ]],
+        'links' => [],
+    ]);
+
+    expect(array_column($spec['objects'][0]['fields'], 'type'))
+        ->toBe(['string', 'email', 'url', 'phone']);
+});
+
+it('assembles a schema-valid manifest that keeps the email field typed', function () {
+    $base = [
+        'schema_version' => '1.0.0',
+        'id' => 'app_scaffold_mail',
+        'slug' => 'helpdesk',
+        'name' => 'Helpdesk',
+        'version' => 1,
+        'objects' => [],
+        'pages' => [],
+        'permissions' => ['roles' => [['id' => 'rol_admin00001', 'slug' => 'admin', 'name' => 'Admin', 'is_default' => true]]],
+        'settings' => ['default_locale' => 'es-MX', 'default_currency' => 'MXN'],
+    ];
+
+    $manifest = app(AppScaffolder::class)->assemble($base, [
+        'objects' => [[
+            'name' => 'Tickets',
+            'slug' => 'tickets',
+            'fields' => [
+                ['name' => 'Asunto', 'slug' => 'asunto', 'type' => 'string', 'options' => null],
+                ['name' => 'Correo', 'slug' => 'correo', 'type' => 'email', 'options' => null],
+            ],
+        ]],
+        'links' => [],
+    ]);
+
+    $correo = collect($manifest['objects'][0]['fields'])->firstWhere('slug', 'correo');
+
+    expect($correo['type'])->toBe('email')
+        ->and((new ManifestValidator)->validate($manifest)->errors)->toBe([]);
+});
+
+it('accepts email through the typed add_field path too', function () {
+    $coercions = [];
+    $field = app(AppScaffolder::class)->normalizeField(
+        ['name' => 'Correo', 'slug' => 'correo', 'type' => 'email'],
+        [],
+        $coercions,
+    );
+
+    expect($field['type'])->toBe('email')
+        ->and($coercions)->toBe([]);
+});

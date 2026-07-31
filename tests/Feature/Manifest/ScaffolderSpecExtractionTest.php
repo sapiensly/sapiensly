@@ -57,3 +57,47 @@ it('does not attempt to load credentials when no user is available', function ()
 
     expect($manifest['objects'])->toBe([]);
 });
+
+it('hands back every downgrade it applied to the model spec', function () {
+    // The model answered with a type the scaffold subset cannot emit. That is a
+    // legitimate downgrade — but a SILENT one leaves the author with a plain
+    // text field where they asked for something else, which is how an `email`
+    // field went unnoticed for the life of the feature.
+    $providers = Mockery::mock(AiProviderService::class);
+    $providers->shouldReceive('applyRuntimeConfig')->andReturnNull();
+    $providers->shouldReceive('resolveProviderForCatalogModel')->andReturnNull();
+
+    Ai::fakeAgent(ChatAgent::class, [
+        '{"objects":[{"name":"Tickets","slug":"tickets","fields":['
+        .'{"name":"Asunto","slug":"asunto","type":"string"},'
+        .'{"name":"Adjunto","slug":"adjunto","type":"file"}]}],"links":[]}',
+    ]);
+
+    $coercions = [];
+    $scaffolder = new AppScaffolder(app(AiDefaults::class), $providers);
+    $manifest = $scaffolder->scaffold(cfgBaseManifest(), 'A help desk.', User::factory()->create(), $coercions);
+
+    $adjunto = collect($manifest['objects'][0]['fields'])->firstWhere('slug', 'adjunto');
+
+    expect($adjunto['type'])->toBe('string')
+        ->and($coercions)->toHaveCount(1)
+        ->and($coercions[0])->toContain('"file"');
+});
+
+it('reports no downgrade for the contact types the prompt offers', function () {
+    $providers = Mockery::mock(AiProviderService::class);
+    $providers->shouldReceive('applyRuntimeConfig')->andReturnNull();
+    $providers->shouldReceive('resolveProviderForCatalogModel')->andReturnNull();
+
+    Ai::fakeAgent(ChatAgent::class, [
+        '{"objects":[{"name":"Tickets","slug":"tickets","fields":['
+        .'{"name":"Correo","slug":"correo","type":"email"}]}],"links":[]}',
+    ]);
+
+    $coercions = [];
+    $scaffolder = new AppScaffolder(app(AiDefaults::class), $providers);
+    $manifest = $scaffolder->scaffold(cfgBaseManifest(), 'A help desk.', User::factory()->create(), $coercions);
+
+    expect($manifest['objects'][0]['fields'][0]['type'])->toBe('email')
+        ->and($coercions)->toBe([]);
+});

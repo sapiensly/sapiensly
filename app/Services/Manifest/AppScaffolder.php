@@ -45,10 +45,23 @@ class AppScaffolder
 
     private const MAX_LINKS = 8;
 
-    /** Field types the model may request; anything else is coerced to `string`. */
+    /**
+     * Field types the model may request; anything else is coerced to `string`.
+     *
+     * email/url/phone belong here because they need nothing but the base
+     * id/slug/name/type — exactly like `string`, which is what they used to be
+     * silently downgraded to. That downgrade cost every generated app its
+     * contact-data validation: the SYSTEM prompt below asks the model for them
+     * ("they validate the format and render the right input"), the model DID
+     * answer `"type":"email"`, and this list threw it away — so a help desk
+     * accepted "esto-no-es-un-correo" as the requester's address. Every
+     * generative path funnels through here (scaffold_app over MCP and the
+     * in-app builder's cold start both call normalizeSpec), so one omission
+     * disabled the type across the product.
+     */
     private const ALLOWED_TYPES = [
-        'string', 'long_text', 'number', 'currency', 'boolean',
-        'date', 'datetime', 'single_select', 'multi_select', 'rating',
+        'string', 'email', 'url', 'phone', 'long_text', 'number', 'currency',
+        'boolean', 'date', 'datetime', 'single_select', 'multi_select', 'rating',
     ];
 
     /**
@@ -56,9 +69,10 @@ class AppScaffolder
      * subset above): the advanced types that previously forced raw RFC 6902 patches.
      */
     private const TYPED_FIELD_TYPES = [
-        'string', 'long_text', 'number', 'currency', 'boolean', 'date', 'datetime',
-        'single_select', 'multi_select', 'rating', 'slider', 'date_range', 'file',
-        'rich_text', 'relation', 'formula', 'lookup', 'rollup',
+        'string', 'email', 'url', 'phone', 'long_text', 'number', 'currency',
+        'boolean', 'date', 'datetime', 'single_select', 'multi_select', 'rating',
+        'slider', 'date_range', 'file', 'rich_text', 'relation', 'formula',
+        'lookup', 'rollup',
     ];
 
     /**
@@ -142,19 +156,21 @@ class AppScaffolder
      * spec. The returned manifest is assembled to always be schema-valid.
      *
      * @param  array<string, mixed>  $baseManifest  the app's initial manifest (schema_version, id, slug, name, version, permissions, settings)
+     * @param  list<string>  $coercions  Out: every change made to the model's spec to keep it valid. The caller is expected to SHOW these — a scaffold that quietly downgrades a field leaves the author believing they got what they asked for.
      * @return array<string, mixed>
      */
-    public function scaffold(array $baseManifest, string $description, ?User $user = null): array
+    public function scaffold(array $baseManifest, string $description, ?User $user = null, array &$coercions = []): array
     {
-        $spec = $this->extractSpec($description, $user);
+        $spec = $this->extractSpec($description, $user, $coercions);
 
         return $this->assemble($baseManifest, $spec);
     }
 
     /**
+     * @param  list<string>  $coercions  Out: notes for any change made to stay valid.
      * @return array{objects: array<int, array{name: string, slug: string, fields: array<int, array<string, mixed>>}>}
      */
-    private function extractSpec(string $description, ?User $user): array
+    private function extractSpec(string $description, ?User $user, array &$coercions = []): array
     {
         // Load the tenant's AI provider credentials into runtime config, the same
         // as every other AI service does (ChatAiService, BuilderAiService,
@@ -174,7 +190,7 @@ class AppScaffolder
             $agent = new ChatAgent(instructions: self::SYSTEM, messages: [], tools: []);
             $response = $agent->prompt(Str::limit($description, 2000), provider: $provider, model: $model, timeout: (int) config('ai.request_timeout', 180));
 
-            return $this->normalizeSpec($this->decodeJson((string) ($response->text ?? '')));
+            return $this->normalizeSpec($this->decodeJson((string) ($response->text ?? '')), $coercions);
         } catch (\Throwable $e) {
             Log::warning('App scaffold: model call failed', ['error' => $e->getMessage()]);
 
@@ -206,9 +222,10 @@ class AppScaffolder
      * derived economics + recipe screens) from the same pipeline as MCP.
      *
      * @param  array<string, mixed>|null  $decoded
+     * @param  list<string>  $coercions  Out: notes for every downgrade applied here.
      * @return array{objects: array<int, array{name: string, slug: string, fields: array<int, array<string, mixed>>}>, links: array<int, array{from: string, to: string, name: ?string}>}
      */
-    public function normalizeSpec(?array $decoded): array
+    public function normalizeSpec(?array $decoded, array &$coercions = []): array
     {
         $rawObjects = is_array($decoded['objects'] ?? null) ? $decoded['objects'] : [];
 
@@ -223,7 +240,7 @@ class AppScaffolder
             $slug = $this->uniqueSlug($object['slug'] ?? $name, $usedObjectSlugs, 'object_'.($i + 1));
             $usedObjectSlugs[] = $slug;
 
-            $fields = $this->normalizeFields(is_array($object['fields'] ?? null) ? $object['fields'] : []);
+            $fields = $this->normalizeFields(is_array($object['fields'] ?? null) ? $object['fields'] : [], $coercions);
             if ($fields === []) {
                 // Never emit a field-less object — the table/form would be empty.
                 $fields[] = ['name' => 'Name', 'slug' => 'name', 'type' => 'string', 'options' => null];
