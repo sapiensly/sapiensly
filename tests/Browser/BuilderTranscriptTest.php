@@ -303,50 +303,45 @@ it('wires a replay control to restart its sequence', function () {
 });
 
 it('collapses the header pills behind one control on a phone', function () {
-    // Four rows of pills before the chat even starts. Closed by default, and
-    // the toggle opens them — asserted through a real click, not by reading a
-    // class, so a broken handler shows up as a failure.
+    // Four rows of pills before the chat even starts. The row is a menu now,
+    // closed by default — opened through a real click, not by reading a class,
+    // so a broken handler shows up as a failure.
     $this->seed(RolesAndPermissionsSeeder::class);
     $appId = landingPreviewApp();
 
-    $pillsVisible = <<<'JS'
+    $menuState = <<<'JS'
     function () {
-        const btn = [...document.querySelectorAll('button')].find(b => /Opciones|Options/i.test(b.textContent || ''));
-        if (!btn) return 'no toggle';
-        const row = btn.nextElementSibling;
-        if (!row) return 'no row';
-        return getComputedStyle(row).display === 'none' ? 'collapsed' : 'open';
-    }
-    JS;
-
-    $openIt = <<<'JS'
-    function () {
-        const btn = [...document.querySelectorAll('button')].find(b => /Opciones|Options/i.test(b.textContent || ''));
-        btn.click();
-        return getComputedStyle(btn.nextElementSibling).display !== 'none' ? 'open' : 'still closed';
+        const menu = document.querySelector('[role="menu"]');
+        if (!menu) return 'collapsed';
+        return menu.querySelectorAll('[role="menuitem"]').length > 0 ? 'open' : 'empty';
     }
     JS;
 
     visit("/apps/{$appId}/builder")->on()->iPhone15()
         ->assertNoJavaScriptErrors()
-        ->assertScript($pillsVisible, 'collapsed')
-        ->assertScript($openIt, 'open');
+        ->assertScript($menuState, 'collapsed')
+        ->click('[data-sp-options-menu]')
+        ->assertScript($menuState, 'open');
 });
 
-it('leaves the header pills in place on a desktop', function () {
-    // The toggle is a phone affordance; at a width that fits the row it must not
-    // appear at all, and the pills must be there without a click.
+it('keeps the pills behind the same one control on a desktop', function () {
+    // The toggle used to be a phone affordance and the row rode along on a
+    // desktop, eleven pills wide. It is one control at every width now: the
+    // settings are in the menu, and nothing but the primary action is loose.
     $this->seed(RolesAndPermissionsSeeder::class);
     $appId = landingPreviewApp();
 
     $desktop = <<<'JS'
     function () {
-        const btn = [...document.querySelectorAll('button')].find(b => /Opciones|Options/i.test(b.textContent || ''));
-        if (btn && btn.getBoundingClientRect().width > 0) return 'toggle showing';
-        const pills = [...document.querySelectorAll('button')].filter(b => /Acento|Accent|Capas|Layers/i.test(b.textContent || ''));
-        return pills.some(p => p.getBoundingClientRect().width > 0) ? 'pills visible' : 'pills hidden';
+        const toggle = document.querySelector('[data-sp-options-menu]');
+        if (!toggle || toggle.getBoundingClientRect().width === 0) return 'no toggle';
+        const pills = [...document.querySelectorAll('button')]
+            .filter(b => /Acento|Accent|Capas|Layers/i.test(b.textContent || ''));
+        return pills.some(p => p.getBoundingClientRect().width > 0) ? 'pills loose' : 'pills behind the menu';
     }
     JS;
 
-    visit("/apps/{$appId}/builder")->on()->macbookAir()->assertScript($desktop, 'pills visible');
+    visit("/apps/{$appId}/builder")->on()->macbookAir()
+        ->assertNoJavaScriptErrors()
+        ->assertScript($desktop, 'pills behind the menu');
 });

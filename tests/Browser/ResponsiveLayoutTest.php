@@ -627,10 +627,10 @@ it('does not offer the workflow editor on a phone', function () {
     JS;
 
     visit("/apps/{$app->id}/builder")->on()->iPhone15()
-        ->click(builderLabel('apps.builder.header_menu'))
+        ->click('[data-sp-options-menu]')
         ->assertScript($tabCount, '0');
     visit("/apps/{$app->id}/builder")->on()->macbookAir()
-        ->click(builderLabel('apps.builder.header_menu'))
+        ->click('[data-sp-options-menu]')
         ->assertScript($tabCount, '1');
 });
 
@@ -676,7 +676,7 @@ it('keeps only Run on the desktop header and hides the rest behind the options m
         ->assertScript($onShow($apiKeys), 'hidden')
         // Open: the whole row is reachable, one click deep, as a menu — items
         // stacked on one left edge, not a second wall of pills somewhere else.
-        ->click(builderLabel('apps.builder.header_menu'))
+        ->click('[data-sp-options-menu]')
         ->assertScript($onShow($layers), 'visible')
         ->assertScript($onShow($apiKeys), 'visible')
         ->assertScript($onShow($run), 'visible')
@@ -742,17 +742,24 @@ it('hides the fine-tune toggle on a phone and keeps it on desktop', function () 
     ], $user);
 
     // Fine-tune IS the drag-and-drop canvas: offering it on a touch screen
-    // would be offering something that cannot work.
+    // would be offering something that cannot work. Asserted with the options
+    // menu OPEN — closed it renders nothing at all, so a closed menu would
+    // report "absent" on both devices and prove nothing about the phone.
     $visible = <<<'JS'
     function () {
-        const el = [...document.querySelectorAll('button')].find(b => /Ajuste|Fine|Manual/i.test(b.textContent || ''));
+        const el = [...document.querySelectorAll('[role="menuitem"]')].find(b => /Ajuste|Fine|Manual/i.test(b.textContent || ''));
         if (!el) return 'absent';
         return el.getBoundingClientRect().width > 0 ? 'visible' : 'hidden';
     }
     JS;
 
     visit("/apps/{$app->id}/builder")->on()->iPhone15()
+        ->click('[data-sp-options-menu]')
         ->assertScript($visible, 'hidden');
+
+    visit("/apps/{$app->id}/builder")->on()->macbookAir()
+        ->click('[data-sp-options-menu]')
+        ->assertScript($visible, 'visible');
 });
 
 /**

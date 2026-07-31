@@ -3926,8 +3926,12 @@ function statusTone(status: Message['status']): string {
                     ref="headerMenuEl"
                     class="relative flex flex-wrap items-center justify-end gap-2"
                 >
+                    <!-- The trigger carries the active view next to its label, so
+                         its text is not a stable handle; tests address this
+                         attribute instead. -->
                     <button
                         type="button"
+                        data-sp-options-menu
                         @click="headerMenuOpen = !headerMenuOpen"
                         :aria-expanded="headerMenuOpen"
                         aria-haspopup="menu"

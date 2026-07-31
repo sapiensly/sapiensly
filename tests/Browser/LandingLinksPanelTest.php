@@ -67,7 +67,7 @@ it('lists every link grouped by destination, broken ones first', function () {
         ->assertNoJavaScriptErrors()
         // The header's controls are collapsed behind the options menu at every
         // width now, so fine-tune is one click deeper than it used to be.
-        ->click(builderLabel('apps.builder.header_menu'))
+        ->click('[data-sp-options-menu]')
         ->click(builderLabel('apps.builder.panel_mode_manual'))
         ->click(builderLabel('apps.builder.links_button'))
         ->assertSee(builderLabel('apps.builder.links_title'))
@@ -90,7 +90,7 @@ it('warns that a <button> cannot navigate on a landing', function () {
     visit("/apps/{$appId}/builder")->on()->macbookAir()
         // The header's controls are collapsed behind the options menu at every
         // width now, so fine-tune is one click deeper than it used to be.
-        ->click(builderLabel('apps.builder.header_menu'))
+        ->click('[data-sp-options-menu]')
         ->click(builderLabel('apps.builder.panel_mode_manual'))
         ->click(builderLabel('apps.builder.links_button'))
         ->assertScript($warning, 'warned');
@@ -136,7 +136,7 @@ it('retargets a whole group from the panel', function () {
     visit("/apps/{$appId}/builder")->on()->macbookAir()
         // The header's controls are collapsed behind the options menu at every
         // width now, so fine-tune is one click deeper than it used to be.
-        ->click(builderLabel('apps.builder.header_menu'))
+        ->click('[data-sp-options-menu]')
         ->click(builderLabel('apps.builder.panel_mode_manual'))
         ->click(builderLabel('apps.builder.links_button'))
         ->assertScript($openEditor, 'opened')
