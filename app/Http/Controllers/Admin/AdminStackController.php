@@ -3,13 +3,11 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Services\Platform\PlatformProbe;
 use Illuminate\Foundation\Application;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Redis;
 use Inertia\Inertia;
 use Inertia\Response;
-use Laravel\Horizon\Contracts\MasterSupervisorRepository;
-use Throwable;
 
 /**
  * Admin v2 Stack — "what's this platform made of" dashboard. Pulls versions
@@ -20,9 +18,16 @@ use Throwable;
  * Returns the `StackProps` contract defined in `lib/admin/types.ts`: five
  * ordered groups (runtime / frontend / data / ai / infra), each with rows
  * carrying a status dot ('ok' | 'outdated' | 'missing').
+ *
+ * The probes and version lookups live in {@see PlatformProbe}, shared with the
+ * `platform_stack` / `platform_health` MCP tools.
  */
 class AdminStackController extends Controller
 {
+    public function __construct(
+        private readonly PlatformProbe $probe,
+    ) {}
+
     public function index(): Response
     {
         return Inertia::render('admin/Stack', [
@@ -59,13 +64,13 @@ class AdminStackController extends Controller
                 ),
                 $this->item(
                     name: 'Inertia',
-                    version: $this->composerVersion('inertiajs/inertia-laravel'),
+                    version: $this->probe->composerVersion('inertiajs/inertia-laravel'),
                     description: __('Server-rendered SPA bridge between Laravel and Vue.'),
                     docsUrl: 'https://inertiajs.com/',
                 ),
                 $this->item(
                     name: 'Fortify',
-                    version: $this->composerVersion('laravel/fortify'),
+                    version: $this->probe->composerVersion('laravel/fortify'),
                     description: __('Backend auth, 2FA, email verification, password reset.'),
                     docsUrl: 'https://laravel.com/docs/fortify',
                 ),
@@ -84,31 +89,31 @@ class AdminStackController extends Controller
             'items' => [
                 $this->item(
                     name: 'Vue',
-                    version: $this->npmVersion('vue'),
+                    version: $this->probe->npmVersion('vue'),
                     description: __('UI framework — every admin screen is a Vue SFC.'),
                     docsUrl: 'https://vuejs.org/',
                 ),
                 $this->item(
                     name: 'TypeScript',
-                    version: $this->npmVersion('typescript'),
+                    version: $this->probe->npmVersion('typescript'),
                     description: __('Static types for the frontend.'),
                     docsUrl: 'https://www.typescriptlang.org/',
                 ),
                 $this->item(
                     name: 'Tailwind CSS',
-                    version: $this->npmVersion('tailwindcss'),
+                    version: $this->probe->npmVersion('tailwindcss'),
                     description: __('Utility-first styling with the brand token block.'),
                     docsUrl: 'https://tailwindcss.com/',
                 ),
                 $this->item(
                     name: 'reka-ui',
-                    version: $this->npmVersion('reka-ui'),
+                    version: $this->probe->npmVersion('reka-ui'),
                     description: __('Accessible primitives under every shadcn-vue component.'),
                     docsUrl: 'https://reka-ui.com/',
                 ),
                 $this->item(
                     name: 'Vite',
-                    version: $this->npmVersion('vite'),
+                    version: $this->probe->npmVersion('vite'),
                     description: __('Dev server + production bundler.'),
                     docsUrl: 'https://vitejs.dev/',
                 ),
@@ -124,7 +129,7 @@ class AdminStackController extends Controller
         // The actual driver of the default connection — NOT config('database.default'),
         // which is the connection NAME (`platform` since the schema split), not a driver.
         $dbDriver = DB::connection()->getDriverName();
-        $dbVersion = $this->safeDbScalar('select version()') ?? 'unknown';
+        $database = $this->probe->database();
 
         return [
             'id' => 'data',
@@ -132,19 +137,19 @@ class AdminStackController extends Controller
             'items' => [
                 $this->item(
                     name: 'PostgreSQL',
-                    version: $this->shortPgVersion((string) $dbVersion),
+                    version: $database['version'] ?? 'unknown',
                     description: __('Primary relational store.'),
                     status: $dbDriver === 'pgsql' ? 'ok' : 'missing',
                 ),
                 $this->item(
                     name: 'pgvector',
-                    version: $this->safeDbScalar("select extversion from pg_extension where extname = 'vector'") ?? null,
+                    version: $database['pgvector'],
                     description: __('Vector similarity search for Knowledge Bases.'),
                     docsUrl: 'https://github.com/pgvector/pgvector',
                 ),
                 $this->item(
                     name: 'Redis',
-                    version: $this->redisVersion(),
+                    version: $this->probe->redisVersion(),
                     description: __('Cache, queue, session, and broadcasting backend.'),
                 ),
             ],
@@ -162,7 +167,7 @@ class AdminStackController extends Controller
             'items' => [
                 $this->item(
                     name: 'laravel/ai',
-                    version: $this->composerVersion('laravel/ai'),
+                    version: $this->probe->composerVersion('laravel/ai'),
                     description: __('Official Laravel AI SDK — chat, streaming, tools, structured output.'),
                 ),
             ],
@@ -180,19 +185,19 @@ class AdminStackController extends Controller
             'items' => [
                 $this->item(
                     name: 'Laravel Horizon',
-                    version: $this->composerVersion('laravel/horizon'),
+                    version: $this->probe->composerVersion('laravel/horizon'),
                     description: __('Queue supervisor and dashboard.'),
-                    status: $this->horizonRunning() ? 'ok' : 'outdated',
+                    status: $this->probe->horizonRunning() ? 'ok' : 'outdated',
                 ),
                 $this->item(
                     name: 'Laravel Reverb',
-                    version: $this->composerVersion('laravel/reverb'),
+                    version: $this->probe->composerVersion('laravel/reverb'),
                     description: __('WebSocket server for live broadcasts.'),
-                    status: $this->reverbReachable() ? 'ok' : 'outdated',
+                    status: $this->probe->reverbReachable() ? 'ok' : 'outdated',
                 ),
                 $this->item(
                     name: 'Laravel Wayfinder',
-                    version: $this->composerVersion('laravel/wayfinder'),
+                    version: $this->probe->composerVersion('laravel/wayfinder'),
                     description: __('Type-safe route helpers surfaced to the frontend.'),
                 ),
             ],
@@ -221,110 +226,5 @@ class AdminStackController extends Controller
             'status' => $status,
             'docsUrl' => $docsUrl,
         ];
-    }
-
-    private function composerVersion(string $package): ?string
-    {
-        static $cache = null;
-        if ($cache === null) {
-            $lock = @file_get_contents(base_path('composer.lock'));
-            if ($lock === false) {
-                $cache = [];
-
-                return null;
-            }
-            $data = json_decode($lock, true) ?: [];
-            $cache = [];
-            foreach (array_merge($data['packages'] ?? [], $data['packages-dev'] ?? []) as $pkg) {
-                if (isset($pkg['name'], $pkg['version'])) {
-                    $cache[$pkg['name']] = ltrim((string) $pkg['version'], 'v');
-                }
-            }
-        }
-
-        return $cache[$package] ?? null;
-    }
-
-    private function npmVersion(string $package): ?string
-    {
-        static $cache = null;
-        if ($cache === null) {
-            $pkg = @file_get_contents(base_path('package.json'));
-            if ($pkg === false) {
-                $cache = [];
-
-                return null;
-            }
-            $data = json_decode($pkg, true) ?: [];
-            $cache = array_merge(
-                (array) ($data['dependencies'] ?? []),
-                (array) ($data['devDependencies'] ?? []),
-            );
-        }
-
-        $value = $cache[$package] ?? null;
-
-        return $value ? ltrim((string) $value, '^~') : null;
-    }
-
-    private function redisVersion(): ?string
-    {
-        try {
-            $info = Redis::connection('default')->info();
-            $version = $info['Server']['redis_version'] ?? ($info['redis_version'] ?? null);
-
-            return $version ? (string) $version : null;
-        } catch (Throwable) {
-            return null;
-        }
-    }
-
-    private function horizonRunning(): bool
-    {
-        try {
-            $masters = app(MasterSupervisorRepository::class)->all();
-
-            return ! empty($masters);
-        } catch (Throwable) {
-            return false;
-        }
-    }
-
-    private function reverbReachable(): bool
-    {
-        $host = (string) config('reverb.servers.reverb.host', '127.0.0.1');
-        $port = (int) config('reverb.servers.reverb.port', 8080);
-
-        try {
-            $fp = @fsockopen($host, $port, $errno, $errstr, 0.5);
-            if (! $fp) {
-                return false;
-            }
-            fclose($fp);
-
-            return true;
-        } catch (Throwable) {
-            return false;
-        }
-    }
-
-    private function safeDbScalar(string $sql): ?string
-    {
-        try {
-            $value = DB::scalar($sql);
-
-            return $value === null ? null : (string) $value;
-        } catch (Throwable) {
-            return null;
-        }
-    }
-
-    private function shortPgVersion(string $raw): string
-    {
-        if (preg_match('/\bPostgreSQL\s+([\d.]+)/i', $raw, $m)) {
-            return $m[1];
-        }
-
-        return $raw === '' ? 'unknown' : $raw;
     }
 }

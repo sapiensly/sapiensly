@@ -5,6 +5,7 @@ namespace App\Ai\Tools\Platform;
 use App\Ai\Tools\Chat\ProposeBuildTool;
 use App\Ai\Tools\RuntimeToolFactory;
 use App\Mcp\Servers\SapiensServer;
+use App\Mcp\Tools\SysadminTool;
 use App\Models\User;
 use Illuminate\Support\Str;
 use Laravel\Ai\Contracts\Tool as ToolContract;
@@ -105,6 +106,15 @@ class PlatformToolsFactory
 
         $tools = [];
         foreach (SapiensServer::TOOLS as $class) {
+            // Platform administration is never bridged into a tenant agent's
+            // toolset. Excluded BY CLASS, not by name: a name list would have to
+            // be extended for every tool added to the suite, and the one someone
+            // forgets is the one that hands an in-app agent the power to delete
+            // accounts or rotate provider keys.
+            if (is_subclass_of($class, SysadminTool::class)) {
+                continue;
+            }
+
             $name = self::toolName($class);
             if (in_array($name, self::DENYLIST, true) || in_array($name, self::CONFIRM_REQUIRED, true)) {
                 continue;

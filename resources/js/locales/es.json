@@ -219,6 +219,8 @@
     "system.mcp.abilities.data_read": "Leer datos del tenant",
     "system.mcp.abilities.data_write": "Escribir datos del tenant",
     "system.mcp.abilities.agents_invoke": "Hablar con agentes",
+    "system.mcp.abilities.platform_admin": "Administrar la plataforma (sysadmin)",
+    "system.mcp.abilities_hint_platform": "La administración de la plataforma nunca se concede dejando las casillas vacías: márcala a propósito.",
     "system.mcp.create": "Crear token",
     "system.mcp.created_title": "Token creado",
     "system.mcp.created_hint": "Cópialo ahora — por seguridad no se mostrará de nuevo.",

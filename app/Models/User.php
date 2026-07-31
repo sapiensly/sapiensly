@@ -24,6 +24,12 @@ class User extends Authenticatable implements HasLocalePreference, MustVerifyEma
 
     use UsesPlatformConnection;
 
+    /** The platform-wide super-admin role, assigned with a null spatie team. */
+    public const SYSADMIN_ROLE = 'sysadmin';
+
+    /** Per-instance memo for {@see self::isSysAdmin()}. */
+    private ?bool $sysAdminMemo = null;
+
     /**
      * The attributes that are mass assignable.
      *
@@ -121,6 +127,36 @@ class User extends Authenticatable implements HasLocalePreference, MustVerifyEma
     public function isBlocked(): bool
     {
         return $this->blocked_at !== null;
+    }
+
+    /**
+     * Whether the user holds the PLATFORM-wide sysadmin role.
+     *
+     * `hasRole('sysadmin')` alone is not enough: spatie's teams feature scopes
+     * the roles relation to the current team (`organization_id`), while the
+     * sysadmin role is assigned globally with a null team (see SysAdminSeeder).
+     * So the moment a team is set — every MCP request pins one, and so does
+     * SetPermissionsTeam on the web — the check silently returns false. This
+     * evaluates the assignment against the null team it was actually made under,
+     * then restores the caller's team so nothing downstream sees a changed scope.
+     */
+    public function isSysAdmin(): bool
+    {
+        if ($this->sysAdminMemo !== null) {
+            return $this->sysAdminMemo;
+        }
+
+        $previousTeam = getPermissionsTeamId();
+
+        try {
+            setPermissionsTeamId(null);
+            $this->unsetRelation('roles');
+
+            return $this->sysAdminMemo = $this->hasRole(self::SYSADMIN_ROLE);
+        } finally {
+            setPermissionsTeamId($previousTeam);
+            $this->unsetRelation('roles');
+        }
     }
 
     /**

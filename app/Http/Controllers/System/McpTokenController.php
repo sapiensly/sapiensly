@@ -4,6 +4,7 @@ namespace App\Http\Controllers\System;
 
 use App\Http\Controllers\Controller;
 use App\Models\McpAccessToken;
+use App\Models\User;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -43,7 +44,7 @@ class McpTokenController extends Controller
                     'created_at' => $token->created_at->toIso8601String(),
                 ])
                 ->all(),
-            'abilities' => McpAccessToken::ABILITIES,
+            'abilities' => $this->grantableAbilities($user),
             'serverUrl' => url("mcp/{$organization->slug}/v1"),
             'justCreatedToken' => $request->session()->get('plain_token'),
         ]);
@@ -55,10 +56,14 @@ class McpTokenController extends Controller
         $organization = $user->organization;
         $this->authorize('manageMcp', $organization);
 
+        // An org owner may hand out the tenant abilities; `platform:admin` is
+        // only offered to — and only accepted from — a platform sysadmin, so
+        // administering the whole platform can never be granted from inside a
+        // single organization's settings screen.
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:80'],
             'abilities' => ['array'],
-            'abilities.*' => ['string', 'in:'.implode(',', McpAccessToken::ABILITIES)],
+            'abilities.*' => ['string', 'in:'.implode(',', $this->grantableAbilities($user))],
         ]);
 
         $plain = McpAccessToken::generateToken();
@@ -84,5 +89,22 @@ class McpTokenController extends Controller
         $mcpToken->delete();
 
         return back()->with('success', 'MCP token revoked.');
+    }
+
+    /**
+     * The abilities this person may put on a token.
+     *
+     * @return list<string>
+     */
+    private function grantableAbilities(User $user): array
+    {
+        if ($user->isSysAdmin()) {
+            return McpAccessToken::ABILITIES;
+        }
+
+        return array_values(array_diff(
+            McpAccessToken::ABILITIES,
+            McpAccessToken::EXPLICIT_ONLY_ABILITIES,
+        ));
     }
 }

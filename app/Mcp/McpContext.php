@@ -23,4 +23,18 @@ class McpContext
 
         return $this->token->hasAbility($ability);
     }
+
+    /**
+     * Whether a token is present AND names this ability outright. Unlike
+     * {@see self::allows()} this FAILS CLOSED when there is no token: the
+     * absent-token case covers the OAuth (claude.ai) connection, which carries
+     * no ability list at all, and in-process calls outside the HTTP middleware.
+     * Platform administration must be deliberately granted on a minted personal
+     * token, never inherited from "no restrictions recorded".
+     */
+    public function allowsExplicitly(string $ability): bool
+    {
+        return $this->token !== null
+            && in_array($ability, $this->token->abilities ?? [], true);
+    }
 }

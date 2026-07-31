@@ -116,6 +116,33 @@ Agents (agents:invoke):
   - list_agents, get_agent, invoke_agent (synchronous reply). For a multi-turn
     conversation, reuse the conversation_id invoke_agent returns on the next
     call; list_conversations resumes an earlier thread.
+
+Platform administration (platform:admin — only visible to a sysadmin whose token
+NAMES that ability). These act across EVERY organization, not the one this
+connection is bound to, and every write is recorded in the platform audit log:
+  - Observe: platform_overview (start here), platform_health (Horizon/Reverb/
+    Redis/Postgres + queue depth), platform_stack (versions), list_failed_jobs /
+    retry_failed_job, read_platform_logs, read_platform_audit (who changed what).
+  - Organizations: list_organizations, inspect_organization (members, what they
+    built, spend, budget, tokens), create_organization, manage_organization
+    (rename / suspend / restore — suspend is a reversible soft-delete, NOT a
+    purge), set_organization_budget (their limits and your platform cap).
+  - Accounts: list_platform_users, inspect_platform_user (read this BEFORE
+    deleting anyone — it says what they own and which organizations they are the
+    sole owner of), invite_platform_user, manage_platform_user (block / unblock /
+    reset_two_factor / resend_verification / delete),
+    manage_organization_membership (never leaves an org without an active owner).
+  - Sign-in policy: get_access_policy / set_access_policy (registration, email
+    verification, 2FA, IP + domain allowlists, session lifetime).
+  - AI: list_platform_providers, manage_provider_key (set/rotate, test, sync
+    models), list_catalog_models, manage_catalog_model (enable/disable/test),
+    get_ai_defaults / set_ai_defaults (which model each module routes to),
+    get_platform_spend (whole platform, or drilled into one organization).
+  - Infrastructure: get_cloud_config, verify_tenant_isolation (checks that RLS,
+    policies and triggers are really in place on every tenant table — run it
+    after any migration that touches them), list_mcp_tokens / revoke_mcp_token,
+    run_platform_maintenance (a fixed allowlist of artisan operations; the
+    disruptive ones need explicit confirmation).
 TXT)]
 class SapiensServer extends Server
 {
@@ -275,6 +302,45 @@ class SapiensServer extends Server
         Tools\Chats\GetChatTool::class,
         Tools\Chats\SearchChatMessagesTool::class,
         Tools\Chats\ContinueChatTool::class,
+        // Platform administration (platform:admin + the sysadmin role — see
+        // App\Mcp\Tools\SysadminTool). These act ACROSS organizations; an
+        // ordinary connection never sees them in tools/list.
+        Tools\Platform\PlatformOverviewTool::class,
+        Tools\Platform\PlatformHealthTool::class,
+        Tools\Platform\PlatformStackTool::class,
+        Tools\Platform\ListFailedJobsTool::class,
+        Tools\Platform\RetryFailedJobTool::class,
+        Tools\Platform\ReadPlatformLogsTool::class,
+        Tools\Platform\ReadPlatformAuditTool::class,
+        // Organizations.
+        Tools\Platform\ListOrganizationsTool::class,
+        Tools\Platform\InspectOrganizationTool::class,
+        Tools\Platform\CreateOrganizationTool::class,
+        Tools\Platform\ManageOrganizationTool::class,
+        Tools\Platform\SetOrganizationBudgetTool::class,
+        // Accounts & membership.
+        Tools\Platform\ListPlatformUsersTool::class,
+        Tools\Platform\InspectPlatformUserTool::class,
+        Tools\Platform\InvitePlatformUserTool::class,
+        Tools\Platform\ManagePlatformUserTool::class,
+        Tools\Platform\ManageOrganizationMembershipTool::class,
+        // Sign-in policy.
+        Tools\Platform\GetAccessPolicyTool::class,
+        Tools\Platform\SetAccessPolicyTool::class,
+        // Platform AI configuration.
+        Tools\Platform\ListPlatformProvidersTool::class,
+        Tools\Platform\ManageProviderKeyTool::class,
+        Tools\Platform\ListCatalogModelsTool::class,
+        Tools\Platform\ManageCatalogModelTool::class,
+        Tools\Platform\GetAiDefaultsTool::class,
+        Tools\Platform\SetAiDefaultsTool::class,
+        Tools\Platform\GetPlatformSpendTool::class,
+        // Infrastructure & credentials.
+        Tools\Platform\GetCloudConfigTool::class,
+        Tools\Platform\VerifyTenantIsolationTool::class,
+        Tools\Platform\ListMcpTokensTool::class,
+        Tools\Platform\RevokeMcpTokenTool::class,
+        Tools\Platform\RunPlatformMaintenanceTool::class,
     ];
 
     /** @var list<class-string> */

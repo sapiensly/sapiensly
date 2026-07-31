@@ -7,6 +7,7 @@ use App\Enums\MembershipRole;
 use App\Enums\MembershipStatus;
 use App\Enums\ToolType;
 use App\Enums\Visibility;
+use App\Mcp\McpContext;
 use App\Models\Agent;
 use App\Models\App;
 use App\Models\Channel;
@@ -112,6 +113,40 @@ function mcpMember(
     ]);
 
     return $user;
+}
+
+/**
+ * A member who also holds the PLATFORM sysadmin role. The role is assigned with
+ * a null spatie team, exactly as SysAdminSeeder does — assigning it under the
+ * org's team would produce a user who looks like a sysadmin to hasRole() and
+ * isn't one, which is the opposite of what these tests need to prove.
+ */
+function mcpSysadmin(Organization $org, ?Organization $activeOrg = null): User
+{
+    $user = mcpMember($org, MembershipRole::Owner, $activeOrg);
+
+    $previousTeam = getPermissionsTeamId();
+    setPermissionsTeamId(null);
+    $user->assignRole(User::SYSADMIN_ROLE);
+    setPermissionsTeamId($previousTeam);
+    $user->unsetRelation('roles');
+
+    return $user;
+}
+
+/**
+ * Bind an McpContext carrying a token with these abilities, the way
+ * AuthenticateMcpToken does per request. Platform tools fail closed without
+ * one, so a test that omits this is testing the gate, not the tool.
+ *
+ * @param  list<string>  $abilities
+ */
+function mcpActingContext(array $abilities): McpAccessToken
+{
+    $token = new McpAccessToken(['abilities' => $abilities]);
+    app()->instance(McpContext::class, new McpContext($token));
+
+    return $token;
 }
 
 /**

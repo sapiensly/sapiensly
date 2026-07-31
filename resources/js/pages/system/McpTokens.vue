@@ -217,6 +217,12 @@ function formatDate(value: string | null): string {
                         <p class="text-xs text-ink-muted">
                             {{ t('system.mcp.abilities_hint') }}
                         </p>
+                        <p
+                            v-if="abilities.includes('platform:admin')"
+                            class="text-xs text-ink-muted"
+                        >
+                            {{ t('system.mcp.abilities_hint_platform') }}
+                        </p>
                         <div class="grid gap-2 sm:grid-cols-2">
                             <label
                                 v-for="ability in abilities"

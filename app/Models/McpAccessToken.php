@@ -20,8 +20,21 @@ class McpAccessToken extends Model
     use HasFactory, HasPrefixedUlid;
     use UsesPlatformConnection;
 
+    /** Platform administration — the whole sysadmin tool suite. */
+    public const PLATFORM_ADMIN = 'platform:admin';
+
     /** MCP tool-group abilities a token may be granted. */
-    public const ABILITIES = ['apps:build', 'data:read', 'data:write', 'agents:invoke'];
+    public const ABILITIES = ['apps:build', 'data:read', 'data:write', 'agents:invoke', self::PLATFORM_ADMIN];
+
+    /**
+     * Abilities an empty `abilities` list does NOT confer. Leaving the list
+     * empty means "all tool groups" for the tenant-facing abilities — a
+     * convenience that must never hand out platform administration by
+     * omission. These are granted only by being named explicitly.
+     *
+     * @var list<string>
+     */
+    public const EXPLICIT_ONLY_ABILITIES = [self::PLATFORM_ADMIN];
 
     protected $fillable = [
         'user_id',
@@ -73,11 +86,17 @@ class McpAccessToken extends Model
 
     public function hasAbility(string $ability): bool
     {
-        if (empty($this->abilities)) {
+        $granted = $this->abilities ?? [];
+
+        if (in_array($ability, self::EXPLICIT_ONLY_ABILITIES, true)) {
+            return in_array($ability, $granted, true);
+        }
+
+        if ($granted === []) {
             return true;
         }
 
-        return in_array($ability, $this->abilities, true);
+        return in_array($ability, $granted, true);
     }
 
     public function touchLastUsed(): void

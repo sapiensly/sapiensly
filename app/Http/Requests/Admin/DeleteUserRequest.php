@@ -9,7 +9,9 @@ class DeleteUserRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        return $this->user()?->hasRole('sysadmin') ?? false;
+        // isSysAdmin(), not hasRole(): the role is global while spatie's
+        // check is scoped to the active organization's team.
+        return $this->user()?->isSysAdmin() ?? false;
     }
 
     public function rules(): array

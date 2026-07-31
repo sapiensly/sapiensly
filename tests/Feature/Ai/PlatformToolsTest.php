@@ -5,6 +5,7 @@ use App\Ai\Tools\Platform\PlatformToolsFactory;
 use App\Ai\Tools\RuntimeToolFactory;
 use App\Mcp\Servers\SapiensServer;
 use App\Mcp\Tools\Account\WhoamiTool;
+use App\Mcp\Tools\SysadminTool;
 use App\Models\User;
 use Illuminate\Support\Str;
 use Laravel\Ai\Contracts\Tool as ToolContract;
@@ -52,7 +53,7 @@ it('gives every platform tool a unique SDK name', function () {
     expect($names->duplicates())->toBeEmpty();
 });
 
-it('drift guard: every registered MCP tool is exposed, denylisted, or confirmation-gated', function () {
+it('drift guard: every registered MCP tool is exposed, denylisted, confirmation-gated, or platform-only', function () {
     $exposed = collect(PlatformToolsFactory::for($this->owner))
         ->map(fn (ToolContract $t) => class_basename($t))
         ->all();
@@ -61,9 +62,31 @@ it('drift guard: every registered MCP tool is exposed, denylisted, or confirmati
         $name = (string) Str::of(class_basename($class))->beforeLast('Tool')->snake();
         $classified = in_array($name, $exposed, true)
             || in_array($name, PlatformToolsFactory::DENYLIST, true)
-            || in_array($name, PlatformToolsFactory::CONFIRM_REQUIRED, true);
+            || in_array($name, PlatformToolsFactory::CONFIRM_REQUIRED, true)
+            // The fourth category, and the only one that needs no list: the
+            // platform-administration suite is withheld from agents by CLASS,
+            // so a tool added to it can never be forgotten here.
+            || is_subclass_of($class, SysadminTool::class);
         expect($classified)
-            ->toBeTrue("MCP tool '{$name}' is neither exposed to agents, denylisted, nor confirmation-gated — classify it.");
+            ->toBeTrue("MCP tool '{$name}' is neither exposed to agents, denylisted, confirmation-gated, nor a platform tool — classify it.");
+    }
+});
+
+it('withholds every platform-administration tool from agents', function () {
+    $exposed = collect(PlatformToolsFactory::for($this->owner))
+        ->map(fn (ToolContract $t) => class_basename($t))
+        ->all();
+
+    $platformTools = array_filter(
+        SapiensServer::TOOLS,
+        fn (string $class) => is_subclass_of($class, SysadminTool::class),
+    );
+
+    expect($platformTools)->not->toBeEmpty();
+
+    foreach ($platformTools as $class) {
+        $name = (string) Str::of(class_basename($class))->beforeLast('Tool')->snake();
+        expect($exposed)->not->toContain($name);
     }
 });
 

@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Middleware\BindTenantContext;
+use App\Http\Middleware\EnsureUserIsSysAdmin;
 use App\Http\Middleware\HandleAppearance;
 use App\Http\Middleware\HandleInertiaRequests;
 use App\Http\Middleware\InjectAiProviderConfig;
@@ -93,6 +94,9 @@ return Application::configure(basePath: dirname(__DIR__))
             'role' => RoleMiddleware::class,
             'permission' => PermissionMiddleware::class,
             'role_or_permission' => RoleOrPermissionMiddleware::class,
+            // NOT `role:sysadmin`: that check is team-scoped and the sysadmin
+            // role is global (see EnsureUserIsSysAdmin).
+            'sysadmin' => EnsureUserIsSysAdmin::class,
             'verify.whatsapp.signature' => VerifyWhatsAppSignature::class,
         ]);
 
