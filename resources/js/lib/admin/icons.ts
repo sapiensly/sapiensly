@@ -9,65 +9,61 @@
  */
 
 export {
-    // navigation
-    LayoutDashboard as NavDashboard,
-    Users as NavUsers,
+    Activity,
+    // state
+    AlertTriangle,
+    ArrowLeftToLine as Back,
+    Ban,
+    Bell,
+    Bot, // alias for reach-around; also as NavAccess
+    Brain as Brain,
+    Check,
+    ChevronDown,
+    // direction
+    ChevronRight,
+    Cpu,
+    Database,
+    Download,
+    ExternalLink,
+    Eye,
+    EyeOff,
+    FileText,
+    HardDrive,
+    Info,
+    Key,
+    Library,
+    Loader2,
+    Lock,
+    LogOut,
+    Mail,
+    Menu,
+    MoreVertical,
     Shield as NavAccess,
     Brain as NavAi,
     Cloud as NavCloud,
+    // navigation
+    LayoutDashboard as NavDashboard,
+    KeyRound as NavMcp,
     Layers as NavStack,
-
-    // entities
-    Sparkles,
-    Bot,
-    Database,
-    HardDrive,
-    Server,
-    Cpu,
-    Zap,
-    Radio,
+    Users as NavUsers,
+    Pencil,
     Plug,
-    Library,
-    FileText,
+    Plus,
+    Radio,
+    RefreshCw,
+    Rocket,
     ScrollText,
-
+    Search,
+    Server,
+    // narrative (three-layer story)
+    Shield as Shield,
     // actions / affordances
     SlidersHorizontal,
-    Lock,
-    Key,
-    Eye,
-    EyeOff,
-    Check,
-    Ban,
-    Mail,
-    Trash2,
-    MoreVertical,
-    RefreshCw,
-    Download,
-    Search,
-    Loader2,
-    ExternalLink,
-    Pencil,
-    Bell,
-    Plus,
-    X,
-
-    // direction
-    ChevronRight,
-    ChevronDown,
-    Menu,
-    LogOut,
-    ArrowLeftToLine as Back,
-
-    // state
-    AlertTriangle,
-    Info,
-    TrendingUp,
-    Activity,
+    // entities
+    Sparkles,
     Star,
-    Rocket,
-
-    // narrative (three-layer story)
-    Shield as Shield, // alias for reach-around; also as NavAccess
-    Brain as Brain,
+    Trash2,
+    TrendingUp,
+    X,
+    Zap,
 } from '@lucide/vue';

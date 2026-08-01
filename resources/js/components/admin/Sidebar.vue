@@ -19,12 +19,13 @@ import {
     NavAi,
     NavCloud,
     NavDashboard,
+    NavMcp,
     NavStack,
     NavUsers,
 } from '@/lib/admin/icons';
-import { ChevronsUpDown } from '@lucide/vue';
 import type { AppPageProps } from '@/types';
 import { Link, usePage } from '@inertiajs/vue3';
+import { ChevronsUpDown } from '@lucide/vue';
 import type { Component } from 'vue';
 import { computed, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
@@ -94,6 +95,13 @@ const navItems = computed<NavItem[]>(() => [
         match: (u) => u.startsWith('/admin/cloud'),
     },
     {
+        key: 'mcp',
+        label: t('admin.nav.mcp'),
+        href: '/admin/mcp',
+        icon: NavMcp,
+        match: (u) => u.startsWith('/admin/mcp'),
+    },
+    {
         key: 'stack',
         label: t('admin.nav.stack'),
         href: '/admin/stack',
@@ -155,10 +163,7 @@ const userRole = computed(() => {
                 collapsed ? 'justify-center px-3' : 'gap-2 px-5',
             ]"
         >
-            <Link
-                href="/admin"
-                class="flex items-center gap-1 outline-none"
-            >
+            <Link href="/admin" class="flex items-center gap-1 outline-none">
                 <AppLogo tone="white" :collapsed="collapsed" />
             </Link>
         </div>
@@ -220,10 +225,7 @@ const userRole = computed(() => {
                                         :is="item.icon"
                                         class="size-4 shrink-0"
                                     />
-                                    <span
-                                        v-if="!collapsed"
-                                        class="truncate"
-                                    >
+                                    <span v-if="!collapsed" class="truncate">
                                         {{ item.label }}
                                     </span>
                                 </Link>
@@ -282,9 +284,7 @@ const userRole = computed(() => {
                             v-if="!collapsed"
                             class="grid min-w-0 flex-1 leading-tight"
                         >
-                            <span
-                                class="truncate font-medium text-ink"
-                            >
+                            <span class="truncate font-medium text-ink">
                                 {{ authUser?.name ?? '—' }}
                             </span>
                             <span class="truncate text-xs text-ink-subtle">

@@ -4,6 +4,7 @@ use App\Http\Controllers\Admin\AdminAccessController;
 use App\Http\Controllers\Admin\AdminAiController;
 use App\Http\Controllers\Admin\AdminCloudController;
 use App\Http\Controllers\Admin\AdminDashboardController;
+use App\Http\Controllers\Admin\AdminMcpController;
 use App\Http\Controllers\Admin\AdminStackController;
 use App\Http\Controllers\Admin\AdminUserController;
 use App\Http\Controllers\Admin\ImpersonateController;
@@ -39,6 +40,12 @@ Route::middleware(['auth', 'verified', 'sysadmin'])->prefix('admin')->group(func
     Route::get('/ai/providers/openrouter/models', [AdminAiController::class, 'openRouterModels'])->name('admin.ai.providers.openrouter.models');
     Route::post('/ai/providers/openrouter/models', [AdminAiController::class, 'saveOpenRouterModels'])->name('admin.ai.providers.openrouter.models.save');
     Route::post('/ai/test-connection', [AdminAiController::class, 'testConnection'])->name('admin.ai.test-connection');
+
+    // Platform MCP access — issuing a `platform:admin` credential belongs in
+    // the sysadmin console, not on an organization's own settings screen.
+    Route::get('/mcp', [AdminMcpController::class, 'index'])->name('admin.mcp.index');
+    Route::post('/mcp', [AdminMcpController::class, 'store'])->name('admin.mcp.store');
+    Route::delete('/mcp/{mcpToken}', [AdminMcpController::class, 'destroy'])->name('admin.mcp.destroy');
 
     Route::get('/cloud', [AdminCloudController::class, 'index'])->name('admin.cloud.index');
 

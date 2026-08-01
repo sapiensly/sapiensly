@@ -13,6 +13,7 @@ import {
     NavAi,
     NavCloud,
     NavDashboard,
+    NavMcp,
     NavStack,
     NavUsers,
 } from '@/lib/admin/icons';
@@ -43,9 +44,7 @@ function registerCommand(cmd: PaletteCommand) {
         cmd,
     ];
     return () => {
-        pageCommands.value = pageCommands.value.filter(
-            (c) => c.id !== cmd.id,
-        );
+        pageCommands.value = pageCommands.value.filter((c) => c.id !== cmd.id);
     };
 }
 
@@ -89,6 +88,13 @@ const navCommands = computed<PaletteCommand[]>(() => [
         label: t('admin.nav.cloud'),
         icon: NavCloud,
         perform: () => router.visit('/admin/cloud'),
+    },
+    {
+        id: 'nav-mcp',
+        group: t('admin.palette.navigation'),
+        label: t('admin.nav.mcp'),
+        icon: NavMcp,
+        perform: () => router.visit('/admin/mcp'),
     },
     {
         id: 'nav-stack',

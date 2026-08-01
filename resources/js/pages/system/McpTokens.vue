@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import McpTokenController from '@/actions/App/Http/Controllers/System/McpTokenController';
-import PageHeader from '@/components/app-v2/PageHeader.vue';
 import SettingsCard from '@/components/admin/SettingsCard.vue';
+import PageHeader from '@/components/app-v2/PageHeader.vue';
 import InputError from '@/components/InputError.vue';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -50,9 +50,7 @@ function submit(): void {
 }
 
 function revoke(token: TokenRow): void {
-    if (
-        !window.confirm(t('system.mcp.revoke_confirm', { name: token.name }))
-    ) {
+    if (!window.confirm(t('system.mcp.revoke_confirm', { name: token.name }))) {
         return;
     }
     router.delete(McpTokenController.destroy(token.id).url, {
@@ -77,9 +75,7 @@ function abilityLabel(ability: string): string {
 }
 
 function formatDate(value: string | null): string {
-    return value
-        ? new Date(value).toLocaleDateString()
-        : t('system.mcp.never');
+    return value ? new Date(value).toLocaleDateString() : t('system.mcp.never');
 }
 </script>
 
@@ -217,12 +213,6 @@ function formatDate(value: string | null): string {
                         <p class="text-xs text-ink-muted">
                             {{ t('system.mcp.abilities_hint') }}
                         </p>
-                        <p
-                            v-if="abilities.includes('platform:admin')"
-                            class="text-xs text-ink-muted"
-                        >
-                            {{ t('system.mcp.abilities_hint_platform') }}
-                        </p>
                         <div class="grid gap-2 sm:grid-cols-2">
                             <label
                                 v-for="ability in abilities"
@@ -263,10 +253,7 @@ function formatDate(value: string | null): string {
                 :description="t('system.mcp.existing_hint')"
                 tint="var(--sp-accent-cyan)"
             >
-                <p
-                    v-if="tokens.length === 0"
-                    class="text-xs text-ink-muted"
-                >
+                <p v-if="tokens.length === 0" class="text-xs text-ink-muted">
                     {{ t('system.mcp.empty') }}
                 </p>
 
@@ -282,9 +269,10 @@ function formatDate(value: string | null): string {
                                     class="truncate text-[13px] font-medium text-ink"
                                     >{{ token.name }}</span
                                 >
-                                <span class="font-mono text-xs text-ink-muted">{{
-                                    token.masked
-                                }}</span>
+                                <span
+                                    class="font-mono text-xs text-ink-muted"
+                                    >{{ token.masked }}</span
+                                >
                             </div>
                             <div
                                 class="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-ink-muted"
@@ -306,7 +294,7 @@ function formatDate(value: string | null): string {
                         </div>
                         <button
                             type="button"
-                            class="inline-flex size-8 shrink-0 items-center justify-center rounded-xs border border-soft text-ink-muted transition-colors hover:border-accent-red/40 hover:bg-accent-red/10 hover:text-accent-red"
+                            class="hover:border-accent-red/40 hover:bg-accent-red/10 hover:text-accent-red inline-flex size-8 shrink-0 items-center justify-center rounded-xs border border-soft text-ink-muted transition-colors"
                             :title="t('system.mcp.revoke')"
                             @click="revoke(token)"
                         >

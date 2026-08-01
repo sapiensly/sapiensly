@@ -2,9 +2,9 @@
 
 namespace App\Http\Controllers\System;
 
+use App\Http\Controllers\Admin\AdminMcpController;
 use App\Http\Controllers\Controller;
 use App\Models\McpAccessToken;
-use App\Models\User;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -18,6 +18,20 @@ use Inertia\Response;
  */
 class McpTokenController extends Controller
 {
+    /**
+     * What this screen may grant: the tenant abilities, and only those.
+     *
+     * `platform:admin` is issued from the sysadmin console (Admin → MCP,
+     * {@see AdminMcpController}). Not because a
+     * sysadmin could not be trusted with the checkbox, but because a
+     * credential that administers every organization does not belong on a
+     * screen whose whole frame says "this organization" — the surrounding
+     * context would misdescribe what the token does.
+     *
+     * @var list<string>
+     */
+    private const TENANT_ABILITIES = ['apps:build', 'data:read', 'data:write', 'agents:invoke'];
+
     public function show(Request $request): Response|RedirectResponse
     {
         $user = $request->user();
@@ -44,7 +58,7 @@ class McpTokenController extends Controller
                     'created_at' => $token->created_at->toIso8601String(),
                 ])
                 ->all(),
-            'abilities' => $this->grantableAbilities($user),
+            'abilities' => self::TENANT_ABILITIES,
             'serverUrl' => url("mcp/{$organization->slug}/v1"),
             'justCreatedToken' => $request->session()->get('plain_token'),
         ]);
@@ -56,14 +70,10 @@ class McpTokenController extends Controller
         $organization = $user->organization;
         $this->authorize('manageMcp', $organization);
 
-        // An org owner may hand out the tenant abilities; `platform:admin` is
-        // only offered to — and only accepted from — a platform sysadmin, so
-        // administering the whole platform can never be granted from inside a
-        // single organization's settings screen.
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:80'],
             'abilities' => ['array'],
-            'abilities.*' => ['string', 'in:'.implode(',', $this->grantableAbilities($user))],
+            'abilities.*' => ['string', 'in:'.implode(',', self::TENANT_ABILITIES)],
         ]);
 
         $plain = McpAccessToken::generateToken();
@@ -89,22 +99,5 @@ class McpTokenController extends Controller
         $mcpToken->delete();
 
         return back()->with('success', 'MCP token revoked.');
-    }
-
-    /**
-     * The abilities this person may put on a token.
-     *
-     * @return list<string>
-     */
-    private function grantableAbilities(User $user): array
-    {
-        if ($user->isSysAdmin()) {
-            return McpAccessToken::ABILITIES;
-        }
-
-        return array_values(array_diff(
-            McpAccessToken::ABILITIES,
-            McpAccessToken::EXPLICIT_ONLY_ABILITIES,
-        ));
     }
 }

@@ -5,9 +5,11 @@ use Database\Seeders\RolesAndPermissionsSeeder;
 use Spatie\Permission\PermissionRegistrar;
 
 /**
- * `platform:admin` is offered on the token screen — and accepted by it — only
- * for a platform sysadmin. Otherwise an organization owner could mint
- * themselves platform administration from inside their own org settings.
+ * The organization MCP screen grants tenant abilities and nothing else.
+ * `platform:admin` is issued from the sysadmin console — not because a sysadmin
+ * could not be trusted with the checkbox, but because a credential that
+ * administers every organization must not be offered on a screen whose entire
+ * frame says "this organization".
  */
 beforeEach(function () {
     $this->seed(RolesAndPermissionsSeeder::class);
@@ -16,49 +18,35 @@ beforeEach(function () {
     $this->org = mcpOrg('Acme');
 });
 
-it('does not offer the platform ability to an org owner', function () {
+$tenantAbilities = ['apps:build', 'data:read', 'data:write', 'agents:invoke'];
+
+it('offers only the tenant abilities to an org owner', function () use ($tenantAbilities) {
     $owner = mcpMember($this->org);
 
     $this->actingAs($owner)
         ->get(route('system.mcp.show'))
         ->assertOk()
-        ->assertInertia(fn ($page) => $page->where('abilities', [
-            'apps:build', 'data:read', 'data:write', 'agents:invoke',
-        ]));
+        ->assertInertia(fn ($page) => $page->where('abilities', $tenantAbilities));
 });
 
-it('offers it to a sysadmin', function () {
+it('does not offer the platform ability even to a sysadmin', function () use ($tenantAbilities) {
     $sysadmin = mcpSysadmin($this->org);
 
     $this->actingAs($sysadmin)
         ->get(route('system.mcp.show'))
         ->assertOk()
-        ->assertInertia(fn ($page) => $page->where('abilities', McpAccessToken::ABILITIES));
+        ->assertInertia(fn ($page) => $page->where('abilities', $tenantAbilities));
 });
 
-it('rejects an org owner who posts the platform ability anyway', function () {
-    $owner = mcpMember($this->org);
-
-    $this->actingAs($owner)
-        ->post(route('system.mcp.store'), [
-            'name' => 'sneaky',
-            'abilities' => ['platform:admin'],
-        ])
-        ->assertSessionHasErrors('abilities.0');
+it('rejects the platform ability posted to the organization screen', function () {
+    foreach ([mcpMember(mcpOrg('Owned')), mcpSysadmin($this->org)] as $actor) {
+        $this->actingAs($actor)
+            ->post(route('system.mcp.store'), [
+                'name' => 'sneaky',
+                'abilities' => [McpAccessToken::PLATFORM_ADMIN],
+            ])
+            ->assertSessionHasErrors('abilities.0');
+    }
 
     expect(McpAccessToken::where('name', 'sneaky')->exists())->toBeFalse();
-});
-
-it('lets a sysadmin mint a token carrying it', function () {
-    $sysadmin = mcpSysadmin($this->org);
-
-    $this->actingAs($sysadmin)
-        ->post(route('system.mcp.store'), [
-            'name' => 'platform',
-            'abilities' => ['platform:admin'],
-        ])
-        ->assertSessionHasNoErrors();
-
-    expect(McpAccessToken::where('name', 'platform')->first()->abilities)
-        ->toBe(['platform:admin']);
 });
