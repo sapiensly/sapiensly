@@ -1010,13 +1010,23 @@ class AppScaffolder
             $parentTaken[] = $rollupSlug;
             $sumFieldId = $this->id('fld');
             $sumSlug = $this->uniqueSlug($from['slug'].'_'.$amount['slug'].'_total', $parentTaken, 'total');
+            // Named for the measure ("Total Renta Mensual"), except when two
+            // child objects sum a like-named field onto the same parent — then
+            // the measure no longer tells them apart and the child's name does.
+            $sumName = $this->labelTotal($lang, $this->moneyMeasureName(
+                $lang,
+                (string) ($amount['name'] ?? ''),
+                $from['name'],
+            ));
+            $takenNames = array_column($to['fields'], 'name');
+            $takenNames[] = $rollupField['name'];
+            if (in_array($sumName, $takenNames, true)) {
+                $sumName = $this->labelTotal($lang, $from['name']);
+            }
             $sumField = [
                 'id' => $sumFieldId,
                 'slug' => $sumSlug,
-                // Named for the children it adds up, not for the field: a
-                // field already called "Costo Total" made this "Total Costo
-                // Total".
-                'name' => $this->labelTotal($lang, $from['name']),
+                'name' => $sumName,
                 'type' => 'rollup',
                 'via_relation_field_id' => $parentFieldId,
                 'aggregator' => 'sum',
@@ -1525,9 +1535,17 @@ class AppScaffolder
             : null;
 
         if ($primary !== null && $primaryCurrency !== null) {
+            // The measure, not the object: a money KPI sits next to a count KPI
+            // for the very same object, and naming both after the object leaves
+            // "Total Inmuebles $308,500.00" above "Inmuebles 6".
+            $measure = $this->moneyMeasureName(
+                $lang,
+                (string) ($primaryCurrency['name'] ?? ''),
+                $primary['name'],
+            );
             $items[] = [
                 'id' => $this->id('itm'),
-                'label' => $this->labelTotal($lang, $primary['name']),
+                'label' => $this->labelTotal($lang, $measure),
                 'query' => ['object_id' => $primary['id']],
                 'aggregation' => 'sum',
                 'field_id' => $primaryCurrency['id'],
@@ -1535,7 +1553,7 @@ class AppScaffolder
             ];
             $items[] = [
                 'id' => $this->id('itm'),
-                'label' => $this->labelAverage($lang, $primary['name']),
+                'label' => $this->labelAverage($lang, $measure),
                 'query' => ['object_id' => $primary['id']],
                 'aggregation' => 'avg',
                 'field_id' => $primaryCurrency['id'],
@@ -3551,6 +3569,26 @@ class AppScaffolder
     private function labelTotal(string $lang, string $name): string
     {
         return SemanticLexicon::for($lang)->label('total', name: $name);
+    }
+
+    /**
+     * Name a money aggregate after whichever of the two says something.
+     *
+     * "Total Inmuebles $308,500.00" beside "Inmuebles 6" spends the same words
+     * on a count and on a sum of rents, leaving the reader to work out which
+     * figure answers which question. The measure settles it — but only when the
+     * measure has a name of its own: "Renta Mensual" does, "Importe" and
+     * "Subtotal" are just the words for money, and "Costo Total" prefixed reads
+     * "Total Costo Total". Those carry nothing the object doesn't, so the object
+     * keeps the naming there.
+     */
+    private function moneyMeasureName(string $lang, string $fieldName, string $objectName): string
+    {
+        $fieldName = trim($fieldName);
+        $generic = $fieldName === ''
+            || SemanticLexicon::for($lang)->matches('amount', $fieldName);
+
+        return $generic ? $objectName : $fieldName;
     }
 
     private function labelAverage(string $lang, string $name): string

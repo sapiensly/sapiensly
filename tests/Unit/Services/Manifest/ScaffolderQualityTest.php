@@ -533,14 +533,65 @@ it('derives a parent total from a child money field', function () {
         ->first(fn ($f) => ($f['type'] ?? null) === 'rollup' && ($f['aggregator'] ?? null) === 'sum');
 
     expect($sumRollup)->not->toBeNull();
-    // Named for the children it adds up, not for the field it sums: naming it
-    // after the field produced "Total Costo Total" on an object whose amount
-    // was already called "Costo Total".
+    // "Subtotal" is the word for money, not the name of a measure — it would
+    // distinguish nothing, and prefixing an amount word reads "Total Costo
+    // Total". So the children name this one.
     expect($sumRollup['name'])->toBe('Total Renglones');
 
     $renglones = collect($manifest['objects'])->firstWhere('slug', 'renglones');
     $subtotal = collect($renglones['fields'])->firstWhere('slug', 'subtotal');
     expect($sumRollup['target_field_id'])->toBe($subtotal['id']);
+});
+
+it('names a money aggregate after the measure when the measure has a name', function () {
+    // The defect this fixes: a dashboard reading "Total Inmuebles $308,500.00"
+    // directly above "Inmuebles 6" — the same two words for a sum of rents and
+    // for a count of properties, so neither label says which is which.
+    $base = [
+        'schema_version' => '1.0.0',
+        'id' => 'app_scaffold_q9',
+        'slug' => 'arren',
+        'name' => 'Arrendamientos',
+        'version' => 1,
+        'objects' => [],
+        'pages' => [],
+        'permissions' => ['roles' => [['id' => 'rol_admin00001', 'slug' => 'admin', 'name' => 'Admin', 'is_default' => true]]],
+        'settings' => ['default_locale' => 'es-MX', 'default_currency' => 'MXN'],
+    ];
+
+    $manifest = app(AppScaffolder::class)->assemble($base, [
+        'objects' => [
+            ['name' => 'Propietarios', 'slug' => 'propietarios', 'fields' => [
+                ['name' => 'Nombre', 'slug' => 'nombre', 'type' => 'string', 'options' => null],
+            ]],
+            ['name' => 'Inmuebles', 'slug' => 'inmuebles', 'fields' => [
+                ['name' => 'Direccion', 'slug' => 'direccion', 'type' => 'string', 'options' => null],
+                ['name' => 'Estado', 'slug' => 'estado', 'type' => 'single_select', 'options' => [
+                    ['value' => 'disponible', 'label' => 'Disponible'],
+                    ['value' => 'rentado', 'label' => 'Rentado'],
+                ]],
+                ['name' => 'Renta Mensual', 'slug' => 'renta_mensual', 'type' => 'currency', 'options' => null],
+            ]],
+        ],
+        'links' => [['from' => 'inmuebles', 'to' => 'propietarios', 'name' => 'propietario']],
+    ]);
+
+    $metrics = blockByType(pageBySlug($manifest, 'dashboard'), 'metric_grid');
+    $sum = collect($metrics['items'])->firstWhere('aggregation', 'sum');
+    $avg = collect($metrics['items'])->firstWhere('aggregation', 'avg');
+
+    expect($sum['label'])->toBe('Total Renta Mensual')
+        ->and($avg['label'])->toBe('Promedio Renta Mensual');
+
+    // …and the count KPI beside them keeps the object's name, so the two read
+    // as different questions.
+    expect(collect($metrics['items'])->pluck('label'))->toContain('Inmuebles');
+
+    // The same rule on the rollup the parent gets from its children.
+    $propietarios = collect($manifest['objects'])->firstWhere('slug', 'propietarios');
+    $sumRollup = collect($propietarios['fields'])
+        ->first(fn ($f) => ($f['type'] ?? null) === 'rollup' && ($f['aggregator'] ?? null) === 'sum');
+    expect($sumRollup['name'])->toBe('Total Renta Mensual');
 });
 
 it('links the parent list table to its detail page', function () {
