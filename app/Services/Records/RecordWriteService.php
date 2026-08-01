@@ -7,6 +7,9 @@ use App\Models\AppFile;
 use App\Models\Record;
 use App\Models\User;
 use App\Services\Workflows\WorkflowTriggerDispatcher;
+use DateTimeImmutable;
+use DateTimeZone;
+use Exception;
 use InvalidArgumentException;
 use RuntimeException;
 
@@ -237,8 +240,8 @@ class RecordWriteService
             'number' => $this->validateNumber($field, $raw, $errors),
             'currency' => $this->validateNumber($field, $raw, $errors),
             'boolean' => (bool) $raw,
-            'date' => $this->validateDate($field, $raw, $errors, datetime: false),
-            'datetime' => $this->validateDate($field, $raw, $errors, datetime: true),
+            'date' => $this->validateDate($field, $raw, $errors, datetime: false, manifest: $manifest),
+            'datetime' => $this->validateDate($field, $raw, $errors, datetime: true, manifest: $manifest),
             'single_select' => $this->validateSelect($field, $raw, $errors, multi: false),
             'multi_select' => $this->validateSelect($field, $raw, $errors, multi: true),
             'relation' => $this->validateRelation($field, $raw, $errors, $app, $manifest, $relCache),
@@ -525,11 +528,25 @@ class RecordWriteService
      * @param  array<string, mixed>  $field
      * @param  list<string>  $errors
      */
-    private function validateDate(array $field, mixed $raw, array &$errors, bool $datetime): ?string
+    private function validateDate(array $field, mixed $raw, array &$errors, bool $datetime, array $manifest = []): ?string
     {
-        $value = (string) $raw;
-        $timestamp = strtotime($value);
-        if ($timestamp === false) {
+        $value = trim((string) $raw);
+
+        // A datetime with no offset — what a datetime-local input posts, and
+        // what a spreadsheet column holds — is a WALL CLOCK, and the wall it
+        // hangs on is the app's. Read in the server's zone instead (strtotime's
+        // default) it silently shifted: a reply typed at 09:15 in Mexico City
+        // was stored as 09:15Z and read back as 03:15 by the person who wrote
+        // it. An explicit offset or a bare date is left to speak for itself.
+        $zone = $datetime && ! $this->carriesOffset($value)
+            ? $this->appTimezone($manifest)
+            : null;
+
+        try {
+            $moment = $zone !== null
+                ? new DateTimeImmutable($value, new DateTimeZone($zone))
+                : new DateTimeImmutable($value);
+        } catch (Exception) {
             $errors[] = $datetime
                 ? "{$field['name']} must be a valid ISO datetime."
                 : "{$field['name']} must be a valid ISO date.";
@@ -540,8 +557,30 @@ class RecordWriteService
         // Normalise to ISO so the JSONB blob is consistent regardless of input
         // format. Date stays as YYYY-MM-DD, datetime as ISO 8601 UTC.
         return $datetime
-            ? gmdate('Y-m-d\TH:i:s\Z', $timestamp)
-            : gmdate('Y-m-d', $timestamp);
+            ? $moment->setTimezone(new DateTimeZone('UTC'))->format('Y-m-d\TH:i:s\Z')
+            : $moment->format('Y-m-d');
+    }
+
+    /** Whether a datetime string already says which zone it is in. */
+    private function carriesOffset(string $value): bool
+    {
+        return preg_match('/(?:Z|[+-]\d{2}:?\d{2})$/i', $value) === 1;
+    }
+
+    /**
+     * The zone an app's naive datetimes are written in: the one it declares,
+     * else the platform's.
+     *
+     * @param  array<string, mixed>  $manifest
+     */
+    private function appTimezone(array $manifest): string
+    {
+        $declared = $manifest['settings']['default_timezone'] ?? null;
+        if (is_string($declared) && in_array($declared, DateTimeZone::listIdentifiers(), true)) {
+            return $declared;
+        }
+
+        return config('app.timezone') ?: 'UTC';
     }
 
     /**

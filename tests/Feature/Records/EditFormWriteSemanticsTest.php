@@ -156,3 +156,70 @@ it('still rejects a required field the submit sent empty', function () {
 
     expect($this->record->fresh()->data['asunto'])->toBe('No puedo entrar');
 });
+
+/**
+ * A datetime with no offset is a wall clock, and the wall it hangs on is the
+ * app's — not the server's.
+ *
+ * A `datetime-local` input posts "2026-07-28T09:15" and a spreadsheet column
+ * holds "2026-07-28 09:15"; neither says which zone. Read in the server's (what
+ * strtotime does by default) a reply typed at 09:15 in Mexico City was stored
+ * as 09:15Z, and the person who wrote it read it back as 03:15.
+ */
+it('reads a naive datetime in the app timezone, not the server one', function () {
+    $manifest = $this->manifest;
+    $manifest['settings'] = ['default_timezone' => 'America/Mexico_City'];
+    $manifest['objects'][0]['fields'][] = [
+        'id' => 'fld_edit_cuando01', 'slug' => 'cuando', 'name' => 'Cuando', 'type' => 'datetime',
+    ];
+
+    $record = app(RecordWriteService::class)->create(
+        $this->appModel,
+        $manifest,
+        'obj_edit_tickets1',
+        ['asunto' => 'Con hora', 'cuando' => '2026-07-28 09:15'],
+        $this->user,
+    );
+
+    // 09:15 in Mexico City (UTC-6 that day) is 15:15 UTC.
+    expect($record->data['cuando'])->toBe('2026-07-28T15:15:00Z');
+});
+
+it('leaves a datetime that already states its offset alone', function () {
+    $manifest = $this->manifest;
+    $manifest['settings'] = ['default_timezone' => 'America/Mexico_City'];
+    $manifest['objects'][0]['fields'][] = [
+        'id' => 'fld_edit_cuando01', 'slug' => 'cuando', 'name' => 'Cuando', 'type' => 'datetime',
+    ];
+
+    $record = app(RecordWriteService::class)->create(
+        $this->appModel,
+        $manifest,
+        'obj_edit_tickets1',
+        ['asunto' => 'Con zona', 'cuando' => '2026-07-28T09:15:00Z'],
+        $this->user,
+    );
+
+    // It said Z, so it means Z — the app's zone must not second-guess it.
+    expect($record->data['cuando'])->toBe('2026-07-28T09:15:00Z');
+});
+
+it('keeps a plain date free of timezone arithmetic', function () {
+    // A date has no clock to shift; nudging it by a zone offset is how a
+    // birthday lands on the day before.
+    $manifest = $this->manifest;
+    $manifest['settings'] = ['default_timezone' => 'America/Mexico_City'];
+    $manifest['objects'][0]['fields'][] = [
+        'id' => 'fld_edit_dia00001', 'slug' => 'dia', 'name' => 'Dia', 'type' => 'date',
+    ];
+
+    $record = app(RecordWriteService::class)->create(
+        $this->appModel,
+        $manifest,
+        'obj_edit_tickets1',
+        ['asunto' => 'Con fecha', 'dia' => '2026-07-28'],
+        $this->user,
+    );
+
+    expect($record->data['dia'])->toBe('2026-07-28');
+});
