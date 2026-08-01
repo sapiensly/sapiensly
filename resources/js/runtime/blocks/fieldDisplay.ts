@@ -1,4 +1,4 @@
-import type { FieldDef } from '../types/manifest';
+import type { FieldDef, ObjectDef } from '../types/manifest';
 
 /**
  * How a stored value is shown to a person — one implementation, shared.
@@ -19,6 +19,12 @@ export interface DisplayContext {
      * absent when the block does not show relations.
      */
     labels?: Record<string, unknown>;
+    /**
+     * Every object in the manifest, so a derived field can be shown the way the
+     * field it derives from would be. Optional: without it a rollup still
+     * renders, just as a plain number.
+     */
+    objects?: ObjectDef[];
 }
 
 /** One option of a select, with the colour the manifest gave it. */
@@ -36,6 +42,25 @@ function isBlank(value: unknown): boolean {
         value === '' ||
         (Array.isArray(value) && value.length === 0)
     );
+}
+
+/**
+ * The field a rollup or lookup draws from, searched across every object because
+ * a derived field always points at another object's column.
+ */
+function sourceField(
+    field: FieldDef,
+    objects?: ObjectDef[],
+): FieldDef | undefined {
+    const target = field.target_field_id;
+    if (target === undefined || objects === undefined) return undefined;
+
+    for (const object of objects) {
+        const found = object.fields.find((f) => f.id === target);
+        if (found !== undefined) return found;
+    }
+
+    return undefined;
 }
 
 /** Look an option up by its stored value, falling back to the raw value. */
@@ -81,6 +106,44 @@ export function formatFieldValue(
     }
 
     if (isBlank(value)) return EMPTY;
+
+    // A derived field is shown the way its source would be. A rollup that SUMS
+    // a currency is money and has to read as money: "37000" sat in the column
+    // beside "$37,000.00", the same quantity twice, formatted two ways. A count
+    // is the exception — it counts rows, so it is a plain number whatever it
+    // counted.
+    if (field.type === 'rollup' || field.type === 'lookup') {
+        const source =
+            field.aggregator === 'count'
+                ? undefined
+                : sourceField(field, ctx.objects);
+
+        if (source !== undefined) {
+            return formatFieldValue(
+                { ...source, name: field.name, slug: field.slug },
+                value,
+                { ...ctx, labels: undefined },
+            );
+        }
+
+        return typeof value === 'number'
+            ? new Intl.NumberFormat(ctx.locale).format(value)
+            : String(value);
+    }
+
+    if (field.type === 'formula') {
+        // A formula declares what it returns; a money one carries its currency.
+        if (field.return_type === 'number' && field.currency_code) {
+            return new Intl.NumberFormat(ctx.locale, {
+                style: 'currency',
+                currency: field.currency_code,
+            }).format(Number(value));
+        }
+
+        return typeof value === 'number'
+            ? new Intl.NumberFormat(ctx.locale).format(value)
+            : String(value);
+    }
 
     if (field.type === 'currency' && typeof value === 'number') {
         return new Intl.NumberFormat(ctx.locale, {
@@ -159,7 +222,29 @@ export function formatDate(
     withTime: boolean,
     locale: string,
 ): string {
-    const raw = String(value);
+    const raw = String(value).trim();
+
+    // A bare "YYYY-MM-DD" is a CALENDAR DAY, not an instant. new Date() reads
+    // it as midnight UTC, and rendering that anywhere west of Greenwich moves
+    // it back a day: a lease starting 2024-06-01 displayed as 31 may 2024 for
+    // every reader in the Americas. Built from its parts it stays the day it
+    // says, in any zone.
+    const day = /^(\d{4})-(\d{2})-(\d{2})$/.exec(raw);
+    if (day !== null) {
+        const local = new Date(
+            Number(day[1]),
+            Number(day[2]) - 1,
+            Number(day[3]),
+        );
+
+        return Number.isNaN(local.getTime())
+            ? raw
+            : local.toLocaleDateString(locale, { dateStyle: 'medium' });
+    }
+
+    // A datetime with no offset is a wall clock too — the same reasoning the
+    // write path applies — so it is read in the reader's own zone rather than
+    // as UTC.
     const parsed = new Date(
         /^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}/.test(raw) &&
             !/[zZ]|[+-]\d{2}:?\d{2}$/.test(raw)

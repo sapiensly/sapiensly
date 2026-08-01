@@ -218,6 +218,7 @@ function contextFor(row: { labels?: Record<string, unknown> }): DisplayContext {
         locale: props.locale,
         defaultCurrency: props.defaultCurrency,
         labels: row.labels,
+        objects: props.objects,
     };
 }
 

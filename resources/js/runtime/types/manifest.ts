@@ -42,6 +42,10 @@ export interface FieldDef {
     include_time?: boolean;
     max_size_mb?: number;
     mime_types?: string[];
+    /** Derived fields (rollup/lookup/formula): what they draw from and return. */
+    target_field_id?: string;
+    aggregator?: string;
+    return_type?: string;
 }
 
 export interface ObjectDef {
