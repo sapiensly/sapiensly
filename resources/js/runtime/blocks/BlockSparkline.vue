@@ -174,9 +174,14 @@ const path = computed(() => {
     const lo = Math.min(0, minVal);
     const hi = Math.max(maxVal, lo + 1);
     const range = hi - lo;
+    // Breathing room top and bottom. Without it a steady series maps to y=0,
+    // which both clips the stroke against the viewBox edge and fills the whole
+    // band — "two a day, every day" read as a solid block rather than a line.
+    const pad = 5;
+    const plot = h - pad * 2;
     const points = series.value.map((v, i) => {
         const x = n === 1 ? w / 2 : (i / (n - 1)) * w;
-        const y = range === 0 ? h / 2 : h - ((v - lo) / range) * h;
+        const y = range === 0 ? h / 2 : h - pad - ((v - lo) / range) * plot;
         return { x, y, sx: x.toFixed(1), sy: y.toFixed(1) };
     });
     const line = 'M ' + points.map((p) => `${p.sx},${p.sy}`).join(' L ');
@@ -191,6 +196,7 @@ const path = computed(() => {
         w,
         h,
         band,
+        points,
         // One transparent hover band per point (full height) → easy tooltip target.
         hits: points.map((p, i) => ({
             x: p.x - band / 2,
@@ -238,10 +244,17 @@ function formatNumber(value: number): string {
                 {{ formatNumber(path.total) }}
             </p>
         </header>
+        <!--
+            A fixed height, not one derived from the width. `w-full` on a
+            240x48 viewBox with preserveAspectRatio="none" makes the SVG as tall
+            as a fifth of whatever it is given — on a full-width dashboard card
+            that is a ~260px band for a mark meant to be glanceable, and two of
+            them filled most of the first screen.
+        -->
         <svg
-            v-if="series.length > 0"
+            v-if="series.length > 1"
             viewBox="0 0 240 48"
-            class="w-full"
+            class="h-16 w-full"
             preserveAspectRatio="none"
         >
             <path
@@ -270,7 +283,25 @@ function formatNumber(value: number): string {
                 @mouseenter="showTip(formatNumber(hit.value), undefined, color)"
             />
         </svg>
-        <p v-else :class="['py-4 text-center text-xs', t.textMuted]">
+        <!--
+            One bucket is not a trend, and a single point is a path with a
+            moveto and no line — it drew literally nothing, leaving an empty
+            band where a chart should be. Say what there is: one reading,
+            marked on its baseline.
+        -->
+        <div
+            v-else-if="series.length === 1"
+            class="flex h-16 items-center justify-center"
+        >
+            <div class="relative flex w-full items-center">
+                <span class="h-px w-full bg-soft" />
+                <span
+                    class="absolute left-1/2 size-2 -translate-x-1/2 rounded-full"
+                    :style="{ backgroundColor: color }"
+                />
+            </div>
+        </div>
+        <p v-else :class="['py-3 text-center text-xs', t.textMuted]">
             No data.
         </p>
     </div>
