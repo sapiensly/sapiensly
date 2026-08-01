@@ -7,6 +7,8 @@ use App\Models\User;
 use App\Services\Manifest\AppManifestService;
 use App\Services\Manifest\AppScaffolder;
 use App\Services\Manifest\ManifestValidator;
+use App\Services\Records\AppActionExecutor;
+use App\Services\Records\BlockDataResolver;
 use App\Support\Locale\Inflector;
 use App\Support\Tenancy\TenantContext;
 use Illuminate\Console\Attributes\Description;
@@ -141,7 +143,11 @@ class BenchmarkApps extends Command
             ];
         }
 
-        $findings = $this->score($manifest, $case);
+        $smokeChecks = 0;
+        $findings = [
+            ...$this->score($manifest, $case),
+            ...$this->smoke($app, $manifest, $user, $smokeChecks),
+        ];
 
         if (! $this->option('keep')) {
             $app->delete();
@@ -154,6 +160,10 @@ class BenchmarkApps extends Command
             'app_slug' => $this->option('keep') ? $slug : null,
             'seconds' => round(microtime(true) - $startedAt, 1),
             'objects' => array_map(fn (array $o): string => $o['name'], $manifest['objects']),
+            // How many runtime assertions the smoke pass actually made. A
+            // harness that cannot tell "passed" from "never ran" is worse than
+            // no harness, because it reports the same word for both.
+            'smoke_checks' => $smokeChecks,
             'findings' => $findings,
             // Not defects: a coercion is the scaffolder telling the truth about
             // something it had to change. Counted so a run that suddenly stops
@@ -245,6 +255,334 @@ class BenchmarkApps extends Command
         }
 
         return $findings;
+    }
+
+    /**
+     * Does the app WORK — not merely validate.
+     *
+     * A manifest can be perfectly valid and the app still broken. The two worst
+     * defects this project has shipped were exactly that: a modal form that
+     * saved every child with a null parent while the UI reported success, and a
+     * post-save refresh that left the page blank. Both apps would score clean
+     * on structure alone, which is why this pass exists.
+     *
+     * So: write a record through the create path the scaffolder actually wired,
+     * with the parameters the page would really pass, then render every page
+     * against what was written and see whether it comes back.
+     *
+     * @param  array<string, mixed>  $manifest
+     * @return list<array{check: string, detail: string}>
+     */
+    private function smoke(App $app, array $manifest, User $user, ?int &$checksRun = null): array
+    {
+        $findings = [];
+        $checksRun = 0;
+        $add = function (string $check, string $detail) use (&$findings): void {
+            $findings[] = ['check' => $check, 'detail' => $detail];
+        };
+
+        $executor = app(AppActionExecutor::class);
+        $created = [];
+
+        // Parents before children, so a child's form has a real parent id to be
+        // handed — which is the whole point of the exercise.
+        foreach ($this->creationOrder($manifest) as $objectId) {
+            $paths = $this->createPathsFor($manifest, $objectId);
+            if ($paths === []) {
+                $add('no_create_path', $this->objectName($manifest, $objectId).' has no form that creates one');
+
+                continue;
+            }
+
+            // EVERY form that creates one, not just the first. A scaffolded app
+            // offers two: the "new" modal on the object's own list, where the
+            // person picks the parent, and the "add" form on the parent's detail
+            // page, which fills the parent in from the URL. Only the second can
+            // orphan a record, and exercising only the first is how this pass
+            // scored a deliberately broken build clean.
+            foreach ($paths as [$page, $form, $action]) {
+                $context = [
+                    'form' => $this->synthesizeForm($manifest, $form, $created),
+                    'params' => $this->pageParamsFrom($page, $manifest, $created),
+                ];
+
+                try {
+                    $result = $executor->execute($app, $manifest, $action, $context, $user);
+                } catch (\Throwable $e) {
+                    $add('write_failed', sprintf(
+                        '%s from /%s: %s',
+                        $this->objectName($manifest, $objectId), $page['slug'], Str::limit($e->getMessage(), 100),
+                    ));
+
+                    continue;
+                }
+
+                $created[$objectId] ??= $result['record_id'];
+
+                // Every value the action claimed it would write, actually
+                // written. A token that resolves to nothing is how children
+                // ended up orphaned under a success toast.
+                foreach ($action['values'] ?? [] as $slug => $expression) {
+                    if (! is_string($expression) || ! str_contains($expression, '{{')) {
+                        continue;
+                    }
+                    $checksRun++;
+                    if (($result['data'][$slug] ?? null) === null) {
+                        $add('write_dropped_value', sprintf(
+                            '%s.%s saved empty from "%s" on /%s',
+                            $this->objectName($manifest, $objectId), $slug, $expression, $page['slug'],
+                        ));
+                    }
+                }
+            }
+        }
+
+        // Now read it all back the way the runtime does.
+        $resolver = app(BlockDataResolver::class);
+        foreach ($manifest['pages'] ?? [] as $page) {
+            $params = $this->pageParamsFrom($page, $manifest, $created);
+
+            try {
+                $data = $resolver->resolve($app, $page['blocks'] ?? [], $manifest, ['params' => $params]);
+            } catch (\Throwable $e) {
+                $add('page_failed', "/{$page['slug']}: ".Str::limit($e->getMessage(), 120));
+
+                continue;
+            }
+
+            foreach ($this->dataBlocksIn($page['blocks'] ?? []) as $block) {
+                $objectId = $block['object_id'] ?? $block['data_source']['object_id'] ?? null;
+                if (! is_string($objectId) || ! isset($created[$objectId])) {
+                    continue;
+                }
+                $payload = $data[$block['id']] ?? null;
+
+                $checksRun++;
+                if (($block['type'] ?? null) === 'record_detail') {
+                    if (($payload['record'] ?? null) === null) {
+                        $add('detail_empty', sprintf(
+                            '/%s shows no record for %s, with one written and its id in the params',
+                            $page['slug'], $this->objectName($manifest, $objectId),
+                        ));
+                    }
+
+                    continue;
+                }
+                if (($payload['rows'] ?? []) === []) {
+                    $add('list_empty', sprintf(
+                        '/%s lists no %s, with one written',
+                        $page['slug'], $this->objectName($manifest, $objectId),
+                    ));
+                }
+            }
+        }
+
+        return $findings;
+    }
+
+    /**
+     * Object ids with every parent ahead of its children, so a child is created
+     * when there is something for it to belong to. Cycles keep manifest order —
+     * a self-referencing model is not a reason to skip the whole pass.
+     *
+     * @param  array<string, mixed>  $manifest
+     * @return list<string>
+     */
+    private function creationOrder(array $manifest): array
+    {
+        $parentsOf = [];
+        foreach ($manifest['objects'] as $object) {
+            $parentsOf[$object['id']] = collect($object['fields'])
+                ->filter(fn (array $f): bool => ($f['type'] ?? null) === 'relation'
+                    && ($f['cardinality'] ?? null) === 'many_to_one')
+                ->pluck('target_object_id')
+                ->filter(fn ($id): bool => is_string($id) && $id !== $object['id'])
+                ->all();
+        }
+
+        $ordered = [];
+        $visiting = [];
+        $visit = function (string $id) use (&$visit, &$ordered, &$visiting, $parentsOf): void {
+            if (in_array($id, $ordered, true) || isset($visiting[$id])) {
+                return;
+            }
+            $visiting[$id] = true;
+            foreach ($parentsOf[$id] ?? [] as $parent) {
+                $visit($parent);
+            }
+            unset($visiting[$id]);
+            $ordered[] = $id;
+        };
+        foreach (array_keys($parentsOf) as $id) {
+            $visit($id);
+        }
+
+        return $ordered;
+    }
+
+    /**
+     * Every route the app offers for creating one of these: the page, the form,
+     * and the create_record it submits.
+     *
+     * @param  array<string, mixed>  $manifest
+     * @return list<array{0: array<string, mixed>, 1: array<string, mixed>, 2: array<string, mixed>}>
+     */
+    private function createPathsFor(array $manifest, string $objectId): array
+    {
+        $paths = [];
+        foreach ($manifest['pages'] ?? [] as $page) {
+            foreach ($this->formBlocksIn($page['blocks'] ?? []) as $form) {
+                if (($form['object_id'] ?? null) !== $objectId || ($form['mode'] ?? null) !== 'create') {
+                    continue;
+                }
+                foreach ($form['on_submit'] ?? [] as $action) {
+                    if (($action['type'] ?? null) === 'create_record' && ($action['object_id'] ?? null) === $objectId) {
+                        $paths[] = [$page, $form, $action];
+                        break;
+                    }
+                }
+            }
+        }
+
+        return $paths;
+    }
+
+    /**
+     * Values a person would put into this form — one per field it offers, of
+     * the shape that field accepts, and for a relation the parent that was
+     * created before it, because that is what a person picks.
+     *
+     * Filling this in matters: leaving relations blank made every child look
+     * orphaned and the harness blamed the app for its own omission. A form that
+     * genuinely fails to OFFER the relation still shows up, because then there
+     * is no field here to fill and the action's token resolves to nothing.
+     *
+     * @param  array<string, mixed>  $manifest
+     * @param  array<string, mixed>  $form
+     * @param  array<string, string>  $created
+     * @return array<string, mixed>
+     */
+    private function synthesizeForm(array $manifest, array $form, array $created = []): array
+    {
+        $object = collect($manifest['objects'])->firstWhere('id', $form['object_id']);
+        $byId = collect($object['fields'] ?? [])->keyBy('id');
+        $values = [];
+
+        $fields = $form['fields'] ?? collect($form['steps'] ?? [])->flatMap(fn (array $s): array => $s['fields'] ?? [])->all();
+        foreach ($fields as $formField) {
+            $field = $byId[$formField['field_id']] ?? null;
+            if ($field === null) {
+                continue;
+            }
+            $values[$field['slug']] = match ($field['type']) {
+                'number', 'rating', 'slider' => 3,
+                'currency' => 120.5,
+                'boolean' => true,
+                'date' => '2026-03-04',
+                'datetime' => '2026-03-04T10:00:00',
+                'email' => 'benchmark@example.test',
+                'url' => 'https://example.test',
+                'phone' => '+525555555555',
+                'single_select' => $field['options'][0]['value'] ?? null,
+                'multi_select' => array_filter([$field['options'][0]['value'] ?? null]),
+                'relation' => ($field['cardinality'] ?? null) === 'many_to_one'
+                    ? ($created[$field['target_object_id'] ?? ''] ?? null)
+                    : null,
+                default => 'Benchmark '.$field['slug'],
+            };
+        }
+
+        return array_filter($values, fn ($v): bool => $v !== null && $v !== []);
+    }
+
+    /**
+     * @param  array<string, mixed>  $page
+     * @param  array<string, mixed>  $manifest
+     * @param  array<string, string>  $created
+     * @return array<string, mixed>
+     */
+    private function pageParamsFrom(array $page, array $manifest, array $created): array
+    {
+        $params = [];
+
+        // Read the param name off the block rather than assuming it. The
+        // point-of-sale screen addresses its open order as {{params.order}},
+        // and a harness that only ever supplied `id` judged it broken for
+        // showing the empty state it is designed to show until one is picked.
+        foreach ($this->dataBlocksIn($page['blocks'] ?? []) as $block) {
+            if (($block['type'] ?? null) !== 'record_detail') {
+                continue;
+            }
+            $id = $created[$block['object_id'] ?? ''] ?? null;
+            if ($id === null) {
+                continue;
+            }
+            if (preg_match('/\{\{\s*params\.([a-z0-9_]+)\s*\}\}/i', (string) ($block['record_id_expression'] ?? ''), $m) === 1) {
+                $params[$m[1]] = $id;
+            }
+        }
+
+        // The scaffolder's own detail pages take `id`; a modal's edit form
+        // reads `record_id`. Both are the record the page is about.
+        if ($params !== [] && ! isset($params['record_id'])) {
+            $params['record_id'] = reset($params);
+        }
+
+        return $params;
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $blocks
+     * @return list<array<string, mixed>>
+     */
+    private function formBlocksIn(array $blocks): array
+    {
+        return array_values(array_filter(
+            $this->flatten($blocks),
+            fn (array $b): bool => in_array($b['type'] ?? null, ['form', 'multi_step_form'], true),
+        ));
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $blocks
+     * @return list<array<string, mixed>>
+     */
+    private function dataBlocksIn(array $blocks): array
+    {
+        return array_values(array_filter(
+            $this->flatten($blocks),
+            fn (array $b): bool => in_array($b['type'] ?? null, ['table', 'record_detail'], true),
+        ));
+    }
+
+    /**
+     * Every block in the tree, nesting included — tabs, split layouts, modals.
+     *
+     * @param  list<array<string, mixed>>  $blocks
+     * @return list<array<string, mixed>>
+     */
+    private function flatten(array $blocks): array
+    {
+        $out = [];
+        foreach ($blocks as $block) {
+            $out[] = $block;
+            foreach (['blocks', 'left_blocks', 'right_blocks'] as $key) {
+                $out = [...$out, ...$this->flatten($block[$key] ?? [])];
+            }
+            foreach (['tabs', 'sections'] as $key) {
+                foreach ($block[$key] ?? [] as $child) {
+                    $out = [...$out, ...$this->flatten($child['blocks'] ?? [])];
+                }
+            }
+        }
+
+        return $out;
+    }
+
+    /** @param array<string, mixed> $manifest */
+    private function objectName(array $manifest, string $objectId): string
+    {
+        return (string) (collect($manifest['objects'])->firstWhere('id', $objectId)['name'] ?? $objectId);
     }
 
     /**
@@ -427,7 +765,10 @@ class BenchmarkApps extends Command
             $status = $result['findings'] === []
                 ? '<fg=green>clean</>'
                 : '<fg=red>'.count($result['findings']).' finding(s)</>';
-            $this->line(sprintf('  %-22s %-24s %5.1fs', $result['case'], $status, $result['seconds']));
+            $this->line(sprintf(
+                '  %-22s %-24s %5.1fs  %s runtime check(s)',
+                $result['case'], $status, $result['seconds'], $result['smoke_checks'] ?? 0,
+            ));
             foreach ($result['findings'] as $finding) {
                 $this->line("      <fg=yellow>{$finding['check']}</> — ".Str::limit($finding['detail'], 140));
             }
