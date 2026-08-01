@@ -237,6 +237,45 @@ function blocksByType(array $page, string $type): array
     return collect($page['blocks'])->where('type', $type)->values()->all();
 }
 
+/**
+ * Find a block by type ANYWHERE on the page, including inside a container.
+ *
+ * A list page's alternative views (board, calendar, timeline) now live in tabs
+ * beside the table rather than stacked under it, so a top-level scan no longer
+ * finds them — they moved, they did not disappear.
+ *
+ * @param  array<string, mixed>  $page
+ * @return array<string, mixed>|null
+ */
+function blockByTypeDeep(array $page, string $type): ?array
+{
+    $walk = function (array $blocks) use (&$walk, $type): ?array {
+        foreach ($blocks as $block) {
+            if (($block['type'] ?? null) === $type) {
+                return $block;
+            }
+            foreach (['blocks', 'left_blocks', 'right_blocks'] as $key) {
+                $found = $walk($block[$key] ?? []);
+                if ($found !== null) {
+                    return $found;
+                }
+            }
+            foreach (['tabs', 'sections'] as $key) {
+                foreach ($block[$key] ?? [] as $child) {
+                    $found = $walk($child['blocks'] ?? []);
+                    if ($found !== null) {
+                        return $found;
+                    }
+                }
+            }
+        }
+
+        return null;
+    };
+
+    return $walk($page['blocks'] ?? []);
+}
+
 function blockByType(array $page, string $type): ?array
 {
     return collect($page['blocks'])->firstWhere('type', $type);
@@ -286,7 +325,7 @@ it('renders a plan object with two date fields as a Gantt, coloured by status', 
     $manifest = scaffoldPlan('en');
 
     $page = pageBySlug($manifest, 'tasks');
-    $gantt = blockByType($page, 'gantt');
+    $gantt = blockByTypeDeep($page, 'gantt');
     expect($gantt)->not->toBeNull();
 
     $fields = collect($manifest['objects'][0]['fields']);
@@ -307,7 +346,7 @@ it('renders a plan object with two date fields as a Gantt, coloured by status', 
 it('does not add a Gantt when an object has fewer than two date fields', function () {
     // Comandas has a status but only a folio + total — no date pair.
     $manifest = scaffoldFor('es-MX');
-    expect(blockByType(pageBySlug($manifest, 'comandas'), 'gantt'))->toBeNull();
+    expect(blockByTypeDeep(pageBySlug($manifest, 'comandas'), 'gantt'))->toBeNull();
 });
 
 /** A single-date EVENT object (a shoot day, an appointment) — the calendar case. */
@@ -338,7 +377,7 @@ function scaffoldEvent(): array
 it('renders a single-date event object as a calendar, coloured by status', function () {
     $manifest = scaffoldEvent();
     $page = pageBySlug($manifest, 'citas');
-    $calendar = blockByType($page, 'calendar');
+    $calendar = blockByTypeDeep($page, 'calendar');
     expect($calendar)->not->toBeNull();
 
     $fields = collect($manifest['objects'][0]['fields']);
@@ -347,22 +386,22 @@ it('renders a single-date event object as a calendar, coloured by status', funct
         ->and($calendar['color_field_id'])->toBe($fields->firstWhere('slug', 'estado')['id']);
 
     // A lone date is an event, not a span — no Gantt.
-    expect(blockByType($page, 'gantt'))->toBeNull();
+    expect(blockByTypeDeep($page, 'gantt'))->toBeNull();
     expect(app(ManifestValidator::class)->validate($manifest)->valid)->toBeTrue();
 });
 
 it('prefers a Gantt over a calendar when an object spans two dates', function () {
     $manifest = scaffoldPlan('en');
     $page = pageBySlug($manifest, 'tasks');
-    expect(blockByType($page, 'gantt'))->not->toBeNull()
-        ->and(blockByType($page, 'calendar'))->toBeNull();
+    expect(blockByTypeDeep($page, 'gantt'))->not->toBeNull()
+        ->and(blockByTypeDeep($page, 'calendar'))->toBeNull();
 });
 
 it('scaffolds an editable kanban with colour-coded status options', function () {
     $manifest = scaffoldFor('es-MX');
 
     $page = pageBySlug($manifest, 'comandas');
-    $kanban = blockByType($page, 'kanban');
+    $kanban = blockByTypeDeep($page, 'kanban');
     expect($kanban)->not->toBeNull();
     expect($kanban['editable'])->toBeTrue();
 
@@ -383,7 +422,7 @@ it('localises the generated chrome for a Spanish app', function () {
     expect($form['submit_label'])->toBe('Guardar');
     expect(collect($form['on_submit'])->firstWhere('type', 'show_toast')['message'])->toBe('Guardado');
 
-    $createdCol = collect(blockByType($page, 'table')['columns'])->firstWhere('field_id', 'sys_created_at');
+    $createdCol = collect(blockByTypeDeep($page, 'table')['columns'])->firstWhere('field_id', 'sys_created_at');
     expect($createdCol['label_override'])->toBe('Creado');
 
     $chart = blockByType(pageBySlug($manifest, 'dashboard'), 'chart');
@@ -396,7 +435,9 @@ it('keeps English chrome for an English app', function () {
 
     expect(blockByType($page, 'button')['label'])->toBe('New Comanda');
     expect(blockByType($page, 'modal')['blocks'][0]['submit_label'])->toBe('Create');
-    expect(blockByType(pageBySlug($manifest, 'dashboard'), 'chart')['label'])->toBe('Comandas by status');
+    // Named after the field it groups by, which in this fixture is called
+    // "Estado" — the chrome is English, the author's field name is theirs.
+    expect(blockByType(pageBySlug($manifest, 'dashboard'), 'chart')['label'])->toBe('Comandas by estado');
 });
 
 it('adds a currency sum KPI to the dashboard', function () {
@@ -501,7 +542,7 @@ it('derives a parent total from a child money field', function () {
 it('links the parent list table to its detail page', function () {
     $manifest = scaffoldWithChild('es-MX');
 
-    $table = blockByType(pageBySlug($manifest, 'comandas'), 'table');
+    $table = blockByTypeDeep(pageBySlug($manifest, 'comandas'), 'table');
     // Addressed by label: the row carries more than one action now (edit opens
     // a modal in place), and this test is about the one that navigates.
     $action = collect($table['columns'])->firstWhere('label', 'Abrir');
@@ -904,7 +945,7 @@ it('defaults the status the board groups by to its first option', function () {
     // …which is exactly the field the kanban groups by, so a new record lands
     // in a column instead of outside the board.
     $page = pageBySlug($manifest, 'comandas');
-    $kanban = collect($page['blocks'])->firstWhere('type', 'kanban');
+    $kanban = blockByTypeDeep($page, 'kanban');
     expect($kanban['group_by_field_id'])->toBe($estado['id']);
 });
 
@@ -1126,7 +1167,7 @@ it('gives every list page a working edit path', function () {
         ->and($update['record_id_expression'])->toBe('{{params.record_id}}')
         ->and($update['object_id'])->toBe($form['object_id']);
 
-    $action = collect(blockByType($page, 'table')['columns'])->firstWhere('label', 'Editar');
+    $action = collect(blockByTypeDeep($page, 'table')['columns'])->firstWhere('label', 'Editar');
     expect($action)->not->toBeNull()
         ->and($action['type'])->toBe('action');
 
@@ -1148,7 +1189,7 @@ it('keeps the edit path in English for an English app', function () {
 
     expect($editModal['title'])->toBe('Edit Comanda')
         ->and($editModal['blocks'][0]['submit_label'])->toBe('Save changes')
-        ->and(collect(blockByType($page, 'table')['columns'])->firstWhere('label', 'Edit'))->not->toBeNull();
+        ->and(collect(blockByTypeDeep($page, 'table')['columns'])->firstWhere('label', 'Edit'))->not->toBeNull();
 });
 
 it('leaves derived fields out of the edit form, as it does the create form', function () {
@@ -1172,4 +1213,206 @@ it('leaves derived fields out of the edit form, as it does the create form', fun
     foreach ($derivedIds as $id) {
         expect($formIds)->not->toContain($id);
     }
+});
+
+/**
+ * A schema cannot tell a status from a taxonomy — both are a select with
+ * options — so the scaffolder used to take the FIRST one for everything: the
+ * default, the board, the breakdown's title. On anything richer than a toy
+ * object that is the wrong field, and the consequences are not cosmetic.
+ *
+ * @return array<string, mixed>
+ */
+function scaffoldWorkOrders(): array
+{
+    $base = [
+        'schema_version' => '1.0.0', 'id' => 'app_scaffold_wo1', 'slug' => 'ot', 'name' => 'OT', 'version' => 1,
+        'objects' => [], 'pages' => [],
+        'permissions' => ['roles' => [['id' => 'rol_admin00001', 'slug' => 'admin', 'name' => 'Admin', 'is_default' => true]]],
+        'settings' => ['default_locale' => 'es-MX', 'default_currency' => 'MXN'],
+    ];
+
+    $spec = [
+        'objects' => [[
+            'name' => 'Ordenes', 'slug' => 'ordenes', 'fields' => [
+                ['name' => 'Folio', 'slug' => 'folio', 'type' => 'string', 'options' => null],
+                // The classification comes FIRST, exactly as the model tends to
+                // emit it, and the real status second.
+                ['name' => 'Tipo de Servicio', 'slug' => 'tipo_servicio', 'type' => 'single_select', 'options' => [
+                    ['value' => 'preventivo', 'label' => 'Preventivo'],
+                    ['value' => 'correctivo', 'label' => 'Correctivo'],
+                ]],
+                ['name' => 'Estado', 'slug' => 'estado', 'type' => 'single_select', 'options' => [
+                    ['value' => 'recibida', 'label' => 'Recibida'],
+                    ['value' => 'en_ejecucion', 'label' => 'En ejecucion'],
+                    ['value' => 'cerrada', 'label' => 'Cerrada'],
+                ]],
+                ['name' => 'Fecha de Apertura', 'slug' => 'fecha_apertura', 'type' => 'date', 'options' => null],
+                ['name' => 'Fecha de Cierre', 'slug' => 'fecha_cierre', 'type' => 'date', 'options' => null],
+            ],
+        ]],
+        'links' => [],
+    ];
+
+    return app(AppScaffolder::class)->assemble($base, $spec);
+}
+
+it('defaults the status field, not whichever select came first', function () {
+    $fields = collect(scaffoldWorkOrders()['objects'][0]['fields']);
+
+    // A classification with a silent default is a value nobody chose: every
+    // order would open claiming to be preventive maintenance.
+    expect($fields->firstWhere('slug', 'tipo_servicio'))->not->toHaveKey('default')
+        ->and($fields->firstWhere('slug', 'estado')['default'])->toBe('recibida');
+});
+
+it('groups the board by the status, so a new record lands in a column', function () {
+    $manifest = scaffoldWorkOrders();
+    $kanban = blockByTypeDeep(pageBySlug($manifest, 'ordenes'), 'kanban');
+    $estado = collect($manifest['objects'][0]['fields'])->firstWhere('slug', 'estado');
+
+    expect($kanban['group_by_field_id'])->toBe($estado['id']);
+});
+
+it('titles a breakdown after the field it actually groups by', function () {
+    $chart = blockByType(pageBySlug(scaffoldWorkOrders(), 'dashboard'), 'chart');
+
+    expect($chart['label'])->toBe('Ordenes por estado');
+});
+
+it('builds no board for an object whose only select is a classification', function () {
+    // Customers do not move left to right across contract types.
+    $base = [
+        'schema_version' => '1.0.0', 'id' => 'app_scaffold_cl1', 'slug' => 'cl', 'name' => 'CL', 'version' => 1,
+        'objects' => [], 'pages' => [],
+        'permissions' => ['roles' => [['id' => 'rol_admin00001', 'slug' => 'admin', 'name' => 'Admin', 'is_default' => true]]],
+        'settings' => ['default_locale' => 'es-MX', 'default_currency' => 'MXN'],
+    ];
+    $spec = ['objects' => [[
+        'name' => 'Clientes', 'slug' => 'clientes', 'fields' => [
+            ['name' => 'Razon Social', 'slug' => 'razon_social', 'type' => 'string', 'options' => null],
+            ['name' => 'Tipo de Contrato', 'slug' => 'tipo_contrato', 'type' => 'single_select', 'options' => [
+                ['value' => 'preventivo', 'label' => 'Preventivo'],
+                ['value' => 'integral', 'label' => 'Integral'],
+            ]],
+            ['name' => 'Fecha de Alta', 'slug' => 'fecha_alta', 'type' => 'date', 'options' => null],
+        ],
+    ]], 'links' => []];
+
+    $manifest = app(AppScaffolder::class)->assemble($base, $spec);
+    $page = pageBySlug($manifest, 'clientes');
+    $fields = collect($manifest['objects'][0]['fields']);
+
+    expect(blockByTypeDeep($page, 'kanban'))->toBeNull()
+        // A signup date is not something you look forward to; a month grid of
+        // them opened the customer list, above the customers.
+        ->and(blockByTypeDeep($page, 'calendar'))->toBeNull()
+        ->and($fields->firstWhere('slug', 'tipo_contrato'))->not->toHaveKey('default')
+        // …but the breakdown is still worth drawing, honestly titled.
+        ->and(blockByType(pageBySlug($manifest, 'dashboard'), 'chart')['label'])
+        ->toBe('Clientes por tipo de contrato');
+});
+
+it('draws a Gantt only for dates that describe a span', function () {
+    // apertura → cierre is work being done; installed → last serviced is not.
+    $withSpan = blockByTypeDeep(pageBySlug(scaffoldWorkOrders(), 'ordenes'), 'gantt');
+    expect($withSpan)->not->toBeNull();
+
+    $base = [
+        'schema_version' => '1.0.0', 'id' => 'app_scaffold_eq1', 'slug' => 'eq', 'name' => 'EQ', 'version' => 1,
+        'objects' => [], 'pages' => [],
+        'permissions' => ['roles' => [['id' => 'rol_admin00001', 'slug' => 'admin', 'name' => 'Admin', 'is_default' => true]]],
+        'settings' => ['default_locale' => 'es-MX', 'default_currency' => 'MXN'],
+    ];
+    $spec = ['objects' => [[
+        'name' => 'Equipos', 'slug' => 'equipos', 'fields' => [
+            ['name' => 'Numero de Serie', 'slug' => 'numero_serie', 'type' => 'string', 'options' => null],
+            ['name' => 'Fecha de Instalacion', 'slug' => 'fecha_instalacion', 'type' => 'date', 'options' => null],
+            ['name' => 'Ultima Revision', 'slug' => 'ultima_revision', 'type' => 'date', 'options' => null],
+        ],
+    ]], 'links' => []];
+
+    expect(blockByTypeDeep(pageBySlug(app(AppScaffolder::class)->assemble($base, $spec), 'equipos'), 'gantt'))->toBeNull();
+});
+
+it('says what each object is called, so nothing downstream has to guess', function () {
+    $manifest = scaffoldWorkOrders();
+    $object = $manifest['objects'][0];
+    $folio = collect($object['fields'])->firstWhere('slug', 'folio');
+
+    expect($object['primary_display_field_id'])->toBe($folio['id']);
+});
+
+it('keeps the way into the detail page when the table moves into a tab', function () {
+    // The alternative views live in tabs now, so the table is no longer a
+    // top-level block. A scan that only looked at the top level dropped the
+    // "open" row action — and with it the only route to the detail page, which
+    // then rendered empty because nothing provided its {{params.id}}.
+    $manifest = scaffoldWithChild('es-MX');
+    $table = blockByTypeDeep(pageBySlug($manifest, 'comandas'), 'table');
+
+    $open = collect($table['columns'])->firstWhere('label', 'Abrir');
+    expect($open)->not->toBeNull()
+        ->and($open['on_click'][0]['to'])->toBe('/comandas_detail?id={{row.id}}');
+
+    // Said another way: the lint that caught it stays quiet.
+    $smells = collect((new ManifestValidator)->validate($manifest)->warnings)
+        ->filter(fn ($w) => $w->code === 'design_smell')
+        ->all();
+    expect($smells)->toBe([]);
+});
+
+it('opens a list page on the list, with the other views one click away', function () {
+    $page = pageBySlug(scaffoldWorkOrders(), 'ordenes');
+    $tabs = blockByType($page, 'tabs');
+
+    expect($tabs)->not->toBeNull()
+        ->and(collect($tabs['tabs'])->pluck('label')->all())
+        ->toBe(['Lista', 'Cronograma', 'Tablero']);
+
+    // The list is first: it is what someone came to the page for.
+    expect($tabs['tabs'][0]['blocks'][0]['type'])->toBe('table');
+});
+
+it('derives a line total from quantity and unit price, sale or not', function () {
+    // The POS pass needs an order←line→product triad, so a part used on a work
+    // order never reached it and its total stayed a number to type by hand,
+    // beside the two numbers it is the product of.
+    $base = [
+        'schema_version' => '1.0.0', 'id' => 'app_scaffold_rf1', 'slug' => 'rf', 'name' => 'RF', 'version' => 1,
+        'objects' => [], 'pages' => [],
+        'permissions' => ['roles' => [['id' => 'rol_admin00001', 'slug' => 'admin', 'name' => 'Admin', 'is_default' => true]]],
+        'settings' => ['default_locale' => 'es-MX', 'default_currency' => 'MXN'],
+    ];
+    $spec = [
+        'objects' => [
+            ['name' => 'Ordenes', 'slug' => 'ordenes', 'fields' => [
+                ['name' => 'Folio', 'slug' => 'folio', 'type' => 'string', 'options' => null],
+            ]],
+            ['name' => 'Refacciones', 'slug' => 'refacciones', 'fields' => [
+                ['name' => 'Descripcion', 'slug' => 'descripcion', 'type' => 'string', 'options' => null],
+                ['name' => 'Cantidad', 'slug' => 'cantidad', 'type' => 'number', 'options' => null],
+                ['name' => 'Costo Unitario', 'slug' => 'costo_unitario', 'type' => 'currency', 'options' => null],
+                ['name' => 'Costo Total', 'slug' => 'costo_total', 'type' => 'currency', 'options' => null],
+            ]],
+        ],
+        'links' => [['from' => 'refacciones', 'to' => 'ordenes', 'name' => 'orden']],
+    ];
+
+    $manifest = app(AppScaffolder::class)->assemble($base, $spec);
+    $refacciones = collect($manifest['objects'])->firstWhere('slug', 'refacciones');
+    $total = collect($refacciones['fields'])->firstWhere('slug', 'costo_total');
+
+    expect($total['type'])->toBe('formula')
+        ->and($total['expression'])->toBe('{{cantidad * costo_unitario}}');
+
+    // And the parent sums the line TOTAL, not the price per piece — adding up
+    // unit prices across lines answers no question anyone has.
+    $ordenes = collect($manifest['objects'])->firstWhere('slug', 'ordenes');
+    $sum = collect($ordenes['fields'])->first(
+        fn (array $f): bool => ($f['type'] ?? null) === 'rollup' && ($f['aggregator'] ?? null) === 'sum'
+    );
+
+    expect($sum)->not->toBeNull()
+        ->and($sum['target_field_id'])->toBe($total['id']);
 });

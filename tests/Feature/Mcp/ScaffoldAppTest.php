@@ -38,6 +38,34 @@ function fakeScaffold(array $objects, array $links = []): void
         });
 }
 
+/**
+ * Every block type on a page, however deeply nested.
+ *
+ * @param  array<string, mixed>  $page
+ * @return list<string>
+ */
+function blockTypesAnywhere(array $page): array
+{
+    $walk = function (array $blocks) use (&$walk): array {
+        $types = [];
+        foreach ($blocks as $block) {
+            $types[] = (string) ($block['type'] ?? '');
+            foreach (['blocks', 'left_blocks', 'right_blocks'] as $key) {
+                $types = [...$types, ...$walk($block[$key] ?? [])];
+            }
+            foreach (['tabs', 'sections'] as $key) {
+                foreach ($block[$key] ?? [] as $child) {
+                    $types = [...$types, ...$walk($child['blocks'] ?? [])];
+                }
+            }
+        }
+
+        return $types;
+    };
+
+    return $walk($page['blocks'] ?? []);
+}
+
 it('scaffold_app creates a populated app with a CRUD page per object', function () {
     fakeScaffold([
         ['name' => 'Ideas', 'slug' => 'ideas', 'fields' => [
@@ -78,10 +106,13 @@ it('scaffold_app creates a populated app with a CRUD page per object', function 
     expect(collect($dashboard['blocks'])->pluck('type'))->toContain('chart');
 
     // The status-bearing object's page gets a kanban board; the other doesn't.
+    // Addressed through the whole page rather than its top level: a page with
+    // more than one way to look at the same rows puts them in tabs, so the
+    // board sits beside the list instead of stacked under it.
     $ideas = collect($manifest['pages'])->firstWhere('path', '/ideas');
     $drafts = collect($manifest['pages'])->firstWhere('path', '/drafts');
-    expect(collect($ideas['blocks'])->pluck('type'))->toContain('kanban', 'table');
-    expect(collect($drafts['blocks'])->pluck('type'))->not->toContain('kanban');
+    expect(blockTypesAnywhere($ideas))->toContain('kanban', 'table');
+    expect(blockTypesAnywhere($drafts))->not->toContain('kanban');
 
     expect(app(ManifestValidator::class)->validate($manifest)->valid)->toBeTrue();
 });

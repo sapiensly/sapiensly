@@ -512,7 +512,7 @@ class AppScaffolder
         $built = [];
         $indexBySlug = [];
         foreach ($spec['objects'] as $object) {
-            [$objectDef, $fieldIndex] = $this->buildObject($object, $currency);
+            [$objectDef, $fieldIndex] = $this->buildObject($object, $currency, $lang);
             $indexBySlug[$objectDef['slug']] = count($built);
             // pageFields drives the object's page; the many-side relation field is
             // appended to it, the one-side (inverse) field is structural only.
@@ -577,6 +577,13 @@ class AppScaffolder
         // and synthesise the line economics (unit price lookup, subtotal formula)
         // + the order total rollup so a generated POS screen actually computes.
         $posSpecs = $this->detectAndBuildPosEconomics($built, $relationsByChild, $currency, $lang);
+
+        // Pass 2.6: the same arithmetic, for lines that are not a sale. A part
+        // used on a work order has a quantity and a unit cost, so its line total
+        // is derivable — but the POS pass needs an order←line→product TRIAD, so
+        // it never fires here and the total was left as a number to type in by
+        // hand, next to the two numbers it is the product of.
+        $this->synthesizeLineTotals($built, $currency, $lang);
 
         // Pass 3: a list page per object (now that relation fields exist).
         $objects = [];
@@ -724,7 +731,7 @@ class AppScaffolder
      * @param  array{name: string, slug: string, fields: array<int, array<string, mixed>>}  $object
      * @return array{0: array<string, mixed>, 1: array<int, array{id: string, slug: string}>}
      */
-    public function buildObject(array $object, string $currency): array
+    public function buildObject(array $object, string $currency, string $lang = 'en'): array
     {
         /** @var list<array<string, mixed>> $fields */
         $fields = [];
@@ -736,14 +743,20 @@ class AppScaffolder
             $fieldIndex[] = $indexEntry;
         }
 
-        $this->applyIntegrityDefaults($fields);
+        $this->applyIntegrityDefaults($fields, $fieldIndex, $lang);
 
-        return [[
+        // What this object is CALLED. Without it every reader downstream has to
+        // guess — the label on a relation cell, a card's title, a picker's rows
+        // — and they each guess separately.
+        $title = $this->titleField($fieldIndex);
+
+        return [array_filter([
             'id' => $this->id('obj'),
             'slug' => $object['slug'],
             'name' => $object['name'],
+            'primary_display_field_id' => $title['id'] ?? null,
             'fields' => $fields,
-        ], $fieldIndex];
+        ], fn ($v): bool => $v !== null), $fieldIndex];
     }
 
     /**
@@ -768,16 +781,12 @@ class AppScaffolder
      *
      * @param  list<array<string, mixed>>  $fields
      */
-    private function applyIntegrityDefaults(array &$fields): void
+    private function applyIntegrityDefaults(array &$fields, array $fieldIndex = [], string $lang = 'en'): void
     {
         $titleIndex = null;
-        $statusIndex = null;
         foreach ($fields as $i => $field) {
             if ($titleIndex === null && ($field['type'] ?? null) === 'string') {
                 $titleIndex = $i;
-            }
-            if ($statusIndex === null && ($field['type'] ?? null) === 'single_select') {
-                $statusIndex = $i;
             }
         }
         // Mirrors titleField(): the first string, else whatever labels the record.
@@ -787,10 +796,22 @@ class AppScaffolder
             $fields[$titleIndex]['required'] = true;
         }
 
-        if ($statusIndex !== null && ! array_key_exists('default', $fields[$statusIndex])) {
-            $first = $fields[$statusIndex]['options'][0]['value'] ?? null;
+        // The STATUS field, not the first select. Defaulting by position put
+        // "preventivo" on every work order — a classification nobody chose — and
+        // left the actual `estado` empty, so each new order opened outside the
+        // board grouped by it. An object with no status gets no default at all.
+        $status = $this->statusField($fieldIndex, $lang);
+        if ($status === null) {
+            return;
+        }
+
+        foreach ($fields as $i => $field) {
+            if (($field['id'] ?? null) !== $status['id'] || array_key_exists('default', $field)) {
+                continue;
+            }
+            $first = $field['options'][0]['value'] ?? null;
             if (is_string($first) && $first !== '') {
-                $fields[$statusIndex]['default'] = $first;
+                $fields[$i]['default'] = $first;
             }
         }
     }
@@ -799,7 +820,7 @@ class AppScaffolder
      * Build one field definition + its index entry from a normalized field spec.
      *
      * @param  array{name: string, slug: string, type: string, options?: array<int, array{value: string, label: string}>|null}  $field
-     * @return array{0: array<string, mixed>, 1: array{id: string, slug: string, type: string}}
+     * @return array{0: array<string, mixed>, 1: array{id: string, slug: string, type: string, name: string, option_labels: list<string>}}
      */
     public function buildField(array $field, string $currency): array
     {
@@ -843,7 +864,21 @@ class AppScaffolder
             $definition['readonly'] = true;
         }
 
-        return [$definition, ['id' => $fieldId, 'slug' => $field['slug'], 'type' => $type]];
+        // The index carries the field's NAME and its option labels, not just its
+        // type: the generators below decide what a field MEANS (a status? a
+        // classification? a date you schedule against?) and a type alone cannot
+        // tell them apart — `estado` and `tipo_contrato` are both a select with
+        // options.
+        return [$definition, [
+            'id' => $fieldId,
+            'slug' => $field['slug'],
+            'type' => $type,
+            'name' => $field['name'] ?? $field['slug'],
+            'option_labels' => array_values(array_map(
+                fn (array $o): string => (string) ($o['label'] ?? $o['value'] ?? ''),
+                $definition['options'] ?? [],
+            )),
+        ]];
     }
 
     /**
@@ -917,7 +952,7 @@ class AppScaffolder
         // total is derived (e.g. an order total from its line amounts).
         $sumField = null;
         $sumIndex = null;
-        $amount = $this->firstCurrencyField($from['fields']);
+        $amount = $this->lineAmountField($from['fields'], $lang);
         if ($amount !== null) {
             $parentTaken[] = $rollupSlug;
             $sumFieldId = $this->id('fld');
@@ -1011,6 +1046,43 @@ class AppScaffolder
         }
 
         return null;
+    }
+
+    /**
+     * The child's money field that is worth summing onto its parent.
+     *
+     * Taking the FIRST currency field summed UNIT PRICES across lines: a parent
+     * carrying "Total Costo Unitario", which is the addition of prices per piece
+     * and answers no question anyone has. What totals is the line's own amount.
+     *
+     * @param  array<int, array<string, mixed>>  $fields
+     * @return array<string, mixed>|null
+     */
+    private function lineAmountField(array $fields, string $lang = 'en'): ?array
+    {
+        $lex = SemanticLexicon::for($lang);
+        $words = fn (array $f): array => [(string) ($f['name'] ?? ''), (string) ($f['slug'] ?? '')];
+
+        $money = array_values(array_filter(
+            $fields,
+            fn (array $f): bool => in_array($f['type'] ?? null, ['currency', 'formula'], true),
+        ));
+
+        // An amount-shaped field that is not a per-unit price.
+        foreach ($money as $field) {
+            if ($lex->matches('amount', ...$words($field)) && ! $lex->matches('unit_price', ...$words($field))) {
+                return $field;
+            }
+        }
+
+        // Failing that, anything that at least is not a unit price.
+        foreach ($money as $field) {
+            if (($field['type'] ?? null) === 'currency' && ! $lex->matches('unit_price', ...$words($field))) {
+                return $field;
+            }
+        }
+
+        return $this->firstCurrencyField($fields);
     }
 
     /**
@@ -1137,29 +1209,47 @@ class AppScaffolder
             $button,
         ];
 
-        // Two date fields (a start + an end) turn the page into a schedule: a
-        // Gantt of each record's span. This is what makes a plan/project object
-        // render as a work-plan timeline.
-        $gantt = $this->buildGantt($objectId, $fieldIndex);
+        // The alternative ways to look at the SAME rows: a board when the object
+        // has a status, a month grid when it has a date you schedule against, a
+        // timeline when it has a real span.
+        $lex = SemanticLexicon::for($lang);
+        $views = [];
+        $gantt = $this->buildGantt($objectId, $fieldIndex, $lang);
         if ($gantt !== null) {
-            $blocks[] = $gantt;
+            $views[] = ['label' => $lex->label('view_timeline'), 'block' => $gantt];
         }
-
-        // A single date field marks an event → a month calendar (mutually
-        // exclusive with the Gantt, which needs a start + an end).
-        $calendar = $this->buildCalendar($objectId, $fieldIndex);
+        $calendar = $this->buildCalendar($objectId, $fieldIndex, $lang, (string) ($object['name'] ?? ''));
         if ($calendar !== null) {
-            $blocks[] = $calendar;
+            $views[] = ['label' => $lex->label('view_calendar'), 'block' => $calendar];
         }
-
-        // A status (single_select) field turns the page into a board: a kanban
-        // grouped by that status, with the title field on each card.
-        $kanban = $this->buildKanban($objectId, $fieldIndex);
+        $kanban = $this->buildKanban($objectId, $fieldIndex, $lang);
         if ($kanban !== null) {
-            $blocks[] = $kanban;
+            $views[] = ['label' => $lex->label('view_board'), 'block' => $kanban];
         }
 
-        $blocks[] = $table;
+        // Stacked, these were the same records drawn three times over, with the
+        // table — the thing you came to the page for — last and below the fold.
+        // Tabbed, every view stays one click away and the list opens first.
+        if ($views === []) {
+            $blocks[] = $table;
+        } else {
+            $blocks[] = [
+                'id' => $this->id('blk'),
+                'type' => 'tabs',
+                'tabs' => [
+                    [
+                        'id' => $this->id('tab'),
+                        'label' => $lex->label('view_list'),
+                        'blocks' => [$table],
+                    ],
+                    ...array_map(fn (array $view): array => [
+                        'id' => $this->id('tab'),
+                        'label' => $view['label'],
+                        'blocks' => [$view['block']],
+                    ], $views),
+                ],
+            ];
+        }
 
         return [
             'id' => $this->id('pag'),
@@ -1178,9 +1268,10 @@ class AppScaffolder
      * @param  array<int, array{id: string, slug: string, type: string}>  $fieldIndex
      * @return array<string, mixed>|null
      */
-    private function buildKanban(string $objectId, array $fieldIndex): ?array
+    private function buildKanban(string $objectId, array $fieldIndex, string $lang = 'en'): ?array
     {
-        $status = $this->firstFieldOfType($fieldIndex, 'single_select');
+        // No status, no board: a classification does not move across columns.
+        $status = $this->statusField($fieldIndex, $lang);
         $title = $this->titleField($fieldIndex);
         if ($status === null || $title === null) {
             return null;
@@ -1220,28 +1311,26 @@ class AppScaffolder
      * @param  array<int, array{id: string, slug: string, type: string}>  $fieldIndex
      * @return array<string, mixed>|null
      */
-    private function buildGantt(string $objectId, array $fieldIndex): ?array
+    private function buildGantt(string $objectId, array $fieldIndex, string $lang = 'en'): ?array
     {
-        $dates = array_values(array_filter(
-            $fieldIndex,
-            fn (array $f): bool => in_array($f['type'] ?? '', ['date', 'datetime'], true),
-        ));
+        $span = $this->spanFields($fieldIndex, $lang);
         $title = $this->titleField($fieldIndex);
-        if (count($dates) < 2 || $title === null) {
+        if ($span === null || $title === null) {
             return null;
         }
+        [$start, $end] = $span;
 
         $gantt = [
             'id' => $this->id('blk'),
             'type' => 'gantt',
             'data_source' => ['object_id' => $objectId],
-            'start_field_id' => $dates[0]['id'],
-            'end_field_id' => $dates[1]['id'],
+            'start_field_id' => $start['id'],
+            'end_field_id' => $end['id'],
             'title_field_id' => $title['id'],
         ];
 
         // Colour each bar by the object's status, when it has one.
-        $status = $this->firstFieldOfType($fieldIndex, 'single_select');
+        $status = $this->statusField($fieldIndex, $lang);
         if ($status !== null) {
             $gantt['color_field_id'] = $status['id'];
         }
@@ -1259,14 +1348,25 @@ class AppScaffolder
      * @param  array<int, array{id: string, slug: string, type: string}>  $fieldIndex
      * @return array<string, mixed>|null
      */
-    private function buildCalendar(string $objectId, array $fieldIndex): ?array
+    private function buildCalendar(string $objectId, array $fieldIndex, string $lang = 'en', string $objectName = ''): ?array
     {
+        // A calendar answers "what is coming up", so it needs a date you look
+        // forward to. Every other date records what already happened, and a
+        // month grid of those is noise above the list you came for — a customer
+        // list opened on a month of signup dates.
+        //
+        // Unless the object IS a schedule. On an Appointments object the date
+        // needs no qualifier: being an appointment is the qualifier.
+        $scheduleObject = $objectName !== ''
+            && SemanticLexicon::for($lang)->matches('event_object', $objectName);
+
         $dates = array_values(array_filter(
             $fieldIndex,
-            fn (array $f): bool => in_array($f['type'] ?? '', ['date', 'datetime'], true),
+            fn (array $f): bool => in_array($f['type'] ?? '', ['date', 'datetime'], true)
+                && ($scheduleObject || $this->isScheduleDate($f, $lang)),
         ));
         $title = $this->titleField($fieldIndex);
-        if (count($dates) !== 1 || $title === null) {
+        if ($dates === [] || $title === null) {
             return null;
         }
 
@@ -1349,14 +1449,21 @@ class AppScaffolder
             if ($charts >= self::DASHBOARD_CHART_CAP) {
                 break;
             }
-            $status = $this->firstFieldOfType($object['fieldIndex'], 'single_select');
+            // A breakdown is worth drawing for a classification too, so this
+            // takes the status when there is one and falls back to the first
+            // select — but it is titled after the field it ACTUALLY groups by.
+            // Labelling every donut "por estado" produced three charts out of
+            // four whose titles were simply false: customers by contract type,
+            // equipment by equipment type, technicians by speciality.
+            $status = $this->statusField($object['fieldIndex'], $lang)
+                ?? $this->firstFieldOfType($object['fieldIndex'], 'single_select');
             $currency = $this->firstFieldOfType($object['fieldIndex'], 'currency');
 
             if ($status !== null) {
                 $blocks[] = [
                     'id' => $this->id('blk'),
                     'type' => 'chart',
-                    'label' => $this->labelByStatus($lang, $object['name']),
+                    'label' => $this->labelByField($lang, $object['name'], (string) ($status['name'] ?? '')),
                     'chart_type' => 'donut',
                     'data_source' => ['object_id' => $object['id'], 'limit' => self::DASHBOARD_ROW_LIMIT],
                     'aggregation' => 'count',
@@ -2518,20 +2625,59 @@ class AppScaffolder
      */
     private function addRowActionToTable(array &$page, string $detailSlug, string $lang): void
     {
-        foreach ($page['blocks'] as &$block) {
+        $column = [
+            'id' => $this->id('col'),
+            'type' => 'action',
+            'label' => SemanticLexicon::for($lang)->label('open'),
+            'icon' => 'arrow-right',
+            'variant' => 'ghost',
+            'on_click' => [['type' => 'navigate', 'to' => '/'.$detailSlug.'?id={{row.id}}']],
+        ];
+
+        // Recursive because the table is no longer a top-level block: it sits in
+        // the first tab beside the board and the calendar. Scanning only the top
+        // level silently dropped the row action, and with it the only way into
+        // the detail page — the design lint caught it as a record_detail whose
+        // {{params.id}} nothing provides.
+        $this->attachOpenColumn($page['blocks'], $column);
+    }
+
+    /**
+     * Append $column to the first table found anywhere in $blocks. Returns true
+     * once it has landed, so the search stops at the first table.
+     *
+     * @param  list<array<string, mixed>>  $blocks
+     * @param  array<string, mixed>  $column
+     */
+    private function attachOpenColumn(array &$blocks, array $column): bool
+    {
+        foreach ($blocks as &$block) {
             if (($block['type'] ?? null) === 'table') {
-                $block['columns'][] = [
-                    'id' => $this->id('col'),
-                    'type' => 'action',
-                    'label' => SemanticLexicon::for($lang)->label('open'),
-                    'icon' => 'arrow-right',
-                    'variant' => 'ghost',
-                    'on_click' => [['type' => 'navigate', 'to' => '/'.$detailSlug.'?id={{row.id}}']],
-                ];
-                break;
+                $block['columns'][] = $column;
+
+                return true;
+            }
+
+            foreach (['blocks', 'left_blocks', 'right_blocks'] as $key) {
+                if (isset($block[$key]) && is_array($block[$key]) && $this->attachOpenColumn($block[$key], $column)) {
+                    return true;
+                }
+            }
+
+            foreach (['tabs', 'sections'] as $key) {
+                foreach ($block[$key] ?? [] as $ci => $child) {
+                    $children = $child['blocks'] ?? [];
+                    if (is_array($children) && $this->attachOpenColumn($children, $column)) {
+                        $block[$key][$ci]['blocks'] = $children;
+
+                        return true;
+                    }
+                }
             }
         }
         unset($block);
+
+        return false;
     }
 
     /**
@@ -2729,6 +2875,84 @@ class AppScaffolder
         }
 
         return [$seed['slug'] => ($seed['type'] === 'boolean' ? false : '')];
+    }
+
+    /**
+     * Derive a line's total wherever one is derivable: an object carrying a
+     * QUANTITY and a UNIT PRICE knows its own amount.
+     *
+     * Deliberately not gated on commerce, unlike the POS screen above.
+     * Multiplication is arithmetic, not a claim about selling: a refacción used
+     * on a work order has a quantity and a unit cost, and the total of those is
+     * a fact whether or not anyone is running a till. The POS gate exists to
+     * stop a project budget spawning a point-of-sale PAGE — a different
+     * question from whether a number can be computed.
+     *
+     * Skips a field that is already computed, so the POS pass (which runs
+     * first) keeps its own richer treatment untouched.
+     *
+     * @param  array<int, array{def: array<string, mixed>, pageFields: array<int, array<string, mixed>>}>  $built
+     */
+    private function synthesizeLineTotals(array &$built, string $currency, string $lang): void
+    {
+        $lex = SemanticLexicon::for($lang);
+        $words = fn (array $f): array => [(string) ($f['name'] ?? ''), (string) ($f['slug'] ?? '')];
+
+        foreach ($built as $i => $entry) {
+            $fields = $entry['def']['fields'] ?? [];
+
+            $quantity = null;
+            $unitPrice = null;
+            $amount = null;
+            foreach ($fields as $field) {
+                $type = $field['type'] ?? null;
+                if ($quantity === null && $type === 'number' && $lex->matches('quantity', ...$words($field))) {
+                    $quantity = $field;
+                }
+                if ($unitPrice === null && $type === 'currency' && $lex->matches('unit_price', ...$words($field))) {
+                    $unitPrice = $field;
+                }
+                if ($amount === null
+                    && $type === 'currency'
+                    && $lex->matches('amount', ...$words($field))
+                    && ! $lex->matches('unit_price', ...$words($field))) {
+                    $amount = $field;
+                }
+            }
+
+            if ($quantity === null || $unitPrice === null || $amount === null) {
+                continue;
+            }
+
+            $expression = '{{'.$quantity['slug'].' * '.$unitPrice['slug'].'}}';
+
+            foreach ($fields as $fi => $field) {
+                if (($field['id'] ?? null) !== $amount['id']) {
+                    continue;
+                }
+
+                $built[$i]['def']['fields'][$fi] = [
+                    'id' => $field['id'],
+                    'slug' => $field['slug'],
+                    'name' => $field['name'],
+                    'type' => 'formula',
+                    'readonly' => true,
+                    'expression' => $expression,
+                    'return_type' => 'number',
+                    'currency_code' => $field['currency_code'] ?? $currency,
+                ];
+                break;
+            }
+
+            // The page index has to learn the new type too, or the create form
+            // keeps offering an input for a value the save now computes.
+            foreach ($built[$i]['pageFields'] as $pi => $idx) {
+                if (($idx['id'] ?? null) === $amount['id']) {
+                    $built[$i]['pageFields'][$pi]['type'] = 'formula';
+                    break;
+                }
+            }
+        }
     }
 
     /**
@@ -2975,6 +3199,106 @@ class AppScaffolder
     }
 
     /**
+     * The select that says where a record IS in its life, or null when the
+     * object has none.
+     *
+     * A schema cannot tell a status from a taxonomy: `estado` and `tipo_contrato`
+     * are both a select with options. Taking the FIRST one — which is what every
+     * generator here used to do — put a default on "tipo de servicio" (stamping
+     * a classification nobody chose onto every record) and left "estado" empty,
+     * so new work orders landed outside the very board grouped by it. It also
+     * turned a customer's contract type into a kanban, promising that customers
+     * move left to right.
+     *
+     * Two signals, in order: the field is NAMED like a state, or its options
+     * READ like a lifecycle. A name that means a category disqualifies it
+     * outright, since "tipo"/"categoria" is the one thing a status never is.
+     *
+     * @param  array<int, array<string, mixed>>  $fieldIndex
+     * @return array<string, mixed>|null
+     */
+    private function statusField(array $fieldIndex, string $lang = 'en'): ?array
+    {
+        $lex = SemanticLexicon::for($lang);
+        $selects = array_values(array_filter(
+            $fieldIndex,
+            fn (array $f): bool => ($f['type'] ?? null) === 'single_select',
+        ));
+
+        $named = null;
+        $lifecycle = null;
+
+        foreach ($selects as $field) {
+            $words = [(string) ($field['name'] ?? ''), (string) ($field['slug'] ?? '')];
+            if ($lex->matches('not_status', ...$words)) {
+                continue;
+            }
+            if ($named === null && $lex->matches('status', ...$words)) {
+                $named = $field;
+            }
+            if ($lifecycle === null && $lex->matches('lifecycle', ...($field['option_labels'] ?? []))) {
+                $lifecycle = $field;
+            }
+        }
+
+        return $named ?? $lifecycle;
+    }
+
+    /**
+     * A date you look FORWARD to — a due date, an appointment, an expiry — as
+     * opposed to one that records when something already happened.
+     *
+     * Only the first kind belongs on a calendar. A month grid of signup dates
+     * was the first thing on a customer list, above the customers.
+     *
+     * @param  array<string, mixed>  $field
+     */
+    private function isScheduleDate(array $field, string $lang = 'en'): bool
+    {
+        return SemanticLexicon::for($lang)->matches(
+            'schedule',
+            (string) ($field['name'] ?? ''),
+            (string) ($field['slug'] ?? ''),
+        );
+    }
+
+    /**
+     * A start/end pair that describes a real span, or null.
+     *
+     * Two dates on an object are not a timeline: "installed on" and "last
+     * serviced" are both dates and the distance between them is not work being
+     * done, so a Gantt of them says nothing.
+     *
+     * @param  array<int, array<string, mixed>>  $fieldIndex
+     * @return array{0: array<string, mixed>, 1: array<string, mixed>}|null
+     */
+    private function spanFields(array $fieldIndex, string $lang = 'en'): ?array
+    {
+        $lex = SemanticLexicon::for($lang);
+        $words = fn (array $f): array => [(string) ($f['name'] ?? ''), (string) ($f['slug'] ?? '')];
+
+        $dates = array_values(array_filter(
+            $fieldIndex,
+            fn (array $f): bool => in_array($f['type'] ?? '', ['date', 'datetime'], true),
+        ));
+
+        $start = null;
+        $end = null;
+        foreach ($dates as $field) {
+            if ($start === null && $lex->matches('span_start', ...$words($field))) {
+                $start = $field;
+
+                continue;
+            }
+            if ($end === null && $lex->matches('span_end', ...$words($field))) {
+                $end = $field;
+            }
+        }
+
+        return $start !== null && $end !== null ? [$start, $end] : null;
+    }
+
+    /**
      * @param  array<int, array{id: string, slug: string, type: string}>  $fieldIndex
      * @return array{id: string, slug: string, type: string}|null
      */
@@ -3058,6 +3382,14 @@ class AppScaffolder
     private function labelByStatus(string $lang, string $name): string
     {
         return SemanticLexicon::for($lang)->label('by_status', name: $name);
+    }
+
+    /** "{Object} by {Field}" — a breakdown that says what it breaks down by. */
+    private function labelByField(string $lang, string $name, string $field): string
+    {
+        return $field === ''
+            ? $this->labelByStatus($lang, $name)
+            : SemanticLexicon::for($lang)->label('by_field', name: $name, field: mb_strtolower($field));
     }
 
     private function labelTotal(string $lang, string $name): string

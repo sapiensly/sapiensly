@@ -34,9 +34,10 @@ class SemanticLexicon
     private const LABELS = [
         'en' => [
             'new' => 'New {s}', 'submit' => 'Create', 'saved' => '{s} created', 'created_col' => 'Created',
-            'by_status' => '{n} by status', 'total' => '{n} total', 'average' => '{n} average',
+            'by_status' => '{n} by status', 'by_field' => '{n} by {f}', 'total' => '{n} total', 'average' => '{n} average',
             'over_time' => '{n} over time', 'value_by_status' => '{n} value by status',
             'open' => 'Open', 'detail' => 'Detail', 'report' => 'Report',
+            'view_list' => 'List', 'view_board' => 'Board', 'view_calendar' => 'Calendar', 'view_timeline' => 'Timeline',
             'edit' => 'Edit', 'edit_title' => 'Edit {s}', 'save' => 'Save changes',
             'trend' => 'Trend', 'breakdown' => 'Breakdown', 'insights' => 'Key readings',
             'pos' => 'Point of Sale', 'new_order' => 'New order', 'order' => 'Order', 'qty' => 'Quantity',
@@ -45,9 +46,10 @@ class SemanticLexicon
         ],
         'es' => [
             'new' => 'Agregar {s}', 'submit' => 'Guardar', 'saved' => 'Guardado', 'created_col' => 'Creado',
-            'by_status' => '{n} por estado', 'total' => 'Total {n}', 'average' => 'Promedio {n}',
+            'by_status' => '{n} por estado', 'by_field' => '{n} por {f}', 'total' => 'Total {n}', 'average' => 'Promedio {n}',
             'over_time' => '{n} en el tiempo', 'value_by_status' => 'Valor de {n} por estado',
             'open' => 'Abrir', 'detail' => 'Detalle', 'report' => 'Reporte',
+            'view_list' => 'Lista', 'view_board' => 'Tablero', 'view_calendar' => 'Calendario', 'view_timeline' => 'Cronograma',
             'edit' => 'Editar', 'edit_title' => 'Editar {s}', 'save' => 'Guardar cambios',
             'trend' => 'Tendencia', 'breakdown' => 'Desglose', 'insights' => 'Lecturas clave',
             'pos' => 'Punto de venta', 'new_order' => 'Nueva orden', 'order' => 'Pedido', 'qty' => 'Cantidad',
@@ -56,9 +58,10 @@ class SemanticLexicon
         ],
         'pt' => [
             'new' => 'Adicionar {s}', 'submit' => 'Salvar', 'saved' => 'Salvo', 'created_col' => 'Criado',
-            'by_status' => '{n} por status', 'total' => 'Total de {n}', 'average' => 'Média de {n}',
+            'by_status' => '{n} por status', 'by_field' => '{n} por {f}', 'total' => 'Total de {n}', 'average' => 'Média de {n}',
             'over_time' => '{n} ao longo do tempo', 'value_by_status' => 'Valor de {n} por status',
             'open' => 'Abrir', 'detail' => 'Detalhe', 'report' => 'Relatório',
+            'view_list' => 'Lista', 'view_board' => 'Quadro', 'view_calendar' => 'Calendário', 'view_timeline' => 'Cronograma',
             'edit' => 'Editar', 'edit_title' => 'Editar {s}', 'save' => 'Salvar alterações',
             'trend' => 'Tendência', 'breakdown' => 'Detalhamento', 'insights' => 'Leituras-chave',
             'pos' => 'Ponto de venda', 'new_order' => 'Novo pedido', 'order' => 'Pedido', 'qty' => 'Quantidade',
@@ -67,9 +70,10 @@ class SemanticLexicon
         ],
         'fr' => [
             'new' => 'Ajouter {s}', 'submit' => 'Enregistrer', 'saved' => 'Enregistré', 'created_col' => 'Créé',
-            'by_status' => '{n} par statut', 'total' => 'Total {n}', 'average' => 'Moyenne {n}',
+            'by_status' => '{n} par statut', 'by_field' => '{n} par {f}', 'total' => 'Total {n}', 'average' => 'Moyenne {n}',
             'over_time' => '{n} dans le temps', 'value_by_status' => 'Valeur de {n} par statut',
             'open' => 'Ouvrir', 'detail' => 'Détail', 'report' => 'Rapport',
+            'view_list' => 'Liste', 'view_board' => 'Tableau', 'view_calendar' => 'Calendrier', 'view_timeline' => 'Chronologie',
             'edit' => 'Modifier', 'edit_title' => 'Modifier {s}', 'save' => 'Enregistrer les modifications',
             'trend' => 'Tendance', 'breakdown' => 'Répartition', 'insights' => 'Lectures clés',
             'pos' => 'Point de vente', 'new_order' => 'Nouvelle commande', 'order' => 'Commande', 'qty' => 'Quantité',
@@ -94,6 +98,20 @@ class SemanticLexicon
             'not_price' => ['budget', 'cost', 'salary', 'wage', 'estimate', 'funding', '\bspend\b', 'expens'],
             'commerce' => ['order', '\bsale\b', 'invoice', '\bcart\b', 'checkout', 'ticket', 'receipt', 'purchase', '\bpos\b', '\bbill\b', 'product', 'item', '\bsku\b', 'catalog', 'menu', '\bdish\b', 'service', '\bline\b'],
             'temporal' => ['label', 'bucket', 'period', 'week'],
+            // A field that names where a record IS in its life.
+            'status' => ['status', '\bstate\b', 'stage', 'phase', 'progress'],
+            // A field that names what a record IS. Looks identical in the
+            // schema (a select with options) and must never be defaulted or
+            // turned into a board: a classification does not move.
+            'not_status' => ['type', 'category', 'kind', 'class', 'speciality', 'specialty', 'segment', 'tier', 'plan', 'brand', 'model', 'source', 'channel', 'method', 'currency', 'country', 'region', 'language', 'role', 'department'],
+            // Option labels that read as a lifecycle rather than a taxonomy.
+            'lifecycle' => ['\bnew\b', 'open', 'pending', 'progress', 'review', 'waiting', 'blocked', 'hold', 'draft', 'todo', 'doing', 'backlog', 'done', 'closed', 'resolved', 'complete', 'cancel', 'reject', 'approved', 'shipped', 'delivered', 'paid', 'active', 'archived', '\bwon\b', '\blost\b'],
+            // A date you look FORWARD to and would want on a calendar.
+            'schedule' => ['\bdue\b', 'deadline', 'scheduled', 'appointment', 'expir', 'renewal', 'valid until', 'target', 'reminder', 'follow.?up', 'next\b'],
+            // An object that IS a schedule: any date on it is one you look at.
+            'event_object' => ['event', 'appointment', 'booking', 'reservation', 'meeting', 'session', 'shift', 'visit', 'agenda', 'calendar', 'schedule', 'class', 'webinar'],
+            'span_start' => ['start', 'begin', 'opened', 'opening', '\bfrom\b', 'kickoff'],
+            'span_end' => ['\bend\b', 'finish', 'closed', 'closing', 'completion', '\bto\b', '\bdue\b', 'delivery', 'deadline'],
         ],
         'es' => [
             'quantity' => ['cant', 'unidad', 'piezas', 'qty', 'count'],
@@ -104,6 +122,13 @@ class SemanticLexicon
             'not_price' => ['presupuest', 'costo', 'coste', 'salar', 'sueldo', 'estimad', 'fondo', 'gasto'],
             'commerce' => ['pedido', 'venta', 'factura', 'comanda', 'carrito', 'ticket', 'recibo', 'compra', 'cuenta', 'producto', 'articulo', 'platillo', 'plato', 'menu', 'servicio', 'renglon', 'linea', 'partida', 'detalle'],
             'temporal' => ['label', 'bucket', 'period', 'semana'],
+            'status' => ['estado', 'estatus', 'etapa', 'fase', 'situacion', 'avance'],
+            'not_status' => ['tipo', 'categoria', 'clase', 'especialidad', 'segmento', 'nivel', 'plan', 'marca', 'modelo', 'origen', 'canal', 'metodo', 'moneda', 'pais', 'region', 'idioma', '\brol\b', 'puesto', 'area', 'departamento', 'giro'],
+            'lifecycle' => ['nuevo', 'abiert', 'pendiente', 'proceso', 'curso', 'revision', 'espera', 'bloquead', 'borrador', 'pordoing', 'hacer', 'haciendo', 'termin', 'cerrad', 'resuelt', 'complet', 'cancelad', 'rechazad', 'aprobad', 'enviad', 'entregad', 'pagad', 'activo', 'archivad', 'ganad', 'perdid', 'diagnosticad', 'ejecucion'],
+            'schedule' => ['compromiso', 'vencimiento', 'vence', 'limite', 'programad', 'agendad', 'cita', 'caduca', 'renovacion', 'vigencia', 'proxima', 'recordatorio', 'seguimiento', 'entrega'],
+            'event_object' => ['evento', 'cita', 'reserva', 'reunion', 'sesion', 'turno', 'visita', 'agenda', 'calendario', 'clase', 'consulta', 'guardia'],
+            'span_start' => ['inicio', 'comienzo', 'apertura', 'alta', 'desde', 'arranque'],
+            'span_end' => ['\bfin\b', 'final', 'cierre', 'termino', 'entrega', 'hasta', 'vencimiento', 'compromiso'],
         ],
         'pt' => [
             'quantity' => ['qtd', 'quantidade', 'unidade', 'pecas', 'contagem'],
@@ -114,6 +139,13 @@ class SemanticLexicon
             'not_price' => ['orcamento', 'custo', 'salario', 'estimativa', 'fundo', 'gasto', 'despesa'],
             'commerce' => ['pedido', 'venda', 'fatura', 'comanda', 'carrinho', 'ticket', 'recibo', 'compra', 'conta', 'produto', 'artigo', 'prato', 'cardapio', 'servico', 'linha', 'item'],
             'temporal' => ['label', 'bucket', 'period', 'semana'],
+            'status' => ['estado', 'situacao', 'etapa', 'fase', 'andamento'],
+            'not_status' => ['tipo', 'categoria', 'classe', 'especialidade', 'segmento', 'nivel', 'plano', 'marca', 'modelo', 'origem', 'canal', 'metodo', 'moeda', 'pais', 'regiao', 'idioma', 'papel', 'cargo', 'area', 'departamento'],
+            'lifecycle' => ['novo', 'abert', 'pendente', 'andamento', 'revisao', 'espera', 'bloquead', 'rascunho', 'fazer', 'fazendo', 'concluid', 'fechad', 'resolvid', 'complet', 'cancelad', 'rejeitad', 'aprovad', 'enviad', 'entregue', 'pago', 'ativo', 'arquivad', 'ganho', 'perdid'],
+            'schedule' => ['prazo', 'vencimento', 'vence', 'limite', 'agendad', 'programad', 'consulta', 'renovacao', 'validade', 'proxima', 'lembrete', 'entrega'],
+            'event_object' => ['evento', 'consulta', 'reserva', 'reuniao', 'sessao', 'turno', 'visita', 'agenda', 'calendario', 'aula'],
+            'span_start' => ['inicio', 'comeco', 'abertura', 'desde'],
+            'span_end' => ['\bfim\b', 'final', 'fechamento', 'termino', 'entrega', 'ate', 'prazo'],
         ],
         'fr' => [
             'quantity' => ['qte', 'quantite', 'unite', 'pieces', 'nombre'],
@@ -124,6 +156,13 @@ class SemanticLexicon
             'not_price' => ['budget', 'cout', 'salaire', 'estimation', 'depense', 'financement'],
             'commerce' => ['commande', 'vente', 'facture', 'panier', 'ticket', 'recu', 'achat', 'produit', 'article', '\bplat', 'menu', 'service', 'ligne', 'addition'],
             'temporal' => ['label', 'bucket', 'period', 'semaine'],
+            'status' => ['statut', '\betat\b', 'etape', 'phase', 'avancement'],
+            'not_status' => ['type', 'categorie', 'classe', 'specialite', 'segment', 'niveau', 'plan', 'marque', 'modele', 'origine', 'canal', 'methode', 'devise', 'pays', 'region', 'langue', 'role', 'poste', 'service', 'departement'],
+            'lifecycle' => ['nouveau', 'ouvert', 'attente', 'cours', 'revision', 'bloque', 'brouillon', 'faire', 'termine', 'ferme', 'resolu', 'complet', 'annule', 'rejete', 'approuve', 'expedie', 'livre', 'paye', 'actif', 'archive', 'gagne', 'perdu'],
+            'schedule' => ['echeance', 'expiration', 'expire', 'limite', 'planifie', 'programme', 'rendez', 'renouvellement', 'validite', 'prochaine', 'rappel', 'livraison'],
+            'event_object' => ['evenement', 'rendez', 'reservation', 'reunion', 'seance', 'visite', 'agenda', 'calendrier', 'cours'],
+            'span_start' => ['debut', 'ouverture', 'depuis', 'demarrage'],
+            'span_end' => ['\bfin\b', 'cloture', 'fermeture', 'livraison', 'echeance', 'jusqu'],
         ],
     ];
 
@@ -239,11 +278,11 @@ class SemanticLexicon
      * A chrome label with `{s}` (singular) and `{n}` (object name) filled in.
      * Falls back to the English template when the locale lacks the key.
      */
-    public function label(string $key, string $singular = '', string $name = ''): string
+    public function label(string $key, string $singular = '', string $name = '', string $field = ''): string
     {
         $template = self::LABELS[$this->locale][$key] ?? self::LABELS['en'][$key] ?? $key;
 
-        return strtr($template, ['{s}' => $singular, '{n}' => $name]);
+        return strtr($template, ['{s}' => $singular, '{n}' => $name, '{f}' => $field]);
     }
 
     /**
