@@ -941,7 +941,11 @@ class AppScaffolder
         $rollupField = [
             'id' => $rollupFieldId,
             'slug' => $rollupSlug,
-            'name' => $from['name'],
+            // NOT the child object's name, which the relation field beside it
+            // already carries: an object ended up with two fields both called
+            // "Sede", rendering as two identical column headers with nothing to
+            // tell them apart. This one is the count.
+            'name' => $this->labelCountOf($lang, $from['name']),
             'type' => 'rollup',
             'via_relation_field_id' => $parentFieldId,
             'aggregator' => 'count',
@@ -3390,6 +3394,12 @@ class AppScaffolder
         return $field === ''
             ? $this->labelByStatus($lang, $name)
             : SemanticLexicon::for($lang)->label('by_field', name: $name, field: mb_strtolower($field));
+    }
+
+    /** "N.º de Sedes" — the count of children, distinct from the relation. */
+    private function labelCountOf(string $lang, string $name): string
+    {
+        return SemanticLexicon::for($lang)->label('count_of', name: $name);
     }
 
     private function labelTotal(string $lang, string $name): string

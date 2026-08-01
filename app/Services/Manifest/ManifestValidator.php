@@ -8,6 +8,7 @@ use App\Services\Records\RecordQueryService;
 use App\Services\Records\SafeExpressionEvaluator;
 use App\Support\Css\ScopedAppCss;
 use App\Support\Landing\LandingLanguages;
+use App\Support\Locale\SemanticLexicon;
 use Cron\CronExpression;
 use Opis\JsonSchema\Errors\ErrorFormatter;
 use Opis\JsonSchema\Errors\ValidationError;
@@ -261,6 +262,131 @@ class ManifestValidator
                 $provided[$p] = true;
             }
             $this->lintParamBlocks($blocks, "/pages/{$pi}/blocks", $provided, $warnings, $this->modalInjectedParams($blocks));
+
+            // R6 — a board grouped by a select nothing fills in.
+            $this->lintBoardDefaults($manifest, $blocks, "/pages/{$pi}/blocks", $warnings);
+        }
+
+        $this->lintObjectShape($manifest, $warnings);
+    }
+
+    /**
+     * Rules about the DATA MODEL, which the audit used to pass in silence.
+     *
+     * `audit_app` answered "ok, 0 errors, 0 warnings" for an app whose parent
+     * summed unit prices and whose every object had two fields called the same
+     * thing. Both are structural and both have exactly one right answer, so
+     * neither needs a person to notice them.
+     *
+     * @param  array<string, mixed>  $manifest
+     * @param  list<ManifestValidationError>  $warnings
+     */
+    private function lintObjectShape(array $manifest, array &$warnings): void
+    {
+        $lex = SemanticLexicon::for($manifest['settings']['default_locale'] ?? null);
+
+        $fieldsById = [];
+        foreach ($manifest['objects'] ?? [] as $object) {
+            foreach ($object['fields'] ?? [] as $field) {
+                if (isset($field['id'])) {
+                    $fieldsById[$field['id']] = $field;
+                }
+            }
+        }
+
+        foreach ($manifest['objects'] ?? [] as $oi => $object) {
+            // R4 — two fields of one object wearing the same name. A relation
+            // and the rollup that counts it both take the child's name, so a
+            // table shows two columns headed "Sede" and nothing distinguishes
+            // them.
+            $seen = [];
+            foreach ($object['fields'] ?? [] as $field) {
+                $name = mb_strtolower(trim((string) ($field['name'] ?? '')));
+                if ($name === '') {
+                    continue;
+                }
+                $seen[$name][] = (string) ($field['slug'] ?? '');
+            }
+            foreach ($seen as $name => $slugs) {
+                if (count($slugs) > 1) {
+                    $warnings[] = new ManifestValidationError(
+                        "/objects/{$oi}",
+                        "object '".($object['slug'] ?? $oi)."' has ".count($slugs)." fields named '{$name}' (".implode(', ', $slugs).') — they render as identical column headers. Give each the name it is known by.',
+                        'design_smell',
+                    );
+                }
+            }
+
+            // R5 — a total built by adding up prices per piece. Summing a unit
+            // price across lines answers no question anyone has; what totals is
+            // the line's own amount.
+            foreach ($object['fields'] ?? [] as $fi => $field) {
+                if (($field['type'] ?? null) !== 'rollup' || ($field['aggregator'] ?? null) !== 'sum') {
+                    continue;
+                }
+                $target = $fieldsById[$field['target_field_id'] ?? ''] ?? null;
+                if ($target === null) {
+                    continue;
+                }
+                $words = [(string) ($target['name'] ?? ''), (string) ($target['slug'] ?? '')];
+                if ($lex->matches('unit_price', ...$words) && ! $lex->matches('amount', ...$words)) {
+                    $warnings[] = new ManifestValidationError(
+                        "/objects/{$oi}/fields/{$fi}",
+                        "'".($field['slug'] ?? $fi)."' sums '".($target['slug'] ?? '')."', which is a price per unit — adding those across rows gives a number with no meaning. Sum the line's amount instead.",
+                        'design_smell',
+                    );
+                }
+            }
+        }
+    }
+
+    /**
+     * R6 — a kanban grouped by a select with no default.
+     *
+     * The column a record lands in is decided by that field, so when nothing
+     * fills it the record opens OUTSIDE the board: the count says 4 and the
+     * columns show 3, with a nameless fourth column holding the rest. This is
+     * the defect that started the whole review, and no rule caught it.
+     *
+     * Recursive, because a board is no longer a top-level block — it sits in a
+     * tab beside the list.
+     *
+     * @param  array<string, mixed>  $manifest
+     * @param  list<array<string, mixed>>  $blocks
+     * @param  list<ManifestValidationError>  $warnings
+     */
+    private function lintBoardDefaults(array $manifest, array $blocks, string $path, array &$warnings): void
+    {
+        foreach ($blocks as $i => $block) {
+            $bp = "{$path}/{$i}";
+
+            if (($block['type'] ?? null) === 'kanban' && isset($block['group_by_field_id'])) {
+                foreach ($manifest['objects'] ?? [] as $object) {
+                    foreach ($object['fields'] ?? [] as $field) {
+                        if (($field['id'] ?? null) !== $block['group_by_field_id']) {
+                            continue;
+                        }
+                        if (($field['options'] ?? []) !== [] && ! array_key_exists('default', $field)) {
+                            $warnings[] = new ManifestValidationError(
+                                $bp,
+                                "this board groups by '".($field['slug'] ?? '')."', which has no default — a new record is saved with it empty and lands outside every column. Give the field a default.",
+                                'design_smell',
+                            );
+                        }
+                    }
+                }
+            }
+
+            foreach (['blocks', 'left_blocks', 'right_blocks'] as $key) {
+                if (! empty($block[$key])) {
+                    $this->lintBoardDefaults($manifest, $block[$key], "{$bp}/{$key}", $warnings);
+                }
+            }
+            foreach (['tabs', 'sections'] as $key) {
+                foreach ($block[$key] ?? [] as $ci => $child) {
+                    $this->lintBoardDefaults($manifest, $child['blocks'] ?? [], "{$bp}/{$key}/{$ci}/blocks", $warnings);
+                }
+            }
         }
     }
 

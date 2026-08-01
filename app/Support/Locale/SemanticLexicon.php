@@ -34,7 +34,7 @@ class SemanticLexicon
     private const LABELS = [
         'en' => [
             'new' => 'New {s}', 'submit' => 'Create', 'saved' => '{s} created', 'created_col' => 'Created',
-            'by_status' => '{n} by status', 'by_field' => '{n} by {f}', 'total' => '{n} total', 'average' => '{n} average',
+            'by_status' => '{n} by status', 'by_field' => '{n} by {f}', 'total' => '{n} total', 'average' => '{n} average', 'count_of' => 'Number of {n}',
             'over_time' => '{n} over time', 'value_by_status' => '{n} value by status',
             'open' => 'Open', 'detail' => 'Detail', 'report' => 'Report',
             'view_list' => 'List', 'view_board' => 'Board', 'view_calendar' => 'Calendar', 'view_timeline' => 'Timeline',
@@ -46,7 +46,7 @@ class SemanticLexicon
         ],
         'es' => [
             'new' => 'Agregar {s}', 'submit' => 'Guardar', 'saved' => 'Guardado', 'created_col' => 'Creado',
-            'by_status' => '{n} por estado', 'by_field' => '{n} por {f}', 'total' => 'Total {n}', 'average' => 'Promedio {n}',
+            'by_status' => '{n} por estado', 'by_field' => '{n} por {f}', 'total' => 'Total {n}', 'average' => 'Promedio {n}', 'count_of' => 'N.º de {n}',
             'over_time' => '{n} en el tiempo', 'value_by_status' => 'Valor de {n} por estado',
             'open' => 'Abrir', 'detail' => 'Detalle', 'report' => 'Reporte',
             'view_list' => 'Lista', 'view_board' => 'Tablero', 'view_calendar' => 'Calendario', 'view_timeline' => 'Cronograma',
@@ -58,7 +58,7 @@ class SemanticLexicon
         ],
         'pt' => [
             'new' => 'Adicionar {s}', 'submit' => 'Salvar', 'saved' => 'Salvo', 'created_col' => 'Criado',
-            'by_status' => '{n} por status', 'by_field' => '{n} por {f}', 'total' => 'Total de {n}', 'average' => 'Média de {n}',
+            'by_status' => '{n} por status', 'by_field' => '{n} por {f}', 'total' => 'Total de {n}', 'average' => 'Média de {n}', 'count_of' => 'N.º de {n}',
             'over_time' => '{n} ao longo do tempo', 'value_by_status' => 'Valor de {n} por status',
             'open' => 'Abrir', 'detail' => 'Detalhe', 'report' => 'Relatório',
             'view_list' => 'Lista', 'view_board' => 'Quadro', 'view_calendar' => 'Calendário', 'view_timeline' => 'Cronograma',
@@ -70,7 +70,7 @@ class SemanticLexicon
         ],
         'fr' => [
             'new' => 'Ajouter {s}', 'submit' => 'Enregistrer', 'saved' => 'Enregistré', 'created_col' => 'Créé',
-            'by_status' => '{n} par statut', 'by_field' => '{n} par {f}', 'total' => 'Total {n}', 'average' => 'Moyenne {n}',
+            'by_status' => '{n} par statut', 'by_field' => '{n} par {f}', 'total' => 'Total {n}', 'average' => 'Moyenne {n}', 'count_of' => 'Nombre de {n}',
             'over_time' => '{n} dans le temps', 'value_by_status' => 'Valeur de {n} par statut',
             'open' => 'Ouvrir', 'detail' => 'Détail', 'report' => 'Rapport',
             'view_list' => 'Liste', 'view_board' => 'Tableau', 'view_calendar' => 'Calendrier', 'view_timeline' => 'Chronologie',

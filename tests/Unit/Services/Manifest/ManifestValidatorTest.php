@@ -3726,3 +3726,100 @@ it('rejects a record.aggregate that reduces a field without naming one', functio
     expect($result->valid)->toBeFalse()
         ->and(collect($result->errorsArray())->pluck('message')->contains(fn ($m) => str_contains($m, 'requires field_id')))->toBeTrue();
 });
+
+/**
+ * The rules that exist because the audit approved an app that had all three
+ * defects. `audit_app` answered "ok, 0 errors, 0 warnings" for a manifest whose
+ * board could not receive a new record, whose parent added up prices per piece,
+ * and whose every object carried two fields with the same name.
+ */
+it('design-lint R4: two fields of one object wearing the same name', function () {
+    $m = baseManifest();
+    $m['objects'][0]['fields'][] = [
+        'id' => id('fld'), 'slug' => 'sedes_count', 'name' => 'Sede',
+        'type' => 'number',
+    ];
+    $m['objects'][0]['fields'][] = [
+        'id' => id('fld'), 'slug' => 'sede', 'name' => 'Sede', 'type' => 'string',
+    ];
+
+    $smells = designWarnings((new ManifestValidator)->validate($m));
+
+    expect($smells->pluck('message')->implode(' '))->toContain("2 fields named 'sede'");
+});
+
+it('design-lint R5: a total built by adding up prices per piece', function () {
+    $m = baseManifest();
+    $lineObject = $m['objects'][0]['id'];
+    $unitPrice = id('fld');
+    $m['objects'][0]['fields'][] = [
+        'id' => $unitPrice, 'slug' => 'precio_unitario', 'name' => 'Precio Unitario',
+        'type' => 'currency', 'currency_code' => 'MXN',
+    ];
+    $m['objects'][] = [
+        'id' => id('obj'), 'slug' => 'pedidos', 'name' => 'Pedidos',
+        'fields' => [
+            ['id' => id('fld'), 'slug' => 'folio', 'name' => 'Folio', 'type' => 'string'],
+            [
+                'id' => id('fld'), 'slug' => 'total', 'name' => 'Total', 'type' => 'rollup',
+                'readonly' => true, 'aggregator' => 'sum', 'target_field_id' => $unitPrice,
+                'via_relation_field_id' => id('fld'),
+            ],
+        ],
+    ];
+    $m['settings'] = ['default_locale' => 'es-MX'];
+
+    expect(designWarnings((new ManifestValidator)->validate($m))->pluck('message')->implode(' '))
+        ->toContain('price per unit');
+
+    // Summing an AMOUNT is the whole point of a rollup — it must stay quiet.
+    $ok = $m;
+    $amount = id('fld');
+    $ok['objects'][0]['fields'][] = [
+        'id' => $amount, 'slug' => 'importe', 'name' => 'Importe',
+        'type' => 'currency', 'currency_code' => 'MXN',
+    ];
+    $ok['objects'][1]['fields'][1]['target_field_id'] = $amount;
+
+    expect(designWarnings((new ManifestValidator)->validate($ok))->pluck('message')->implode(' '))
+        ->not->toContain('price per unit');
+});
+
+it('design-lint R6: a board grouped by a select nothing fills in', function () {
+    $m = baseManifest();
+    $object = $m['objects'][0];
+    $estado = id('fld');
+    $m['objects'][0]['fields'][] = [
+        'id' => $estado, 'slug' => 'estado', 'name' => 'Estado', 'type' => 'single_select',
+        'options' => [
+            ['id' => id('opt'), 'value' => 'nuevo', 'label' => 'Nuevo'],
+            ['id' => id('opt'), 'value' => 'cerrado', 'label' => 'Cerrado'],
+        ],
+    ];
+    $board = [
+        'id' => id('blk'), 'type' => 'kanban',
+        'data_source' => ['object_id' => $object['id']],
+        'group_by_field_id' => $estado,
+        'card_title_field_id' => $object['fields'][0]['id'],
+    ];
+
+    // Nested in a tab, which is where a board lives now — a top-level scan
+    // would have missed it entirely.
+    $m['pages'] = [[
+        'id' => id('pag'), 'slug' => 'b', 'name' => 'B', 'path' => '/b',
+        'blocks' => [[
+            'id' => id('blk'), 'type' => 'tabs',
+            'tabs' => [['id' => id('tab'), 'label' => 'Tablero', 'blocks' => [$board]]],
+        ]],
+    ]];
+
+    expect(designWarnings((new ManifestValidator)->validate($m))->pluck('message')->implode(' '))
+        ->toContain('lands outside every column');
+
+    // With a default, the record has a column to land in and the rule is silent.
+    $withDefault = $m;
+    $withDefault['objects'][0]['fields'][array_key_last($withDefault['objects'][0]['fields'])]['default'] = 'nuevo';
+
+    expect(designWarnings((new ManifestValidator)->validate($withDefault))->pluck('message')->implode(' '))
+        ->not->toContain('lands outside every column');
+});
