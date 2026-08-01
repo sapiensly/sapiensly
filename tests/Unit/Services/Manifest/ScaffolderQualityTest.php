@@ -2035,3 +2035,37 @@ it('cuts a relationship the model also wrote as a text field', function () {
         ->toContain('etapa')
         ->and(implode(' ', $coercions))->toContain('goes stale');
 });
+
+it('says what it left out when a spec runs past a cap', function () {
+    // The failure mode these caps used to have: a lifecycle with a ninth state
+    // came back with eight, and the ninth was simply unreachable for ever, with
+    // nothing anywhere saying so. Same for a relationship over the limit — the
+    // objects both survive, so nothing looks missing.
+    $states = ['reportada', 'revision', 'asignada', 'reparacion', 'espera', 'resuelta', 'cerrada', 'cancelada', 'reabierta'];
+
+    $coercions = [];
+    $spec = app(AppScaffolder::class)->normalizeSpec([
+        'objects' => [
+            ['name' => 'Incidencias', 'slug' => 'incidencias', 'fields' => [
+                ['name' => 'Estado', 'slug' => 'estado', 'type' => 'single_select', 'options' => array_map(
+                    fn (string $s): array => ['value' => $s, 'label' => ucfirst($s)],
+                    $states,
+                )],
+            ]],
+            ['name' => 'Inmuebles', 'slug' => 'inmuebles', 'fields' => [
+                ['name' => 'Direccion', 'slug' => 'direccion', 'type' => 'string', 'options' => null],
+            ]],
+        ],
+        'links' => array_map(
+            fn (int $n): array => ['from' => 'incidencias', 'to' => 'inmuebles', 'name' => 'inmueble_'.$n],
+            range(1, 9),
+        ),
+    ], $coercions);
+
+    $estado = collect($spec['objects'][0]['fields'])->firstWhere('slug', 'estado');
+    $notes = implode(' ', $coercions);
+
+    expect($estado['options'])->toHaveCount(8)
+        ->and($notes)->toContain('Reabierta')
+        ->and($notes)->toContain('9 relationships were described');
+});

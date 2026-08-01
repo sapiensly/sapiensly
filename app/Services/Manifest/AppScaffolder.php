@@ -319,7 +319,7 @@ class AppScaffolder
             $objects[] = ['name' => $name, 'slug' => $slug, 'fields' => $fields];
         }
 
-        $links = $this->normalizeLinks($decoded['links'] ?? null, $usedObjectSlugs);
+        $links = $this->normalizeLinks($decoded['links'] ?? null, $usedObjectSlugs, $coercions);
         $this->dropRestatedRelations($objects, $links, $coercions);
 
         return [
@@ -465,10 +465,29 @@ class AppScaffolder
      * @param  array<int, string>  $objectSlugs
      * @return array<int, array{from: string, to: string, name: ?string}>
      */
-    private function normalizeLinks(mixed $rawLinks, array $objectSlugs): array
+    private function normalizeLinks(mixed $rawLinks, array $objectSlugs, array &$coercions = []): array
     {
         if (! is_array($rawLinks)) {
             return [];
+        }
+
+        // A relationship dropped in silence is a whole side of the model gone:
+        // no picker on the form, no children on the detail page, no rollup —
+        // and the objects both still there, so nothing looks missing.
+        if (count($rawLinks) > self::MAX_LINKS) {
+            $dropped = array_slice($rawLinks, self::MAX_LINKS);
+            $named = array_values(array_filter(array_map(
+                fn ($l): string => is_array($l)
+                    ? trim((string) ($l['from'] ?? '')).' → '.trim((string) ($l['to'] ?? ''))
+                    : '',
+                $dropped,
+            )));
+            $coercions[] = sprintf(
+                '%d relationships were described, over the %d limit — %s left out. Add them with add_relation.',
+                count($rawLinks),
+                self::MAX_LINKS,
+                $named !== [] ? implode(', ', $named).' were' : count($dropped).' were',
+            );
         }
 
         $links = [];
@@ -541,7 +560,7 @@ class AppScaffolder
 
         $options = null;
         if (in_array($type, ['single_select', 'multi_select'], true)) {
-            $options = $this->normalizeOptions($field['options'] ?? null);
+            $options = $this->normalizeOptions($field['options'] ?? null, $name, $coercions);
             if ($options === []) {
                 // A select with no options is invalid — degrade to free text.
                 $coercions[] = "field \"{$name}\": {$type} needs a non-empty options array — used plain text instead.";
@@ -585,7 +604,7 @@ class AppScaffolder
 
             $options = null;
             if (in_array($type, ['single_select', 'multi_select'], true)) {
-                $options = $this->normalizeOptions($field['options'] ?? null);
+                $options = $this->normalizeOptions($field['options'] ?? null, $name, $coercions);
                 if ($options === []) {
                     // A select with no options is invalid — degrade to free text.
                     $coercions[] = "field \"{$name}\": {$type} needs a non-empty options array — used plain text instead.";
@@ -602,12 +621,32 @@ class AppScaffolder
     }
 
     /**
+     * @param  list<string>  $coercions  Out: a note when choices had to be dropped.
      * @return array<int, array{value: string, label: string}>
      */
-    private function normalizeOptions(mixed $options): array
+    private function normalizeOptions(mixed $options, string $fieldName = '', array &$coercions = []): array
     {
         if (! is_array($options)) {
             return [];
+        }
+
+        // A ninth state on a select is not a rare edge — "reportada, en
+        // revisión, asignada, en reparación, esperando refacción, resuelta,
+        // cerrada, cancelada, reabierta" is an ordinary lifecycle. Losing one
+        // in silence means records can never reach it and nobody is told why.
+        if (count($options) > self::MAX_OPTIONS) {
+            $dropped = array_slice($options, self::MAX_OPTIONS);
+            $labels = array_values(array_filter(array_map(
+                fn ($o): string => is_string($o) ? $o : (is_array($o) ? trim((string) ($o['label'] ?? $o['value'] ?? '')) : ''),
+                $dropped,
+            )));
+            $coercions[] = sprintf(
+                'field "%s" listed %d choices, over the %d limit — %s left out. Add them with add_field, or fold them into the ones that stayed.',
+                $fieldName !== '' ? $fieldName : 'select',
+                count($options),
+                self::MAX_OPTIONS,
+                $labels !== [] ? '"'.implode('", "', $labels).'" were' : count($dropped).' were',
+            );
         }
 
         $normalized = [];
