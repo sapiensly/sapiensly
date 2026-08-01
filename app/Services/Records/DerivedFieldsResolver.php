@@ -186,7 +186,12 @@ class DerivedFieldsResolver
         $childrenByParent = $children->groupBy(fn (Record $r) => $r->data[$inverseField['slug']] ?? null);
 
         foreach ($records as $record) {
-            $children = $childrenByParent[$record->id] ?? collect();
+            // An Eloquent collection, not `collect()`: aggregate() type-hints
+            // the Eloquent one, so a parent with NO children used to throw and
+            // the rollup was left unresolved — a count that should read 0
+            // rendered as an em dash, on exactly the records the number matters
+            // most for (the empty ones).
+            $children = $childrenByParent[$record->id] ?? new Collection;
             $value = $this->aggregate($children, $aggregator, $targetSlug);
             $record->setAttribute('data', array_merge($record->data ?? [], [$field['slug'] => $value]));
         }

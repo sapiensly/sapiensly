@@ -123,3 +123,42 @@ it('validator accepts a metric_grid that aggregates a rollup field', function ()
     $incompatible = collect($result->errors)->filter(fn ($e) => $e->code === 'incompatible_type');
     expect($incompatible)->toBeEmpty();
 });
+
+/**
+ * The childless parent — the case every test above happens to avoid by giving
+ * each order at least one line, and the reason this went unnoticed: the empty
+ * branch handed the aggregator a base collection where it type-hints Eloquent's,
+ * so resolution threw, the exception was swallowed as a warning, and the field
+ * was left unset. A count that should read 0 rendered as an em dash on exactly
+ * the records where "none yet" is the thing you want to see.
+ */
+it('rolls a childless parent up to zero, not to nothing', function () {
+    $writer = app(RecordWriteService::class);
+    $empty = $writer->create($this->appModel, $this->manifest, 'obj_orders_0001', ['name' => 'Sin lineas'], $this->user);
+
+    $rows = app(RecordQueryService::class)->query(
+        $this->appModel,
+        ['object_id' => 'obj_orders_0001'],
+        $this->manifest,
+    );
+
+    $row = $rows->firstWhere('id', $empty->id);
+
+    expect($row)->not->toBeNull()
+        ->and($row->data)->toHaveKey('total')
+        // Numeric, not typed: an empty sum folds to int 0 where a populated one
+        // folds to float. The claim here is "zero", not "zero of that PHP type".
+        ->and($row->data['total'])->toEqual(0);
+});
+
+it('keeps a childless parent out of the way of the others', function () {
+    // The zero must not disturb the aggregate the populated parents produce.
+    $writer = app(RecordWriteService::class);
+    $writer->create($this->appModel, $this->manifest, 'obj_orders_0001', ['name' => 'Sin lineas'], $this->user);
+
+    $svc = app(RecordQueryService::class);
+    $query = ['object_id' => 'obj_orders_0001'];
+
+    expect($svc->aggregate($this->appModel, $query, 'sum', 'fld_ord_total01', $this->manifest))->toBe(244.0)
+        ->and($svc->aggregate($this->appModel, $query, 'min', 'fld_ord_total01', $this->manifest))->toBe(0.0);
+});
