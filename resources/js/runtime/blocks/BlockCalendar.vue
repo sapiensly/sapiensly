@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ChevronLeft, ChevronRight } from '@lucide/vue';
-import { computed, ref } from 'vue';
+import { computed, ref, watch } from 'vue';
 import type { FieldDef, ObjectDef } from '../types/manifest';
 import { resolveField } from '../types/manifest';
 import { useChartTooltip } from '../useChartTooltip';
@@ -135,6 +135,46 @@ const eventsByDay = computed<Record<string, CalendarEvent[]>>(() => {
     }
     return out;
 });
+/**
+ * Open on a month that has something in it.
+ *
+ * The grid starts on today's month, which is right whenever the work is
+ * current — but an app opened in August to look at July's tickets landed on a
+ * blank grid with no hint that the records existed at all. So: if the month we
+ * would show is empty and the data is not, move to the nearest month that
+ * isn't, preferring the most recent one behind us.
+ *
+ * Once only, and only before anyone has navigated — the arrows and Today must
+ * keep meaning what they say. It has to run on a watcher rather than at setup
+ * because block data is a deferred prop: at mount there is nothing to aim at.
+ */
+const settled = ref(false);
+
+watch(
+    () => props.data?.rows,
+    () => {
+        if (settled.value) return;
+        const days = Object.keys(eventsByDay.value);
+        if (days.length === 0) return;
+        settled.value = true;
+
+        const current = monthKey(anchor.value);
+        if (days.some((d) => d.slice(0, 7) === current)) return;
+
+        const months = [...new Set(days.map((d) => d.slice(0, 7)))].sort();
+        const behind = months.filter((m) => m <= current);
+        const target =
+            behind.length > 0 ? behind[behind.length - 1] : months[0];
+        const [year, month] = target.split('-').map(Number);
+        anchor.value = new Date(year, month - 1, 1);
+    },
+    { immediate: true },
+);
+
+/** "YYYY-MM" for a date, the granularity the jump above compares on. */
+function monthKey(d: Date): string {
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+}
 
 const weekdayHeaders = computed(() => {
     // Use a known Monday (2024-01-01 was a Monday) to render localised short names.
