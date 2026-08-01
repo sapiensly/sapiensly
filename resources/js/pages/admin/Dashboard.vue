@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import AuditRow from '@/components/admin/AuditRow.vue';
 import HealthRow from '@/components/admin/HealthRow.vue';
-import Sparkline from '@/components/admin/Sparkline.vue';
 import StatCard from '@/components/admin/StatCard.vue';
 import AdminLayout from '@/layouts/AdminLayout.vue';
 import type { DashboardProps } from '@/lib/admin/types';
@@ -14,7 +13,6 @@ import {
     Sparkles,
     TrendingUp,
     User,
-    Zap,
 } from '@lucide/vue';
 import { computed } from 'vue';
 import { useI18n } from 'vue-i18n';
@@ -25,7 +23,7 @@ const { t } = useI18n();
 
 function refresh() {
     router.reload({
-        only: ['stats', 'layers', 'spend', 'health', 'audit'],
+        only: ['stats', 'services', 'spend', 'health', 'audit'],
     });
 }
 
@@ -45,35 +43,26 @@ const spendSegments = computed(() => {
     }));
 });
 
-const layerCards = computed(() => {
-    if (!props.layers) return [];
-    return [
-        {
-            key: 'understand' as const,
-            label: t('admin.dashboard.layers.understand'),
-            count: props.layers.understand.count,
-            subtitle: props.layers.understand.subtitle,
-            series: props.layers.understand.series,
-            tint: 'var(--sp-spectrum-magenta)',
-        },
-        {
-            key: 'discover' as const,
-            label: t('admin.dashboard.layers.discover'),
-            count: props.layers.discover.count,
-            subtitle: props.layers.discover.subtitle,
-            series: props.layers.discover.series,
-            tint: 'var(--sp-spectrum-cyan)',
-        },
-        {
-            key: 'resolve' as const,
-            label: t('admin.dashboard.layers.resolve'),
-            count: props.layers.resolve.count,
-            subtitle: props.layers.resolve.subtitle,
-            series: props.layers.resolve.series,
-            tint: 'var(--sp-spectrum-indigo)',
-        },
-    ];
-});
+/** Tint per service row, cycling the brand spectrum. */
+const SERVICE_TINTS = [
+    'var(--sp-spectrum-magenta)',
+    'var(--sp-spectrum-cyan)',
+    'var(--sp-spectrum-indigo)',
+    'var(--sp-accent-blue)',
+];
+
+function serviceTint(index: number): string {
+    return SERVICE_TINTS[index % SERVICE_TINTS.length];
+}
+
+function money(value: number): string {
+    if (value === 0) return '$0';
+    return '$' + value.toFixed(value < 1 ? 4 : 2);
+}
+
+function num(value: number): string {
+    return new Intl.NumberFormat().format(value);
+}
 </script>
 
 <template>
@@ -180,70 +169,102 @@ const layerCards = computed(() => {
                 />
             </section>
 
-            <!-- Three Layers + System Health row (2/3 + 1/3 split on xl). -->
+            <!-- Spend by service + System Health row (2/3 + 1/3 split on xl). -->
             <section class="grid grid-cols-1 gap-4 xl:grid-cols-3">
-                <!-- Three Layers card — spans 2 columns on xl. -->
+                <!-- Where the AI money went — spans 2 columns on xl. -->
                 <div
-                    v-if="layers"
                     class="rounded-sp-sm border border-soft bg-navy p-5 xl:col-span-2"
                 >
                     <header class="flex items-start justify-between gap-3">
                         <div>
                             <h2 class="text-base font-semibold text-ink">
-                                {{ t('admin.dashboard.layers.heading') }}
+                                {{ t('admin.dashboard.services.heading') }}
                             </h2>
                             <p class="text-xs text-ink-muted">
-                                {{ t('admin.dashboard.layers.subtitle') }}
+                                {{ t('admin.dashboard.services.subtitle') }}
                             </p>
                         </div>
-                        <span
-                            class="inline-flex shrink-0 items-center gap-1 rounded-pill border border-soft bg-surface px-2.5 py-1 text-[10px] font-semibold tracking-wider text-ink-muted uppercase"
+                        <Link
+                            href="/admin/ai/usage"
+                            class="shrink-0 text-xs text-ink-muted hover:text-ink"
                         >
-                            <Zap class="size-3 text-sp-success" />
-                            {{ t('admin.dashboard.layers.live') }}
-                        </span>
+                            {{ t('admin.dashboard.services.view_all') }}
+                        </Link>
                     </header>
 
-                    <div class="mt-5 grid grid-cols-1 gap-4 md:grid-cols-3">
+                    <p
+                        v-if="!services || services.length === 0"
+                        class="px-2 py-6 text-sm text-ink-muted"
+                    >
+                        {{ t('admin.dashboard.services.empty') }}
+                    </p>
+                    <div v-else class="mt-4 flex flex-col gap-3">
                         <div
-                            v-for="(card, idx) in layerCards"
-                            :key="card.key"
-                            :class="[
-                                'rounded-xs p-4 transition-all',
-                                idx === 2 ? 'border bg-white/[0.02]' : '',
-                            ]"
-                            :style="
-                                idx === 2
-                                    ? {
-                                          borderColor: `color-mix(in oklab, ${card.tint} 35%, transparent)`,
-                                      }
-                                    : {}
-                            "
+                            v-for="(service, idx) in services"
+                            :key="service.service"
+                            class="rounded-xs border border-soft/60 bg-surface/40 p-4"
                         >
-                            <p
-                                class="flex items-center gap-1.5 text-[10px] font-semibold tracking-wider uppercase"
-                                :style="{ color: card.tint }"
+                            <header
+                                class="flex items-baseline justify-between gap-3"
                             >
-                                <span
-                                    class="inline-block size-1.5 rounded-pill"
-                                    :style="{ backgroundColor: card.tint }"
-                                />
-                                {{ card.label }}
-                            </p>
-                            <p
-                                class="mt-2 font-mono text-[24px] font-semibold text-ink"
+                                <h3 class="text-sm font-medium text-ink">
+                                    {{ service.service }}
+                                </h3>
+                                <div class="text-right whitespace-nowrap">
+                                    <span
+                                        class="text-sm font-semibold text-ink"
+                                        >{{ money(service.cost) }}</span
+                                    >
+                                    <span class="ml-2 text-xs text-ink-subtle">
+                                        {{ num(service.calls) }}
+                                        {{ t('admin.dashboard.spend.calls') }}
+                                    </span>
+                                </div>
+                            </header>
+
+                            <div
+                                class="mt-2 h-1 overflow-hidden rounded-pill bg-white/[0.06]"
                             >
-                                {{ card.count.toLocaleString() }}
-                            </p>
-                            <p class="mt-1 text-xs text-ink-muted">
-                                {{ card.subtitle }}
-                            </p>
-                            <div class="mt-4 h-10">
-                                <Sparkline
-                                    :series="card.series"
-                                    :tint="card.tint"
+                                <div
+                                    class="h-full rounded-pill"
+                                    :style="{
+                                        width: `${service.share}%`,
+                                        backgroundColor: serviceTint(idx),
+                                    }"
                                 />
                             </div>
+
+                            <ul class="mt-2 divide-y divide-soft/40">
+                                <li
+                                    v-for="model in service.models"
+                                    :key="model.model"
+                                    class="flex items-center justify-between py-1.5 text-xs"
+                                >
+                                    <span class="truncate text-ink-muted">
+                                        {{ model.model }}
+                                        <span
+                                            v-if="model.unpriced"
+                                            class="ml-1 text-sp-warning"
+                                            >{{
+                                                t(
+                                                    'admin.dashboard.services.unpriced',
+                                                )
+                                            }}</span
+                                        >
+                                    </span>
+                                    <span
+                                        class="flex shrink-0 items-center gap-3"
+                                    >
+                                        <span class="text-ink-subtle"
+                                            >{{ num(model.tokens) }} tok</span
+                                        >
+                                        <span
+                                            class="w-16 text-right font-medium text-ink"
+                                            >{{ money(model.cost) }}</span
+                                        >
+                                    </span>
+                                </li>
+                            </ul>
                         </div>
                     </div>
                 </div>

@@ -59,10 +59,22 @@ export interface DashboardStat {
     series?: number[];
 }
 
-export interface DashboardLayer {
-    count: number;
-    subtitle: string;
-    series: number[];
+/** One service line in the platform spend breakdown, with its top models. */
+export interface DashboardService {
+    service: string;
+    cost: number;
+    calls: number;
+    tokens: number;
+    /** Share of the window's total spend, 0-100. */
+    share: number;
+    models: {
+        model: string;
+        cost: number;
+        calls: number;
+        tokens: number;
+        /** No price recorded — its spend meters as $0 and slips past budgets. */
+        unpriced: boolean;
+    }[];
 }
 
 export interface DashboardProvider {
@@ -81,11 +93,7 @@ export interface DashboardProps {
         spendToday: DashboardStat;
         totalUsers: DashboardStat;
     } | null;
-    layers: {
-        understand: DashboardLayer;
-        discover: DashboardLayer;
-        resolve: DashboardLayer;
-    } | null;
+    services: DashboardService[] | null;
     spend: {
         providers: DashboardProvider[];
     } | null;

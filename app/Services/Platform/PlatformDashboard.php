@@ -9,6 +9,7 @@ use App\Models\User;
 use App\Services\Ai\AiDefaults;
 use App\Services\Ai\AiUsageReport;
 use App\Services\AiProviderService;
+use App\Support\Ai\SpendPeriod;
 use App\Support\Tenancy\Schemas;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
@@ -41,6 +42,7 @@ class PlatformDashboard
         private readonly PlatformProbe $probe,
         private readonly AiProviderService $providers,
         private readonly AiDefaults $defaults,
+        private readonly AiUsageReport $usage,
     ) {}
 
     /**
@@ -50,9 +52,15 @@ class PlatformDashboard
     {
         $now = CarbonImmutable::now();
 
+        // One report engine for money, the same one the tenant-facing spend
+        // dashboard renders — read platform-wide here instead of RLS-scoped.
+        // Two engines would drift, and the first symptom would be an
+        // organization's own page disagreeing with the platform total.
+        $report = $this->usage->platformWide(SpendPeriod::fromKey('today'));
+
         return [
-            'stats' => $this->stats($now),
-            'layers' => $this->layers($now),
+            'stats' => $this->stats($now, $report),
+            'services' => $this->services($report),
             'spend' => $this->spend($now),
             'health' => $this->health(),
             'audit' => $this->audit(),
@@ -62,7 +70,10 @@ class PlatformDashboard
     /**
      * @return array<string, mixed>|null
      */
-    private function stats(CarbonImmutable $now): ?array
+    /**
+     * @param  array<string, mixed>  $report
+     */
+    private function stats(CarbonImmutable $now, array $report): ?array
     {
         $since = $now->subDay();
         $previous = $now->subDays(2);
@@ -73,7 +84,13 @@ class PlatformDashboard
         $handling = $this->handlingTimes($since, $now);
         $handlingBefore = $this->handlingTimes($previous, $since);
 
-        $today = $this->usageTotals($now->startOfDay(), $now);
+        // Today's money comes from the shared report; yesterday's is measured
+        // the same way, one window back, so the delta compares like with like.
+        $today = [
+            'cost' => (float) ($report['totals']['cost'] ?? 0),
+            'calls' => (int) ($report['totals']['calls'] ?? 0),
+            'tokens' => (int) ($report['totals']['input_tokens'] ?? 0) + (int) ($report['totals']['output_tokens'] ?? 0),
+        ];
         $yesterday = $this->usageTotals($now->subDay()->startOfDay(), $now->startOfDay());
 
         $organizations = Organization::query()->count();
@@ -141,52 +158,46 @@ class PlatformDashboard
     }
 
     /**
-     * The agent triad, each card counting something the platform actually
-     * records. The subtitles name the measurement rather than the ambition, so
-     * a number that looks low can be read for what it is.
+     * Where the platform's AI money went in the window, by service (Chat, Apps,
+     * Chatbots, Knowledge, Landing Director…), each with the models underneath.
      *
-     * @return array<string, mixed>|null
+     * This is the platform-wide read of the very breakdown an organization sees
+     * on its own spend dashboard — same report, same shape, different scope —
+     * so "what is this platform doing right now" is answered in the units the
+     * bill is actually written in.
+     *
+     * @param  array<string, mixed>  $report
+     * @return list<array<string, mixed>>|null
      */
-    private function layers(CarbonImmutable $now): ?array
+    private function services(array $report): ?array
     {
-        $since = $now->subDay();
+        $services = $report['by_service'] ?? [];
 
-        $started = $this->countConversations($since, $now);
-        $resolved = $this->countConversations($since, $now, resolvedOnly: true);
-        $knowledge = $this->knowledgeCalls($since, $now);
-
-        // Nothing has run in the window — say so instead of drawing three zeros
-        // under a "Live" badge.
-        if ($started === 0 && $resolved === 0 && $knowledge === 0) {
+        if ($services === []) {
             return null;
         }
 
-        return [
-            'understand' => [
-                'count' => $started,
-                'subtitle' => __('Conversations opened across every tenant'),
-                'series' => $this->series(
-                    $now,
-                    fn (CarbonImmutable $from, CarbonImmutable $to) => $this->countConversations($from, $to),
-                ),
-            ],
-            'discover' => [
-                'count' => $knowledge,
-                'subtitle' => __('Knowledge retrievals and document reads'),
-                'series' => $this->series(
-                    $now,
-                    fn (CarbonImmutable $from, CarbonImmutable $to) => $this->knowledgeCalls($from, $to),
-                ),
-            ],
-            'resolve' => [
-                'count' => $resolved,
-                'subtitle' => __('Conversations closed as resolved'),
-                'series' => $this->series(
-                    $now,
-                    fn (CarbonImmutable $from, CarbonImmutable $to) => $this->countConversations($from, $to, resolvedOnly: true),
-                ),
-            ],
-        ];
+        $total = (float) ($report['totals']['cost'] ?? 0);
+
+        return array_map(static function (array $service) use ($total) {
+            $models = array_slice($service['models'] ?? [], 0, 3);
+
+            return [
+                'service' => $service['service'],
+                'cost' => round((float) $service['cost'], 4),
+                'calls' => (int) $service['calls'],
+                'tokens' => (int) $service['input_tokens'] + (int) $service['output_tokens'],
+                // Share of the window's spend, so one line reads as a bar.
+                'share' => $total > 0 ? round(((float) $service['cost'] / $total) * 100, 1) : 0.0,
+                'models' => array_map(static fn (array $model) => [
+                    'model' => $model['model'],
+                    'cost' => round((float) $model['cost'], 4),
+                    'calls' => (int) $model['calls'],
+                    'tokens' => (int) $model['input_tokens'] + (int) $model['output_tokens'],
+                    'unpriced' => ($model['unpriced'] ?? false) === true,
+                ], $models),
+            ];
+        }, array_slice($services, 0, 6));
     }
 
     /**
@@ -466,25 +477,6 @@ class PlatformDashboard
             'avg_seconds' => $row?->avg_ms === null ? null : round(((float) $row->avg_ms) / 1000, 2),
             'p95_seconds' => $row?->p95_ms === null ? null : round(((float) $row->p95_ms) / 1000, 2),
         ];
-    }
-
-    private function knowledgeCalls(CarbonImmutable $from, CarbonImmutable $to): int
-    {
-        $modules = ['embeddings', 'document_ocr', 'reranking'];
-        $total = 0;
-
-        foreach ([Schemas::qualify('ai_usage_events'), 'platform.system_ai_usage_events'] as $table) {
-            try {
-                $total += (int) DB::connection('pgsql')->table($table)
-                    ->whereIn('module', $modules)
-                    ->whereBetween('created_at', [$from, $to])
-                    ->count();
-            } catch (Throwable) {
-                // A missing ledger contributes nothing rather than failing.
-            }
-        }
-
-        return $total;
     }
 
     /**

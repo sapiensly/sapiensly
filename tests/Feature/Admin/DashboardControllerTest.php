@@ -7,6 +7,7 @@ use App\Models\User;
 use App\Models\WidgetSession;
 use App\Services\Ai\AiDefaults;
 use App\Support\Tenancy\Schemas;
+use Carbon\Carbon;
 use Database\Seeders\RolesAndPermissionsSeeder;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -18,6 +19,12 @@ use Spatie\Permission\PermissionRegistrar;
  * section with nothing behind it comes back null rather than plausible.
  */
 beforeEach(function () {
+    // "Spend today" is a calendar-day window while the conversation stats are a
+    // rolling 24h. Left to the real clock, a fixture placed two hours ago falls
+    // outside the day whenever the suite runs just after midnight — the run that
+    // caught this was at 00:05 UTC. Freeze midday so both windows are stable.
+    $this->travelTo(Carbon::today()->addHours(12));
+
     $this->seed(RolesAndPermissionsSeeder::class);
     app()[PermissionRegistrar::class]->forgetCachedPermissions();
 
@@ -61,8 +68,6 @@ it('counts conversations from every organization, not just the viewer\'s', funct
         ->assertOk()
         ->assertInertia(fn ($page) => $page
             ->where('stats.ticketsResolved.value', 2)
-            ->where('layers.understand.count', 3)
-            ->where('layers.resolve.count', 2)
             // (2000 + 4000 + 6000) / 3 = 4000ms
             ->where('stats.avgHandleTime.value', 4)
             ->where('stats.avgHandleTime.display', '4.0s')
@@ -80,12 +85,12 @@ it('reports real account totals', function () {
         );
 });
 
-it('returns null for the layer panel when nothing ran in the window', function () {
+it('returns null for the spend panels when nothing ran in the window', function () {
     $this->actingAs($this->sysadmin)
         ->get(route('admin.dashboard'))
         ->assertOk()
         ->assertInertia(fn ($page) => $page
-            ->where('layers', null)
+            ->where('services', null)
             ->where('spend', null)
         );
 });
@@ -115,6 +120,13 @@ it('groups the last day of spend by provider', function () {
             ->where('spend.providers.0.cost', 0.5)
             ->where('spend.providers.1.calls', 1)
             ->where('stats.tokensUsed.value', 450)
+            // The service breakdown comes from the same report the tenant-facing
+            // spend dashboard renders: module 'chat' maps to the Chat service.
+            ->where('services.0.service', 'Chat')
+            ->where('services.0.calls', 3)
+            ->where('services.0.cost', 0.55)
+            ->where('services.0.share', 100)
+            ->where('services.0.models.0.model', 'test-model')
         );
 });
 
