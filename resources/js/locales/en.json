@@ -219,7 +219,7 @@
     "system.mcp.abilities.data_read": "Read tenant data",
     "system.mcp.abilities.data_write": "Write tenant data",
     "system.mcp.abilities.agents_invoke": "Talk to agents",
-    "system.mcp.abilities.platform_admin": "Administer the platform (sysadmin)",
+    "system.mcp.abilities.platform_admin": "Administer the platform",
     "system.mcp.abilities_hint_platform": "Platform administration is never granted by leaving the boxes unchecked — tick it deliberately.",
     "system.mcp.create": "Create token",
     "system.mcp.created_title": "Token created",
