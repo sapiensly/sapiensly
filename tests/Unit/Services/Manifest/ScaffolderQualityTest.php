@@ -739,6 +739,10 @@ function scaffoldWithFocus(?array $focus): array
                 ['name' => 'Folio', 'slug' => 'folio', 'type' => 'string', 'options' => null],
                 ['name' => 'Monto Pagado', 'slug' => 'monto_pagado', 'type' => 'currency', 'options' => null],
                 ['name' => 'Fecha Limite de Pago', 'slug' => 'fecha_limite', 'type' => 'date', 'options' => null],
+                ['name' => 'Estado', 'slug' => 'estado', 'type' => 'single_select', 'options' => [
+                    ['value' => 'pendiente', 'label' => 'Pendiente'],
+                    ['value' => 'pagado', 'label' => 'Pagado'],
+                ]],
             ]],
         ],
         'links' => [['from' => 'pagos', 'to' => 'inmuebles', 'name' => 'inmueble']],
@@ -806,6 +810,37 @@ it('answers a sum over text as a count rather than dropping the question', funct
     ], $coercions);
 
     expect($spec['focus']['measures'][0]['aggregation'])->toBe('count');
+});
+
+it('spends the chart budget on the objects the description named', function () {
+    // Live regeneration of the rentals app asked for four things and got
+    // three: the fourth slot went to a growth line nobody asked for, next to a
+    // value bar re-cutting the object that already had a donut.
+    $manifest = scaffoldWithFocus([
+        'objects' => ['pagos', 'inmuebles'],
+        'measures' => [],
+    ]);
+
+    $labels = collect(pageBySlug($manifest, 'dashboard')['blocks'])
+        ->where('type', 'chart')
+        ->pluck('label');
+
+    expect($labels)->toContain('Pagos por estado')
+        ->and($labels)->toContain('Inmuebles por estado');
+});
+
+it('holds the dashboard to its chart budget', function () {
+    // The ceiling used to bound only the breakdown loop, so the growth line and
+    // the value bar were appended on top of it: a four-chart budget drew six.
+    $manifest = scaffoldWithFocus([
+        'objects' => ['pagos', 'inmuebles'],
+        'measures' => [],
+    ]);
+
+    $visualisations = collect(pageBySlug($manifest, 'dashboard')['blocks'])
+        ->whereIn('type', ['chart', 'sparkline']);
+
+    expect($visualisations->count())->toBeLessThanOrEqual(4);
 });
 
 it('leaves the structural dashboard alone when nothing was asked for', function () {

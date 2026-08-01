@@ -1871,10 +1871,21 @@ class AppScaffolder
                 $withClassification[] = $object;
             }
         }
+        // Two breakdowns is the right default for a dashboard derived from
+        // structure alone. When the description named the things it wants to
+        // see, the budget belongs to them: an operator who asked for expiring
+        // contracts, the month's collections, available properties and open
+        // incidents got three of the four, because the fourth slot went to a
+        // growth line nobody asked for and a value bar re-cutting an object
+        // that already had a donut.
+        $breakdownCap = max(
+            self::DASHBOARD_BREAKDOWN_CAP,
+            min(count($focus['objects'] ?? []), self::DASHBOARD_CHART_CAP),
+        );
         $breakdownObjects = array_slice(
             [...$withStatus, ...$withClassification],
             0,
-            self::DASHBOARD_BREAKDOWN_CAP,
+            $breakdownCap,
         );
 
         $charts = 0;
@@ -1936,12 +1947,22 @@ class AppScaffolder
             ];
         }
 
-        // Append trends and value bars after the breakdowns, each capped.
-        foreach (array_slice($trends, 0, self::DASHBOARD_TREND_CAP) as $trend) {
-            $blocks[] = $trend;
-        }
-        foreach (array_slice($valueBars, 0, self::DASHBOARD_VALUE_BAR_CAP) as $bar) {
-            $blocks[] = $bar;
+        // Trends and value bars fill what the breakdowns left, and the ceiling
+        // is a ceiling: it used to bound only the loop above, so these two were
+        // appended on top of it and a four-chart budget drew six. They are the
+        // extras — a growth line and a re-cut of an object that already has a
+        // donut — so when the breakdowns need the room, they are what gives.
+        foreach ([
+            array_slice($trends, 0, self::DASHBOARD_TREND_CAP),
+            array_slice($valueBars, 0, self::DASHBOARD_VALUE_BAR_CAP),
+        ] as $extras) {
+            foreach ($extras as $extra) {
+                if ($charts >= self::DASHBOARD_CHART_CAP) {
+                    break 2;
+                }
+                $blocks[] = $extra;
+                $charts++;
+            }
         }
 
         return [
