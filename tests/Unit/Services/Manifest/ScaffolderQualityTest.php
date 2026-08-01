@@ -1928,3 +1928,82 @@ it('stays quiet when everything described was built', function () {
 
     expect($coercions)->toBe([]);
 });
+
+it('never totals a per-unit price, whichever way the line was described', function () {
+    // Both shapes the benchmark caught. A line whose only money is a price per
+    // unit: the relation pass has nothing else to add up and used to point the
+    // parent's total at it, so an order's "total" was the sum of the prices of
+    // one of each thing on it — not a figure at all.
+    $base = fn (string $slug): array => [
+        'schema_version' => '1.0.0',
+        'id' => 'app_scaffold_u1',
+        'slug' => $slug,
+        'name' => 'Unit price',
+        'version' => 1,
+        'objects' => [],
+        'pages' => [],
+        'permissions' => ['roles' => [['id' => 'rol_admin00001', 'slug' => 'admin', 'name' => 'Admin', 'is_default' => true]]],
+        'settings' => ['default_locale' => 'es-MX', 'default_currency' => 'MXN'],
+    ];
+
+    $lineFields = [
+        ['name' => 'Cantidad', 'slug' => 'cantidad', 'type' => 'number', 'options' => null],
+        ['name' => 'Precio unitario', 'slug' => 'precio_unitario', 'type' => 'currency', 'options' => null],
+    ];
+
+    // (a) A repair shop: a parent with priced lines, but no product catalogue,
+    // so the POS recipe never fires and the line total has to be derived.
+    $parts = app(AppScaffolder::class)->assemble($base('parts'), [
+        'objects' => [
+            ['name' => 'Ordenes', 'slug' => 'ordenes', 'fields' => [
+                ['name' => 'Folio', 'slug' => 'folio', 'type' => 'string', 'options' => null],
+            ]],
+            ['name' => 'Refacciones', 'slug' => 'refacciones', 'fields' => $lineFields],
+        ],
+        'links' => [['from' => 'refacciones', 'to' => 'ordenes', 'name' => 'orden']],
+    ]);
+
+    // (b) A point of sale: the same line, plus the catalogue that makes it one.
+    $pos = app(AppScaffolder::class)->assemble($base('till'), [
+        'objects' => [
+            ['name' => 'Comandas', 'slug' => 'comandas', 'fields' => [
+                ['name' => 'Folio', 'slug' => 'folio', 'type' => 'string', 'options' => null],
+            ]],
+            ['name' => 'Platillos', 'slug' => 'platillos', 'fields' => [
+                ['name' => 'Nombre', 'slug' => 'nombre', 'type' => 'string', 'options' => null],
+                ['name' => 'Precio', 'slug' => 'precio', 'type' => 'currency', 'options' => null],
+            ]],
+            ['name' => 'Renglones', 'slug' => 'renglones', 'fields' => $lineFields],
+        ],
+        'links' => [
+            ['from' => 'renglones', 'to' => 'comandas', 'name' => 'comanda'],
+            ['from' => 'renglones', 'to' => 'platillos', 'name' => 'platillo'],
+        ],
+    ]);
+
+    foreach (['parts' => $parts, 'pos' => $pos] as $shape => $manifest) {
+        $line = collect($manifest['objects'])->firstWhere('slug', $shape === 'parts' ? 'refacciones' : 'renglones');
+        $unitPrice = collect($line['fields'])->firstWhere('slug', 'precio_unitario');
+
+        $summed = collect($manifest['objects'])
+            ->flatMap(fn ($o) => $o['fields'])
+            ->filter(fn ($f) => ($f['type'] ?? null) === 'rollup' && ($f['aggregator'] ?? null) === 'sum')
+            ->pluck('target_field_id');
+
+        expect($summed)->not->toContain($unitPrice['id'], "[{$shape}] a total is summing the per-unit price");
+
+        // What it sums instead is the line's own total, quantity × price.
+        $target = collect($line['fields'])->firstWhere('id', $summed->first());
+        expect($target['type'])->toBe('formula', "[{$shape}] the parent totals something that is not the line total")
+            ->and($target['expression'])->toContain('cantidad');
+
+        // And the line kept ONE unit price, not two identically named ones.
+        expect(collect($line['fields'])->where('name', 'Precio unitario'))->toHaveCount(1);
+    }
+
+    // Both shapes still produce a manifest the schema accepts — repointing a
+    // rollup onto a lookup is how this fix first broke the build.
+    foreach ([$parts, $pos] as $manifest) {
+        expect(app(ManifestValidator::class)->validate($manifest)->valid)->toBeTrue();
+    }
+});

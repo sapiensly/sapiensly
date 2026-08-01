@@ -163,7 +163,7 @@ class AppScaffolder
         - NEVER restate a relationship as a field: do not add a string/number field that holds a related record's name or id (e.g. on a line item do NOT add a "product"/"category" text field) — model it with a link instead. The relation, its picker, child counts and totals are generated for you.
         - Model line-item / amount structures as a parent with a child linked to it (e.g. an order/ticket with its line items, each line a currency field): the child's amount then rolls up to a total on the parent automatically. Do not add a manual "total" field to the parent — it is derived.
         - focus: what the person asked to SEE, which is not the same as what the app stores. Read the description for the questions it wants answered ("I need to know what is owed this month", "which incidents are still open") and name them here. `objects` lists the object slugs those questions are about, most important first — the dashboard is built around the first one and spends its charts in this order. `measures` names the specific figures asked for: `object` and `field` are slugs YOU defined above (a `field` must exist on that `object`), `aggregation` is "sum"/"avg" for a number or currency field and "count" for how many records. At most 4 measures. Use null when the description only describes what to store and asks for nothing in particular — do not invent an interest the description does not show.
-        - Write names/labels in the SAME language as the description.
+        - Write names/labels in the SAME language as the description — and that includes every `slug`, which is a snake_case echo of the name beside it, never a translation of it. A Spanish app is served at /duenos and /mascotas; "Dueños" with the slug "owner" puts English in the URL of an app that has none anywhere else.
         SYS;
 
     public function __construct(
@@ -3222,11 +3222,41 @@ class AppScaffolder
             }
 
             // Unit price: a lookup of the product price across the line→product rel.
-            $priceSlug = $this->uniqueSlug('precio_unitario', $taken, 'precio');
-            $taken[] = $priceSlug;
-            [$precio, $precioIdx] = $this->buildField(['name' => $labels['unit_price'], 'slug' => $priceSlug, 'type' => 'lookup', 'options' => null, 'config' => ['via_relation_field_id' => $productRel['childFieldId'], 'target_field_id' => $productPrice['id']]], $currency);
-            $lineDef['fields'][] = $precio;
-            $built[$lineIndex]['pageFields'][] = $precioIdx;
+            // Unit price: looked up off the product so the line cannot drift from
+            // the catalogue. Reuse the one the model already put on the line —
+            // adding a second gave the object two fields both called "Precio
+            // unitario", side by side in the table.
+            $existingPrice = $this->unitPriceFieldOf($lineDef, $lang);
+            if ($existingPrice !== null) {
+                $priceSlug = (string) $existingPrice['slug'];
+                $precio = [
+                    'id' => $existingPrice['id'],
+                    'slug' => $priceSlug,
+                    'name' => $existingPrice['name'] ?? $labels['unit_price'],
+                    'type' => 'lookup',
+                    'readonly' => true,
+                    'via_relation_field_id' => $productRel['childFieldId'],
+                    'target_field_id' => $productPrice['id'],
+                ];
+                foreach ($lineDef['fields'] as $fi => $f) {
+                    if (($f['id'] ?? null) === $existingPrice['id']) {
+                        $lineDef['fields'][$fi] = $precio;
+                        break;
+                    }
+                }
+                foreach ($built[$lineIndex]['pageFields'] as $pi => $idx) {
+                    if (($idx['id'] ?? null) === $existingPrice['id']) {
+                        $built[$lineIndex]['pageFields'][$pi]['type'] = 'lookup';
+                        break;
+                    }
+                }
+            } else {
+                $priceSlug = $this->uniqueSlug('precio_unitario', $taken, 'precio');
+                $taken[] = $priceSlug;
+                [$precio, $precioIdx] = $this->buildField(['name' => $labels['unit_price'], 'slug' => $priceSlug, 'type' => 'lookup', 'options' => null, 'config' => ['via_relation_field_id' => $productRel['childFieldId'], 'target_field_id' => $productPrice['id']]], $currency);
+                $lineDef['fields'][] = $precio;
+                $built[$lineIndex]['pageFields'][] = $precioIdx;
+            }
 
             // Subtotal: qty × unit price. Reuse an amount field the model already
             // put on the line (convert it to the formula in place, keeping its
@@ -3265,6 +3295,12 @@ class AppScaffolder
                 $built[$lineIndex]['pageFields'][] = $subIdx;
             }
 
+            // When the unit price was the only money on the line, the relation
+            // pass had nothing else to total and pointed the parent's rollup at
+            // it — adding prices-per-unit across rows. Now that the line has a
+            // subtotal, that is what the parent was always adding up.
+            $this->repointLineRollups($built, (string) $precio['id'], (string) $subtotal['id']);
+
             // Order total: rollup SUM of the line subtotals. Reuse the sum rollup
             // buildRelation already added over this field (the common case when the
             // model gave the line an amount) instead of adding a second total.
@@ -3283,6 +3319,24 @@ class AppScaffolder
                 [$total, $totalIdx] = $this->buildField(['name' => $labels['total'], 'slug' => $totalSlug, 'type' => 'rollup', 'options' => null, 'config' => ['via_relation_field_id' => $orderRel['parentFieldId'], 'aggregator' => 'sum', 'target_field_id' => $subtotal['id']]], $currency);
                 $orderDefRef['fields'][] = $total;
                 $built[$orderRel['targetIndex']]['pageFields'][] = $totalIdx;
+            }
+
+            // A picker of bare rectangles is the thing this screen exists to
+            // avoid, so when the product has nowhere to put a picture, give it
+            // one. Not padding: it is the field the screen being built needs,
+            // and it stays empty until someone fills it.
+            if ($this->imageFieldOf($built[$productRel['targetIndex']]['def'], $lang) === null) {
+                $productFields = &$built[$productRel['targetIndex']]['def']['fields'];
+                $photoSlug = $this->uniqueSlug('foto', array_column($productFields, 'slug'), 'foto');
+                [$photo, $photoIdx] = $this->buildField([
+                    'name' => $labels['photo'],
+                    'slug' => $photoSlug,
+                    'type' => 'string',
+                    'options' => null,
+                ], $currency);
+                $productFields[] = $photo;
+                $built[$productRel['targetIndex']]['pageFields'][] = $photoIdx;
+                unset($productFields);
             }
 
             $productDef = $built[$productRel['targetIndex']]['def'];
@@ -3353,6 +3407,31 @@ class AppScaffolder
      *
      * @param  array<int, array{def: array<string, mixed>, pageFields: array<int, array<string, mixed>>}>  $built
      */
+    /**
+     * Point a parent's sum rollup at the line total instead of at the per-unit
+     * price it was summing.
+     *
+     * Relations are wired in pass 2 and the line total is derived after, so by
+     * the time one exists the rollup has already chosen its target — and with
+     * no amount on the line to choose, it took the only money field there was.
+     * The parent's own name for the figure is left alone: it is still that
+     * object's total, and it was already named for the children it adds up.
+     *
+     * @param  list<array{def: array<string, mixed>, pageFields: array<int, array<string, mixed>>}>  $built
+     */
+    private function repointLineRollups(array &$built, string $fromFieldId, string $toFieldId): void
+    {
+        foreach ($built as $i => $entry) {
+            foreach ($entry['def']['fields'] ?? [] as $fi => $field) {
+                if (($field['type'] ?? null) === 'rollup'
+                    && ($field['aggregator'] ?? null) === 'sum'
+                    && ($field['target_field_id'] ?? null) === $fromFieldId) {
+                    $built[$i]['def']['fields'][$fi]['target_field_id'] = $toFieldId;
+                }
+            }
+        }
+    }
+
     private function synthesizeLineTotals(array &$built, string $currency, string $lang): void
     {
         $lex = SemanticLexicon::for($lang);
@@ -3380,11 +3459,32 @@ class AppScaffolder
                 }
             }
 
-            if ($quantity === null || $unitPrice === null || $amount === null) {
+            if ($quantity === null || $unitPrice === null) {
                 continue;
             }
 
             $expression = '{{'.$quantity['slug'].' * '.$unitPrice['slug'].'}}';
+
+            // Quantity and a unit cost, and nowhere for their product to go: a
+            // work order's parts had exactly this shape, so the order's total
+            // ended up summing the per-part COST instead — adding unit prices
+            // across rows, which is not a figure at all. Give the line the
+            // total it implies.
+            if ($amount === null) {
+                $amountSlug = $this->uniqueSlug('subtotal', array_column($fields, 'slug'), 'subtotal');
+                [$amountField, $amountIdx] = $this->buildField([
+                    'name' => $lex->label('subtotal'),
+                    'slug' => $amountSlug,
+                    'type' => 'formula',
+                    'options' => null,
+                    'config' => ['expression' => $expression, 'return_type' => 'number', 'currency_code' => $currency],
+                ], $currency);
+                $built[$i]['def']['fields'][] = $amountField;
+                $built[$i]['pageFields'][] = $amountIdx;
+                $this->repointLineRollups($built, $unitPrice['id'], $amountField['id']);
+
+                continue;
+            }
 
             foreach ($fields as $fi => $field) {
                 if (($field['id'] ?? null) !== $amount['id']) {
@@ -3622,6 +3722,32 @@ class AppScaffolder
      * @param  array<string, mixed>  $def
      * @return array<string, mixed>|null
      */
+    /**
+     * A per-unit price already on the line, or null.
+     *
+     * The POS pass adds one as a lookup off the product, and used to add it
+     * unconditionally: a line the model had already given a "Precio unitario"
+     * came out with two fields of that exact name, rendering as two identical
+     * column headers with nothing to tell them apart.
+     *
+     * @param  array<string, mixed>  $def
+     * @return array<string, mixed>|null
+     */
+    private function unitPriceFieldOf(array $def, string $lang): ?array
+    {
+        $lex = SemanticLexicon::for($lang);
+        foreach ($def['fields'] as $field) {
+            if (! in_array($field['type'] ?? '', ['currency', 'number'], true)) {
+                continue;
+            }
+            if ($lex->matches('unit_price', (string) ($field['slug'] ?? ''), (string) ($field['name'] ?? ''))) {
+                return $field;
+            }
+        }
+
+        return null;
+    }
+
     private function subtotalFieldOf(array $def, string $lang): ?array
     {
         $lex = SemanticLexicon::for($lang);
@@ -3983,6 +4109,7 @@ class AppScaffolder
             'order' => $lex->label('order'),
             'qty' => $lex->label('qty'),
             'unit_price' => $lex->label('unit_price'),
+            'photo' => $lex->label('photo'),
             'subtotal' => $lex->label('subtotal'),
             'total' => $lex->label('total_word'),
             'empty' => $lex->label('cart_empty'),

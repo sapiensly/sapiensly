@@ -41,7 +41,7 @@ class SemanticLexicon
             'edit' => 'Edit', 'edit_title' => 'Edit {s}', 'save' => 'Save changes',
             'trend' => 'Trend', 'breakdown' => 'Breakdown', 'insights' => 'Key readings',
             'pos' => 'Point of Sale', 'new_order' => 'New order', 'order' => 'Order', 'qty' => 'Quantity',
-            'unit_price' => 'Unit price', 'subtotal' => 'Subtotal', 'total_word' => 'Total',
+            'unit_price' => 'Unit price', 'photo' => 'Photo', 'subtotal' => 'Subtotal', 'total_word' => 'Total',
             'cart_empty' => 'Open an order and add products.',
         ],
         'es' => [
@@ -53,7 +53,7 @@ class SemanticLexicon
             'edit' => 'Editar', 'edit_title' => 'Editar {s}', 'save' => 'Guardar cambios',
             'trend' => 'Tendencia', 'breakdown' => 'Desglose', 'insights' => 'Lecturas clave',
             'pos' => 'Punto de venta', 'new_order' => 'Nueva orden', 'order' => 'Pedido', 'qty' => 'Cantidad',
-            'unit_price' => 'Precio unitario', 'subtotal' => 'Subtotal', 'total_word' => 'Total',
+            'unit_price' => 'Precio unitario', 'photo' => 'Foto', 'subtotal' => 'Subtotal', 'total_word' => 'Total',
             'cart_empty' => 'Abre una orden y agrega productos.',
         ],
         'pt' => [
@@ -65,7 +65,7 @@ class SemanticLexicon
             'edit' => 'Editar', 'edit_title' => 'Editar {s}', 'save' => 'Salvar alterações',
             'trend' => 'Tendência', 'breakdown' => 'Detalhamento', 'insights' => 'Leituras-chave',
             'pos' => 'Ponto de venda', 'new_order' => 'Novo pedido', 'order' => 'Pedido', 'qty' => 'Quantidade',
-            'unit_price' => 'Preço unitário', 'subtotal' => 'Subtotal', 'total_word' => 'Total',
+            'unit_price' => 'Preço unitário', 'photo' => 'Foto', 'subtotal' => 'Subtotal', 'total_word' => 'Total',
             'cart_empty' => 'Abra um pedido e adicione produtos.',
         ],
         'fr' => [
@@ -77,7 +77,7 @@ class SemanticLexicon
             'edit' => 'Modifier', 'edit_title' => 'Modifier {s}', 'save' => 'Enregistrer les modifications',
             'trend' => 'Tendance', 'breakdown' => 'Répartition', 'insights' => 'Lectures clés',
             'pos' => 'Point de vente', 'new_order' => 'Nouvelle commande', 'order' => 'Commande', 'qty' => 'Quantité',
-            'unit_price' => 'Prix unitaire', 'subtotal' => 'Sous-total', 'total_word' => 'Total',
+            'unit_price' => 'Prix unitaire', 'photo' => 'Photo', 'subtotal' => 'Sous-total', 'total_word' => 'Total',
             'cart_empty' => 'Ouvrez une commande et ajoutez des produits.',
         ],
     ];
