@@ -18,41 +18,28 @@ interface TokenRow {
     isPlatform: boolean;
     owner: string | null;
     organization: string | null;
-    organizationSlug: string | null;
     lastUsedAt: string | null;
     createdAt: string | null;
 }
 
 const props = defineProps<{
-    organizations: { id: string; name: string; slug: string }[];
-    abilities: string[];
-    platformAbility: string;
+    serverUrl: string;
+    serverName: string;
     tokens: TokenRow[];
     justCreatedToken: string | null;
-    justCreatedUrl: string | null;
-    justCreatedServerName: string | null;
 }>();
 
 const { t } = useI18n();
 
-const form = useForm<{
-    name: string;
-    organization_id: string;
-    abilities: string[];
-}>({
-    name: '',
-    organization_id: props.organizations[0]?.id ?? '',
-    // The reason to be on this screen — pre-selected, still a visible choice.
-    abilities: [props.platformAbility],
-});
+// The only decision on this screen is what to call it. The ability is fixed —
+// a token issued here is platform:admin and nothing else — and there is no
+// organization to pick, because this endpoint is not bound to one.
+const form = useForm<{ name: string }>({ name: '' });
 
 function submit(): void {
     form.post('/admin/mcp', {
         preserveScroll: true,
-        onSuccess: () => {
-            form.reset('name');
-            form.abilities = [props.platformAbility];
-        },
+        onSuccess: () => form.reset('name'),
     });
 }
 
@@ -60,11 +47,9 @@ function revoke(token: TokenRow): void {
     router.delete(`/admin/mcp/${token.id}`, { preserveScroll: true });
 }
 
-// The server name comes from the server: a platform credential is added under
-// its own name so it never lands on top of an existing tenant connection.
 const connectCommand = computed(
     () =>
-        `claude mcp add --transport http ${props.justCreatedServerName ?? 'sapiensly-sysadmin'} ${props.justCreatedUrl} --header "Authorization: Bearer ${props.justCreatedToken}"`,
+        `claude mcp add --transport http ${props.serverName} ${props.serverUrl} --header "Authorization: Bearer ${props.justCreatedToken}"`,
 );
 
 const copied = ref<string | null>(null);
@@ -72,10 +57,6 @@ function copy(value: string, key: string): void {
     navigator.clipboard?.writeText(value);
     copied.value = key;
     window.setTimeout(() => (copied.value = null), 1500);
-}
-
-function abilityLabel(ability: string): string {
-    return t(`system.mcp.abilities.${ability.replace(':', '_')}`);
 }
 
 function formatDate(value: string | null): string {
@@ -163,13 +144,35 @@ function formatDate(value: string | null): string {
                 </div>
             </SettingsCard>
 
-            <!-- Issue a token. -->
+            <!-- Issue a token. Name it; everything else is fixed. -->
             <SettingsCard
                 :icon="Key"
                 :title="t('admin.mcp.create.title')"
                 :description="t('admin.mcp.create.description')"
             >
-                <form class="space-y-4" @submit.prevent="submit">
+                <div
+                    class="rounded-xs border border-soft bg-surface/40 px-3 py-2"
+                >
+                    <p class="text-xs text-ink-muted">
+                        {{ t('admin.mcp.create.endpoint_label') }}
+                    </p>
+                    <code class="font-mono text-xs text-ink">
+                        {{ serverUrl }}
+                    </code>
+                </div>
+
+                <div
+                    class="flex flex-wrap items-center gap-2 rounded-xs border border-accent-blue/40 bg-accent-blue/5 px-3 py-2"
+                >
+                    <span class="font-mono text-[13px] text-ink">
+                        platform:admin
+                    </span>
+                    <span class="text-xs text-ink-muted">
+                        {{ t('admin.mcp.create.fixed_ability') }}
+                    </span>
+                </div>
+
+                <form class="space-y-4 pt-1" @submit.prevent="submit">
                     <div>
                         <Label for="token-name">
                             {{ t('system.mcp.name') }}
@@ -178,7 +181,9 @@ function formatDate(value: string | null): string {
                             id="token-name"
                             v-model="form.name"
                             class="mt-1"
-                            :placeholder="t('system.mcp.name_placeholder')"
+                            :placeholder="
+                                t('admin.mcp.create.name_placeholder')
+                            "
                         />
                         <p
                             v-if="form.errors.name"
@@ -188,84 +193,7 @@ function formatDate(value: string | null): string {
                         </p>
                     </div>
 
-                    <div>
-                        <Label for="token-org">
-                            {{ t('admin.mcp.create.organization_label') }}
-                        </Label>
-                        <p class="text-xs text-ink-muted">
-                            {{ t('admin.mcp.create.organization_hint') }}
-                        </p>
-                        <select
-                            id="token-org"
-                            v-model="form.organization_id"
-                            class="mt-1 h-9 w-full rounded-xs border border-soft bg-surface px-3 text-[13px] text-ink"
-                        >
-                            <option
-                                v-for="org in organizations"
-                                :key="org.id"
-                                :value="org.id"
-                            >
-                                {{ org.name }} — /mcp/{{ org.slug }}/v1
-                            </option>
-                        </select>
-                        <p
-                            v-if="organizations.length === 0"
-                            class="mt-1 text-xs text-sp-warning"
-                        >
-                            {{ t('admin.mcp.create.no_organizations') }}
-                        </p>
-                        <p
-                            v-if="form.errors.organization_id"
-                            class="mt-1 text-xs text-sp-danger"
-                        >
-                            {{ form.errors.organization_id }}
-                        </p>
-                    </div>
-
-                    <div>
-                        <Label>{{ t('system.mcp.abilities_label') }}</Label>
-                        <p class="text-xs text-ink-muted">
-                            {{ t('admin.mcp.create.abilities_hint') }}
-                        </p>
-                        <div class="mt-2 grid gap-2 sm:grid-cols-2">
-                            <label
-                                v-for="ability in abilities"
-                                :key="ability"
-                                :class="[
-                                    'flex cursor-pointer items-center gap-2 rounded-xs border px-3 py-2 text-[13px] transition-colors',
-                                    ability === platformAbility
-                                        ? 'border-accent-blue/40 bg-accent-blue/5 text-ink'
-                                        : 'border-soft text-ink-muted hover:bg-surface',
-                                ]"
-                            >
-                                <input
-                                    v-model="form.abilities"
-                                    type="checkbox"
-                                    :value="ability"
-                                    class="size-3.5 accent-[var(--sp-accent-blue)]"
-                                />
-                                <span class="font-mono text-ink">
-                                    {{ ability }}
-                                </span>
-                                <span class="truncate text-xs">
-                                    {{ abilityLabel(ability) }}
-                                </span>
-                            </label>
-                        </div>
-                        <p
-                            v-if="form.errors.abilities"
-                            class="mt-1 text-xs text-sp-danger"
-                        >
-                            {{ form.errors.abilities }}
-                        </p>
-                    </div>
-
-                    <Button
-                        type="submit"
-                        :disabled="
-                            form.processing || organizations.length === 0
-                        "
-                    >
+                    <Button type="submit" :disabled="form.processing">
                         <Key class="size-3.5" />
                         {{ t('system.mcp.create') }}
                     </Button>
@@ -309,7 +237,10 @@ function formatDate(value: string | null): string {
                                 ·
                                 {{ token.owner ?? '—' }}
                                 ·
-                                {{ token.organization ?? '—' }}
+                                {{
+                                    token.organization ??
+                                    t('admin.mcp.existing.no_organization')
+                                }}
                             </p>
                             <p class="truncate text-xs text-ink-subtle">
                                 {{

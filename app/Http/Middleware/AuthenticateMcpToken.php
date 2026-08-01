@@ -37,6 +37,15 @@ class AuthenticateMcpToken
             return $this->unauthorized('Authorization header with a Bearer token is required.');
         }
 
+        // A platform credential belongs to the platform endpoint. Say so, rather
+        // than reporting it as invalid — it is a perfectly good token at the
+        // wrong door, and "invalid or expired" would send someone reissuing it.
+        $platformToken = McpAccessToken::where('token', $bearerToken)->first();
+        if ($platformToken && $platformToken->organization_id === null
+            && $platformToken->hasAbility(McpAccessToken::PLATFORM_ADMIN)) {
+            return $this->forbidden('This is a platform administration token. Connect it at mcp/platform/v1, which is not organization-bound.');
+        }
+
         [$user, $context] = $this->resolveCredential($request, $bearerToken, $org);
         if (! $user) {
             return $this->unauthorized('The provided MCP credentials are invalid or have expired.');

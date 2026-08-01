@@ -61,9 +61,19 @@ class OrganizationController extends Controller
 
         $user = $request->user();
 
+        $slug = Str::slug($request->name);
+
+        // A slug a platform route already owns would leave this organization
+        // unreachable over MCP — refuse it here rather than at first use.
+        if (Organization::slugIsReserved($slug)) {
+            return back()->withErrors([
+                'name' => __('That name is reserved. Please choose another.'),
+            ]);
+        }
+
         $organization = Organization::create([
             'name' => $request->name,
-            'slug' => Str::slug($request->name),
+            'slug' => $slug,
         ]);
 
         OrganizationMembership::create([

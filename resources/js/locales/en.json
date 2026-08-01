@@ -1968,13 +1968,9 @@
     "admin.nav.stack": "Stack",
     "admin.nav.mcp": "MCP",
     "admin.mcp.heading": "Platform MCP access",
-    "admin.mcp.description": "Issue and revoke the credentials that administer this platform over MCP.",
-    "admin.mcp.create.title": "Issue a token",
-    "admin.mcp.create.description": "A token carrying platform:admin administers every organization. Treat it like a root credential.",
-    "admin.mcp.create.organization_label": "Pinned organization",
-    "admin.mcp.create.organization_hint": "The MCP endpoint is per-organization and refuses a token whose bearer is not an active member. Platform tools ignore this scope; tenant abilities on the same token use it.",
-    "admin.mcp.create.no_organizations": "You are not an active member of any organization, so there is no endpoint to pin a token to.",
-    "admin.mcp.create.abilities_hint": "Pick every ability this token needs — unlike the organization screen, nothing is granted by leaving boxes unchecked.",
+    "admin.mcp.description": "One global credential for administering this platform over MCP. Not bound to any organization.",
+    "admin.mcp.create.title": "Issue the platform token",
+    "admin.mcp.create.description": "It carries platform:admin and nothing else, and it acts across every organization. Treat it like a root credential.",
     "admin.mcp.existing.title": "All tokens",
     "admin.mcp.existing.description": "Every MCP token on the platform, across organizations. Revoke anything you no longer recognize.",
     "admin.mcp.existing.empty": "No MCP tokens have been issued yet.",
@@ -3173,5 +3169,9 @@
     "apps.builder.wireframe.mode_replica": "Replica",
     "apps.builder.wireframe.mode_replica_hint": "Copy this page as faithfully as I can — same sections, same text, same look. It becomes a landing.",
     "apps.builder.wireframe.mode_inspiration": "Inspiration",
-    "apps.builder.wireframe.mode_inspiration_hint": "Build an app that works like this one: objects, pages and blocks, taking the layout and the look as a reference."
+    "apps.builder.wireframe.mode_inspiration_hint": "Build an app that works like this one: objects, pages and blocks, taking the layout and the look as a reference.",
+    "admin.mcp.create.endpoint_label": "Endpoint — no organization in the URL",
+    "admin.mcp.create.fixed_ability": "The only ability a token issued here can carry.",
+    "admin.mcp.create.name_placeholder": "e.g. Ed · MacStudio",
+    "admin.mcp.existing.no_organization": "no organization"
 }

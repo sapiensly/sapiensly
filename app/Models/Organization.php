@@ -40,6 +40,24 @@ class Organization extends Model
         return OrganizationBrand::fromArray($this->brand);
     }
 
+    /**
+     * Slugs an organization may not take, because a route already owns them.
+     *
+     * `platform` is the organization-free MCP endpoint (`mcp/platform/v1`),
+     * registered ahead of `mcp/{organization}/v1`. An org that took the slug
+     * would not break the platform endpoint — it would simply become
+     * unreachable over MCP itself, silently, which is worse than being told no
+     * at creation time.
+     *
+     * @var list<string>
+     */
+    public const RESERVED_SLUGS = ['platform'];
+
+    public static function slugIsReserved(?string $slug): bool
+    {
+        return in_array(strtolower(trim((string) $slug)), self::RESERVED_SLUGS, true);
+    }
+
     public static function getIdPrefix(): string
     {
         return 'org';

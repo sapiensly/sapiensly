@@ -1968,13 +1968,9 @@
     "admin.nav.stack": "Stack",
     "admin.nav.mcp": "MCP",
     "admin.mcp.heading": "Acceso MCP de plataforma",
-    "admin.mcp.description": "Emite y revoca las credenciales que administran esta plataforma por MCP.",
-    "admin.mcp.create.title": "Emitir un token",
-    "admin.mcp.create.description": "Un token con platform:admin administra todas las organizaciones. Trátalo como una credencial de root.",
-    "admin.mcp.create.organization_label": "Organización asociada",
-    "admin.mcp.create.organization_hint": "El endpoint MCP es por organización y rechaza un token cuyo portador no sea miembro activo. Las tools de plataforma ignoran este ámbito; las de tenant en el mismo token lo usan.",
-    "admin.mcp.create.no_organizations": "No eres miembro activo de ninguna organización, así que no hay endpoint al que asociar un token.",
-    "admin.mcp.create.abilities_hint": "Marca cada ability que necesite este token: a diferencia de la pantalla de organización, aquí no se concede nada por dejar casillas vacías.",
+    "admin.mcp.description": "Una credencial global para administrar esta plataforma por MCP. No está ligada a ninguna organización.",
+    "admin.mcp.create.title": "Emitir el token de plataforma",
+    "admin.mcp.create.description": "Lleva platform:admin y nada más, y actúa sobre todas las organizaciones. Trátalo como una credencial de root.",
     "admin.mcp.existing.title": "Todos los tokens",
     "admin.mcp.existing.description": "Todos los tokens MCP de la plataforma, de todas las organizaciones. Revoca lo que no reconozcas.",
     "admin.mcp.existing.empty": "Todavía no se ha emitido ningún token MCP.",
@@ -3173,5 +3169,9 @@
     "apps.builder.wireframe.mode_replica": "Réplica",
     "apps.builder.wireframe.mode_replica_hint": "Copio la página lo más fiel que pueda — mismas secciones, mismo texto, mismo look. Se construye como landing.",
     "apps.builder.wireframe.mode_inspiration": "Inspiración",
-    "apps.builder.wireframe.mode_inspiration_hint": "Construyo una app que funcione como esta: objetos, páginas y bloques, tomando el layout y el look como referencia."
+    "apps.builder.wireframe.mode_inspiration_hint": "Construyo una app que funcione como esta: objetos, páginas y bloques, tomando el layout y el look como referencia.",
+    "admin.mcp.create.endpoint_label": "Endpoint — sin organización en la URL",
+    "admin.mcp.create.fixed_ability": "La única ability que puede llevar un token emitido aquí.",
+    "admin.mcp.create.name_placeholder": "p. ej. Ed · MacStudio",
+    "admin.mcp.existing.no_organization": "sin organización"
 }

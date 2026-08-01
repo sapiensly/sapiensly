@@ -39,6 +39,10 @@ class CreateOrganizationTool extends SysadminTool
             return Response::error('That name does not produce a usable slug — pass `slug` explicitly.');
         }
 
+        if (Organization::slugIsReserved($slug)) {
+            return Response::error("'{$slug}' is reserved by a platform route — an organization holding it would be unreachable over MCP. Pass a different `slug`.");
+        }
+
         if (Organization::withTrashed()->where('slug', $slug)->exists()) {
             return Response::error("The slug '{$slug}' is already taken (slugs stay reserved after deletion). Pass a different one.");
         }
