@@ -19,11 +19,16 @@ class BlockVisibilityFilter
      * Recursively keep only visible blocks, descending into every layout
      * container (container/modal, split_view, tabs, accordion).
      *
+     * Pass `$objects` (the manifest's objects) to also drop, from every form on
+     * the page, the inputs for fields this role may not read — see
+     * {@see stripHiddenFormFields()}.
+     *
      * @param  list<array<string, mixed>>  $blocks
      * @param  array<string, mixed>  $context
+     * @param  list<array<string, mixed>>  $objects
      * @return list<array<string, mixed>>
      */
-    public function visibleBlocks(array $blocks, AppAccessContext $access, array $context): array
+    public function visibleBlocks(array $blocks, AppAccessContext $access, array $context, array $objects = []): array
     {
         $kept = [];
 
@@ -35,15 +40,17 @@ class BlockVisibilityFilter
                 continue;
             }
 
+            $block = $this->stripHiddenFormFields($block, $access, $objects);
+
             foreach (['blocks', 'left_blocks', 'right_blocks'] as $key) {
                 if (isset($block[$key]) && is_array($block[$key])) {
-                    $block[$key] = $this->visibleBlocks($block[$key], $access, $context);
+                    $block[$key] = $this->visibleBlocks($block[$key], $access, $context, $objects);
                 }
             }
             foreach (['tabs', 'sections'] as $key) {
                 if (isset($block[$key]) && is_array($block[$key])) {
-                    $block[$key] = array_map(function (array $child) use ($access, $context): array {
-                        $child['blocks'] = $this->visibleBlocks($child['blocks'] ?? [], $access, $context);
+                    $block[$key] = array_map(function (array $child) use ($access, $context, $objects): array {
+                        $child['blocks'] = $this->visibleBlocks($child['blocks'] ?? [], $access, $context, $objects);
 
                         return $child;
                     }, $block[$key]);
@@ -54,6 +61,88 @@ class BlockVisibilityFilter
         }
 
         return $kept;
+    }
+
+    /**
+     * Drop, from a form, the inputs for fields the role may not READ.
+     *
+     * A row's hidden fields are already stripped on the way out, but nothing
+     * stopped a form from rendering an input for one — so the field's existence
+     * and type leaked, and on an edit form the input rendered EMPTY (its value
+     * having been withheld) and would have written that emptiness back over a
+     * value the user was never allowed to see.
+     *
+     * Read-hidden is the right test rather than write-readonly: those are two
+     * independent lists on a policy, and a field you cannot read is one you
+     * cannot meaningfully fill in. Writing a readonly field is refused by the
+     * action executor, which is a different guarantee and stays where it is.
+     *
+     * @param  array<string, mixed>  $block
+     * @param  list<array<string, mixed>>  $objects
+     * @return array<string, mixed>
+     */
+    private function stripHiddenFormFields(array $block, AppAccessContext $access, array $objects): array
+    {
+        $type = $block['type'] ?? null;
+        if (! in_array($type, ['form', 'multi_step_form'], true) || $objects === []) {
+            return $block;
+        }
+
+        $objectId = $block['object_id'] ?? null;
+        if (! is_string($objectId)) {
+            return $block;
+        }
+
+        $hidden = $access->hiddenFieldSlugs($objectId);
+        if ($hidden === []) {
+            return $block;
+        }
+
+        $object = null;
+        foreach ($objects as $candidate) {
+            if (($candidate['id'] ?? null) === $objectId) {
+                $object = $candidate;
+                break;
+            }
+        }
+        if ($object === null) {
+            return $block;
+        }
+
+        $hiddenIds = [];
+        foreach ($object['fields'] ?? [] as $field) {
+            if (in_array($field['slug'] ?? null, $hidden, true) && isset($field['id'])) {
+                $hiddenIds[] = $field['id'];
+            }
+        }
+        if ($hiddenIds === []) {
+            return $block;
+        }
+
+        $keep = fn (array $entries): array => array_values(array_filter(
+            $entries,
+            fn (array $f): bool => ! in_array($f['field_id'] ?? null, $hiddenIds, true),
+        ));
+
+        // A form with no explicit `fields` renders every field of the object, so
+        // it has to be made explicit here before the hidden ones can be removed.
+        if ($type === 'form') {
+            $entries = $block['fields'] ?? array_map(
+                fn (array $f): array => ['field_id' => $f['id']],
+                $object['fields'] ?? [],
+            );
+            $block['fields'] = $keep($entries);
+
+            return $block;
+        }
+
+        $block['steps'] = array_map(function (array $step) use ($keep): array {
+            $step['fields'] = $keep($step['fields'] ?? []);
+
+            return $step;
+        }, $block['steps'] ?? []);
+
+        return $block;
     }
 
     /**

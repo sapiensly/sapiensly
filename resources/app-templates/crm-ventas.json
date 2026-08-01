@@ -23,7 +23,8 @@
                         "id": "fld_01kytgcymkr9jd2jsn15g47edq",
                         "slug": "nombre",
                         "name": "Nombre",
-                        "type": "string"
+                        "type": "string",
+                        "required": true
                     },
                     {
                         "id": "fld_01kytgcymkr9jd2jsn15g47edr",
@@ -88,7 +89,8 @@
                         "id": "fld_01kytgcymkr9jd2jsn15g47edx",
                         "slug": "titulo",
                         "name": "Titulo",
-                        "type": "string"
+                        "type": "string",
+                        "required": true
                     },
                     {
                         "id": "fld_01kytgcymkr9jd2jsn15g47edy",
@@ -133,7 +135,8 @@
                                 "label": "Perdida",
                                 "color": "#ef4444"
                             }
-                        ]
+                        ],
+                        "default": "prospecto"
                     },
                     {
                         "id": "fld_01kytgcymkr9jd2jsn15g47ee5",
@@ -180,7 +183,8 @@
                         "id": "fld_01kytgcymkr9jd2jsn15g47ee7",
                         "slug": "asunto",
                         "name": "Asunto",
-                        "type": "string"
+                        "type": "string",
+                        "required": true
                     },
                     {
                         "id": "fld_01kytgcymkr9jd2jsn15g47ee8",
@@ -396,6 +400,63 @@
                         ]
                     },
                     {
+                        "id": "blk_01kyxp3xjzv2yr39sx248ayqsc",
+                        "type": "modal",
+                        "title": "Editar Cliente",
+                        "blocks": [
+                            {
+                                "id": "blk_01kyxp3xjzv2yr39sx248ayqsd",
+                                "type": "form",
+                                "object_id": "obj_01kytgcymkr9jd2jsn15g47edw",
+                                "mode": "edit",
+                                "record_id_expression": "{{params.record_id}}",
+                                "fields": [
+                                    {
+                                        "field_id": "fld_01kytgcymkr9jd2jsn15g47edq"
+                                    },
+                                    {
+                                        "field_id": "fld_01kytgcymkr9jd2jsn15g47edr"
+                                    },
+                                    {
+                                        "field_id": "fld_01kytgcymkr9jd2jsn15g47eds"
+                                    },
+                                    {
+                                        "field_id": "fld_01kytgcymkr9jd2jsn15g47edt"
+                                    },
+                                    {
+                                        "field_id": "fld_01kytgcymkr9jd2jsn15g47edv"
+                                    }
+                                ],
+                                "submit_label": "Guardar cambios",
+                                "on_submit": [
+                                    {
+                                        "type": "update_record",
+                                        "object_id": "obj_01kytgcymkr9jd2jsn15g47edw",
+                                        "record_id_expression": "{{params.record_id}}",
+                                        "values": {
+                                            "nombre": "{{form.nombre}}",
+                                            "empresa": "{{form.empresa}}",
+                                            "correo": "{{form.correo}}",
+                                            "telefono": "{{form.telefono}}",
+                                            "ciudad": "{{form.ciudad}}"
+                                        }
+                                    },
+                                    {
+                                        "type": "close_modal"
+                                    },
+                                    {
+                                        "type": "show_toast",
+                                        "level": "success",
+                                        "message": "Guardado"
+                                    },
+                                    {
+                                        "type": "refresh"
+                                    }
+                                ]
+                            }
+                        ]
+                    },
+                    {
                         "id": "blk_01kytgcymkr9jd2jsn15g47eem",
                         "type": "button",
                         "label": "Agregar Cliente",
@@ -452,6 +513,23 @@
                                 "id": "col_01kytgcymkr9jd2jsn15g47eew",
                                 "field_id": "sys_created_at",
                                 "label_override": "Creado"
+                            },
+                            {
+                                "id": "col_01kyxp3xjzv2yr39sx248ayqse",
+                                "type": "action",
+                                "label": "Editar",
+                                "icon": "pencil",
+                                "variant": "ghost",
+                                "on_click": [
+                                    {
+                                        "type": "open_modal",
+                                        "modal_block_id": "blk_01kyxp3xjzv2yr39sx248ayqsc",
+                                        "params": {
+                                            "record_id": "{{row.id}}",
+                                            "record": "{{row.data}}"
+                                        }
+                                    }
+                                ]
                             },
                             {
                                 "id": "col_01kytgcymkr9jd2jsn15g47eg3",
@@ -513,6 +591,63 @@
                                     {
                                         "type": "create_record",
                                         "object_id": "obj_01kytgcymkr9jd2jsn15g47ee6",
+                                        "values": {
+                                            "titulo": "{{form.titulo}}",
+                                            "monto": "{{form.monto}}",
+                                            "etapa": "{{form.etapa}}",
+                                            "cierre_estimado": "{{form.cierre_estimado}}",
+                                            "cliente": "{{form.cliente}}"
+                                        }
+                                    },
+                                    {
+                                        "type": "close_modal"
+                                    },
+                                    {
+                                        "type": "show_toast",
+                                        "level": "success",
+                                        "message": "Guardado"
+                                    },
+                                    {
+                                        "type": "refresh"
+                                    }
+                                ]
+                            }
+                        ]
+                    },
+                    {
+                        "id": "blk_01kyxp3xjzv2yr39sx248ayqsf",
+                        "type": "modal",
+                        "title": "Editar Oportunidad",
+                        "blocks": [
+                            {
+                                "id": "blk_01kyxp3xjzv2yr39sx248ayqsg",
+                                "type": "form",
+                                "object_id": "obj_01kytgcymkr9jd2jsn15g47ee6",
+                                "mode": "edit",
+                                "record_id_expression": "{{params.record_id}}",
+                                "fields": [
+                                    {
+                                        "field_id": "fld_01kytgcymkr9jd2jsn15g47edx"
+                                    },
+                                    {
+                                        "field_id": "fld_01kytgcymkr9jd2jsn15g47edy"
+                                    },
+                                    {
+                                        "field_id": "fld_01kytgcymkr9jd2jsn15g47edz"
+                                    },
+                                    {
+                                        "field_id": "fld_01kytgcymkr9jd2jsn15g47ee5"
+                                    },
+                                    {
+                                        "field_id": "fld_01kytgcymkr9jd2jsn15g47eeb"
+                                    }
+                                ],
+                                "submit_label": "Guardar cambios",
+                                "on_submit": [
+                                    {
+                                        "type": "update_record",
+                                        "object_id": "obj_01kytgcymkr9jd2jsn15g47ee6",
+                                        "record_id_expression": "{{params.record_id}}",
                                         "values": {
                                             "titulo": "{{form.titulo}}",
                                             "monto": "{{form.monto}}",
@@ -619,6 +754,23 @@
                                 "label_override": "Creado"
                             },
                             {
+                                "id": "col_01kyxp3xjzv2yr39sx248ayqsh",
+                                "type": "action",
+                                "label": "Editar",
+                                "icon": "pencil",
+                                "variant": "ghost",
+                                "on_click": [
+                                    {
+                                        "type": "open_modal",
+                                        "modal_block_id": "blk_01kyxp3xjzv2yr39sx248ayqsf",
+                                        "params": {
+                                            "record_id": "{{row.id}}",
+                                            "record": "{{row.data}}"
+                                        }
+                                    }
+                                ]
+                            },
+                            {
                                 "id": "col_01kytgcymkr9jd2jsn15g47egc",
                                 "type": "action",
                                 "label": "Abrir",
@@ -698,6 +850,59 @@
                         ]
                     },
                     {
+                        "id": "blk_01kyxp3xjzv2yr39sx248ayqsj",
+                        "type": "modal",
+                        "title": "Editar Actividad",
+                        "blocks": [
+                            {
+                                "id": "blk_01kyxp3xjzv2yr39sx248ayqsk",
+                                "type": "form",
+                                "object_id": "obj_01kytgcymkr9jd2jsn15g47eea",
+                                "mode": "edit",
+                                "record_id_expression": "{{params.record_id}}",
+                                "fields": [
+                                    {
+                                        "field_id": "fld_01kytgcymkr9jd2jsn15g47ee7"
+                                    },
+                                    {
+                                        "field_id": "fld_01kytgcymkr9jd2jsn15g47ee8"
+                                    },
+                                    {
+                                        "field_id": "fld_01kytgcymkr9jd2jsn15g47ee9"
+                                    },
+                                    {
+                                        "field_id": "fld_01kytgcymkr9jd2jsn15g47eef"
+                                    }
+                                ],
+                                "submit_label": "Guardar cambios",
+                                "on_submit": [
+                                    {
+                                        "type": "update_record",
+                                        "object_id": "obj_01kytgcymkr9jd2jsn15g47eea",
+                                        "record_id_expression": "{{params.record_id}}",
+                                        "values": {
+                                            "asunto": "{{form.asunto}}",
+                                            "notas": "{{form.notas}}",
+                                            "fecha": "{{form.fecha}}",
+                                            "oportunidad": "{{form.oportunidad}}"
+                                        }
+                                    },
+                                    {
+                                        "type": "close_modal"
+                                    },
+                                    {
+                                        "type": "show_toast",
+                                        "level": "success",
+                                        "message": "Guardado"
+                                    },
+                                    {
+                                        "type": "refresh"
+                                    }
+                                ]
+                            }
+                        ]
+                    },
+                    {
                         "id": "blk_01kytgcymkr9jd2jsn15g47efh",
                         "type": "button",
                         "label": "Agregar Actividad",
@@ -751,6 +956,23 @@
                                 "id": "col_01kytgcymkr9jd2jsn15g47efp",
                                 "field_id": "sys_created_at",
                                 "label_override": "Creado"
+                            },
+                            {
+                                "id": "col_01kyxp3xjzv2yr39sx248ayqsm",
+                                "type": "action",
+                                "label": "Editar",
+                                "icon": "pencil",
+                                "variant": "ghost",
+                                "on_click": [
+                                    {
+                                        "type": "open_modal",
+                                        "modal_block_id": "blk_01kyxp3xjzv2yr39sx248ayqsj",
+                                        "params": {
+                                            "record_id": "{{row.id}}",
+                                            "record": "{{row.data}}"
+                                        }
+                                    }
+                                ]
                             }
                         ]
                     }
@@ -1047,6 +1269,65 @@
                     "slug": "user",
                     "name": "User",
                     "is_default": true
+                }
+            ],
+            "object_policies": [
+                {
+                    "object_id": "obj_01kytgcymkr9jd2jsn15g47edw",
+                    "role_id": "rol_01kytgcymkr9jd2jsn15g47edn",
+                    "actions": [
+                        "create",
+                        "read",
+                        "update",
+                        "delete"
+                    ]
+                },
+                {
+                    "object_id": "obj_01kytgcymkr9jd2jsn15g47edw",
+                    "role_id": "rol_01kytgcymkr9jd2jsn15g47edp",
+                    "actions": [
+                        "create",
+                        "read",
+                        "update"
+                    ]
+                },
+                {
+                    "object_id": "obj_01kytgcymkr9jd2jsn15g47ee6",
+                    "role_id": "rol_01kytgcymkr9jd2jsn15g47edn",
+                    "actions": [
+                        "create",
+                        "read",
+                        "update",
+                        "delete"
+                    ]
+                },
+                {
+                    "object_id": "obj_01kytgcymkr9jd2jsn15g47ee6",
+                    "role_id": "rol_01kytgcymkr9jd2jsn15g47edp",
+                    "actions": [
+                        "create",
+                        "read",
+                        "update"
+                    ]
+                },
+                {
+                    "object_id": "obj_01kytgcymkr9jd2jsn15g47eea",
+                    "role_id": "rol_01kytgcymkr9jd2jsn15g47edn",
+                    "actions": [
+                        "create",
+                        "read",
+                        "update",
+                        "delete"
+                    ]
+                },
+                {
+                    "object_id": "obj_01kytgcymkr9jd2jsn15g47eea",
+                    "role_id": "rol_01kytgcymkr9jd2jsn15g47edp",
+                    "actions": [
+                        "create",
+                        "read",
+                        "update"
+                    ]
                 }
             ]
         },

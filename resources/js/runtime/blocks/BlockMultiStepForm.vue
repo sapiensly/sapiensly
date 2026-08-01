@@ -71,6 +71,14 @@ const modalParams = inject<Ref<Record<string, unknown>> | null>(
     null,
 );
 
+// …and the page's own params (its URL query), so {{params.id}} on a detail
+// page resolves here too. See the same merge in BlockForm.
+const pageParams = inject<Record<string, unknown>>('pageParams', {});
+const submitParams = computed(() => ({
+    ...pageParams,
+    ...(modalParams?.value ?? {}),
+}));
+
 // Drop the card chrome when the form lives inside a modal (same reasoning
 // as BlockForm).
 const insideModal = inject<boolean>('insideModal', false);
@@ -145,19 +153,45 @@ const isLastStep = computed(
 );
 const isFirstStep = computed(() => currentStepIndex.value === 0);
 
+/** The record a modal-hosted edit wizard was opened on. See BlockForm. */
+const modalRecord = computed<Record<string, unknown>>(() => {
+    const record = modalParams?.value?.record;
+    return record !== null &&
+        typeof record === 'object' &&
+        !Array.isArray(record)
+        ? (record as Record<string, unknown>)
+        : {};
+});
+
 const formData = ref<Record<string, unknown>>(initialState());
+// What the wizard opened with; an edit submits the difference against it.
+const pristine = ref<Record<string, unknown>>({ ...formData.value });
 const fieldErrors = ref<Record<string, string[]>>({});
 const stepError = ref<string | null>(null);
 const submitting = ref(false);
 
 function initialState(): Record<string, unknown> {
     const state: Record<string, unknown> = {};
-    const defaults = props.data?.form?.defaults ?? {};
+    const seed =
+        props.block.mode === 'edit'
+            ? { ...modalRecord.value, ...(props.data?.form?.defaults ?? {}) }
+            : (props.data?.form?.defaults ?? {});
     for (const f of allFields.value) {
         state[f.slug] =
-            f.slug in defaults ? defaults[f.slug] : initialFieldValue(f.field);
+            f.slug in seed ? seed[f.slug] : initialFieldValue(f.field);
     }
     return state;
+}
+
+/** See BlockForm: two empties are equal, structured values compare by shape. */
+function isUnchanged(value: unknown, before: unknown): boolean {
+    const empty = (v: unknown): boolean =>
+        v === null ||
+        v === undefined ||
+        v === '' ||
+        (Array.isArray(v) && v.length === 0);
+    if (empty(value) && empty(before)) return true;
+    return JSON.stringify(value) === JSON.stringify(before);
 }
 
 /** Whether a field passes its visible_if condition (always visible when none set). */
@@ -233,14 +267,19 @@ async function submit() {
     const visibleSlugs = new Set(
         allFields.value.filter(isVisible).map((f) => f.slug),
     );
+    // An edit sends only what changed — update_record merges, so a full
+    // resend would rewrite fields this browser never loaded. See BlockForm.
+    const editing = props.block.mode === 'edit';
     const payload: Record<string, unknown> = {};
     for (const [slug, value] of Object.entries(formData.value)) {
-        if (visibleSlugs.has(slug)) payload[slug] = value;
+        if (!visibleSlugs.has(slug)) continue;
+        if (editing && isUnchanged(value, pristine.value[slug])) continue;
+        payload[slug] = value;
     }
 
     const result = await execute(
         (props.block.on_submit ?? []) as RuntimeAction[],
-        { appSlug, form: payload, params: modalParams?.value ?? {} },
+        { appSlug, form: payload, params: submitParams.value },
     );
 
     if (!result.ok && result.fieldErrors) {
@@ -262,7 +301,7 @@ async function cancel() {
     await execute((props.block.on_cancel ?? []) as RuntimeAction[], {
         appSlug,
         form: { ...formData.value },
-        params: modalParams?.value ?? {},
+        params: submitParams.value,
     });
 }
 </script>

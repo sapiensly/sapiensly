@@ -334,7 +334,7 @@ class AppBuilderController extends Controller
         // Drop blocks the role or a visibility expression hides BEFORE resolving
         // data — identical to the runtime, so a hidden block never shows in the
         // preview (and its data never gets resolved either).
-        $page['blocks'] = $this->visibility->visibleBlocks($page['blocks'] ?? [], $access, $context);
+        $page['blocks'] = $this->visibility->visibleBlocks($page['blocks'] ?? [], $access, $context, $manifest['objects'] ?? []);
 
         // Org Brandbook fills unset brand values (live fallback); the app wins.
         $settings = $app->organization !== null

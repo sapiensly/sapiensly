@@ -23,7 +23,8 @@
                         "id": "fld_01kytgcz1ck4197hqe4ky7k5n0",
                         "slug": "nombre",
                         "name": "Nombre",
-                        "type": "string"
+                        "type": "string",
+                        "required": true
                     },
                     {
                         "id": "fld_01kytgcz1ck4197hqe4ky7k5n1",
@@ -73,7 +74,8 @@
                         "id": "fld_01kytgcz1ck4197hqe4ky7k5n5",
                         "slug": "folio",
                         "name": "Folio",
-                        "type": "string"
+                        "type": "string",
+                        "required": true
                     },
                     {
                         "id": "fld_01kytgcz1ck4197hqe4ky7k5n6",
@@ -111,7 +113,8 @@
                                 "label": "Entregado",
                                 "color": "#8b5cf6"
                             }
-                        ]
+                        ],
+                        "default": "borrador"
                     },
                     {
                         "id": "fld_01kytgcz1ck4197hqe4ky7k5ng",
@@ -152,7 +155,8 @@
                         "id": "fld_01kytgcz1ck4197hqe4ky7k5nd",
                         "slug": "cantidad",
                         "name": "Cantidad",
-                        "type": "number"
+                        "type": "number",
+                        "required": true
                     },
                     {
                         "id": "fld_01kytgcz1ck4197hqe4ky7k5nf",
@@ -556,6 +560,59 @@
                         ]
                     },
                     {
+                        "id": "blk_01kyxp3xx2w0snmkzqmrv6ash5",
+                        "type": "modal",
+                        "title": "Editar Producto",
+                        "blocks": [
+                            {
+                                "id": "blk_01kyxp3xx2w0snmkzqmrv6ash6",
+                                "type": "form",
+                                "object_id": "obj_01kytgcz1ck4197hqe4ky7k5n4",
+                                "mode": "edit",
+                                "record_id_expression": "{{params.record_id}}",
+                                "fields": [
+                                    {
+                                        "field_id": "fld_01kytgcz1ck4197hqe4ky7k5n0"
+                                    },
+                                    {
+                                        "field_id": "fld_01kytgcz1ck4197hqe4ky7k5n1"
+                                    },
+                                    {
+                                        "field_id": "fld_01kytgcz1ck4197hqe4ky7k5n2"
+                                    },
+                                    {
+                                        "field_id": "fld_01kytgcz1ck4197hqe4ky7k5n3"
+                                    }
+                                ],
+                                "submit_label": "Guardar cambios",
+                                "on_submit": [
+                                    {
+                                        "type": "update_record",
+                                        "object_id": "obj_01kytgcz1ck4197hqe4ky7k5n4",
+                                        "record_id_expression": "{{params.record_id}}",
+                                        "values": {
+                                            "nombre": "{{form.nombre}}",
+                                            "sku": "{{form.sku}}",
+                                            "precio": "{{form.precio}}",
+                                            "existencias": "{{form.existencias}}"
+                                        }
+                                    },
+                                    {
+                                        "type": "close_modal"
+                                    },
+                                    {
+                                        "type": "show_toast",
+                                        "level": "success",
+                                        "message": "Guardado"
+                                    },
+                                    {
+                                        "type": "refresh"
+                                    }
+                                ]
+                            }
+                        ]
+                    },
+                    {
                         "id": "blk_01kytgcz1ck4197hqe4ky7k5nt",
                         "type": "button",
                         "label": "Agregar Producto",
@@ -604,6 +661,23 @@
                                 "id": "col_01kytgcz1ck4197hqe4ky7k5p0",
                                 "field_id": "sys_created_at",
                                 "label_override": "Creado"
+                            },
+                            {
+                                "id": "col_01kyxp3xx2w0snmkzqmrv6ash7",
+                                "type": "action",
+                                "label": "Editar",
+                                "icon": "pencil",
+                                "variant": "ghost",
+                                "on_click": [
+                                    {
+                                        "type": "open_modal",
+                                        "modal_block_id": "blk_01kyxp3xx2w0snmkzqmrv6ash5",
+                                        "params": {
+                                            "record_id": "{{row.id}}",
+                                            "record": "{{row.data}}"
+                                        }
+                                    }
+                                ]
                             },
                             {
                                 "id": "col_01kytgcz1ck4197hqe4ky7k5qf",
@@ -659,6 +733,55 @@
                                     {
                                         "type": "create_record",
                                         "object_id": "obj_01kytgcz1ck4197hqe4ky7k5nc",
+                                        "values": {
+                                            "folio": "{{form.folio}}",
+                                            "fecha": "{{form.fecha}}",
+                                            "estado": "{{form.estado}}"
+                                        }
+                                    },
+                                    {
+                                        "type": "close_modal"
+                                    },
+                                    {
+                                        "type": "show_toast",
+                                        "level": "success",
+                                        "message": "Guardado"
+                                    },
+                                    {
+                                        "type": "refresh"
+                                    }
+                                ]
+                            }
+                        ]
+                    },
+                    {
+                        "id": "blk_01kyxp3xx2w0snmkzqmrv6ash8",
+                        "type": "modal",
+                        "title": "Editar Pedido",
+                        "blocks": [
+                            {
+                                "id": "blk_01kyxp3xx2w0snmkzqmrv6ash9",
+                                "type": "form",
+                                "object_id": "obj_01kytgcz1ck4197hqe4ky7k5nc",
+                                "mode": "edit",
+                                "record_id_expression": "{{params.record_id}}",
+                                "fields": [
+                                    {
+                                        "field_id": "fld_01kytgcz1ck4197hqe4ky7k5n5"
+                                    },
+                                    {
+                                        "field_id": "fld_01kytgcz1ck4197hqe4ky7k5n6"
+                                    },
+                                    {
+                                        "field_id": "fld_01kytgcz1ck4197hqe4ky7k5n7"
+                                    }
+                                ],
+                                "submit_label": "Guardar cambios",
+                                "on_submit": [
+                                    {
+                                        "type": "update_record",
+                                        "object_id": "obj_01kytgcz1ck4197hqe4ky7k5nc",
+                                        "record_id_expression": "{{params.record_id}}",
                                         "values": {
                                             "folio": "{{form.folio}}",
                                             "fecha": "{{form.fecha}}",
@@ -759,6 +882,23 @@
                                 "label_override": "Creado"
                             },
                             {
+                                "id": "col_01kyxp3xx2w0snmkzqmrv6asha",
+                                "type": "action",
+                                "label": "Editar",
+                                "icon": "pencil",
+                                "variant": "ghost",
+                                "on_click": [
+                                    {
+                                        "type": "open_modal",
+                                        "modal_block_id": "blk_01kyxp3xx2w0snmkzqmrv6ash8",
+                                        "params": {
+                                            "record_id": "{{row.id}}",
+                                            "record": "{{row.data}}"
+                                        }
+                                    }
+                                ]
+                            },
+                            {
                                 "id": "col_01kytgcz1ck4197hqe4ky7k5q6",
                                 "type": "action",
                                 "label": "Abrir",
@@ -834,6 +974,55 @@
                         ]
                     },
                     {
+                        "id": "blk_01kyxp3xx2w0snmkzqmrv6ashb",
+                        "type": "modal",
+                        "title": "Editar Renglon",
+                        "blocks": [
+                            {
+                                "id": "blk_01kyxp3xx2w0snmkzqmrv6ashc",
+                                "type": "form",
+                                "object_id": "obj_01kytgcz1ck4197hqe4ky7k5ne",
+                                "mode": "edit",
+                                "record_id_expression": "{{params.record_id}}",
+                                "fields": [
+                                    {
+                                        "field_id": "fld_01kytgcz1ck4197hqe4ky7k5nd"
+                                    },
+                                    {
+                                        "field_id": "fld_01kytgcz1ck4197hqe4ky7k5nf"
+                                    },
+                                    {
+                                        "field_id": "fld_01kytgcz1ck4197hqe4ky7k5nj"
+                                    }
+                                ],
+                                "submit_label": "Guardar cambios",
+                                "on_submit": [
+                                    {
+                                        "type": "update_record",
+                                        "object_id": "obj_01kytgcz1ck4197hqe4ky7k5ne",
+                                        "record_id_expression": "{{params.record_id}}",
+                                        "values": {
+                                            "cantidad": "{{form.cantidad}}",
+                                            "pedido": "{{form.pedido}}",
+                                            "producto": "{{form.producto}}"
+                                        }
+                                    },
+                                    {
+                                        "type": "close_modal"
+                                    },
+                                    {
+                                        "type": "show_toast",
+                                        "level": "success",
+                                        "message": "Guardado"
+                                    },
+                                    {
+                                        "type": "refresh"
+                                    }
+                                ]
+                            }
+                        ]
+                    },
+                    {
                         "id": "blk_01kytgcz1ck4197hqe4ky7k5pm",
                         "type": "button",
                         "label": "Agregar Renglon",
@@ -882,6 +1071,23 @@
                                 "id": "col_01kytgcz1ck4197hqe4ky7k5pt",
                                 "field_id": "sys_created_at",
                                 "label_override": "Creado"
+                            },
+                            {
+                                "id": "col_01kyxp3xx2w0snmkzqmrv6ashd",
+                                "type": "action",
+                                "label": "Editar",
+                                "icon": "pencil",
+                                "variant": "ghost",
+                                "on_click": [
+                                    {
+                                        "type": "open_modal",
+                                        "modal_block_id": "blk_01kyxp3xx2w0snmkzqmrv6ashb",
+                                        "params": {
+                                            "record_id": "{{row.id}}",
+                                            "record": "{{row.data}}"
+                                        }
+                                    }
+                                ]
                             }
                         ]
                     }
@@ -1157,6 +1363,65 @@
                     "slug": "user",
                     "name": "User",
                     "is_default": true
+                }
+            ],
+            "object_policies": [
+                {
+                    "object_id": "obj_01kytgcz1ck4197hqe4ky7k5n4",
+                    "role_id": "rol_01kytgcz1ck4197hqe4ky7k5my",
+                    "actions": [
+                        "create",
+                        "read",
+                        "update",
+                        "delete"
+                    ]
+                },
+                {
+                    "object_id": "obj_01kytgcz1ck4197hqe4ky7k5n4",
+                    "role_id": "rol_01kytgcz1ck4197hqe4ky7k5mz",
+                    "actions": [
+                        "create",
+                        "read",
+                        "update"
+                    ]
+                },
+                {
+                    "object_id": "obj_01kytgcz1ck4197hqe4ky7k5nc",
+                    "role_id": "rol_01kytgcz1ck4197hqe4ky7k5my",
+                    "actions": [
+                        "create",
+                        "read",
+                        "update",
+                        "delete"
+                    ]
+                },
+                {
+                    "object_id": "obj_01kytgcz1ck4197hqe4ky7k5nc",
+                    "role_id": "rol_01kytgcz1ck4197hqe4ky7k5mz",
+                    "actions": [
+                        "create",
+                        "read",
+                        "update"
+                    ]
+                },
+                {
+                    "object_id": "obj_01kytgcz1ck4197hqe4ky7k5ne",
+                    "role_id": "rol_01kytgcz1ck4197hqe4ky7k5my",
+                    "actions": [
+                        "create",
+                        "read",
+                        "update",
+                        "delete"
+                    ]
+                },
+                {
+                    "object_id": "obj_01kytgcz1ck4197hqe4ky7k5ne",
+                    "role_id": "rol_01kytgcz1ck4197hqe4ky7k5mz",
+                    "actions": [
+                        "create",
+                        "read",
+                        "update"
+                    ]
                 }
             ]
         },

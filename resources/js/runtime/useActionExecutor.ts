@@ -306,7 +306,15 @@ export function useActionExecutor() {
                 break;
             }
             case 'refresh':
-                router.reload();
+                // `blockData` is a DEFERRED prop, and a deferred prop is left
+                // OUT of a plain reload's response — the page would come back
+                // with it undefined and every data block would render its
+                // empty state ("No record selected.") until a full navigation.
+                // Asking for it by name is the same partial request Inertia's
+                // own deferred fetch makes, so the refreshed data arrives.
+                // It is the only prop a refresh needs: the manifest, the page
+                // params and the chrome cannot change without a navigation.
+                router.reload({ only: ['blockData'] });
                 break;
             case 'show_toast': {
                 const message =

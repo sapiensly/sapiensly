@@ -23,7 +23,8 @@
                         "id": "fld_01kytgcyx8nx5cp8q0kv1s2cce",
                         "slug": "asunto",
                         "name": "Asunto",
-                        "type": "string"
+                        "type": "string",
+                        "required": true
                     },
                     {
                         "id": "fld_01kytgcyx8nx5cp8q0kv1s2ccf",
@@ -67,7 +68,8 @@
                                 "label": "Resuelto",
                                 "color": "#8b5cf6"
                             }
-                        ]
+                        ],
+                        "default": "nuevo"
                     },
                     {
                         "id": "fld_01kytgcyx8nx5cp8q0kv1s2ccp",
@@ -130,7 +132,8 @@
                         "id": "fld_01kytgcyx8nx5cp8q0kv1s2ccw",
                         "slug": "mensaje",
                         "name": "Mensaje",
-                        "type": "long_text"
+                        "type": "long_text",
+                        "required": true
                     },
                     {
                         "id": "fld_01kytgcyx8nx5cp8q0kv1s2ccx",
@@ -288,6 +291,63 @@
                         ]
                     },
                     {
+                        "id": "blk_01kyxp3y6j6xavghdt33pxgwxa",
+                        "type": "modal",
+                        "title": "Editar Ticket",
+                        "blocks": [
+                            {
+                                "id": "blk_01kyxp3y6j6xavghdt33pxgwxb",
+                                "type": "form",
+                                "object_id": "obj_01kytgcyx8nx5cp8q0kv1s2ccv",
+                                "mode": "edit",
+                                "record_id_expression": "{{params.record_id}}",
+                                "fields": [
+                                    {
+                                        "field_id": "fld_01kytgcyx8nx5cp8q0kv1s2cce"
+                                    },
+                                    {
+                                        "field_id": "fld_01kytgcyx8nx5cp8q0kv1s2ccf"
+                                    },
+                                    {
+                                        "field_id": "fld_01kytgcyx8nx5cp8q0kv1s2ccg"
+                                    },
+                                    {
+                                        "field_id": "fld_01kytgcyx8nx5cp8q0kv1s2cch"
+                                    },
+                                    {
+                                        "field_id": "fld_01kytgcyx8nx5cp8q0kv1s2ccp"
+                                    }
+                                ],
+                                "submit_label": "Guardar cambios",
+                                "on_submit": [
+                                    {
+                                        "type": "update_record",
+                                        "object_id": "obj_01kytgcyx8nx5cp8q0kv1s2ccv",
+                                        "record_id_expression": "{{params.record_id}}",
+                                        "values": {
+                                            "asunto": "{{form.asunto}}",
+                                            "descripcion": "{{form.descripcion}}",
+                                            "correo": "{{form.correo}}",
+                                            "estado": "{{form.estado}}",
+                                            "prioridad": "{{form.prioridad}}"
+                                        }
+                                    },
+                                    {
+                                        "type": "close_modal"
+                                    },
+                                    {
+                                        "type": "show_toast",
+                                        "level": "success",
+                                        "message": "Guardado"
+                                    },
+                                    {
+                                        "type": "refresh"
+                                    }
+                                ]
+                            }
+                        ]
+                    },
+                    {
                         "id": "blk_01kytgcyx8nx5cp8q0kv1s2cd4",
                         "type": "button",
                         "label": "Agregar Ticket",
@@ -358,6 +418,23 @@
                                 "id": "col_01kytgcyx8nx5cp8q0kv1s2cdb",
                                 "field_id": "sys_created_at",
                                 "label_override": "Creado"
+                            },
+                            {
+                                "id": "col_01kyxp3y6j6xavghdt33pxgwxc",
+                                "type": "action",
+                                "label": "Editar",
+                                "icon": "pencil",
+                                "variant": "ghost",
+                                "on_click": [
+                                    {
+                                        "type": "open_modal",
+                                        "modal_block_id": "blk_01kyxp3y6j6xavghdt33pxgwxa",
+                                        "params": {
+                                            "record_id": "{{row.id}}",
+                                            "record": "{{row.data}}"
+                                        }
+                                    }
+                                ]
                             },
                             {
                                 "id": "col_01kytgcyx8nx5cp8q0kv1s2ce3",
@@ -435,6 +512,55 @@
                         ]
                     },
                     {
+                        "id": "blk_01kyxp3y6j6xavghdt33pxgwxd",
+                        "type": "modal",
+                        "title": "Editar Respuestum",
+                        "blocks": [
+                            {
+                                "id": "blk_01kyxp3y6j6xavghdt33pxgwxe",
+                                "type": "form",
+                                "object_id": "obj_01kytgcyx8nx5cp8q0kv1s2ccy",
+                                "mode": "edit",
+                                "record_id_expression": "{{params.record_id}}",
+                                "fields": [
+                                    {
+                                        "field_id": "fld_01kytgcyx8nx5cp8q0kv1s2ccw"
+                                    },
+                                    {
+                                        "field_id": "fld_01kytgcyx8nx5cp8q0kv1s2ccx"
+                                    },
+                                    {
+                                        "field_id": "fld_01kytgcyx8nx5cp8q0kv1s2ccz"
+                                    }
+                                ],
+                                "submit_label": "Guardar cambios",
+                                "on_submit": [
+                                    {
+                                        "type": "update_record",
+                                        "object_id": "obj_01kytgcyx8nx5cp8q0kv1s2ccy",
+                                        "record_id_expression": "{{params.record_id}}",
+                                        "values": {
+                                            "mensaje": "{{form.mensaje}}",
+                                            "fecha": "{{form.fecha}}",
+                                            "ticket": "{{form.ticket}}"
+                                        }
+                                    },
+                                    {
+                                        "type": "close_modal"
+                                    },
+                                    {
+                                        "type": "show_toast",
+                                        "level": "success",
+                                        "message": "Guardado"
+                                    },
+                                    {
+                                        "type": "refresh"
+                                    }
+                                ]
+                            }
+                        ]
+                    },
+                    {
                         "id": "blk_01kytgcyx8nx5cp8q0kv1s2cdj",
                         "type": "button",
                         "label": "Agregar Respuesta",
@@ -484,6 +610,23 @@
                                 "id": "col_01kytgcyx8nx5cp8q0kv1s2cdp",
                                 "field_id": "sys_created_at",
                                 "label_override": "Creado"
+                            },
+                            {
+                                "id": "col_01kyxp3y6j6xavghdt33pxgwxf",
+                                "type": "action",
+                                "label": "Editar",
+                                "icon": "pencil",
+                                "variant": "ghost",
+                                "on_click": [
+                                    {
+                                        "type": "open_modal",
+                                        "modal_block_id": "blk_01kyxp3y6j6xavghdt33pxgwxd",
+                                        "params": {
+                                            "record_id": "{{row.id}}",
+                                            "record": "{{row.data}}"
+                                        }
+                                    }
+                                ]
                             }
                         ]
                     }
@@ -628,6 +771,46 @@
                     "slug": "user",
                     "name": "User",
                     "is_default": true
+                }
+            ],
+            "object_policies": [
+                {
+                    "object_id": "obj_01kytgcyx8nx5cp8q0kv1s2ccv",
+                    "role_id": "rol_01kytgcyx8nx5cp8q0kv1s2ccc",
+                    "actions": [
+                        "create",
+                        "read",
+                        "update",
+                        "delete"
+                    ]
+                },
+                {
+                    "object_id": "obj_01kytgcyx8nx5cp8q0kv1s2ccv",
+                    "role_id": "rol_01kytgcyx8nx5cp8q0kv1s2ccd",
+                    "actions": [
+                        "create",
+                        "read",
+                        "update"
+                    ]
+                },
+                {
+                    "object_id": "obj_01kytgcyx8nx5cp8q0kv1s2ccy",
+                    "role_id": "rol_01kytgcyx8nx5cp8q0kv1s2ccc",
+                    "actions": [
+                        "create",
+                        "read",
+                        "update",
+                        "delete"
+                    ]
+                },
+                {
+                    "object_id": "obj_01kytgcyx8nx5cp8q0kv1s2ccy",
+                    "role_id": "rol_01kytgcyx8nx5cp8q0kv1s2ccd",
+                    "actions": [
+                        "create",
+                        "read",
+                        "update"
+                    ]
                 }
             ]
         },

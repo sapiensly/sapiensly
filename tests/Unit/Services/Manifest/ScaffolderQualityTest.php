@@ -502,9 +502,11 @@ it('links the parent list table to its detail page', function () {
     $manifest = scaffoldWithChild('es-MX');
 
     $table = blockByType(pageBySlug($manifest, 'comandas'), 'table');
-    $action = collect($table['columns'])->firstWhere('type', 'action');
+    // Addressed by label: the row carries more than one action now (edit opens
+    // a modal in place), and this test is about the one that navigates.
+    $action = collect($table['columns'])->firstWhere('label', 'Abrir');
     expect($action)->not->toBeNull();
-    expect($action['label'])->toBe('Abrir');
+    expect($action['type'])->toBe('action');
     expect($action['on_click'][0]['type'])->toBe('navigate');
     expect($action['on_click'][0]['to'])->toBe('/comandas_detail?id={{row.id}}');
 });
@@ -1091,4 +1093,83 @@ it('does not hand a portal role anything it was not explicitly given', function 
     // never be what puts tenant data in front of strangers.
     expect($forNew->firstWhere('role_id', $visitor['id']))->toBeNull()
         ->and($forNew)->toHaveCount(2);
+});
+
+/**
+ * A generated app must be able to CHANGE a record, not only add one. Without
+ * this the create form is the whole write surface: every field is fixed at
+ * insert time, and correcting a typo means deleting and retyping the record.
+ *
+ * The path has three parts that only work together — a modal, an edit form
+ * reading the id the modal was handed, and a row action that hands it over
+ * along with the row's current values to seed the inputs. Assert all three.
+ */
+it('gives every list page a working edit path', function () {
+    $manifest = scaffoldFor('es-MX');
+    $page = pageBySlug($manifest, 'comandas');
+
+    $editModal = collect($page['blocks'])
+        ->filter(fn (array $b): bool => ($b['type'] ?? null) === 'modal')
+        ->first(fn (array $b): bool => ($b['blocks'][0]['mode'] ?? null) === 'edit');
+
+    expect($editModal)->not->toBeNull()
+        ->and($editModal['title'])->toBe('Editar Comanda');
+
+    $form = $editModal['blocks'][0];
+    expect($form['record_id_expression'])->toBe('{{params.record_id}}')
+        ->and($form['submit_label'])->toBe('Guardar cambios');
+
+    // The submit must UPDATE the row it opened — an edit form wired to
+    // create_record would silently fork a duplicate on every save.
+    $update = collect($form['on_submit'])->firstWhere('type', 'update_record');
+    expect($update)->not->toBeNull()
+        ->and($update['record_id_expression'])->toBe('{{params.record_id}}')
+        ->and($update['object_id'])->toBe($form['object_id']);
+
+    $action = collect(blockByType($page, 'table')['columns'])->firstWhere('label', 'Editar');
+    expect($action)->not->toBeNull()
+        ->and($action['type'])->toBe('action');
+
+    $open = $action['on_click'][0];
+    expect($open['type'])->toBe('open_modal')
+        ->and($open['modal_block_id'])->toBe($editModal['id'])
+        ->and($open['params']['record_id'])->toBe('{{row.id}}')
+        // Without the row's values the modal opens blank, and a blank edit is
+        // how a save quietly wipes every field the user did not retype.
+        ->and($open['params']['record'])->toBe('{{row.data}}');
+});
+
+it('keeps the edit path in English for an English app', function () {
+    $page = pageBySlug(scaffoldFor('en'), 'comandas');
+
+    $editModal = collect($page['blocks'])
+        ->filter(fn (array $b): bool => ($b['type'] ?? null) === 'modal')
+        ->first(fn (array $b): bool => ($b['blocks'][0]['mode'] ?? null) === 'edit');
+
+    expect($editModal['title'])->toBe('Edit Comanda')
+        ->and($editModal['blocks'][0]['submit_label'])->toBe('Save changes')
+        ->and(collect(blockByType($page, 'table')['columns'])->firstWhere('label', 'Edit'))->not->toBeNull();
+});
+
+it('leaves derived fields out of the edit form, as it does the create form', function () {
+    // A rollup/lookup/formula is computed; offering it in an edit form would
+    // present a writable input for a value the save cannot accept.
+    $manifest = scaffoldWithChild('es-MX');
+    $page = pageBySlug($manifest, 'comandas');
+
+    $editModal = collect($page['blocks'])
+        ->filter(fn (array $b): bool => ($b['type'] ?? null) === 'modal')
+        ->first(fn (array $b): bool => ($b['blocks'][0]['mode'] ?? null) === 'edit');
+
+    $object = collect($manifest['objects'])->firstWhere('slug', 'comandas');
+    $derivedIds = collect($object['fields'])
+        ->filter(fn (array $f): bool => in_array($f['type'], ['rollup', 'lookup', 'formula'], true))
+        ->pluck('id');
+
+    expect($derivedIds)->not->toBeEmpty();
+
+    $formIds = collect($editModal['blocks'][0]['fields'])->pluck('field_id');
+    foreach ($derivedIds as $id) {
+        expect($formIds)->not->toContain($id);
+    }
 });

@@ -101,7 +101,7 @@ class PublicAppController extends Controller
             $context['current_user'] = $portalUser->toExpressionContext();
         }
 
-        $page['blocks'] = $this->visibility->visibleBlocks($page['blocks'] ?? [], $access, $context);
+        $page['blocks'] = $this->visibility->visibleBlocks($page['blocks'] ?? [], $access, $context, $manifest['objects'] ?? []);
 
         $settings = $app->organization !== null
             ? $app->organization->brandbook()->applyToAppSettings($manifest['settings'] ?? [])

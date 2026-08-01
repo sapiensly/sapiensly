@@ -1065,11 +1065,60 @@ class AppScaffolder
             'on_click' => [['type' => 'open_modal', 'modal_block_id' => $modalId]],
         ];
 
+        // The other half of a create form: a record you cannot change after
+        // saving it is a log, not an app. A row action opens a modal carrying
+        // both the clicked row's id and its current values, which the edit form
+        // reads back as {{params.record_id}} and seeds its inputs from — the
+        // row is already in the browser, so this costs no extra read.
+        $editModalId = $this->id('blk');
+        $updateValues = [];
+        foreach ($formIndex as $f) {
+            $updateValues[$f['slug']] = '{{form.'.$f['slug'].'}}';
+        }
+
+        $editModal = [
+            'id' => $editModalId,
+            'type' => 'modal',
+            'title' => $this->labelEditTitle($lang, $singular),
+            'blocks' => [[
+                'id' => $this->id('blk'),
+                'type' => 'form',
+                'object_id' => $objectId,
+                'mode' => 'edit',
+                'record_id_expression' => '{{params.record_id}}',
+                'fields' => $formFields,
+                'submit_label' => $this->labelSave($lang),
+                'on_submit' => [
+                    [
+                        'type' => 'update_record',
+                        'object_id' => $objectId,
+                        'record_id_expression' => '{{params.record_id}}',
+                        'values' => $updateValues,
+                    ],
+                    ['type' => 'close_modal'],
+                    ['type' => 'show_toast', 'level' => 'success', 'message' => $this->toastSaved($lang, $singular)],
+                    ['type' => 'refresh'],
+                ],
+            ]],
+        ];
+
         $columns = array_map(fn (array $f): array => [
             'id' => $this->id('col'),
             'field_id' => $f['id'],
         ], $fieldIndex);
         $columns[] = ['id' => $this->id('col'), 'field_id' => 'sys_created_at', 'label_override' => $this->labelCreatedColumn($lang)];
+        $columns[] = [
+            'id' => $this->id('col'),
+            'type' => 'action',
+            'label' => $this->labelEdit($lang),
+            'icon' => 'pencil',
+            'variant' => 'ghost',
+            'on_click' => [[
+                'type' => 'open_modal',
+                'modal_block_id' => $editModalId,
+                'params' => ['record_id' => '{{row.id}}', 'record' => '{{row.data}}'],
+            ]],
+        ];
 
         $table = [
             'id' => $this->id('blk'),
@@ -1084,6 +1133,7 @@ class AppScaffolder
         $blocks = [
             ['id' => $this->id('blk'), 'type' => 'heading', 'content' => $object['name']],
             $modal,
+            $editModal,
             $button,
         ];
 
@@ -2988,6 +3038,21 @@ class AppScaffolder
     private function labelCreatedColumn(string $lang): string
     {
         return SemanticLexicon::for($lang)->label('created_col');
+    }
+
+    private function labelEdit(string $lang): string
+    {
+        return SemanticLexicon::for($lang)->label('edit');
+    }
+
+    private function labelEditTitle(string $lang, string $singular): string
+    {
+        return SemanticLexicon::for($lang)->label('edit_title', singular: $singular);
+    }
+
+    private function labelSave(string $lang): string
+    {
+        return SemanticLexicon::for($lang)->label('save');
     }
 
     private function labelByStatus(string $lang, string $name): string

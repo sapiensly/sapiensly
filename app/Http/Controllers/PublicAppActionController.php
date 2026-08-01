@@ -210,7 +210,7 @@ class PublicAppActionController extends Controller
         if ($ok && $wantsRefresh) {
             $page = $this->findViewablePage($manifest, $access, $request->input('page'));
             if ($page !== null) {
-                $blocks = $this->visibility->visibleBlocks($page['blocks'] ?? [], $access, $context);
+                $blocks = $this->visibility->visibleBlocks($page['blocks'] ?? [], $access, $context, $manifest['objects'] ?? []);
                 $blockData = $this->blockData->resolve($app, $blocks, $manifest, $context);
             }
         }

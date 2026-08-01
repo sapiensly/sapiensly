@@ -74,14 +74,29 @@ it('add_field adds the field and wires it into the table and create form', funct
     $table = findBlock($page['blocks'], 'table');
     $form = findBlock($page['blocks'], 'form');
 
-    // The new field is a table column and a form field, and the table keeps
-    // the trailing "Created" (sys_created_at) column last.
+    // The new field is a table column and a form field, and "Created"
+    // (sys_created_at) stays last among the DATA columns — the row's action
+    // buttons sit to its right and carry no field_id.
     expect(collect($table['columns'])->pluck('field_id'))->toContain($newField['id']);
-    expect(collect($table['columns'])->last()['field_id'])->toBe('sys_created_at');
+    $dataColumns = collect($table['columns'])->filter(fn (array $c): bool => isset($c['field_id']));
+    expect($dataColumns->last()['field_id'])->toBe('sys_created_at');
     expect(collect($form['fields'])->pluck('field_id'))->toContain($newField['id']);
 
     $createValues = collect($form['on_submit'])->firstWhere('type', 'create_record')['values'];
     expect($createValues)->toHaveKey('status', '{{form.status}}');
+
+    // …and the EDIT form learns the field too. A field you can set on creation
+    // but never change afterwards is the shape of the bug this guards.
+    $editForm = collect($page['blocks'])
+        ->filter(fn (array $b): bool => ($b['type'] ?? null) === 'modal')
+        ->map(fn (array $b): array => $b['blocks'][0] ?? [])
+        ->first(fn (array $f): bool => ($f['mode'] ?? null) === 'edit');
+
+    expect($editForm)->not->toBeNull()
+        ->and(collect($editForm['fields'])->pluck('field_id'))->toContain($newField['id']);
+
+    $updateValues = collect($editForm['on_submit'])->firstWhere('type', 'update_record')['values'];
+    expect($updateValues)->toHaveKey('status', '{{form.status}}');
 
     expect(app(ManifestValidator::class)->validate($manifest)->valid)->toBeTrue();
 });

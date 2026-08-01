@@ -213,15 +213,19 @@ class ManifestEditor
                 $block['columns'] = $columns;
             }
 
+            // Both write modes: a page carries a create form AND an edit one,
+            // and a field only the create form knows about is a field nobody
+            // can ever correct.
             if ($formToo
                 && $type === 'form'
                 && ($block['object_id'] ?? null) === $objectId
-                && ($block['mode'] ?? null) === 'create'
+                && in_array($block['mode'] ?? null, ['create', 'edit'], true)
             ) {
+                $writeAction = ($block['mode'] ?? null) === 'edit' ? 'update_record' : 'create_record';
                 $block['fields'][] = ['field_id' => $fieldId];
                 if (isset($block['on_submit']) && is_array($block['on_submit'])) {
                     foreach ($block['on_submit'] as &$action) {
-                        if (($action['type'] ?? null) === 'create_record' && ($action['object_id'] ?? null) === $objectId) {
+                        if (($action['type'] ?? null) === $writeAction && ($action['object_id'] ?? null) === $objectId) {
                             $action['values'][$slug] = '{{form.'.$slug.'}}';
                         }
                     }

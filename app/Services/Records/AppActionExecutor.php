@@ -205,11 +205,43 @@ class AppActionExecutor
     {
         $resolved = [];
         foreach ($values as $slug => $value) {
+            // A `{{form.x}}` whose field was not submitted is DROPPED, not
+            // resolved to empty. The values map names every field the form can
+            // write, so an edit that sends only what the user changed would
+            // otherwise arrive with the untouched ones present-and-blank — a
+            // required field rejecting a save it can see filled in on screen,
+            // and every optional one quietly overwritten with nothing.
+            if (is_string($value) && $this->isMissingFormRef($value, $context)) {
+                continue;
+            }
+
             $resolved[$slug] = is_string($value)
                 ? $this->expressions->resolve($value, $context)
                 : $value;
         }
 
         return $resolved;
+    }
+
+    /**
+     * Whether an expression is exactly one `{{form.<field>}}` reference whose
+     * field the submitted form did not include.
+     *
+     * Deliberately narrow: only a whole-string reference to a single form
+     * field counts. Anything interpolated into surrounding text ("Hola
+     * {{form.nombre}}") still resolves the old way, since dropping the key
+     * would change what that expression was written to produce.
+     *
+     * @param  array<string, mixed>  $context
+     */
+    private function isMissingFormRef(string $expression, array $context): bool
+    {
+        if (preg_match('/^\{\{\s*form\.([\w]+)\s*\}\}$/', $expression, $m) !== 1) {
+            return false;
+        }
+
+        $form = $context['form'] ?? null;
+
+        return is_array($form) && ! array_key_exists($m[1], $form);
     }
 }

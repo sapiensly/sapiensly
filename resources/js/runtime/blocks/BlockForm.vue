@@ -66,6 +66,21 @@ const modalParams = inject<Ref<Record<string, unknown>> | null>(
     null,
 );
 
+// The PAGE's params — its URL query — are the other half of {{params.*}}. A
+// detail page reads {{params.id}} in its record_detail, and its "add a child"
+// form writes the same token into on_submit (create_record values.parent =
+// "{{params.id}}"). Forwarding only the modal's params left that resolving to
+// nothing, so every child created from a detail page was saved with a NULL
+// parent — silently, since the create itself succeeds.
+const pageParams = inject<Record<string, unknown>>('pageParams', {});
+
+// The modal's params win on a key collision: they name the exact row that
+// opened this form, which is more specific than the page it sits on.
+const submitParams = computed(() => ({
+    ...pageParams,
+    ...(modalParams?.value ?? {}),
+}));
+
 // When rendered inside a modal, drop the form's own card chrome — the modal
 // already supplies the border + background + padding. Without this the user
 // sees a "card inside a card" with an awkward gap between the two surfaces.
@@ -129,16 +144,40 @@ const renderedFields = computed<RenderedField[]>(() => {
         .filter((f): f is RenderedField => f !== null);
 });
 
+/**
+ * The record an edit form opened on, when the modal that opened it carried one.
+ *
+ * The server seeds `data.form.defaults` whenever the record id is knowable at
+ * render time, but a modal opened from a table row only learns its id on the
+ * click — so the row hands its own values over in the open_modal params. Those
+ * values already reached this browser to be drawn in the table, and the role's
+ * read-hidden fields were stripped before they did.
+ */
+const modalRecord = computed<Record<string, unknown>>(() => {
+    const record = modalParams?.value?.record;
+    return record !== null &&
+        typeof record === 'object' &&
+        !Array.isArray(record)
+        ? (record as Record<string, unknown>)
+        : {};
+});
+
 const formData = ref<Record<string, unknown>>(initialState());
+// What the form opened with. An edit submits the DIFFERENCE against this, so
+// keep it as the pristine copy — never the same object as formData.
+const pristine = ref<Record<string, unknown>>({ ...formData.value });
 const fieldErrors = ref<Record<string, string[]>>({});
 const submitting = ref(false);
 
 function initialState(): Record<string, unknown> {
     const state: Record<string, unknown> = {};
-    const defaults = props.data?.form?.defaults ?? {};
+    const seed =
+        props.block.mode === 'edit'
+            ? { ...modalRecord.value, ...(props.data?.form?.defaults ?? {}) }
+            : (props.data?.form?.defaults ?? {});
     for (const f of renderedFields.value) {
         state[f.slug] =
-            f.slug in defaults ? defaults[f.slug] : initialFieldValue(f.field);
+            f.slug in seed ? seed[f.slug] : initialFieldValue(f.field);
     }
     return state;
 }
@@ -171,6 +210,21 @@ function isEmpty(value: unknown): boolean {
     );
 }
 
+/**
+ * Whether a field still holds what it opened with — the test that decides
+ * whether an edit sends it at all.
+ *
+ * Two empties count as equal: a stored null reaches an input that binds it as
+ * '', and calling that a change would post an empty write for every untouched
+ * optional field, which is exactly the noise this is here to avoid. Emptying a
+ * field that HELD something is a real change and still travels. Structured
+ * values (multi-selects, date ranges) compare by shape.
+ */
+function isUnchanged(value: unknown, before: unknown): boolean {
+    if (isEmpty(value) && isEmpty(before)) return true;
+    return JSON.stringify(value) === JSON.stringify(before);
+}
+
 async function submit() {
     if (submitting.value) return;
     fieldErrors.value = {};
@@ -192,15 +246,25 @@ async function submit() {
 
     // Only submit values for currently-visible fields; hidden fields are
     // dropped so a conditionally-hidden field never writes a stale value.
+    //
+    // An EDIT submits only what the user actually changed. update_record merges
+    // (it touches the keys it is sent and leaves the rest), so sending the whole
+    // form would rewrite every field with whatever this browser happened to hold
+    // — blanking anything it never loaded, and clobbering a colleague's
+    // concurrent edit to a field this user never looked at. Clearing a field on
+    // purpose still travels: it changed.
     const visibleSlugs = new Set(visibleFields.value.map((f) => f.slug));
+    const editing = props.block.mode === 'edit';
     const payload: Record<string, unknown> = {};
     for (const [slug, value] of Object.entries(formData.value)) {
-        if (visibleSlugs.has(slug)) payload[slug] = value;
+        if (!visibleSlugs.has(slug)) continue;
+        if (editing && isUnchanged(value, pristine.value[slug])) continue;
+        payload[slug] = value;
     }
 
     const result = await execute(
         (props.block.on_submit ?? []) as RuntimeAction[],
-        { appSlug, form: payload, params: modalParams?.value ?? {} },
+        { appSlug, form: payload, params: submitParams.value },
     );
 
     if (!result.ok && result.fieldErrors) {
@@ -214,7 +278,7 @@ async function cancel() {
     await execute((props.block.on_cancel ?? []) as RuntimeAction[], {
         appSlug,
         form: { ...formData.value },
-        params: modalParams?.value ?? {},
+        params: submitParams.value,
     });
 }
 </script>

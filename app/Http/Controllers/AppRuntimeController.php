@@ -133,7 +133,7 @@ class AppRuntimeController extends Controller
         // data — a hidden block's data must never reach the wire. Gated on the
         // role AND, when set, the `expression` evaluated against this context
         // (e.g. show the cart only when {{params.order}} is set).
-        $page['blocks'] = $this->visibility->visibleBlocks($page['blocks'] ?? [], $access, $context);
+        $page['blocks'] = $this->visibility->visibleBlocks($page['blocks'] ?? [], $access, $context, $manifest['objects'] ?? []);
 
         // Effective settings = manifest settings with the org Brandbook filling any
         // unset brand value (live fallback); the app's own choices win.

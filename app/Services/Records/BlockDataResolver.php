@@ -203,7 +203,7 @@ class BlockDataResolver
         }
 
         if ($block['type'] === 'form' || $block['type'] === 'multi_step_form') {
-            return $this->resolveFormBlock($block, $manifest, $context);
+            return $this->resolveFormBlock($app, $block, $manifest, $context);
         }
 
         if ($block['type'] === 'record_detail') {
@@ -271,14 +271,25 @@ class BlockDataResolver
      * @param  array<string, mixed>  $context
      * @return array{form: array{defaults: array<string, mixed>, readonly: array<string, bool>}}|null
      */
-    private function resolveFormBlock(array $block, array $manifest, array $context): ?array
+    private function resolveFormBlock(App $app, array $block, array $manifest, array $context): ?array
     {
         $object = $this->findObject($manifest, $block['object_id'] ?? null);
         if ($object === null) {
             return null;
         }
 
-        $defaults = [];
+        // An EDIT form opens on a record, so its initial values are that
+        // record's — resolvable here whenever the id is knowable at render time
+        // (a detail page's {{params.id}}). A form whose id only exists once a
+        // control hands it over (a modal opened from a row) resolves to nothing
+        // and is seeded client-side instead, from the row that opened it.
+        //
+        // The record wins over `default_expression`: a default is what a NEW
+        // record starts as, and overriding a stored value with one would
+        // silently rewrite the row the moment someone pressed save.
+        $defaults = ($block['mode'] ?? null) === 'edit'
+            ? $this->editingRecordData($app, $block, $manifest, $context)
+            : [];
         $readonly = [];
 
         foreach ($this->formFields($block) as $formField) {
@@ -287,7 +298,7 @@ class BlockDataResolver
                 continue;
             }
 
-            if (isset($formField['default_expression'])) {
+            if (isset($formField['default_expression']) && ! array_key_exists($slug, $defaults)) {
                 $defaults[$slug] = $this->expressions->resolve($formField['default_expression'], $context);
             }
             if (isset($formField['readonly_expression'])) {
@@ -300,6 +311,39 @@ class BlockDataResolver
         }
 
         return ['form' => ['defaults' => $defaults, 'readonly' => $readonly]];
+    }
+
+    /**
+     * The stored values of the record an edit form is editing, keyed by slug,
+     * or [] when the block's record id is not resolvable at render time.
+     *
+     * Read through the same row-filter-aware finder the rest of the runtime
+     * uses, with the role's read-hidden fields stripped — so a form can never
+     * seed itself with a value its user is not allowed to see.
+     *
+     * @param  array<string, mixed>  $block
+     * @param  array<string, mixed>  $manifest
+     * @param  array<string, mixed>  $context
+     * @return array<string, mixed>
+     */
+    private function editingRecordData(App $app, array $block, array $manifest, array $context): array
+    {
+        $recordId = $this->expressions->resolve($block['record_id_expression'] ?? '', $context);
+        if (! is_string($recordId) || $recordId === '') {
+            return [];
+        }
+
+        $record = $this->records->find($app, $block['object_id'], $recordId, $manifest, $context);
+        if ($record === null) {
+            return [];
+        }
+
+        $data = $record->data ?? [];
+        foreach ($this->hiddenSlugsFor($context, $block['object_id']) as $slug) {
+            unset($data[$slug]);
+        }
+
+        return $data;
     }
 
     /**
