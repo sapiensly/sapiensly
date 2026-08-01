@@ -162,13 +162,10 @@ function formatDate(value: string | null): string {
                 </div>
 
                 <div
-                    class="flex flex-wrap items-center gap-2 rounded-xs border border-accent-blue/40 bg-accent-blue/5 px-3 py-2"
+                    class="rounded-xs border border-accent-blue/40 bg-accent-blue/5 px-3 py-2"
                 >
                     <span class="font-mono text-[13px] text-ink">
                         platform:admin
-                    </span>
-                    <span class="text-xs text-ink-muted">
-                        {{ t('admin.mcp.create.fixed_ability') }}
                     </span>
                 </div>
 

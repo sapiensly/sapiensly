@@ -3171,7 +3171,6 @@
     "apps.builder.wireframe.mode_inspiration": "Inspiration",
     "apps.builder.wireframe.mode_inspiration_hint": "Build an app that works like this one: objects, pages and blocks, taking the layout and the look as a reference.",
     "admin.mcp.create.endpoint_label": "Endpoint — no organization in the URL",
-    "admin.mcp.create.fixed_ability": "The only ability a token issued here can carry.",
     "admin.mcp.create.name_placeholder": "e.g. Ed · MacStudio",
     "admin.mcp.existing.no_organization": "no organization"
 }
