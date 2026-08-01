@@ -45,10 +45,30 @@ provide('modalParams', modalParams);
 // double-card looks weird (a "card inside a card" with a white frame around).
 provide('insideModal', true);
 
+/**
+ * Warm the heavy children before the click, not after it.
+ *
+ * Every block renders through defineAsyncComponent, so a modal's contents are
+ * only fetched once it opens — which is why the dialog appeared as a bare title
+ * for a moment and then filled in. The button that opens it is already on
+ * screen, so the fetch can happen while nobody is waiting on it.
+ *
+ * Deliberately not forceMount on the dialog: the form has to REMOUNT on each
+ * open to read the params it was opened with (that is how an edit form learns
+ * which record it is editing). Warming the module graph gets the speed without
+ * touching that.
+ */
+function warmContents(): void {
+    const types = new Set((props.block.blocks ?? []).map((b) => b.type));
+    if (types.has('form')) void import('./BlockForm.vue');
+    if (types.has('multi_step_form')) void import('./BlockMultiStepForm.vue');
+}
+
 let offOpen: () => void = () => {};
 let offClose: () => void = () => {};
 
 onMounted(() => {
+    warmContents();
     offOpen = modalBus.on('open', (id, params) => {
         if (id === props.block.id) {
             modalParams.value = params ?? {};

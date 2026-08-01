@@ -1,9 +1,20 @@
 <script setup lang="ts">
 import axios from 'axios';
-import { computed, ref } from 'vue';
+import { computed, defineAsyncComponent, ref } from 'vue';
 import type { FieldDef } from '../types/manifest';
 import { themeTokens, useRuntimeTheme } from '../useRuntimeTheme';
-import RichTextEditor from './RichTextEditor.vue';
+/**
+ * Loaded only by a form that actually has a rich_text field.
+ *
+ * Imported statically it rode along with EVERY form: opening a modal to type a
+ * subject and an email pulled the editor, tiptap's starter kit, tiptap's Vue
+ * bindings and their chunks — six of the ten modules the dialog fetched, none
+ * of which it could use. That is the pause between a modal's title appearing
+ * and its fields showing up.
+ */
+const RichTextEditor = defineAsyncComponent(
+    () => import('./RichTextEditor.vue'),
+);
 
 interface UploadedFile {
     file_id: string;
