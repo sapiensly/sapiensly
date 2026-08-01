@@ -33,6 +33,12 @@ class AppScaffolder
     private const MAX_OBJECTS = 6;
 
     /**
+     * Figures the description can ask for by name. Past four the dashboard
+     * stops leading with an answer and becomes a wall of numbers.
+     */
+    private const MAX_FOCUS_MEASURES = 4;
+
+    /**
      * A real fact table legitimately runs wide (a weekly-ops object had 21 columns).
      * The old cap of 12 silently dropped the rest, so an add_object that asked for 21
      * fields saved 12 with a success response and no warning — the surviving loop only
@@ -146,7 +152,7 @@ class AppScaffolder
     private const SYSTEM = <<<'SYS'
         You design simple internal business apps as a set of data objects (like database tables) with fields, and the links between them.
         Given a description, respond with ONLY a single minified JSON object — no markdown, no code fences, no commentary — using exactly this schema:
-        {"objects":[{"name":string,"slug":string,"fields":[{"name":string,"slug":string,"type":"string"|"email"|"url"|"phone"|"long_text"|"number"|"currency"|"boolean"|"date"|"datetime"|"single_select"|"multi_select"|"rating","options":[{"value":string,"label":string}]|null}]}],"links":[{"from":string,"to":string,"name":string,"type":"belongs_to"|"many_to_many"}]|null}
+        {"objects":[{"name":string,"slug":string,"fields":[{"name":string,"slug":string,"type":"string"|"email"|"url"|"phone"|"long_text"|"number"|"currency"|"boolean"|"date"|"datetime"|"single_select"|"multi_select"|"rating","options":[{"value":string,"label":string}]|null}]}],"links":[{"from":string,"to":string,"name":string,"type":"belongs_to"|"many_to_many"}]|null,"focus":{"objects":[string],"measures":[{"object":string,"field":string,"aggregation":"sum"|"avg"|"count"}]}|null}
         Rules:
         - objects: the main entities the app tracks (e.g. for a content engine: Ideas, Drafts, Published). At most 6. Each needs a human `name` and a snake_case `slug`.
         - fields: the columns of each object. At most 12 per object. Each needs a `name`, a snake_case `slug`, and a `type`. Give every object a short text title/name field FIRST.
@@ -156,6 +162,7 @@ class AppScaffolder
         - links: relationships between objects. Default `type` "belongs_to" means "a <from> belongs to one <to>" (e.g. {"from":"drafts","to":"ideas","name":"idea"} = each Draft belongs to one Idea). Use `type` "many_to_many" for a symmetric link where BOTH sides hold many (e.g. {"from":"scenes","to":"cast","type":"many_to_many"} = a scene features many cast AND a cast appears in many scenes) — give it once per pair, it builds a picker on both. `from`/`to` are object slugs; `name` is the human label on the <from> side. Use null when there are no relationships. At most 8.
         - NEVER restate a relationship as a field: do not add a string/number field that holds a related record's name or id (e.g. on a line item do NOT add a "product"/"category" text field) — model it with a link instead. The relation, its picker, child counts and totals are generated for you.
         - Model line-item / amount structures as a parent with a child linked to it (e.g. an order/ticket with its line items, each line a currency field): the child's amount then rolls up to a total on the parent automatically. Do not add a manual "total" field to the parent — it is derived.
+        - focus: what the person asked to SEE, which is not the same as what the app stores. Read the description for the questions it wants answered ("I need to know what is owed this month", "which incidents are still open") and name them here. `objects` lists the object slugs those questions are about, most important first — the dashboard is built around the first one and spends its charts in this order. `measures` names the specific figures asked for: `object` and `field` are slugs YOU defined above (a `field` must exist on that `object`), `aggregation` is "sum"/"avg" for a number or currency field and "count" for how many records. At most 4 measures. Use null when the description only describes what to store and asks for nothing in particular — do not invent an interest the description does not show.
         - Write names/labels in the SAME language as the description.
         SYS;
 
@@ -315,7 +322,87 @@ class AppScaffolder
         return [
             'objects' => $objects,
             'links' => $this->normalizeLinks($decoded['links'] ?? null, $usedObjectSlugs),
+            'focus' => $this->normalizeFocus($decoded['focus'] ?? null, $objects, $coercions),
         ];
+    }
+
+    /**
+     * What the description asked to SEE, kept only where it resolves.
+     *
+     * The dashboard used to be derived from structure alone, so a request for
+     * "what is owed this month and which incidents are open" produced one that
+     * mentioned neither Pagos nor Incidencias — every object got a count, and
+     * the charts, which are capped, were spent on whatever came first. Reading
+     * intent is the one part of this the model is better at than a rule.
+     *
+     * Composition stays here, and so does the truth: a focus naming an object
+     * or field that does not exist is dropped and reported, never guessed at.
+     * A model that hallucinates a `monto_total` it never defined must not
+     * silently produce a KPI over nothing.
+     *
+     * @param  list<array{name: string, slug: string, fields: list<array<string, mixed>>}>  $objects
+     * @param  list<string>  $coercions
+     * @return array{objects: list<string>, measures: list<array{object: string, field: string, aggregation: string}>}
+     */
+    private function normalizeFocus(mixed $raw, array $objects, array &$coercions): array
+    {
+        $empty = ['objects' => [], 'measures' => []];
+        if (! is_array($raw)) {
+            return $empty;
+        }
+
+        $fieldsBySlug = [];
+        foreach ($objects as $object) {
+            $fieldsBySlug[$object['slug']] = collect($object['fields'])
+                ->keyBy(fn (array $f): string => (string) $f['slug'])
+                ->all();
+        }
+
+        $focusObjects = [];
+        foreach (is_array($raw['objects'] ?? null) ? $raw['objects'] : [] as $slug) {
+            $slug = is_string($slug) ? $slug : '';
+            if (isset($fieldsBySlug[$slug]) && ! in_array($slug, $focusObjects, true)) {
+                $focusObjects[] = $slug;
+            }
+        }
+
+        $measures = [];
+        $unresolved = [];
+        foreach (is_array($raw['measures'] ?? null) ? $raw['measures'] : [] as $measure) {
+            if (! is_array($measure) || count($measures) >= self::MAX_FOCUS_MEASURES) {
+                continue;
+            }
+
+            $objectSlug = trim((string) ($measure['object'] ?? ''));
+            $fieldSlug = trim((string) ($measure['field'] ?? ''));
+            $aggregation = trim((string) ($measure['aggregation'] ?? 'count'));
+            $field = $fieldsBySlug[$objectSlug][$fieldSlug] ?? null;
+
+            if ($field === null) {
+                $unresolved[] = $objectSlug.'.'.$fieldSlug;
+
+                continue;
+            }
+            if (! in_array($aggregation, ['sum', 'avg', 'count'], true)) {
+                $aggregation = 'count';
+            }
+            // Summing a name is not a figure. Demote rather than drop: the
+            // reader still asked about this field, and "how many" is an
+            // answerable version of the question.
+            if (in_array($aggregation, ['sum', 'avg'], true)
+                && ! in_array($field['type'] ?? null, ['number', 'currency', 'rating'], true)) {
+                $aggregation = 'count';
+            }
+
+            $measures[] = ['object' => $objectSlug, 'field' => $fieldSlug, 'aggregation' => $aggregation];
+        }
+
+        if ($unresolved !== []) {
+            $coercions[] = 'The dashboard was asked to show '.implode(', ', $unresolved)
+                .', which no object defines — left out rather than guessed at.';
+        }
+
+        return ['objects' => $focusObjects, 'measures' => $measures];
     }
 
     /**
@@ -538,6 +625,12 @@ class AppScaffolder
     {
         $currency = (string) ($base['settings']['default_currency'] ?? 'MXN');
         $lang = self::langForLocale($base['settings']['default_locale'] ?? null);
+        // Absent on a spec assembled by hand (the in-app builder's cold start,
+        // the templates, every existing test) — those keep the structural
+        // dashboard they had.
+        $focus = is_array($spec['focus'] ?? null)
+            ? $spec['focus'] + ['objects' => [], 'measures' => []]
+            : ['objects' => [], 'measures' => []];
 
         // Pass 1: build every object so all ids exist before relations wire them.
         $built = [];
@@ -630,7 +723,12 @@ class AppScaffolder
         $forDashboard = [];
         foreach ($built as $i => $entry) {
             $objects[] = $entry['def'];
-            $forDashboard[] = ['name' => $entry['def']['name'], 'id' => $entry['def']['id'], 'fieldIndex' => $entry['pageFields']];
+            $forDashboard[] = [
+                'name' => $entry['def']['name'],
+                'id' => $entry['def']['id'],
+                'slug' => $entry['def']['slug'],
+                'fieldIndex' => $entry['pageFields'],
+            ];
 
             if ($this->isLineItem($entry['def'], $relationsByChild[$i] ?? [], $lang)) {
                 continue;
@@ -674,7 +772,7 @@ class AppScaffolder
         // the app's home. Only worth it once there is something to summarise.
         if ($forDashboard !== []) {
             $dashboardSlug = $this->uniqueSlug('dashboard', array_column($pages, 'slug'), 'dashboard');
-            array_unshift($pages, $this->buildDashboard($base['name'] ?? 'Dashboard', $dashboardSlug, $forDashboard, $lang));
+            array_unshift($pages, $this->buildDashboard($base['name'] ?? 'Dashboard', $dashboardSlug, $forDashboard, $lang, $focus));
         }
 
         $base['objects'] = $objects;
@@ -1530,33 +1628,179 @@ class AppScaffolder
      * @param  array<int, array<string, mixed>>  $objects
      * @return array<string, mixed>|null
      */
+    /**
+     * The app's operational core — the object the dashboard is about.
+     *
+     * Taking the first object that happens to have a status field made this a
+     * question of who the author listed first. In a rentals app that answered
+     * "Inmuebles": a catalogue of properties, which does have a status, sitting
+     * above the Contratos that are the actual work.
+     *
+     * Score the signals instead. Records that move through states are the work
+     * (a catalogue's "status" is usually one too, so this alone is not enough).
+     * What separates a transaction from the reference data it cites is that the
+     * transaction POINTS at things — a contract names a property and a tenant —
+     * while a catalogue is only pointed at. A deadline says the records happen
+     * in time rather than simply existing, and money says someone is counting.
+     *
+     * Ties keep the author's order, so a genuinely flat model is unchanged.
+     *
+     * @param  array<int, array{id: string, name: string, fieldIndex: array<int, array<string, mixed>>}>  $objects
+     */
     private function primaryObject(array $objects, string $lang): ?array
     {
+        $best = null;
+        $bestScore = 0;
+
         foreach ($objects as $object) {
-            if ($this->statusField($object['fieldIndex'], $lang) !== null) {
-                return $object;
+            $index = $object['fieldIndex'];
+            $score = 0;
+
+            if ($this->statusField($index, $lang) !== null) {
+                $score += 3;
+            }
+
+            // Outgoing belongs-to links. The parent side of a relation reaches
+            // its children through a rollup, so a plain relation in the index
+            // is this object citing another.
+            $cites = count(array_filter(
+                $index,
+                fn (array $f): bool => ($f['type'] ?? null) === 'relation',
+            ));
+            $score += min($cites, 2);
+
+            foreach ($index as $field) {
+                if (in_array($field['type'] ?? null, ['date', 'datetime'], true)
+                    && $this->isScheduleDate($field, $lang)) {
+                    $score += 2;
+                    break;
+                }
+            }
+
+            if ($this->firstFieldOfType($index, 'currency') !== null) {
+                $score += 1;
+            }
+
+            if ($score > $bestScore) {
+                $best = $object;
+                $bestScore = $score;
             }
         }
 
-        return $objects[0] ?? null;
+        return $best ?? ($objects[0] ?? null);
     }
 
-    private function buildDashboard(string $appName, string $slug, array $objects, string $lang = 'en'): array
+    /**
+     * Put the objects the description cared about at the front, keeping the
+     * structural order among the rest. The dashboard spends its charts down
+     * this list, and they are capped — which is how an app asked for payment
+     * collection and open incidents got a dashboard mentioning neither.
+     *
+     * @param  list<array<string, mixed>>  $objects
+     * @param  list<string>  $focusSlugs
+     * @return list<array<string, mixed>>
+     */
+    private function orderByFocus(array $objects, array $focusSlugs): array
     {
-        // The app's operational core: the object whose records move through a
-        // status. That is what a dashboard is about, and what earns the money
-        // figures and the trend line — an app tracking work orders wants "how
-        // much are we billing", not "how many depots do we have".
-        $primary = $this->primaryObject($objects, $lang);
+        if ($focusSlugs === []) {
+            return $objects;
+        }
 
-        // Money first, because a figure beats a count, then counts — the
-        // primary object's ahead of the rest.
+        $bySlug = [];
+        foreach ($objects as $object) {
+            $bySlug[(string) ($object['slug'] ?? '')] = $object;
+        }
+
+        $front = [];
+        foreach ($focusSlugs as $slug) {
+            if (isset($bySlug[$slug])) {
+                $front[] = $bySlug[$slug];
+                unset($bySlug[$slug]);
+            }
+        }
+
+        return $front === [] ? $objects : [...$front, ...array_values($bySlug)];
+    }
+
+    /**
+     * The figures the description named, as KPI items.
+     *
+     * Everything here was already checked against the objects that exist —
+     * normalizeFocus drops what does not resolve and says so — but the ids only
+     * exist once the objects are built, so the slugs are looked up again here.
+     * Anything that still fails to resolve is skipped rather than emitted
+     * pointing at nothing.
+     *
+     * @param  list<array<string, mixed>>  $objects
+     * @param  list<array{object: string, field: string, aggregation: string}>  $measures
+     * @return list<array<string, mixed>>
+     */
+    private function focusMeasureItems(array $objects, array $measures, string $lang): array
+    {
         $items = [];
+        foreach ($measures as $measure) {
+            $object = collect($objects)->firstWhere('slug', $measure['object']);
+            if ($object === null) {
+                continue;
+            }
+            $field = collect($object['fieldIndex'])->firstWhere('slug', $measure['field']);
+            if ($field === null) {
+                continue;
+            }
+
+            $isMoney = ($field['type'] ?? null) === 'currency';
+            $measureName = $this->moneyMeasureName(
+                $lang,
+                (string) ($field['name'] ?? ''),
+                (string) $object['name'],
+            );
+
+            $items[] = array_filter([
+                'id' => $this->id('itm'),
+                'label' => match ($measure['aggregation']) {
+                    'sum' => $this->labelTotal($lang, $measureName),
+                    'avg' => $this->labelAverage($lang, $measureName),
+                    default => (string) $object['name'],
+                },
+                'query' => ['object_id' => $object['id']],
+                'aggregation' => $measure['aggregation'],
+                // A count is over records, not over a column.
+                'field_id' => $measure['aggregation'] === 'count' ? null : $field['id'],
+                'format' => $isMoney && $measure['aggregation'] !== 'count' ? 'currency' : null,
+            ], fn ($v): bool => $v !== null);
+        }
+
+        return $items;
+    }
+
+    private function buildDashboard(string $appName, string $slug, array $objects, string $lang = 'en', array $focus = ['objects' => [], 'measures' => []]): array
+    {
+        // What the description asked to see comes first, when it named
+        // anything; the structural read is the answer when it did not.
+        $objects = $this->orderByFocus($objects, $focus['objects'] ?? []);
+
+        // The app's operational core: what earns the money figures and the
+        // trend line — an app tracking work orders wants "how much are we
+        // billing", not "how many depots do we have".
+        $primary = ($focus['objects'] ?? []) !== []
+            ? $objects[0]
+            : $this->primaryObject($objects, $lang);
+
+        // The figures the description asked for by name, ahead of the derived
+        // ones: someone who wrote "I need to know what is owed this month"
+        // should find that at the top, not a count of every object.
+        $items = $this->focusMeasureItems($objects, $focus['measures'] ?? [], $lang);
         $primaryCurrency = $primary !== null
             ? $this->firstFieldOfType($primary['fieldIndex'], 'currency')
             : null;
 
-        if ($primary !== null && $primaryCurrency !== null) {
+        $alreadyAsked = fn (string $objectId, string $fieldId, string $aggregation): bool => collect($items)
+            ->contains(fn (array $i): bool => ($i['query']['object_id'] ?? null) === $objectId
+                && ($i['field_id'] ?? null) === $fieldId
+                && ($i['aggregation'] ?? null) === $aggregation);
+
+        if ($primary !== null && $primaryCurrency !== null
+            && ! $alreadyAsked($primary['id'], $primaryCurrency['id'], 'sum')) {
             // The measure, not the object: a money KPI sits next to a count KPI
             // for the very same object, and naming both after the object leaves
             // "Total Inmuebles $308,500.00" above "Inmuebles 6".
@@ -1588,6 +1832,11 @@ class AppScaffolder
             : [$primary, ...array_filter($objects, fn (array $o): bool => $o['id'] !== $primary['id'])];
 
         foreach ($ordered as $object) {
+            // A count the description already asked for is on the board.
+            if (collect($items)->contains(fn (array $i): bool => ($i['aggregation'] ?? null) === 'count'
+                && ($i['query']['object_id'] ?? null) === $object['id'])) {
+                continue;
+            }
             $items[] = [
                 'id' => $this->id('itm'),
                 'label' => $object['name'],
@@ -3667,10 +3916,22 @@ class AppScaffolder
     private function moneyMeasureName(string $lang, string $fieldName, string $objectName): string
     {
         $fieldName = trim($fieldName);
-        $generic = $fieldName === ''
-            || SemanticLexicon::for($lang)->matches('amount', $fieldName);
+        $lex = SemanticLexicon::for($lang);
 
-        return $generic ? $objectName : $fieldName;
+        // Bare "Importe", "Monto", "Subtotal": the word for money and nothing
+        // else, so it names no measure. Qualified, it does — "Monto Pagado"
+        // says which money, and deserves the label.
+        $bareAmountWord = ! str_contains($fieldName, ' ')
+            && $lex->matches('amount', $fieldName);
+
+        // "Costo Total" prefixed reads "Total Costo Total". The word has to be
+        // whole: "Subtotal" is not this case, it is the one above.
+        $totalWord = preg_quote($lex->label('total_word'), '/');
+        $stutters = preg_match('/\b'.$totalWord.'\b/iu', $fieldName) === 1;
+
+        return $fieldName === '' || $bareAmountWord || $stutters
+            ? $objectName
+            : $fieldName;
     }
 
     private function labelAverage(string $lang, string $name): string

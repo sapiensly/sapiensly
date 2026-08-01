@@ -651,6 +651,173 @@ it('keeps a wide object scannable by folding columns past the sixth', function (
         ->and($shown)->not->toContain('notas');
 });
 
+it('builds the dashboard around the work, not around the catalogue', function () {
+    // The rentals shape that exposed this: Inmuebles is a catalogue of
+    // properties and it does have an "Estado", so listing it first won it the
+    // dashboard. Contratos is what the business actually runs on — it cites a
+    // property and a tenant, it has a term, and it carries the rent.
+    $manifest = app(AppScaffolder::class)->assemble([
+        'schema_version' => '1.0.0',
+        'id' => 'app_scaffold_q7',
+        'slug' => 'arren2',
+        'name' => 'Arrendamientos',
+        'version' => 1,
+        'objects' => [],
+        'pages' => [],
+        'permissions' => ['roles' => [['id' => 'rol_admin00001', 'slug' => 'admin', 'name' => 'Admin', 'is_default' => true]]],
+        'settings' => ['default_locale' => 'es-MX', 'default_currency' => 'MXN'],
+    ], [
+        'objects' => [
+            ['name' => 'Inmuebles', 'slug' => 'inmuebles', 'fields' => [
+                ['name' => 'Direccion', 'slug' => 'direccion', 'type' => 'string', 'options' => null],
+                ['name' => 'Estado', 'slug' => 'estado', 'type' => 'single_select', 'options' => [
+                    ['value' => 'disponible', 'label' => 'Disponible'],
+                    ['value' => 'rentado', 'label' => 'Rentado'],
+                ]],
+                ['name' => 'Renta Mensual', 'slug' => 'renta_mensual', 'type' => 'currency', 'options' => null],
+            ]],
+            ['name' => 'Inquilinos', 'slug' => 'inquilinos', 'fields' => [
+                ['name' => 'Nombre', 'slug' => 'nombre', 'type' => 'string', 'options' => null],
+            ]],
+            ['name' => 'Contratos', 'slug' => 'contratos', 'fields' => [
+                ['name' => 'Folio', 'slug' => 'folio', 'type' => 'string', 'options' => null],
+                ['name' => 'Fecha de Vencimiento', 'slug' => 'fecha_vencimiento', 'type' => 'date', 'options' => null],
+                ['name' => 'Renta Pactada', 'slug' => 'renta_pactada', 'type' => 'currency', 'options' => null],
+                ['name' => 'Estado', 'slug' => 'estado', 'type' => 'single_select', 'options' => [
+                    ['value' => 'vigente', 'label' => 'Vigente'],
+                    ['value' => 'vencido', 'label' => 'Vencido'],
+                ]],
+            ]],
+        ],
+        'links' => [
+            ['from' => 'contratos', 'to' => 'inmuebles', 'name' => 'inmueble'],
+            ['from' => 'contratos', 'to' => 'inquilinos', 'name' => 'inquilino'],
+        ],
+    ]);
+
+    $metrics = blockByType(pageBySlug($manifest, 'dashboard'), 'metric_grid');
+    $sum = collect($metrics['items'])->firstWhere('aggregation', 'sum');
+
+    $contratos = collect($manifest['objects'])->firstWhere('slug', 'contratos');
+    expect($sum['query']['object_id'])->toBe($contratos['id'])
+        ->and($sum['label'])->toBe('Total Renta Pactada');
+
+    // The count KPIs lead with it too, ahead of the catalogue it cites.
+    expect(collect($metrics['items'])->pluck('label')->first(fn ($l) => in_array($l, ['Contratos', 'Inmuebles'], true)))
+        ->toBe('Contratos');
+});
+
+/**
+ * The spec for the intent tests: the rentals model, plus whatever `focus` the
+ * case is exercising.
+ *
+ * @return array<string, mixed>
+ */
+function scaffoldWithFocus(?array $focus): array
+{
+    return app(AppScaffolder::class)->assemble([
+        'schema_version' => '1.0.0',
+        'id' => 'app_scaffold_q6',
+        'slug' => 'arren3',
+        'name' => 'Arrendamientos',
+        'version' => 1,
+        'objects' => [],
+        'pages' => [],
+        'permissions' => ['roles' => [['id' => 'rol_admin00001', 'slug' => 'admin', 'name' => 'Admin', 'is_default' => true]]],
+        'settings' => ['default_locale' => 'es-MX', 'default_currency' => 'MXN'],
+    ], [
+        'objects' => [
+            ['name' => 'Inmuebles', 'slug' => 'inmuebles', 'fields' => [
+                ['name' => 'Direccion', 'slug' => 'direccion', 'type' => 'string', 'options' => null],
+                ['name' => 'Estado', 'slug' => 'estado', 'type' => 'single_select', 'options' => [
+                    ['value' => 'disponible', 'label' => 'Disponible'],
+                    ['value' => 'rentado', 'label' => 'Rentado'],
+                ]],
+                ['name' => 'Renta Mensual', 'slug' => 'renta_mensual', 'type' => 'currency', 'options' => null],
+            ]],
+            ['name' => 'Pagos', 'slug' => 'pagos', 'fields' => [
+                ['name' => 'Folio', 'slug' => 'folio', 'type' => 'string', 'options' => null],
+                ['name' => 'Monto Pagado', 'slug' => 'monto_pagado', 'type' => 'currency', 'options' => null],
+                ['name' => 'Fecha Limite de Pago', 'slug' => 'fecha_limite', 'type' => 'date', 'options' => null],
+            ]],
+        ],
+        'links' => [['from' => 'pagos', 'to' => 'inmuebles', 'name' => 'inmueble']],
+        'focus' => $focus,
+    ]);
+}
+
+it('leads the dashboard with the figure the description asked for', function () {
+    // "I need to know what is owed this month." The structural read would lead
+    // with Inmuebles — it has a status and money — and the request would go
+    // unanswered on the page built to answer it.
+    $manifest = scaffoldWithFocus([
+        'objects' => ['pagos', 'inmuebles'],
+        'measures' => [['object' => 'pagos', 'field' => 'monto_pagado', 'aggregation' => 'sum']],
+    ]);
+
+    $items = collect(blockByType(pageBySlug($manifest, 'dashboard'), 'metric_grid')['items']);
+    $pagos = collect($manifest['objects'])->firstWhere('slug', 'pagos');
+
+    expect($items->first()['label'])->toBe('Total Monto Pagado')
+        ->and($items->first()['query']['object_id'])->toBe($pagos['id'])
+        ->and($items->first()['format'])->toBe('currency');
+
+    // Asked for once, shown once: the derived money KPI does not repeat it.
+    expect($items->filter(fn ($i) => ($i['aggregation'] ?? null) === 'sum'))->toHaveCount(1);
+});
+
+it('ignores a figure over a field no object defines, and says so', function () {
+    // The failure mode that makes a model-written dashboard untrustworthy: a
+    // KPI pointing at a column that was never created.
+    $coercions = [];
+    $spec = app(AppScaffolder::class)->normalizeSpec([
+        'objects' => [['name' => 'Pagos', 'slug' => 'pagos', 'fields' => [
+            ['name' => 'Monto', 'slug' => 'monto', 'type' => 'currency', 'options' => null],
+        ]]],
+        'links' => [],
+        'focus' => [
+            'objects' => ['pagos', 'inventado'],
+            'measures' => [
+                ['object' => 'pagos', 'field' => 'monto_total', 'aggregation' => 'sum'],
+                ['object' => 'pagos', 'field' => 'monto', 'aggregation' => 'sum'],
+            ],
+        ],
+    ], $coercions);
+
+    expect($spec['focus']['objects'])->toBe(['pagos'])
+        ->and($spec['focus']['measures'])->toBe([
+            ['object' => 'pagos', 'field' => 'monto', 'aggregation' => 'sum'],
+        ])
+        ->and(implode(' ', $coercions))->toContain('pagos.monto_total');
+});
+
+it('answers a sum over text as a count rather than dropping the question', function () {
+    $coercions = [];
+    $spec = app(AppScaffolder::class)->normalizeSpec([
+        'objects' => [['name' => 'Incidencias', 'slug' => 'incidencias', 'fields' => [
+            ['name' => 'Estado', 'slug' => 'estado', 'type' => 'single_select', 'options' => [
+                ['value' => 'abierta', 'label' => 'Abierta'],
+            ]],
+        ]]],
+        'links' => [],
+        'focus' => ['objects' => [], 'measures' => [
+            ['object' => 'incidencias', 'field' => 'estado', 'aggregation' => 'sum'],
+        ]],
+    ], $coercions);
+
+    expect($spec['focus']['measures'][0]['aggregation'])->toBe('count');
+});
+
+it('leaves the structural dashboard alone when nothing was asked for', function () {
+    $withoutFocus = scaffoldWithFocus(null);
+    $items = collect(blockByType(pageBySlug($withoutFocus, 'dashboard'), 'metric_grid')['items']);
+
+    // Pagos wins on the structural read too here (it cites a property, has a
+    // deadline and carries money), so the point is that the shape is the
+    // derived one: a money total and its average, not a named figure.
+    expect($items->pluck('aggregation')->take(2)->all())->toBe(['sum', 'avg']);
+});
+
 it('links the parent list table to its detail page', function () {
     $manifest = scaffoldWithChild('es-MX');
 
