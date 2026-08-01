@@ -260,8 +260,47 @@ class ManifestValidator
             foreach ($this->filterBarParams($blocks) as $p) {
                 $provided[$p] = true;
             }
-            $this->lintParamBlocks($blocks, "/pages/{$pi}/blocks", $provided, $warnings);
+            $this->lintParamBlocks($blocks, "/pages/{$pi}/blocks", $provided, $warnings, $this->modalInjectedParams($blocks));
         }
+    }
+
+    /**
+     * Params each modal receives from the open_modal actions that target it —
+     * the third way a {{params.X}} gets provided, alongside an inbound link and
+     * a filter_bar. This is the canonical edit pattern: a row action opens a
+     * modal with params:{record_id:"{{row.id}}"} and the edit form inside reads
+     * {{params.record_id}}. Without this the validator flagged that wiring as a
+     * dead dependency and told authors to fix what was already correct.
+     *
+     * Keyed by modal id rather than pooled per page, so a param handed to one
+     * modal does not silently vouch for a different one.
+     *
+     * @param  list<array<string, mixed>>  $blocks
+     * @return array<string, array<string, bool>>
+     */
+    private function modalInjectedParams(array $blocks): array
+    {
+        $map = [];
+        $walk = function (mixed $node) use (&$walk, &$map): void {
+            if (! is_array($node)) {
+                return;
+            }
+            if (($node['type'] ?? null) === 'open_modal'
+                && is_string($node['modal_block_id'] ?? null)
+                && is_array($node['params'] ?? null)) {
+                foreach (array_keys($node['params']) as $param) {
+                    if (is_string($param)) {
+                        $map[$node['modal_block_id']][$param] = true;
+                    }
+                }
+            }
+            foreach ($node as $child) {
+                $walk($child);
+            }
+        };
+        $walk($blocks);
+
+        return $map;
     }
 
     /**
@@ -332,8 +371,9 @@ class ManifestValidator
      * @param  list<array<string, mixed>>  $blocks
      * @param  array<string, bool>  $provided
      * @param  list<ManifestValidationError>  $warnings
+     * @param  array<string, array<string, bool>>  $modalParams
      */
-    private function lintParamBlocks(array $blocks, string $path, array $provided, array &$warnings): void
+    private function lintParamBlocks(array $blocks, string $path, array $provided, array &$warnings, array $modalParams = []): void
     {
         foreach ($blocks as $i => $block) {
             $bp = "{$path}/{$i}";
@@ -361,16 +401,23 @@ class ManifestValidator
                 }
             }
 
+            // Inside a modal, whatever the open_modal actions hand it counts as
+            // provided — for that modal's subtree only.
+            $inner = $provided;
+            if (($block['type'] ?? null) === 'modal' && is_string($block['id'] ?? null)) {
+                $inner = [...$provided, ...($modalParams[$block['id']] ?? [])];
+            }
+
             foreach (['blocks', 'left_blocks', 'right_blocks'] as $key) {
                 if (! empty($block[$key])) {
-                    $this->lintParamBlocks($block[$key], "{$bp}/{$key}", $provided, $warnings);
+                    $this->lintParamBlocks($block[$key], "{$bp}/{$key}", $inner, $warnings, $modalParams);
                 }
             }
             foreach ($block['tabs'] ?? [] as $ti => $tab) {
-                $this->lintParamBlocks($tab['blocks'] ?? [], "{$bp}/tabs/{$ti}/blocks", $provided, $warnings);
+                $this->lintParamBlocks($tab['blocks'] ?? [], "{$bp}/tabs/{$ti}/blocks", $inner, $warnings, $modalParams);
             }
             foreach ($block['sections'] ?? [] as $si => $section) {
-                $this->lintParamBlocks($section['blocks'] ?? [], "{$bp}/sections/{$si}/blocks", $provided, $warnings);
+                $this->lintParamBlocks($section['blocks'] ?? [], "{$bp}/sections/{$si}/blocks", $inner, $warnings, $modalParams);
             }
         }
     }

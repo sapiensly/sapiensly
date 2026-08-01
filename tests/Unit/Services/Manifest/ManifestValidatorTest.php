@@ -3334,6 +3334,100 @@ it('design-lint R3: warns on a param block with no source, but not when guarded'
     expect(designWarnings((new ManifestValidator)->validate($guarded)))->toBeEmpty();
 });
 
+/**
+ * The canonical edit pattern hands a modal the clicked row's id, and the edit
+ * form inside reads it back. The linter used to know only two providers — an
+ * inbound link and a filter_bar — so it flagged that wiring as a dead
+ * dependency and told the author to repair what was already right.
+ */
+it('design-lint R3: a modal form fed by open_modal params is not warned', function () {
+    $m = baseManifest();
+    $obj = $m['objects'][0]['id'];
+    $fld = $m['objects'][0]['fields'][0]['id'];
+    $modalId = id('blk');
+
+    $editModal = [
+        'id' => $modalId, 'type' => 'modal', 'title' => 'Editar',
+        'blocks' => [[
+            'id' => id('blk'), 'type' => 'form', 'object_id' => $obj, 'mode' => 'edit',
+            'record_id_expression' => '{{params.record_id}}',
+            'fields' => [['field_id' => $fld]],
+            'on_submit' => [[
+                'type' => 'update_record', 'object_id' => $obj,
+                'record_id_expression' => '{{params.record_id}}',
+                'values' => ['nombre' => '{{form.nombre}}'],
+            ]],
+        ]],
+    ];
+
+    $table = [
+        'id' => id('blk'), 'type' => 'table', 'data_source' => ['object_id' => $obj],
+        'columns' => [
+            ['id' => id('col'), 'field_id' => $fld],
+            ['id' => id('col'), 'type' => 'action', 'label' => 'Editar', 'on_click' => [
+                ['type' => 'open_modal', 'modal_block_id' => $modalId, 'params' => ['record_id' => '{{row.id}}']],
+            ]],
+        ],
+    ];
+
+    $m['pages'] = [['id' => id('pag'), 'slug' => 'l', 'name' => 'L', 'path' => '/l', 'blocks' => [$editModal, $table]]];
+    expect(designWarnings((new ManifestValidator)->validate($m)))->toBeEmpty();
+});
+
+it('design-lint R3: an open_modal that omits the param leaves the form warned', function () {
+    $m = baseManifest();
+    $obj = $m['objects'][0]['id'];
+    $fld = $m['objects'][0]['fields'][0]['id'];
+    $modalId = id('blk');
+
+    // The button opens the modal but hands it nothing, so the edit form still
+    // has no record to load — exactly the smell this rule exists to catch.
+    $m['pages'] = [['id' => id('pag'), 'slug' => 'l', 'name' => 'L', 'path' => '/l', 'blocks' => [
+        [
+            'id' => $modalId, 'type' => 'modal', 'title' => 'Editar',
+            'blocks' => [[
+                'id' => id('blk'), 'type' => 'form', 'object_id' => $obj, 'mode' => 'edit',
+                'record_id_expression' => '{{params.record_id}}',
+                'fields' => [['field_id' => $fld]],
+            ]],
+        ],
+        ['id' => id('blk'), 'type' => 'button', 'label' => 'Editar', 'on_click' => [
+            ['type' => 'open_modal', 'modal_block_id' => $modalId],
+        ]],
+    ]]];
+
+    expect(designWarnings((new ManifestValidator)->validate($m))->isNotEmpty())->toBeTrue();
+});
+
+it('design-lint R3: params handed to one modal do not vouch for another', function () {
+    $m = baseManifest();
+    $obj = $m['objects'][0]['id'];
+    $fld = $m['objects'][0]['fields'][0]['id'];
+    $wired = id('blk');
+    $orphan = id('blk');
+
+    $modal = fn (string $mid): array => [
+        'id' => $mid, 'type' => 'modal', 'title' => 'Editar',
+        'blocks' => [[
+            'id' => id('blk'), 'type' => 'form', 'object_id' => $obj, 'mode' => 'edit',
+            'record_id_expression' => '{{params.record_id}}',
+            'fields' => [['field_id' => $fld]],
+        ]],
+    ];
+
+    $m['pages'] = [['id' => id('pag'), 'slug' => 'l', 'name' => 'L', 'path' => '/l', 'blocks' => [
+        $modal($wired),
+        $modal($orphan),
+        ['id' => id('blk'), 'type' => 'button', 'label' => 'Editar', 'on_click' => [
+            ['type' => 'open_modal', 'modal_block_id' => $wired, 'params' => ['record_id' => '{{row.id}}']],
+        ]],
+    ]]];
+
+    // Only the second modal's form is orphaned.
+    expect(designWarnings((new ManifestValidator)->validate($m))->pluck('path')->all())
+        ->toBe(['/pages/0/blocks/1/blocks/0']);
+});
+
 it('design-lint R3: a param block fed by an inbound link is not warned', function () {
     $obj = baseManifest()['objects'][0]['id'];
     $fld = baseManifest()['objects'][0]['fields'][0]['id'];
