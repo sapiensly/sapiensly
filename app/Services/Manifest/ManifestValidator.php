@@ -36,6 +36,13 @@ class ManifestValidator
     /** Upper bound on schema errors collected per validation (a runaway guard). */
     private const MAX_SCHEMA_ERRORS = 100;
 
+    /**
+     * Visible data columns a table may show before it stops being scannable.
+     * Set above the six the scaffolder aims for, so deliberate authoring has
+     * room and only the genuinely unreadable tables get flagged.
+     */
+    private const MAX_SCANNABLE_COLUMNS = 8;
+
     private ?OpisValidator $opis = null;
 
     /** The maxErrors=1 confirmation validator — see validateSchema(). */
@@ -264,7 +271,7 @@ class ManifestValidator
             $this->lintParamBlocks($blocks, "/pages/{$pi}/blocks", $provided, $warnings, $this->modalInjectedParams($blocks));
 
             // R6 — a board grouped by a select nothing fills in.
-            $this->lintBoardDefaults($manifest, $blocks, "/pages/{$pi}/blocks", $warnings);
+            $this->lintBlockDesign($manifest, $blocks, "/pages/{$pi}/blocks", $warnings);
         }
 
         $this->lintObjectShape($manifest, $warnings);
@@ -355,7 +362,7 @@ class ManifestValidator
      * @param  list<array<string, mixed>>  $blocks
      * @param  list<ManifestValidationError>  $warnings
      */
-    private function lintBoardDefaults(array $manifest, array $blocks, string $path, array &$warnings): void
+    private function lintBlockDesign(array $manifest, array $blocks, string $path, array &$warnings): void
     {
         foreach ($blocks as $i => $block) {
             $bp = "{$path}/{$i}";
@@ -377,14 +384,34 @@ class ManifestValidator
                 }
             }
 
+            // R7: a list nobody can scan. Every field getting a visible column
+            // produced tables 17 across, where each cell wraps to three lines
+            // and the row stops reading as one record. The fix is not to drop
+            // fields — it is `hidden_by_default`, which keeps them a click away
+            // in the table's own column picker.
+            if (($block['type'] ?? null) === 'table') {
+                $visible = array_filter(
+                    $block['columns'] ?? [],
+                    fn (array $c): bool => ($c['type'] ?? null) !== 'action'
+                        && ($c['hidden_by_default'] ?? false) !== true,
+                );
+                if (count($visible) > self::MAX_SCANNABLE_COLUMNS) {
+                    $warnings[] = new ManifestValidationError(
+                        "{$bp}/columns",
+                        'this table shows '.count($visible).' columns at once, which wraps every cell and stops the row reading as one record. Keep about six — which record is this, where does it stand — and mark the rest `hidden_by_default: true` so the column picker still offers them.',
+                        'design_smell',
+                    );
+                }
+            }
+
             foreach (['blocks', 'left_blocks', 'right_blocks'] as $key) {
                 if (! empty($block[$key])) {
-                    $this->lintBoardDefaults($manifest, $block[$key], "{$bp}/{$key}", $warnings);
+                    $this->lintBlockDesign($manifest, $block[$key], "{$bp}/{$key}", $warnings);
                 }
             }
             foreach (['tabs', 'sections'] as $key) {
                 foreach ($block[$key] ?? [] as $ci => $child) {
-                    $this->lintBoardDefaults($manifest, $child['blocks'] ?? [], "{$bp}/{$key}/{$ci}/blocks", $warnings);
+                    $this->lintBlockDesign($manifest, $child['blocks'] ?? [], "{$bp}/{$key}/{$ci}/blocks", $warnings);
                 }
             }
         }

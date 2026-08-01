@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Download } from '@lucide/vue';
+import { Check, Columns3, Download } from '@lucide/vue';
 import DOMPurify from 'dompurify';
 import { computed, inject, ref } from 'vue';
 import RuntimeIcon from '../RuntimeIcon.vue';
@@ -116,6 +116,7 @@ interface DataColumn {
     label: string;
     field: FieldDef;
     width?: number;
+    hiddenByDefault: boolean;
 }
 
 interface ActionColumn {
@@ -131,7 +132,7 @@ interface ActionColumn {
 
 type Column = DataColumn | ActionColumn;
 
-const columns = computed<Column[]>(() =>
+const allColumns = computed<Column[]>(() =>
     (props.block.columns as Array<Record<string, unknown>>)
         .map((col): Column | null => {
             if (col.type === 'action') {
@@ -158,10 +159,122 @@ const columns = computed<Column[]>(() =>
                 label: (col.label_override as string | undefined) ?? field.name,
                 field,
                 width: col.width as number | undefined,
+                hiddenByDefault: col.hidden_by_default === true,
             };
         })
         .filter((c): c is Column => c !== null),
 );
+
+/**
+ * Which columns the reader has switched off.
+ *
+ * A wide object arrives with most of its columns folded away (the manifest says
+ * which), because a table 17 columns across wraps every cell to three lines and
+ * stops being scannable. Nothing is dropped though — the picker below lists
+ * every column, and what the reader chooses is theirs to keep, so it outlives
+ * the visit rather than resetting on every navigation.
+ */
+const storageKey = computed(() => `sp:table-cols:${appSlug}:${props.block.id}`);
+
+function loadHidden(): Set<string> {
+    const known = new Set(
+        allColumns.value.filter((c) => c.kind === 'data').map((c) => c.id),
+    );
+    try {
+        const raw = window.localStorage.getItem(storageKey.value);
+        if (raw !== null) {
+            const saved = JSON.parse(raw);
+            if (Array.isArray(saved)) {
+                // Intersect with what the table currently has: a manifest that
+                // dropped or renamed a column must not leave a stale id behind.
+                return new Set(
+                    saved.filter(
+                        (id: unknown): id is string =>
+                            typeof id === 'string' && known.has(id),
+                    ),
+                );
+            }
+        }
+    } catch {
+        // A disabled or full localStorage is not a reason to fail to render.
+    }
+    return new Set(
+        allColumns.value
+            .filter((c) => c.kind === 'data' && c.hiddenByDefault)
+            .map((c) => c.id),
+    );
+}
+
+const hidden = ref<Set<string>>(loadHidden());
+
+const columns = computed<Column[]>(() =>
+    allColumns.value.filter(
+        (c) => c.kind === 'action' || !hidden.value.has(c.id),
+    ),
+);
+
+/** Every data column, shown or not — the picker's menu. */
+const hideableColumns = computed<DataColumn[]>(
+    () => allColumns.value.filter((c) => c.kind === 'data') as DataColumn[],
+);
+
+const pickerOpen = ref(false);
+
+/**
+ * Offer the picker only where the manifest folded something away, or where the
+ * reader already has. An app whose tables were always meant to show every
+ * column gains no control it has no use for.
+ */
+const showPicker = computed(
+    () =>
+        hidden.value.size > 0 ||
+        hideableColumns.value.some((c) => c.hiddenByDefault),
+);
+
+/**
+ * The runtime has no string catalogue, and the two chrome strings that predate
+ * this one are hardcoded Spanish — wrong in an English app. One word does not
+ * justify inventing a framework, but the block already knows its locale, so
+ * spend it rather than add a third.
+ */
+const COLUMNS_WORD: Record<string, string> = {
+    en: 'Columns',
+    es: 'Columnas',
+    pt: 'Colunas',
+    fr: 'Colonnes',
+};
+
+const pickerLabel = computed(() => {
+    const word =
+        COLUMNS_WORD[props.locale.slice(0, 2).toLowerCase()] ?? COLUMNS_WORD.en;
+    const shown = hideableColumns.value.length - hidden.value.size;
+
+    // The count is the point when something is folded away: without it the
+    // table looks complete and the reader never thinks to look.
+    return hidden.value.size > 0
+        ? `${word} ${shown}/${hideableColumns.value.length}`
+        : word;
+});
+
+function toggleColumn(id: string): void {
+    const next = new Set(hidden.value);
+    if (next.has(id)) {
+        next.delete(id);
+    } else {
+        // Never let the reader empty the table entirely.
+        if (columns.value.filter((c) => c.kind === 'data').length <= 1) return;
+        next.add(id);
+    }
+    hidden.value = next;
+    try {
+        window.localStorage.setItem(
+            storageKey.value,
+            JSON.stringify([...next]),
+        );
+    } catch {
+        // Same as above: the choice just does not survive the visit.
+    }
+}
 
 async function runRowAction(
     col: ActionColumn,
@@ -236,10 +349,75 @@ function richTextCell(value: unknown): string {
 <template>
     <div :class="['overflow-hidden rounded-sp-sm border', t.surface]">
         <div
-            v-if="exportHref"
-            :class="['flex justify-end border-b px-3 py-1.5', t.divider]"
+            v-if="exportHref || showPicker"
+            :class="[
+                'flex items-center justify-end gap-1 border-b px-3 py-1.5',
+                t.divider,
+            ]"
         >
+            <div v-if="showPicker" class="relative">
+                <button
+                    type="button"
+                    :class="[
+                        'inline-flex items-center gap-1.5 rounded-pill px-2.5 py-1 text-[11px] transition-colors hover:bg-surface-hover',
+                        t.textMuted,
+                    ]"
+                    :aria-expanded="pickerOpen"
+                    aria-haspopup="true"
+                    @click="pickerOpen = !pickerOpen"
+                >
+                    <Columns3 class="size-3" />
+                    {{ pickerLabel }}
+                </button>
+                <!--
+                    Closing by way of a backdrop rather than a document-level
+                    listener: the click that dismisses the menu is swallowed
+                    here, so it cannot also land on whatever sits underneath.
+                -->
+                <template v-if="pickerOpen">
+                    <div
+                        class="fixed inset-0 z-20"
+                        @click="pickerOpen = false"
+                    />
+                    <div
+                        :class="[
+                            'absolute right-0 z-30 mt-1 max-h-72 min-w-52 overflow-y-auto rounded-sp-sm border py-1 shadow-lg',
+                            t.surface,
+                        ]"
+                        role="menu"
+                    >
+                        <button
+                            v-for="col in hideableColumns"
+                            :key="col.id"
+                            type="button"
+                            role="menuitemcheckbox"
+                            :aria-checked="!hidden.has(col.id)"
+                            :class="[
+                                'flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs transition-colors hover:bg-surface-hover',
+                                t.text,
+                            ]"
+                            @click="toggleColumn(col.id)"
+                        >
+                            <span
+                                :class="[
+                                    'flex size-3.5 shrink-0 items-center justify-center rounded-[3px] border',
+                                    hidden.has(col.id)
+                                        ? 'border-medium'
+                                        : 'border-accent-blue bg-accent-blue text-white',
+                                ]"
+                            >
+                                <Check
+                                    v-if="!hidden.has(col.id)"
+                                    class="size-2.5"
+                                />
+                            </span>
+                            {{ col.label }}
+                        </button>
+                    </div>
+                </template>
+            </div>
             <a
+                v-if="exportHref"
                 :href="exportHref"
                 :class="[
                     'inline-flex items-center gap-1.5 rounded-pill px-2.5 py-1 text-[11px] transition-opacity',

@@ -1240,11 +1240,33 @@ class AppScaffolder
             ]],
         ];
 
-        $columns = array_map(fn (array $f): array => [
-            'id' => $this->id('col'),
-            'field_id' => $f['id'],
-        ], $fieldIndex);
-        $columns[] = ['id' => $this->id('col'), 'field_id' => 'sys_created_at', 'label_override' => $this->labelCreatedColumn($lang)];
+        // Columns follow the ranking, and everything past the cap starts folded
+        // away behind the table's column picker rather than being dropped.
+        $ranked = $this->rankedColumnFields($fieldIndex, $lang);
+        $byId = [];
+        foreach ($fieldIndex as $f) {
+            $byId[$f['id']] = $f;
+        }
+
+        $columns = [];
+        foreach ($ranked as $i => $fieldId) {
+            if (! isset($byId[$fieldId])) {
+                continue;
+            }
+            $column = ['id' => $this->id('col'), 'field_id' => $fieldId];
+            if ($i >= self::VISIBLE_COLUMN_CAP) {
+                $column['hidden_by_default'] = true;
+            }
+            $columns[] = $column;
+        }
+
+        // When the record has enough of its own to say, the row it was typed on
+        // is not one of the six things worth the width.
+        $created = ['id' => $this->id('col'), 'field_id' => 'sys_created_at', 'label_override' => $this->labelCreatedColumn($lang)];
+        if (count($ranked) >= self::VISIBLE_COLUMN_CAP) {
+            $created['hidden_by_default'] = true;
+        }
+        $columns[] = $created;
         $columns[] = [
             'id' => $this->id('col'),
             'type' => 'action',
@@ -3479,6 +3501,66 @@ class AppScaffolder
         }
 
         return null;
+    }
+
+    /** Data columns a list table shows before the reader has to ask for more. */
+    private const VISIBLE_COLUMN_CAP = 6;
+
+    /**
+     * Types that cost a list far more width than they repay: a paragraph, a
+     * formatted document, an attachment. They still get a column, ranked last,
+     * so the picker can offer them.
+     */
+    private const BULKY_COLUMN_TYPES = ['long_text', 'rich_text', 'file'];
+
+    /**
+     * Every field ranked by how much it earns a place in a list table, most
+     * deserving first.
+     *
+     * Every field used to get a visible column, so an object with 17 of them
+     * produced a table 17 columns wide: each cell wrapped to three lines and
+     * the row that was meant to be scannable read as a paragraph. A list
+     * answers two questions — which record is this, and where does it stand.
+     * The rest is what the detail page is for, and what the column picker
+     * offers on demand; nothing is dropped, only demoted.
+     *
+     * @param  array<int, array<string, mixed>>  $fieldIndex
+     * @return list<string>
+     */
+    private function rankedColumnFields(array $fieldIndex, string $lang = 'en'): array
+    {
+        $picked = [];
+        $take = function (?array $field) use (&$picked): void {
+            if ($field !== null && ! in_array($field['id'], $picked, true)) {
+                $picked[] = $field['id'];
+            }
+        };
+
+        // Which record is this, and where does it stand.
+        $take($this->titleField($fieldIndex));
+        $take($this->statusField($fieldIndex, $lang));
+        // What it hangs off, the date you would chase it by, and how much.
+        $take($this->firstFieldOfType($fieldIndex, 'relation'));
+        foreach ($fieldIndex as $field) {
+            if (in_array($field['type'] ?? null, ['date', 'datetime'], true)
+                && $this->isScheduleDate($field, $lang)) {
+                $take($field);
+                break;
+            }
+        }
+        $take($this->firstFieldOfType($fieldIndex, 'currency'));
+
+        // Then the author's own order, leaving the bulky types for the end.
+        foreach ($fieldIndex as $field) {
+            if (! in_array($field['type'] ?? null, self::BULKY_COLUMN_TYPES, true)) {
+                $take($field);
+            }
+        }
+        foreach ($fieldIndex as $field) {
+            $take($field);
+        }
+
+        return $picked;
     }
 
     /**

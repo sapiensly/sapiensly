@@ -2327,6 +2327,11 @@
                                                 "type": "boolean",
                                                 "default": true
                                             },
+                                            "hidden_by_default": {
+                                                "type": "boolean",
+                                                "default": false,
+                                                "description": "Start this column folded away. The reader can switch it on from the table's column picker, and the choice is remembered. Use it to keep a wide object's list scannable without dropping any of its fields."
+                                            },
                                             "format": {
                                                 "type": "string"
                                             }

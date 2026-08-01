@@ -594,6 +594,63 @@ it('names a money aggregate after the measure when the measure has a name', func
     expect($sumRollup['name'])->toBe('Total Renta Mensual');
 });
 
+it('keeps a wide object scannable by folding columns past the sixth', function () {
+    // A 17-column table wrapped every cell to three lines. Nothing is dropped
+    // — the extras keep their column and start folded behind the picker.
+    $fields = [
+        ['name' => 'Folio', 'slug' => 'folio', 'type' => 'string', 'options' => null],
+        ['name' => 'Notas', 'slug' => 'notas', 'type' => 'long_text', 'options' => null],
+        ['name' => 'Estado', 'slug' => 'estado', 'type' => 'single_select', 'options' => [
+            ['value' => 'activo', 'label' => 'Activo'],
+            ['value' => 'vencido', 'label' => 'Vencido'],
+        ]],
+        ['name' => 'Renta Mensual', 'slug' => 'renta_mensual', 'type' => 'currency', 'options' => null],
+        ['name' => 'Fecha de Vencimiento', 'slug' => 'fecha_vencimiento', 'type' => 'date', 'options' => null],
+    ];
+    foreach (range(1, 8) as $n) {
+        $fields[] = ['name' => "Extra {$n}", 'slug' => "extra_{$n}", 'type' => 'string', 'options' => null];
+    }
+
+    $manifest = app(AppScaffolder::class)->assemble([
+        'schema_version' => '1.0.0',
+        'id' => 'app_scaffold_q8',
+        'slug' => 'wide',
+        'name' => 'Wide',
+        'version' => 1,
+        'objects' => [],
+        'pages' => [],
+        'permissions' => ['roles' => [['id' => 'rol_admin00001', 'slug' => 'admin', 'name' => 'Admin', 'is_default' => true]]],
+        'settings' => ['default_locale' => 'es-MX', 'default_currency' => 'MXN'],
+    ], [
+        'objects' => [['name' => 'Contratos', 'slug' => 'contratos', 'fields' => $fields]],
+        'links' => [],
+    ]);
+
+    $table = blockByTypeDeep(pageBySlug($manifest, 'contratos'), 'table');
+    $data = collect($table['columns'])->filter(fn ($c) => ($c['type'] ?? null) !== 'action');
+    $visible = $data->reject(fn ($c) => $c['hidden_by_default'] ?? false);
+
+    expect($visible)->toHaveCount(6)
+        // Every field still has a column; the picker can bring them back.
+        ->and($data)->toHaveCount(14);
+
+    // The six are the ones that say which record this is and where it stands —
+    // not simply the first six the author happened to write.
+    $slugOf = function (string $fieldId) use ($manifest): string {
+        $object = collect($manifest['objects'])->firstWhere('slug', 'contratos');
+
+        return (string) collect($object['fields'])->firstWhere('id', $fieldId)['slug'];
+    };
+    $shown = $visible
+        ->reject(fn ($c) => $c['field_id'] === 'sys_created_at')
+        ->map(fn ($c) => $slugOf($c['field_id']))
+        ->all();
+
+    expect($shown)->toContain('folio', 'estado', 'renta_mensual', 'fecha_vencimiento')
+        // A paragraph costs a list more width than it repays.
+        ->and($shown)->not->toContain('notas');
+});
+
 it('links the parent list table to its detail page', function () {
     $manifest = scaffoldWithChild('es-MX');
 

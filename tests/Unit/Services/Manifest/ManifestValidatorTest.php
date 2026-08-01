@@ -3823,3 +3823,46 @@ it('design-lint R6: a board grouped by a select nothing fills in', function () {
     expect(designWarnings((new ManifestValidator)->validate($withDefault))->pluck('message')->implode(' '))
         ->not->toContain('lands outside every column');
 });
+
+it('design-lint R7: a table too wide to scan, unless the extras are folded away', function () {
+    $m = baseManifest();
+    $object = $m['objects'][0];
+
+    // Twelve fields, each demanding its own column.
+    $columns = [['id' => id('col'), 'field_id' => $object['fields'][0]['id']]];
+    foreach (range(1, 11) as $n) {
+        $fld = id('fld');
+        $m['objects'][0]['fields'][] = ['id' => $fld, 'slug' => "extra_{$n}", 'name' => "Extra {$n}", 'type' => 'string'];
+        $columns[] = ['id' => id('col'), 'field_id' => $fld];
+    }
+
+    // Nested in a tab: the recursion is shared with the other block rules
+    // precisely because a top-level-only scan once missed everything in tabs.
+    $table = fn (array $cols) => [[
+        'id' => id('pag'), 'slug' => 'l', 'name' => 'L', 'path' => '/l',
+        'blocks' => [[
+            'id' => id('blk'), 'type' => 'tabs',
+            'tabs' => [['id' => id('tab'), 'label' => 'Lista', 'blocks' => [[
+                'id' => id('blk'), 'type' => 'table',
+                'data_source' => ['object_id' => $object['id']],
+                'columns' => $cols,
+            ]]]],
+        ]],
+    ]];
+
+    $m['pages'] = $table($columns);
+    expect(designWarnings((new ManifestValidator)->validate($m))->pluck('message')->implode(' '))
+        ->toContain('stops the row reading as one record');
+
+    // Folding the extras away answers the rule — the fields keep their columns
+    // and the picker still offers them, so nothing was lost to silence it.
+    $folded = $columns;
+    foreach ($folded as $i => $col) {
+        if ($i >= 6) {
+            $folded[$i]['hidden_by_default'] = true;
+        }
+    }
+    $m['pages'] = $table($folded);
+    expect(designWarnings((new ManifestValidator)->validate($m))->pluck('message')->implode(' '))
+        ->not->toContain('stops the row reading as one record');
+});

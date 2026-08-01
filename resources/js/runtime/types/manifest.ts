@@ -143,6 +143,8 @@ export interface BlockTable extends BlockBase {
         field_id: string;
         label_override?: string;
         width?: number;
+        /** Starts folded away; the reader can switch it on from the picker. */
+        hidden_by_default?: boolean;
     }>;
     empty_state_message?: string;
 }
