@@ -234,6 +234,130 @@ return [
         ],
     ],
     [
+        // Both sides hold many: the shape belongs_to cannot express, and the
+        // one every case above avoided.
+        'key' => 'rodaje',
+        'name' => 'Producción audiovisual',
+        'locale' => 'es-MX',
+        'description' => <<<'TXT'
+        Producción de una serie de televisión.
+
+        LOCACIONES: nombre, dirección, tipo (interior, exterior), costo por día y si requiere permiso.
+
+        ESCENAS: cada escena se graba en una locación. Número de escena, título, descripción, páginas de guion, tiempo estimado de rodaje en horas y estado (por grabar, grabada, repetir, descartada).
+
+        REPARTO: nombre del actor, personaje que interpreta, tarifa por día y teléfono. Un actor aparece en muchas escenas y una escena tiene a varios actores.
+
+        DIAS DE RODAJE: fecha, hora de citatorio, notas de producción y estado (planeado, en curso, completado, cancelado). En un día de rodaje se graban varias escenas y una escena puede necesitar varios días.
+
+        La producción necesita ver qué escenas faltan por grabar, cómo va cada día de rodaje y cuánto se lleva gastado en locaciones.
+        TXT,
+        'expect' => [
+            'objects' => ['locaciones', 'escenas', 'reparto|actores|actor', 'dias'],
+            'dashboard' => ['escenas', 'dias'],
+        ],
+    ],
+    [
+        // A domain whose vocabulary none of the semantic lexicons were written
+        // for. "Alza" is a super, not a rise; "cuadro" is a frame, not a table.
+        'key' => 'apiario',
+        'name' => 'Apicultura',
+        'locale' => 'es-MX',
+        'description' => <<<'TXT'
+        Operación apícola que produce miel en varios apiarios.
+
+        APIARIOS: nombre, ubicación, número de hectáreas, tipo de floración predominante y fecha de establecimiento.
+
+        COLMENAS: cada colmena está en un apiario. Número de colmena, tipo de caja, número de alzas, raza de la abeja reina, fecha de instalación de la reina y condición (fuerte, regular, débil, orfandad, perdida).
+
+        INSPECCIONES: cada inspección es de una colmena. Fecha, cuadros con cría, cuadros con miel, presencia de reina, presencia de varroa, temperamento y observaciones.
+
+        COSECHAS: cada cosecha es de una colmena. Fecha, kilos de miel obtenidos, tipo de miel, humedad medida y precio por kilo.
+
+        El apicultor necesita ver la condición de sus colmenas, qué inspecciones tocan y cuántos kilos lleva cosechados.
+        TXT,
+        'expect' => [
+            'objects' => ['apiarios', 'colmenas', 'inspecciones', 'cosechas'],
+            'dashboard' => ['colmenas', 'inspecciones', 'cosechas'],
+        ],
+    ],
+    [
+        'key' => 'cabinet',
+        'name' => 'Cabinet d\'avocats',
+        'locale' => 'fr-FR',
+        'description' => <<<'TXT'
+        Cabinet d'avocats spécialisé en droit des affaires.
+
+        CLIENTS : raison sociale, contact principal, téléphone, courriel, adresse et type de client (entreprise, particulier).
+
+        DOSSIERS : chaque dossier appartient à un client. Référence, intitulé, domaine du droit, avocat responsable, date d'ouverture, date de clôture prévue, honoraires convenus et statut (ouvert, en cours, en attente client, plaidé, clos, abandonné).
+
+        AUDIENCES : chaque audience concerne un dossier. Date, heure, juridiction, salle, type d'audience et issue.
+
+        FACTURES : chaque facture porte sur un dossier. Numéro, date d'émission, date d'échéance, montant hors taxes, montant TTC et statut (brouillon, envoyée, payée, en retard).
+
+        Le cabinet doit voir quels dossiers sont ouverts, quelles audiences approchent et quelles factures sont en retard.
+        TXT,
+        'expect' => [
+            'objects' => ['clients', 'dossiers', 'audiences', 'factures'],
+            'dashboard' => ['dossiers', 'factures'],
+        ],
+    ],
+    [
+        'key' => 'grants',
+        'name' => 'Grant management',
+        'locale' => 'en-US',
+        'description' => <<<'TXT'
+        Grant management for a small foundation that funds community programmes.
+
+        DONORS: name, type (individual, corporate, foundation, government), contact email, phone and whether the gift is restricted.
+
+        PROGRAMMES: name, focus area, description, annual budget and status (planning, running, paused, closed).
+
+        GRANTS: each grant is awarded to a programme and funded by a donor. Reference, amount awarded, award date, reporting deadline, term in months and status (applied, under review, awarded, declined, closed).
+
+        DISBURSEMENTS: each disbursement belongs to a grant. Scheduled date, paid date, amount and status (scheduled, paid, held, cancelled).
+
+        The programme officer needs to see which grants are awaiting a decision, which reports are coming due, and how much has actually been paid out.
+        TXT,
+        'expect' => [
+            'objects' => ['donors', 'programmes', 'grants', 'disbursements'],
+            'dashboard' => ['grants', 'disbursements'],
+        ],
+    ],
+    [
+        // One object, no relations. The degenerate case every generator's
+        // relation-shaped assumptions get tested by.
+        'key' => 'activos',
+        'name' => 'Registro de activos',
+        'locale' => 'es-MX',
+        'description' => <<<'TXT'
+        Un registro simple de los activos fijos de una oficina, sin más.
+
+        ACTIVOS: número de inventario, descripción, categoría (cómputo, mobiliario, transporte, herramienta), marca, modelo, número de serie, fecha de compra, costo de adquisición, ubicación, responsable y estado (en uso, en resguardo, en reparación, dado de baja).
+        TXT,
+        'expect' => [
+            'objects' => ['activos'],
+            'dashboard' => ['activos'],
+        ],
+    ],
+    [
+        // Vague, hedged and partly contradictory — what people actually type
+        // before they know what they want. There is no right answer here, so
+        // nothing specific is expected: what is being tested is that it
+        // degrades with dignity rather than inventing an elaborate wrong app.
+        'key' => 'vago',
+        'name' => 'Algo para mi negocio',
+        'locale' => 'es-MX',
+        'description' => <<<'TXT'
+        Necesito algo para organizar mi negocio, no sé bien qué. Tengo clientes, aunque a veces son proveedores también. Hago trabajos, o pedidos, depende. A veces cobro por adelantado y a veces no. Me gustaría no perder de vista lo que está pendiente.
+        TXT,
+        'expect' => [
+            'objects' => [],
+            'dashboard' => [],
+        ],
+    ],
+    [
         'key' => 'restaurante',
         'name' => 'Restaurante',
         'locale' => 'es-MX',

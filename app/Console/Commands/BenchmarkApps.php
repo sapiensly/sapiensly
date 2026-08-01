@@ -2,6 +2,7 @@
 
 namespace App\Console\Commands;
 
+use App\Models\AiUsageEvent;
 use App\Models\App;
 use App\Models\User;
 use App\Services\Manifest\AppManifestService;
@@ -143,6 +144,7 @@ class BenchmarkApps extends Command
             ];
         }
 
+        $spend = $this->spendOn($app);
         $smokeChecks = 0;
         $findings = [
             ...$this->score($manifest, $case),
@@ -159,6 +161,9 @@ class BenchmarkApps extends Command
             'built' => true,
             'app_slug' => $this->option('keep') ? $slug : null,
             'seconds' => round(microtime(true) - $startedAt, 1),
+            // What this app cost to design. Read from the ledger the scaffolder
+            // bills, so it is the real charge and not an estimate of one.
+            'spend' => $spend,
             'objects' => array_map(fn (array $o): string => $o['name'], $manifest['objects']),
             // How many runtime assertions the smoke pass actually made. A
             // harness that cannot tell "passed" from "never ran" is worse than
@@ -169,6 +174,30 @@ class BenchmarkApps extends Command
             // something it had to change. Counted so a run that suddenly stops
             // reporting any is visible — silence here was its own bug once.
             'coercions' => $coercions,
+        ];
+    }
+
+    /**
+     * What designing this app actually cost.
+     *
+     * Read off the ledger the scaffolder bills rather than estimated from token
+     * counts here: the ledger already knows the model's rates, whether the call
+     * ran on the org's own key, and what the cache absorbed. `estimated` rides
+     * along so a run whose provider did not report usage cannot masquerade as a
+     * measured one.
+     *
+     * @return array{cost: float, input_tokens: int, output_tokens: int, model: ?string, estimated: bool}
+     */
+    private function spendOn(App $app): array
+    {
+        $events = AiUsageEvent::query()->where('app_id', $app->id)->get();
+
+        return [
+            'cost' => round((float) $events->sum('cost'), 5),
+            'input_tokens' => (int) $events->sum('input_tokens'),
+            'output_tokens' => (int) $events->sum('output_tokens'),
+            'model' => $events->first()?->model,
+            'estimated' => $events->contains(fn (AiUsageEvent $e): bool => (bool) $e->estimated),
         ];
     }
 
@@ -324,6 +353,16 @@ class BenchmarkApps extends Command
                 // ended up orphaned under a success toast.
                 foreach ($action['values'] ?? [] as $slug => $expression) {
                     if (! is_string($expression) || ! str_contains($expression, '{{')) {
+                        continue;
+                    }
+                    // Only assert on what the harness could actually supply. A
+                    // many-to-many picker on the FIRST object created has
+                    // nothing to point at yet — a person links those later —
+                    // and blaming the app for that is measuring the harness.
+                    // Params are always supplied, so the orphaned-child case
+                    // this pass exists for stays fully covered.
+                    if (preg_match('/\{\{\s*form\.([a-z0-9_]+)\s*\}\}/i', $expression, $token) === 1
+                        && ($context['form'][$token[1]] ?? null) === null) {
                         continue;
                     }
                     $checksRun++;
@@ -485,9 +524,14 @@ class BenchmarkApps extends Command
                 'phone' => '+525555555555',
                 'single_select' => $field['options'][0]['value'] ?? null,
                 'multi_select' => array_filter([$field['options'][0]['value'] ?? null]),
-                'relation' => ($field['cardinality'] ?? null) === 'many_to_one'
-                    ? ($created[$field['target_object_id'] ?? ''] ?? null)
-                    : null,
+                // A picker holding one record, or a picker holding many — a
+                // person fills both, and leaving the many-sided one blank made
+                // the harness blame a film-shoot app for its own omission.
+                'relation' => match ($field['cardinality'] ?? null) {
+                    'many_to_one' => $created[$field['target_object_id'] ?? ''] ?? null,
+                    'many_to_many' => array_filter([$created[$field['target_object_id'] ?? ''] ?? null]),
+                    default => null,
+                },
                 default => 'Benchmark '.$field['slug'],
             };
         }
@@ -686,6 +730,20 @@ class BenchmarkApps extends Command
      */
     private function namedAmong(string $expected, array $names): bool
     {
+        // "reparto|actores": alternatives that are all right answers. A cast
+        // list modelled as "Actor" is not worse than one modelled as
+        // "Reparto", and an expectation that fails on a defensible answer
+        // measures naming taste rather than correctness.
+        if (str_contains($expected, '|')) {
+            foreach (explode('|', $expected) as $alternative) {
+                if ($this->namedAmong(trim($alternative), $names)) {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
         $needle = $this->fold($expected);
 
         foreach ($names as $name) {
@@ -736,6 +794,8 @@ class BenchmarkApps extends Command
     private function report(array $results, float $seconds): array
     {
         $defects = collect($results)->sum(fn (array $r): int => count($r['findings']));
+        $cost = collect($results)->sum(fn (array $r): float => (float) ($r['spend']['cost'] ?? 0));
+        $estimated = collect($results)->contains(fn (array $r): bool => (bool) ($r['spend']['estimated'] ?? false));
         $byCheck = collect($results)
             ->flatMap(fn (array $r): array => $r['findings'])
             ->countBy('check')
@@ -751,6 +811,13 @@ class BenchmarkApps extends Command
                 'defects_per_app' => count($results) > 0 ? round($defects / count($results), 2) : 0.0,
                 'clean_apps' => collect($results)->filter(fn (array $r): bool => $r['findings'] === [])->count(),
                 'seconds' => round($seconds, 1),
+                'cost' => round($cost, 4),
+                'cost_per_app' => count($results) > 0 ? round($cost / count($results), 4) : 0.0,
+                'input_tokens' => collect($results)->sum(fn (array $r): int => (int) ($r['spend']['input_tokens'] ?? 0)),
+                'output_tokens' => collect($results)->sum(fn (array $r): int => (int) ($r['spend']['output_tokens'] ?? 0)),
+                // True when any provider did not report usage and the ledger had
+                // to estimate — the figure above is then not a measurement.
+                'cost_estimated' => $estimated,
             ],
             'by_check' => $byCheck,
             'results' => $results,
@@ -766,8 +833,12 @@ class BenchmarkApps extends Command
                 ? '<fg=green>clean</>'
                 : '<fg=red>'.count($result['findings']).' finding(s)</>';
             $this->line(sprintf(
-                '  %-22s %-24s %5.1fs  %s runtime check(s)',
-                $result['case'], $status, $result['seconds'], $result['smoke_checks'] ?? 0,
+                '  %-22s %-24s %5.1fs  %8s  %3s checks',
+                $result['case'],
+                $status,
+                $result['seconds'],
+                isset($result['spend']) ? '$'.number_format($result['spend']['cost'], 4) : '—',
+                $result['smoke_checks'] ?? 0,
             ));
             foreach ($result['findings'] as $finding) {
                 $this->line("      <fg=yellow>{$finding['check']}</> — ".Str::limit($finding['detail'], 140));
@@ -776,7 +847,12 @@ class BenchmarkApps extends Command
 
         $t = $report['totals'];
         $this->newLine();
-        $this->line("  <options=bold>{$t['clean_apps']}/{$t['apps']} clean · {$t['defects']} defects · {$t['defects_per_app']} per app · {$t['seconds']}s</>");
+        $this->line(sprintf(
+            '  <options=bold>%d/%d clean · %d defects · %s per app · %ss · $%s total, $%s per app%s</>',
+            $t['clean_apps'], $t['apps'], $t['defects'], $t['defects_per_app'], $t['seconds'],
+            number_format($t['cost'], 4), number_format($t['cost_per_app'], 4),
+            $t['cost_estimated'] ? ' (estimated)' : '',
+        ));
         foreach ($report['by_check'] as $check => $count) {
             $this->line("    {$check}: {$count}");
         }

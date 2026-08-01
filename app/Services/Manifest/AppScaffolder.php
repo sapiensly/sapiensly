@@ -319,11 +319,65 @@ class AppScaffolder
             $objects[] = ['name' => $name, 'slug' => $slug, 'fields' => $fields];
         }
 
+        $links = $this->normalizeLinks($decoded['links'] ?? null, $usedObjectSlugs);
+        $this->dropRestatedRelations($objects, $links, $coercions);
+
         return [
             'objects' => $objects,
-            'links' => $this->normalizeLinks($decoded['links'] ?? null, $usedObjectSlugs),
+            'links' => $links,
             'focus' => $this->normalizeFocus($decoded['focus'] ?? null, $objects, $coercions),
         ];
+    }
+
+    /**
+     * A relationship stated twice: once as a link, once as a text field holding
+     * the related record's name.
+     *
+     * The prompt forbids it and the model does it anyway — an application to a
+     * vacancy came back with a `candidato` link AND a `candidato_nombre`
+     * string, which the relation field then collided with: two columns headed
+     * "Candidato", one of them a copy that goes stale the moment the candidate
+     * is renamed. Only the exact restatements are cut (the link's own name, or
+     * that name with a naming suffix), so a genuinely different field that
+     * merely starts with the same word survives.
+     *
+     * @param  list<array{name: string, slug: string, fields: list<array<string, mixed>>}>  $objects
+     * @param  list<array{from: string, to: string, name: ?string}>  $links
+     * @param  list<string>  $coercions
+     */
+    private function dropRestatedRelations(array &$objects, array $links, array &$coercions): void
+    {
+        $suffixes = ['', '_nombre', '_name', '_nome', '_nom', '_id', '_titulo', '_title', '_clave', '_key'];
+
+        foreach ($links as $link) {
+            $base = Str::snake(Str::ascii((string) ($link['name'] ?? '')));
+            if ($base === '') {
+                continue;
+            }
+            $restatements = array_map(fn (string $s): string => $base.$s, $suffixes);
+
+            foreach ($objects as $oi => $object) {
+                if ($object['slug'] !== $link['from']) {
+                    continue;
+                }
+                foreach ($object['fields'] as $fi => $field) {
+                    // Only scalars: a real relation field is not a restatement.
+                    if (! in_array($field['type'] ?? null, ['string', 'number'], true)) {
+                        continue;
+                    }
+                    if (! in_array((string) $field['slug'], $restatements, true)) {
+                        continue;
+                    }
+
+                    unset($objects[$oi]['fields'][$fi]);
+                    $coercions[] = sprintf(
+                        '"%s" on %s repeated the "%s" link as a text field — dropped, because the link already shows that record and a copy of its name goes stale the moment it is renamed.',
+                        $field['name'] ?? $field['slug'], $object['name'], $link['name'],
+                    );
+                }
+                $objects[$oi]['fields'] = array_values($objects[$oi]['fields']);
+            }
+        }
     }
 
     /**
@@ -708,6 +762,7 @@ class AppScaffolder
         // it never fires here and the total was left as a number to type in by
         // hand, next to the two numbers it is the product of.
         $this->synthesizeLineTotals($built, $currency, $lang);
+        $this->dropUnitPriceTotals($built, $lang);
 
         // Pass 3: a list page per object (now that relation fields exist) —
         // except for the line items, which are not places anyone navigates to.
@@ -3429,6 +3484,58 @@ class AppScaffolder
                     $built[$i]['def']['fields'][$fi]['target_field_id'] = $toFieldId;
                 }
             }
+        }
+    }
+
+    /**
+     * The invariant, enforced after every pass that could have satisfied it:
+     * nothing ships a total of per-unit prices.
+     *
+     * The passes above give a line the total it implies and point the parent at
+     * that — but only when they can recognise the quantity. A honey harvest
+     * measured in kilos beside a price per kilo defeated that, and no
+     * enumeration of units is ever going to be complete. So whatever is still
+     * summing a price-per-something when the derivation had its chance is
+     * removed: the sum of what one of each thing costs is not a smaller truth
+     * than the total, it is not a figure at all, and a wrong number on a screen
+     * is worse than a missing one.
+     *
+     * @param  list<array{def: array<string, mixed>, pageFields: array<int, array<string, mixed>>}>  $built
+     */
+    private function dropUnitPriceTotals(array &$built, string $lang): void
+    {
+        $lex = SemanticLexicon::for($lang);
+
+        $unitPriceIds = [];
+        foreach ($built as $entry) {
+            foreach ($entry['def']['fields'] ?? [] as $field) {
+                if ($lex->matches('unit_price', (string) ($field['name'] ?? ''), (string) ($field['slug'] ?? ''))) {
+                    $unitPriceIds[] = (string) $field['id'];
+                }
+            }
+        }
+        if ($unitPriceIds === []) {
+            return;
+        }
+
+        foreach ($built as $i => $entry) {
+            $doomed = [];
+            foreach ($entry['def']['fields'] ?? [] as $fi => $field) {
+                if (($field['type'] ?? null) === 'rollup'
+                    && ($field['aggregator'] ?? null) === 'sum'
+                    && in_array((string) ($field['target_field_id'] ?? ''), $unitPriceIds, true)) {
+                    $doomed[] = (string) $field['id'];
+                    unset($built[$i]['def']['fields'][$fi]);
+                }
+            }
+            if ($doomed === []) {
+                continue;
+            }
+            $built[$i]['def']['fields'] = array_values($built[$i]['def']['fields']);
+            $built[$i]['pageFields'] = array_values(array_filter(
+                $built[$i]['pageFields'],
+                fn (array $idx): bool => ! in_array((string) ($idx['id'] ?? ''), $doomed, true),
+            ));
         }
     }
 

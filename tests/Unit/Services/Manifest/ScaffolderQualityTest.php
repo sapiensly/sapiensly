@@ -2007,3 +2007,31 @@ it('never totals a per-unit price, whichever way the line was described', functi
         expect(app(ManifestValidator::class)->validate($manifest)->valid)->toBeTrue();
     }
 });
+
+it('cuts a relationship the model also wrote as a text field', function () {
+    $coercions = [];
+    $spec = app(AppScaffolder::class)->normalizeSpec([
+        'objects' => [
+            ['name' => 'Candidatos', 'slug' => 'candidatos', 'fields' => [
+                ['name' => 'Nombre', 'slug' => 'nombre', 'type' => 'string', 'options' => null],
+            ]],
+            ['name' => 'Postulaciones', 'slug' => 'postulaciones', 'fields' => [
+                ['name' => 'Etapa', 'slug' => 'etapa', 'type' => 'string', 'options' => null],
+                // The restatement: a copy of the candidate's name, which the
+                // relation field beside it then collides with.
+                ['name' => 'Candidato', 'slug' => 'candidato_nombre', 'type' => 'string', 'options' => null],
+                // Same opening word, different fact — must survive.
+                ['name' => 'Candidato referido por', 'slug' => 'candidato_referido_por', 'type' => 'string', 'options' => null],
+            ]],
+        ],
+        'links' => [['from' => 'postulaciones', 'to' => 'candidatos', 'name' => 'candidato']],
+    ], $coercions);
+
+    $slugs = collect($spec['objects'])->firstWhere('slug', 'postulaciones')['fields'];
+
+    expect(collect($slugs)->pluck('slug'))
+        ->not->toContain('candidato_nombre')
+        ->toContain('candidato_referido_por')
+        ->toContain('etapa')
+        ->and(implode(' ', $coercions))->toContain('goes stale');
+});

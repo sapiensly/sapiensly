@@ -90,7 +90,7 @@ class SemanticLexicon
      */
     private const VOCAB = [
         'en' => [
-            'quantity' => ['qty', 'quantity', 'count', '\bunits?\b'],
+            'quantity' => ['qty', 'quantity', 'count', '\bunits?\b', '\bkilos?\b', '\bkg\b', '\bhours?\b', '\blit(re|er)s?\b', '\bmet(re|er)s?\b'],
             'image' => ['image', 'photo', 'picture', 'thumbnail', 'avatar', 'url'],
             'amount' => ['subtotal', 'amount', 'total'],
             'unit_price' => ['\bunit', 'price'],
@@ -114,7 +114,7 @@ class SemanticLexicon
             'span_end' => ['\bend\b', 'finish', 'closed', 'closing', 'completion', '\bto\b', '\bdue\b', 'delivery', 'deadline'],
         ],
         'es' => [
-            'quantity' => ['cant', 'unidad', 'piezas', 'qty', 'count'],
+            'quantity' => ['cant', 'unidad', 'piezas', 'qty', 'count', '\bkilos?\b', '\bkg\b', '\bhoras\b', '\blitros\b', '\bmetros\b'],
             'image' => ['imagen', 'foto', 'url', 'avatar'],
             'amount' => ['subtotal', 'importe', '\bmonto\b', 'total'],
             'unit_price' => ['unitario', 'precio'],
@@ -131,7 +131,7 @@ class SemanticLexicon
             'span_end' => ['\bfin\b', 'final', 'cierre', 'termino', 'entrega', 'hasta', 'vencimiento', 'compromiso'],
         ],
         'pt' => [
-            'quantity' => ['qtd', 'quantidade', 'unidade', 'pecas', 'contagem'],
+            'quantity' => ['qtd', 'quantidade', 'unidade', 'pecas', 'contagem', '\bquilos?\b', '\bkg\b', '\bhoras\b', '\blitros\b', '\bmetros\b'],
             'image' => ['imagem', 'foto', 'url', 'avatar'],
             'amount' => ['subtotal', 'valor', 'total'],
             'unit_price' => ['unitario', 'preco'],
@@ -148,7 +148,7 @@ class SemanticLexicon
             'span_end' => ['\bfim\b', 'final', 'fechamento', 'termino', 'entrega', 'ate', 'prazo'],
         ],
         'fr' => [
-            'quantity' => ['qte', 'quantite', 'unite', 'pieces', 'nombre'],
+            'quantity' => ['qte', 'quantite', 'unite', 'pieces', 'nombre', '\bkilos?\b', '\bkg\b', '\bheures\b', '\blitres\b', '\bmetres\b'],
             'image' => ['image', 'photo', 'url', 'avatar', 'vignette'],
             'amount' => ['sous-total', 'sous_total', 'montant', 'total'],
             'unit_price' => ['unitaire', 'prix'],
