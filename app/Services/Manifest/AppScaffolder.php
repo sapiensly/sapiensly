@@ -275,6 +275,23 @@ class AppScaffolder
     {
         $rawObjects = is_array($decoded['objects'] ?? null) ? $decoded['objects'] : [];
 
+        // Over the cap, the extras are dropped — say so. Fields already report
+        // their own truncation a few lines down, and an object going missing is
+        // the more consequential of the two: a whole entity the description
+        // asked for, and every field on it, gone from a result that otherwise
+        // reads as a success.
+        if (count($rawObjects) > self::MAX_OBJECTS) {
+            $dropped = array_slice($rawObjects, self::MAX_OBJECTS);
+            $names = array_values(array_filter(array_map(
+                fn ($o): string => is_array($o) ? trim((string) ($o['name'] ?? '')) : '',
+                $dropped,
+            )));
+            $coercions[] = count($rawObjects).' objects were described, over the '
+                .self::MAX_OBJECTS.' limit — '
+                .(count($names) > 0 ? '"'.implode('", "', $names).'" were' : count($dropped).' were')
+                .' left out, with every field on them. Add them with add_object, or fold their fields into an object that stayed.';
+        }
+
         $objects = [];
         $usedObjectSlugs = [];
         foreach (array_slice($rawObjects, 0, self::MAX_OBJECTS) as $i => $object) {

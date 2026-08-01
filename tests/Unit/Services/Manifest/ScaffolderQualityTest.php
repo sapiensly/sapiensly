@@ -1584,3 +1584,37 @@ it('leaves a name alone when pluralising it would need an accent it cannot infer
         ->and(Inflector::plural('Cliente', 'es'))->toBe('Clientes')
         ->and(Inflector::plural('Clientes', 'es'))->toBe('Clientes');
 });
+
+it('says which objects it left out instead of dropping them in silence', function () {
+    // Seven entities described, six built. The result otherwise reads as a
+    // success: a whole entity the description asked for, and every field on it,
+    // gone without a word. Fields over their own cap already reported this.
+    $spec = ['objects' => [], 'links' => []];
+    foreach (['Propietarios', 'Inmuebles', 'Inquilinos', 'Contratos', 'Pagos', 'Incidencias', 'Partidas'] as $name) {
+        $spec['objects'][] = [
+            'name' => $name,
+            'slug' => mb_strtolower($name),
+            'fields' => [['name' => 'Nombre', 'slug' => 'nombre', 'type' => 'string', 'options' => null]],
+        ];
+    }
+
+    $coercions = [];
+    $normalized = app(AppScaffolder::class)->normalizeSpec($spec, $coercions);
+
+    expect($normalized['objects'])->toHaveCount(6)
+        ->and(implode(' ', $coercions))->toContain('Partidas')
+        ->and(implode(' ', $coercions))->toContain('left out');
+});
+
+it('stays quiet when everything described was built', function () {
+    $spec = ['objects' => [
+        ['name' => 'Clientes', 'slug' => 'clientes', 'fields' => [
+            ['name' => 'Nombre', 'slug' => 'nombre', 'type' => 'string', 'options' => null],
+        ]],
+    ], 'links' => []];
+
+    $coercions = [];
+    app(AppScaffolder::class)->normalizeSpec($spec, $coercions);
+
+    expect($coercions)->toBe([]);
+});
