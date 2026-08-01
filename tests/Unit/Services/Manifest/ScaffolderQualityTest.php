@@ -1416,3 +1416,117 @@ it('derives a line total from quantity and unit price, sale or not', function ()
     expect($sum)->not->toBeNull()
         ->and($sum['target_field_id'])->toBe($total['id']);
 });
+
+/**
+ * A six-object app, the shape that exposed the dashboard's arithmetic: one KPI
+ * per object plus two per object with money, a donut per select and a trend per
+ * object came to nineteen blocks — some four thousand pixels of scrolling
+ * before a single record existed. Nobody lays that out on purpose.
+ *
+ * @return array<string, mixed>
+ */
+function scaffoldOperation(): array
+{
+    $base = [
+        'schema_version' => '1.0.0', 'id' => 'app_scaffold_op1', 'slug' => 'op', 'name' => 'Op', 'version' => 1,
+        'objects' => [], 'pages' => [],
+        'permissions' => ['roles' => [['id' => 'rol_admin00001', 'slug' => 'admin', 'name' => 'Admin', 'is_default' => true]]],
+        'settings' => ['default_locale' => 'es-MX', 'default_currency' => 'MXN'],
+    ];
+
+    $spec = [
+        'objects' => [
+            ['name' => 'Clientes', 'slug' => 'clientes', 'fields' => [
+                ['name' => 'Razon Social', 'slug' => 'razon_social', 'type' => 'string', 'options' => null],
+                ['name' => 'Tipo de Contrato', 'slug' => 'tipo_contrato', 'type' => 'single_select', 'options' => [
+                    ['value' => 'preventivo', 'label' => 'Preventivo'], ['value' => 'integral', 'label' => 'Integral'],
+                ]],
+            ]],
+            ['name' => 'Sedes', 'slug' => 'sedes', 'fields' => [
+                ['name' => 'Nombre', 'slug' => 'nombre', 'type' => 'string', 'options' => null],
+            ]],
+            ['name' => 'Ordenes', 'slug' => 'ordenes', 'fields' => [
+                ['name' => 'Folio', 'slug' => 'folio', 'type' => 'string', 'options' => null],
+                ['name' => 'Estado', 'slug' => 'estado', 'type' => 'single_select', 'options' => [
+                    ['value' => 'recibida', 'label' => 'Recibida'], ['value' => 'cerrada', 'label' => 'Cerrada'],
+                ]],
+                ['name' => 'Costo Total', 'slug' => 'costo_total', 'type' => 'currency', 'options' => null],
+            ]],
+            ['name' => 'Tecnicos', 'slug' => 'tecnicos', 'fields' => [
+                ['name' => 'Nombre', 'slug' => 'nombre', 'type' => 'string', 'options' => null],
+                ['name' => 'Especialidad', 'slug' => 'especialidad', 'type' => 'single_select', 'options' => [
+                    ['value' => 'mecanica', 'label' => 'Mecanica'], ['value' => 'electrica', 'label' => 'Electrica'],
+                ]],
+            ]],
+            ['name' => 'Refacciones', 'slug' => 'refacciones', 'fields' => [
+                ['name' => 'Descripcion', 'slug' => 'descripcion', 'type' => 'string', 'options' => null],
+                ['name' => 'Cantidad', 'slug' => 'cantidad', 'type' => 'number', 'options' => null],
+                ['name' => 'Costo Unitario', 'slug' => 'costo_unitario', 'type' => 'currency', 'options' => null],
+                ['name' => 'Importe', 'slug' => 'importe', 'type' => 'currency', 'options' => null],
+            ]],
+        ],
+        'links' => [
+            ['from' => 'sedes', 'to' => 'clientes', 'name' => 'cliente'],
+            ['from' => 'ordenes', 'to' => 'sedes', 'name' => 'sede'],
+            ['from' => 'ordenes', 'to' => 'tecnicos', 'name' => 'tecnico'],
+            ['from' => 'refacciones', 'to' => 'ordenes', 'name' => 'orden'],
+        ],
+    ];
+
+    return app(AppScaffolder::class)->assemble($base, $spec);
+}
+
+it('keeps the dashboard to what fits on a first screen', function () {
+    $dashboard = pageBySlug(scaffoldOperation(), 'dashboard');
+    $kpis = blockByType($dashboard, 'metric_grid')['items'];
+
+    expect(count($dashboard['blocks']))->toBeLessThanOrEqual(7)
+        ->and(count($kpis))->toBeLessThanOrEqual(5);
+
+    // Money leads, and it is the operational core's money: an app tracking work
+    // orders wants "how much are we billing", not "how many depots".
+    expect($kpis[0]['aggregation'])->toBe('sum')
+        ->and($kpis[0]['label'])->toBe('Total Ordenes');
+
+    // One trend, for that same core — not one per object.
+    $trends = blocksByType($dashboard, 'sparkline');
+    expect($trends)->toHaveCount(1)
+        ->and($trends[0]['label'])->toBe('Ordenes en el tiempo');
+
+    // Breakdowns lead with a real lifecycle; a classification only fills what
+    // the lifecycle ones left over.
+    $donuts = collect(blocksByType($dashboard, 'chart'))
+        ->filter(fn (array $b): bool => ($b['chart_type'] ?? null) === 'donut')
+        ->values();
+    expect($donuts)->toHaveCount(2)
+        ->and($donuts[0]['label'])->toBe('Ordenes por estado');
+});
+
+it('keeps a line item out of the menu but reachable from its order', function () {
+    $manifest = scaffoldOperation();
+    $paths = collect($manifest['pages'])->pluck('path');
+
+    // A part used on an order is not a place you navigate to.
+    expect($paths)->not->toContain('/refacciones')
+        ->and($paths)->toContain('/ordenes', '/clientes');
+
+    // It is still fully usable where it belongs: the order's detail page lists
+    // its lines and offers the form that adds one.
+    $detail = collect($manifest['pages'])->firstWhere('path', '/ordenes_detail');
+    $refacciones = collect($manifest['objects'])->firstWhere('slug', 'refacciones');
+
+    $related = collect($detail['blocks'])->firstWhere('type', 'related_list');
+    expect($related['object_id'])->toBe($refacciones['id']);
+
+    $addForm = collect($detail['blocks'])
+        ->filter(fn (array $b): bool => ($b['type'] ?? null) === 'modal')
+        ->map(fn (array $b): array => $b['blocks'][0] ?? [])
+        ->first(fn (array $f): bool => ($f['object_id'] ?? null) === $refacciones['id']);
+    expect($addForm)->not->toBeNull();
+});
+
+it('leaves a plain child its own page — being a child is not being a line', function () {
+    // Sedes belong to Clientes and have no quantity or unit price. "All the
+    // depots" is a page someone wants; dropping it would be a loss.
+    expect(collect(scaffoldOperation()['pages'])->pluck('path'))->toContain('/sedes');
+});

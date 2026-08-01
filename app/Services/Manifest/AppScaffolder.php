@@ -116,6 +116,20 @@ class AppScaffolder
     /** Max charts of each kind (breakdown / trend / value-bar) on the scaffolded dashboard. */
     private const DASHBOARD_CHART_CAP = 4;
 
+    /**
+     * A dashboard is an editorial artifact, so it gets a budget.
+     *
+     * Generated per object × per metric it came to 19 blocks for a six-object
+     * app — ten KPIs, five charts, four sparklines, some four thousand pixels
+     * of scrolling before a single record existed. Nobody would lay that out on
+     * purpose. These are the number of things worth putting on a first screen.
+     */
+    private const DASHBOARD_BREAKDOWN_CAP = 2;
+
+    private const DASHBOARD_TREND_CAP = 1;
+
+    private const DASHBOARD_VALUE_BAR_CAP = 1;
+
     /** Max KPI cards in the dashboard's opening metric_grid — the headline few, not a wall. */
     private const DASHBOARD_KPI_CAP = 5;
 
@@ -585,14 +599,27 @@ class AppScaffolder
         // hand, next to the two numbers it is the product of.
         $this->synthesizeLineTotals($built, $currency, $lang);
 
-        // Pass 3: a list page per object (now that relation fields exist).
+        // Pass 3: a list page per object (now that relation fields exist) —
+        // except for the line items, which are not places anyone navigates to.
+        //
+        // "Refacción Usada" had a page of its own and an entry in the menu, and
+        // a part used on a work order is not a concept you go and look at: it
+        // exists inside its order, where the detail page already lists and adds
+        // them. The test is the one that decides a line total is derivable —
+        // quantity AND unit price — because that is exactly what makes a row a
+        // line rather than a thing.
         $objects = [];
         $objectPages = [];
         $forDashboard = [];
         foreach ($built as $i => $entry) {
             $objects[] = $entry['def'];
-            $objectPages[$i] = $this->buildPage(['name' => $entry['def']['name'], 'slug' => $entry['def']['slug']], $entry['def']['id'], $entry['pageFields'], $lang);
             $forDashboard[] = ['name' => $entry['def']['name'], 'id' => $entry['def']['id'], 'fieldIndex' => $entry['pageFields']];
+
+            if ($this->isLineItem($entry['def'], $relationsByChild[$i] ?? [], $lang)) {
+                continue;
+            }
+
+            $objectPages[$i] = $this->buildPage(['name' => $entry['def']['name'], 'slug' => $entry['def']['slug']], $entry['def']['id'], $entry['pageFields'], $lang);
         }
 
         // Pass 4: a master-detail page for every parent that has children — the
@@ -1402,41 +1429,109 @@ class AppScaffolder
      * @param  array<int, array{name: string, id: string, fieldIndex: array<int, array{id: string, slug: string, type: string}>}>  $objects
      * @return array<string, mixed>
      */
+    /**
+     * Whether an object is a LINE of something else rather than a thing in its
+     * own right.
+     *
+     * Belongs to a parent, and carries the quantity + unit price that make a
+     * row an economic line. Deliberately narrow: a task belonging to a project
+     * is also a child, and "all my tasks" is a page people very much want — so
+     * being a child is not enough on its own.
+     *
+     * @param  array<string, mixed>  $def
+     * @param  array<int, array<string, mixed>>  $relations
+     */
+    private function isLineItem(array $def, array $relations, string $lang): bool
+    {
+        if ($relations === []) {
+            return false;
+        }
+
+        $lex = SemanticLexicon::for($lang);
+        $words = fn (array $f): array => [(string) ($f['name'] ?? ''), (string) ($f['slug'] ?? '')];
+
+        $hasQuantity = false;
+        $hasUnitPrice = false;
+        foreach ($def['fields'] ?? [] as $field) {
+            $type = $field['type'] ?? null;
+            if ($type === 'number' && $lex->matches('quantity', ...$words($field))) {
+                $hasQuantity = true;
+            }
+            if ($type === 'currency' && $lex->matches('unit_price', ...$words($field))) {
+                $hasUnitPrice = true;
+            }
+        }
+
+        return $hasQuantity && $hasUnitPrice;
+    }
+
+    /**
+     * The object a dashboard is really about: the first that has a status, since
+     * a status is what makes records move and therefore what anyone watches.
+     * Falls back to the first object when nothing has one.
+     *
+     * @param  array<int, array<string, mixed>>  $objects
+     * @return array<string, mixed>|null
+     */
+    private function primaryObject(array $objects, string $lang): ?array
+    {
+        foreach ($objects as $object) {
+            if ($this->statusField($object['fieldIndex'], $lang) !== null) {
+                return $object;
+            }
+        }
+
+        return $objects[0] ?? null;
+    }
+
     private function buildDashboard(string $appName, string $slug, array $objects, string $lang = 'en'): array
     {
-        // One record-count KPI per object …
-        $items = array_map(fn (array $o): array => [
-            'id' => $this->id('itm'),
-            'label' => $o['name'],
-            'query' => ['object_id' => $o['id']],
-            'aggregation' => 'count',
-        ], $objects);
+        // The app's operational core: the object whose records move through a
+        // status. That is what a dashboard is about, and what earns the money
+        // figures and the trend line — an app tracking work orders wants "how
+        // much are we billing", not "how many depots do we have".
+        $primary = $this->primaryObject($objects, $lang);
 
-        // … plus money KPIs (total + average of the first currency field) for
-        // objects that track an amount, so the dashboard leads with the figures
-        // that matter, not just counts.
-        foreach ($objects as $object) {
-            $currencyField = $this->firstFieldOfType($object['fieldIndex'], 'currency');
-            if ($currencyField === null) {
-                continue;
-            }
+        // Money first, because a figure beats a count, then counts — the
+        // primary object's ahead of the rest.
+        $items = [];
+        $primaryCurrency = $primary !== null
+            ? $this->firstFieldOfType($primary['fieldIndex'], 'currency')
+            : null;
+
+        if ($primary !== null && $primaryCurrency !== null) {
             $items[] = [
                 'id' => $this->id('itm'),
-                'label' => $this->labelTotal($lang, $object['name']),
-                'query' => ['object_id' => $object['id']],
+                'label' => $this->labelTotal($lang, $primary['name']),
+                'query' => ['object_id' => $primary['id']],
                 'aggregation' => 'sum',
-                'field_id' => $currencyField['id'],
+                'field_id' => $primaryCurrency['id'],
                 'format' => 'currency',
             ];
             $items[] = [
                 'id' => $this->id('itm'),
-                'label' => $this->labelAverage($lang, $object['name']),
-                'query' => ['object_id' => $object['id']],
+                'label' => $this->labelAverage($lang, $primary['name']),
+                'query' => ['object_id' => $primary['id']],
                 'aggregation' => 'avg',
-                'field_id' => $currencyField['id'],
+                'field_id' => $primaryCurrency['id'],
                 'format' => 'currency',
             ];
         }
+
+        $ordered = $primary === null
+            ? $objects
+            : [$primary, ...array_filter($objects, fn (array $o): bool => $o['id'] !== $primary['id'])];
+
+        foreach ($ordered as $object) {
+            $items[] = [
+                'id' => $this->id('itm'),
+                'label' => $object['name'],
+                'query' => ['object_id' => $object['id']],
+                'aggregation' => 'count',
+            ];
+        }
+
+        $items = array_slice($items, 0, self::DASHBOARD_KPI_CAP);
 
         $blocks = [
             ['id' => $this->id('blk'), 'type' => 'heading', 'content' => $appName],
@@ -1446,10 +1541,32 @@ class AppScaffolder
         // Per object, the visualisations its shape supports. Status donuts come
         // first (so the first `chart` block stays the status breakdown), then a
         // growth trend, then a value-by-status bar for money objects.
+        // Breakdowns lead with the objects that have a real status; a
+        // classification breakdown only fills a slot the lifecycle ones left
+        // empty. On a six-object app "customers by contract type" is the fourth
+        // most interesting thing on the page and does not earn a place.
+        $withStatus = [];
+        $withClassification = [];
+        foreach ($objects as $object) {
+            if ($this->statusField($object['fieldIndex'], $lang) !== null) {
+                $withStatus[] = $object;
+
+                continue;
+            }
+            if ($this->firstFieldOfType($object['fieldIndex'], 'single_select') !== null) {
+                $withClassification[] = $object;
+            }
+        }
+        $breakdownObjects = array_slice(
+            [...$withStatus, ...$withClassification],
+            0,
+            self::DASHBOARD_BREAKDOWN_CAP,
+        );
+
         $charts = 0;
         $trends = [];
         $valueBars = [];
-        foreach ($objects as $object) {
+        foreach ($breakdownObjects as $object) {
             if ($charts >= self::DASHBOARD_CHART_CAP) {
                 break;
             }
@@ -1489,23 +1606,27 @@ class AppScaffolder
                 }
             }
 
-            // A growth trend works for every object via the always-present
-            // sys_created_at system field (sparkline truncates it to day).
+        }
+
+        // One trend, for the operational core. "Depots over time" is not a
+        // signal anyone watches; four of them is a wall.
+        $trendObject = $primary ?? ($objects[0] ?? null);
+        if ($trendObject !== null) {
             $trends[] = [
                 'id' => $this->id('blk'),
                 'type' => 'sparkline',
-                'label' => $this->labelOverTime($lang, $object['name']),
-                'data_source' => ['object_id' => $object['id'], 'limit' => self::DASHBOARD_ROW_LIMIT],
+                'label' => $this->labelOverTime($lang, $trendObject['name']),
+                'data_source' => ['object_id' => $trendObject['id'], 'limit' => self::DASHBOARD_ROW_LIMIT],
                 'x_field_id' => 'sys_created_at',
                 'aggregation' => 'count',
             ];
         }
 
         // Append trends and value bars after the breakdowns, each capped.
-        foreach (array_slice($trends, 0, self::DASHBOARD_CHART_CAP) as $trend) {
+        foreach (array_slice($trends, 0, self::DASHBOARD_TREND_CAP) as $trend) {
             $blocks[] = $trend;
         }
-        foreach (array_slice($valueBars, 0, self::DASHBOARD_CHART_CAP) as $bar) {
+        foreach (array_slice($valueBars, 0, self::DASHBOARD_VALUE_BAR_CAP) as $bar) {
             $blocks[] = $bar;
         }
 
