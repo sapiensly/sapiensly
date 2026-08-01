@@ -3,6 +3,8 @@ import { computed } from 'vue';
 import type { FieldDef, ObjectDef } from '../types/manifest';
 import { resolveField } from '../types/manifest';
 import { themeTokens, useRuntimeTheme } from '../useRuntimeTheme';
+import FieldValue from './FieldValue.vue';
+import { type DisplayContext } from './fieldDisplay';
 
 interface DetailField {
     field_id: string;
@@ -20,7 +22,15 @@ interface RecordDetailBlock {
 
 const props = defineProps<{
     block: RecordDetailBlock;
-    data: { record: { id: string; data: Record<string, unknown> } | null } | undefined;
+    data:
+        | {
+              record: {
+                  id: string;
+                  data: Record<string, unknown>;
+                  labels?: Record<string, unknown>;
+              } | null;
+          }
+        | undefined;
     objects: ObjectDef[];
     locale: string;
     defaultCurrency: string;
@@ -33,72 +43,90 @@ const object = computed<ObjectDef | undefined>(() =>
 );
 const record = computed(() => props.data?.record ?? null);
 
-const rows = computed(() =>
+const context = computed<DisplayContext>(() => ({
+    locale: props.locale,
+    defaultCurrency: props.defaultCurrency,
+    labels: record.value?.labels,
+}));
+
+/**
+ * Prose spans the full row; everything else pairs up across the grid.
+ *
+ * A description sharing a 3-up row with a status wraps to five cramped lines
+ * beside two words, so the long ones get the whole width and the short ones
+ * stay side by side.
+ */
+const WIDE_TYPES = new Set(['long_text', 'rich_text', 'file', 'date_range']);
+
+interface DetailRow {
+    key: string;
+    label: string;
+    field?: FieldDef;
+    value: unknown;
+    wide: boolean;
+}
+
+const rows = computed<DetailRow[]>(() =>
     props.block.fields.map((f) => {
         const field = resolveField(object.value, f.field_id);
         return {
             key: f.field_id,
             label: f.label_override ?? field?.name ?? f.field_id,
-            value: field ? format(field, record.value?.data?.[field.slug]) : '—',
+            field,
+            value: field ? record.value?.data?.[field.slug] : undefined,
+            wide: WIDE_TYPES.has(field?.type ?? ''),
         };
     }),
 );
-
-function format(field: FieldDef, value: unknown): string {
-    if (value === null || value === undefined || value === '') return '—';
-    if (field.type === 'currency' && typeof value === 'number') {
-        return new Intl.NumberFormat(props.locale, {
-            style: 'currency',
-            currency: field.currency_code ?? props.defaultCurrency ?? 'MXN',
-        }).format(value);
-    }
-    if (field.type === 'number' && typeof value === 'number') {
-        return new Intl.NumberFormat(props.locale).format(value);
-    }
-    if (field.type === 'boolean') return value ? '✓' : '—';
-    if (field.type === 'single_select') {
-        return field.options?.find((o) => o.value === value)?.label ?? String(value);
-    }
-    if (field.type === 'multi_select' && Array.isArray(value)) {
-        return value
-            .map((v) => field.options?.find((o) => o.value === v)?.label ?? String(v))
-            .join(', ');
-    }
-    if (field.type === 'date' || field.type === 'datetime') {
-        try {
-            const d = new Date(String(value));
-            return field.type === 'date' ? d.toLocaleDateString(props.locale) : d.toLocaleString(props.locale);
-        } catch {
-            return String(value);
-        }
-    }
-    if (field.type === 'rating') {
-        const n = Number(value);
-        const max = (field as unknown as { max?: number }).max ?? 5;
-        return '★'.repeat(Math.max(0, Math.min(max, Math.round(n)))) + ` ${n}/${max}`;
-    }
-    if (field.type === 'date_range' && value && typeof value === 'object') {
-        const r = value as { from?: string; to?: string };
-        const fmt = (s?: string) => (s ? new Date(s).toLocaleDateString(props.locale) : '—');
-        return `${fmt(r.from)} → ${fmt(r.to)}`;
-    }
-    if (field.type === 'file' && value && typeof value === 'object') {
-        return (value as { original_name?: string }).original_name ?? 'file';
-    }
-    return String(value);
-}
 </script>
 
 <template>
+    <!--
+        Stacked pairs on a responsive grid, not a label/value row split across
+        the card. The old layout pushed every value hard right, so on a wide
+        screen a label sat a thousand pixels from the thing it named and reading
+        one record meant sweeping left to right per line. Label above value
+        keeps the two together at any width, and the grid uses the space the
+        card actually has instead of padding it with air.
+    -->
     <div :class="['rounded-sp-sm border p-5', t.surface]">
-        <p v-if="block.label" :class="['mb-3 text-[11px] uppercase tracking-wider', t.textSubtle]">{{ block.label }}</p>
+        <p
+            v-if="block.label"
+            :class="['mb-4 text-[11px] tracking-wider uppercase', t.textSubtle]"
+        >
+            {{ block.label }}
+        </p>
 
-        <p v-if="!record" :class="['py-6 text-center text-xs', t.textMuted]">No record selected.</p>
+        <p v-if="!record" :class="['py-6 text-center text-xs', t.textMuted]">
+            No record selected.
+        </p>
 
-        <dl v-else class="divide-y divide-soft">
-            <div v-for="row in rows" :key="row.key" class="flex justify-between gap-4 py-2">
-                <dt :class="['text-xs', t.textMuted]">{{ row.label }}</dt>
-                <dd :class="['text-right text-sm font-medium', t.text]">{{ row.value }}</dd>
+        <dl
+            v-else
+            class="grid grid-cols-1 gap-x-8 gap-y-4 sm:grid-cols-2 xl:grid-cols-3"
+        >
+            <div
+                v-for="row in rows"
+                :key="row.key"
+                :class="row.wide ? 'sm:col-span-2 xl:col-span-3' : ''"
+            >
+                <dt
+                    :class="[
+                        'mb-1 text-[11px] tracking-wide uppercase',
+                        t.textSubtle,
+                    ]"
+                >
+                    {{ row.label }}
+                </dt>
+                <dd :class="['text-sm', t.text]">
+                    <FieldValue
+                        v-if="row.field"
+                        :field="row.field"
+                        :value="row.value"
+                        :context="context"
+                    />
+                    <template v-else>—</template>
+                </dd>
             </div>
         </dl>
     </div>

@@ -212,10 +212,36 @@ class BlockDataResolver
                 return ['record' => null];
             }
             $record = $this->records->find($app, $block['object_id'], $recordId, $manifest, $context);
+            if ($record === null) {
+                return ['record' => null];
+            }
 
-            return ['record' => $record === null
-                ? null
-                : $this->mapRows([$record], $this->hiddenSlugsFor($context, $block['object_id']))[0]];
+            // find() does not expand, and a detail page is exactly where
+            // "which ticket?" needs an answer a person can read. One read per
+            // relation, through the same access-checked finder.
+            $object = $this->findObject($manifest, $block['object_id']);
+            $plan = $this->relationLabelPlan($object, $manifest);
+            $labels = [];
+            foreach ($object['fields'] ?? [] as $field) {
+                $entry = $plan[$field['id'] ?? ''] ?? null;
+                $fk = $entry !== null ? ($record->data[$entry['slug']] ?? null) : null;
+                if ($entry === null || ! is_string($fk) || $fk === '') {
+                    continue;
+                }
+
+                $related = $this->records->find($app, $field['target_object_id'], $fk, $manifest, $context);
+                $label = $related?->data[$entry['display']] ?? null;
+                if (is_scalar($label) && (string) $label !== '') {
+                    $labels[$entry['slug']] = (string) $label;
+                }
+            }
+
+            $row = $this->mapRows([$record], $this->hiddenSlugsFor($context, $block['object_id']))[0];
+            if ($labels !== []) {
+                $row['labels'] = $labels;
+            }
+
+            return ['record' => $row];
         }
 
         if ($block['type'] === 'related_list') {
@@ -975,10 +1001,85 @@ class BlockDataResolver
             return $this->connectedRows($app, $object, $dataSource, $context);
         }
 
+        // Resolve the relations this object points at, so a cell shows the
+        // record's name instead of its id. Batched by the query service (one
+        // extra read per relation, no N+1), and only when the object actually
+        // has a belongs-to.
+        $labelPlan = $this->relationLabelPlan($object, $manifest);
+        if ($labelPlan !== []) {
+            $dataSource['expand'] = array_values(array_unique([
+                ...($dataSource['expand'] ?? []),
+                ...array_keys($labelPlan),
+            ]));
+        }
+
         return $this->mapRows(
             $this->records->query($app, $dataSource, $manifest, $context),
             $this->hiddenSlugsFor($context, $dataSource['object_id'] ?? null),
+            $labelPlan,
         );
+    }
+
+    /**
+     * Which of an object's relation fields can be shown by name, and which
+     * field of the target says that name.
+     *
+     * Only belongs-to: a has-many holds many records and has no single label to
+     * stand in for them. The target's `primary_display_field_id` is the
+     * author's answer when they set one; otherwise the first text field is the
+     * same guess the scaffolder makes when it picks a card title.
+     *
+     * @param  array<string, mixed>|null  $object
+     * @param  array<string, mixed>  $manifest
+     * @return array<string, array{slug: string, display: string}>
+     */
+    private function relationLabelPlan(?array $object, array $manifest): array
+    {
+        $plan = [];
+
+        foreach ($object['fields'] ?? [] as $field) {
+            if (($field['type'] ?? null) !== 'relation'
+                || ($field['cardinality'] ?? null) !== 'many_to_one') {
+                continue;
+            }
+
+            $target = $this->findObject($manifest, $field['target_object_id'] ?? null);
+            if ($target === null) {
+                continue;
+            }
+
+            $display = null;
+            foreach ($target['fields'] ?? [] as $candidate) {
+                if (($candidate['id'] ?? null) === ($target['primary_display_field_id'] ?? null)) {
+                    $display = $candidate['slug'] ?? null;
+                    break;
+                }
+            }
+            $display ??= $this->firstTextSlug($target);
+
+            if ($display !== null) {
+                $plan[$field['id']] = ['slug' => $field['slug'], 'display' => $display];
+            }
+        }
+
+        return $plan;
+    }
+
+    /**
+     * The slug of the first field that reads as a name, or null when the object
+     * has nothing text-like to label a row with.
+     *
+     * @param  array<string, mixed>  $object
+     */
+    private function firstTextSlug(array $object): ?string
+    {
+        foreach ($object['fields'] ?? [] as $field) {
+            if (in_array($field['type'] ?? null, ['string', 'long_text', 'rich_text'], true)) {
+                return $field['slug'] ?? null;
+            }
+        }
+
+        return null;
     }
 
     /**
@@ -1053,7 +1154,7 @@ class BlockDataResolver
      * @param  list<string>  $hiddenSlugs  field slugs to strip from every row (field_restrictions.hidden)
      * @return list<array{id: string, data: array<string, mixed>}>
      */
-    private function mapRows(iterable $records, array $hiddenSlugs = []): array
+    private function mapRows(iterable $records, array $hiddenSlugs = [], array $labelPlan = []): array
     {
         $out = [];
         foreach ($records as $r) {
@@ -1065,6 +1166,21 @@ class BlockDataResolver
             $data['sys_created_at'] = optional($r->created_at)->toIso8601String();
             $data['sys_updated_at'] = optional($r->updated_at)->toIso8601String();
             $row = ['id' => $r->id, 'data' => $data];
+
+            // Display text for each relation, keyed by the field's own slug —
+            // the id stays in `data` untouched, since filters and actions
+            // address the record by it.
+            $labels = [];
+            foreach ($labelPlan as $fieldId => $plan) {
+                $related = $r->expanded[$fieldId] ?? null;
+                $label = is_array($related) ? ($related['data'][$plan['display']] ?? null) : null;
+                if (is_scalar($label) && (string) $label !== '') {
+                    $labels[$plan['slug']] = (string) $label;
+                }
+            }
+            if ($labels !== []) {
+                $row['labels'] = $labels;
+            }
             // Inline-expanded belongs_to relations (RecordQueryService::query with
             // `expand`); already access- and field-hiding-safe at the engine level.
             if (! empty($r->expanded)) {

@@ -3,6 +3,8 @@ import { computed, inject, reactive, ref } from 'vue';
 import type { FieldDef, ObjectDef } from '../types/manifest';
 import { useActionExecutor } from '../useActionExecutor';
 import { themeTokens, useRuntimeTheme } from '../useRuntimeTheme';
+import FieldValue from './FieldValue.vue';
+import { type DisplayContext, valueChips } from './fieldDisplay';
 
 interface KanbanBlock {
     id: string;
@@ -17,6 +19,7 @@ interface KanbanBlock {
 interface RowData {
     id: string;
     data: Record<string, unknown>;
+    labels?: Record<string, unknown>;
 }
 
 const props = defineProps<{
@@ -45,6 +48,37 @@ const metaFields = computed<FieldDef[]>(() =>
         .map((m) => fieldOf(m.field_id))
         .filter((f): f is FieldDef => f !== undefined),
 );
+
+/**
+ * A card's selects read as chips and everything else as a labelled line.
+ *
+ * Colour already says what a status or a priority is, and repeating its field
+ * name beside it costs the width the value needs — that is how "Descripcion"
+ * came to render as "Descr…" on a 288px card.
+ */
+const chipMetas = computed<FieldDef[]>(() =>
+    metaFields.value.filter((f) =>
+        ['single_select', 'multi_select'].includes(f.type),
+    ),
+);
+const lineMetas = computed<FieldDef[]>(() =>
+    metaFields.value.filter(
+        (f) => !['single_select', 'multi_select'].includes(f.type),
+    ),
+);
+
+function contextFor(row: RowData): DisplayContext {
+    return {
+        locale: props.locale,
+        defaultCurrency: props.defaultCurrency,
+        labels: row.labels,
+    };
+}
+
+/** Whether this row has any chip worth a row of its own. */
+function hasChips(row: RowData): boolean {
+    return chipMetas.value.some((f) => valueChips(f, row.data[f.slug]));
+}
 
 const { execute } = useActionExecutor();
 const appSlug = inject<string>('appSlug', '');
@@ -152,35 +186,6 @@ async function onDrop(col: Column) {
     }
 }
 
-function formatMeta(field: FieldDef, value: unknown): string {
-    if (value === null || value === undefined || value === '') return '—';
-    if (field.type === 'currency' && typeof value === 'number') {
-        return new Intl.NumberFormat(props.locale, {
-            style: 'currency',
-            currency: field.currency_code ?? props.defaultCurrency ?? 'MXN',
-        }).format(value);
-    }
-    if (field.type === 'number' && typeof value === 'number') {
-        return new Intl.NumberFormat(props.locale).format(value);
-    }
-    if (field.type === 'single_select') {
-        const opt = field.options?.find((o) => o.value === value);
-        return opt?.label ?? String(value);
-    }
-    if (field.type === 'boolean') return value ? '✓' : '—';
-    if (field.type === 'date' || field.type === 'datetime') {
-        try {
-            const d = new Date(String(value));
-            return field.type === 'date'
-                ? d.toLocaleDateString(props.locale)
-                : d.toLocaleString(props.locale);
-        } catch {
-            return String(value);
-        }
-    }
-    return String(value);
-}
-
 function titleFor(row: RowData): string {
     if (!titleField.value) return row.id;
     const v = row.data[titleField.value.slug];
@@ -195,7 +200,7 @@ function titleFor(row: RowData): string {
                 v-for="col in columns"
                 :key="col.value"
                 :class="[
-                    'flex w-72 shrink-0 flex-col rounded-sp-sm border',
+                    'flex min-w-64 flex-1 flex-col rounded-sp-sm border',
                     t.surface,
                     canDrag && draggingId
                         ? 'ring-1 ring-white/10 ring-inset'
@@ -250,21 +255,43 @@ function titleFor(row: RowData): string {
                         <p :class="['text-xs font-medium', t.text]">
                             {{ titleFor(row) }}
                         </p>
+                        <div
+                            v-if="hasChips(row)"
+                            class="mt-1.5 flex flex-wrap items-center gap-1"
+                        >
+                            <FieldValue
+                                v-for="f in chipMetas"
+                                :key="f.id"
+                                :field="f"
+                                :value="row.data[f.slug]"
+                                :context="contextFor(row)"
+                                size="sm"
+                            />
+                        </div>
                         <dl
-                            v-if="metaFields.length"
+                            v-if="lineMetas.length"
                             :class="[
-                                'mt-1 space-y-0.5 text-[11px]',
+                                'mt-1.5 space-y-0.5 text-[11px]',
                                 t.textMuted,
                             ]"
                         >
                             <div
-                                v-for="f in metaFields"
+                                v-for="f in lineMetas"
                                 :key="f.id"
-                                class="flex items-center justify-between gap-2"
+                                class="flex items-baseline gap-2"
                             >
-                                <dt class="truncate">{{ f.name }}</dt>
-                                <dd :class="['truncate', t.text]">
-                                    {{ formatMeta(f, row.data[f.slug]) }}
+                                <!-- The label never truncates; the value does.
+                                     A clipped field name tells you nothing,
+                                     while a clipped value at least starts with
+                                     the part that matters. -->
+                                <dt class="shrink-0">{{ f.name }}</dt>
+                                <dd :class="['ml-auto truncate', t.text]">
+                                    <FieldValue
+                                        :field="f"
+                                        :value="row.data[f.slug]"
+                                        :context="contextFor(row)"
+                                        size="sm"
+                                    />
                                 </dd>
                             </div>
                         </dl>

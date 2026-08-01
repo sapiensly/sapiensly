@@ -12,6 +12,8 @@ import type {
 import { resolveField } from '../types/manifest';
 import { useActionExecutor, type RuntimeAction } from '../useActionExecutor';
 import { themeTokens, useRuntimeTheme } from '../useRuntimeTheme';
+import FieldValue from './FieldValue.vue';
+import { type DisplayContext } from './fieldDisplay';
 
 const props = defineProps<{
     block: BlockTable;
@@ -207,90 +209,16 @@ function goToPage(p: number) {
     page.value = Math.min(Math.max(1, p), pageCount.value);
 }
 
-function formatCell(field: FieldDef, value: unknown): string {
-    if (value === null || value === undefined) return '—';
-    if (field.type === 'currency' && typeof value === 'number') {
-        return new Intl.NumberFormat(props.locale, {
-            style: 'currency',
-            currency: field.currency_code ?? props.defaultCurrency ?? 'MXN',
-        }).format(value);
-    }
-    if (field.type === 'number' && typeof value === 'number') {
-        return new Intl.NumberFormat(props.locale).format(value);
-    }
-    if (field.type === 'boolean') return value ? '✓' : '—';
-    if (field.type === 'single_select') {
-        const option = field.options?.find((o) => o.value === value);
-        return option?.label ?? String(value);
-    }
-    if (field.type === 'date' || field.type === 'datetime') {
-        try {
-            const d = new Date(String(value));
-            return field.type === 'date'
-                ? d.toLocaleDateString(props.locale)
-                : d.toLocaleString(props.locale);
-        } catch {
-            return String(value);
-        }
-    }
-    if (field.type === 'rating') {
-        const n = Number(value);
-        const max = (field as unknown as { max?: number }).max ?? 5;
-        const icon =
-            (field as unknown as { icon?: string }).icon === 'heart'
-                ? '♥'
-                : (field as unknown as { icon?: string }).icon === 'thumb'
-                  ? '👍'
-                  : '★';
-        return (
-            icon.repeat(Math.max(0, Math.min(max, Math.round(n)))) +
-            ` ${n}/${max}`
-        );
-    }
-    if (field.type === 'slider') {
-        const n = Number(value);
-        const fmt = (field as unknown as { format?: string }).format ?? 'plain';
-        if (fmt === 'percentage') return `${n}%`;
-        if (fmt === 'currency') {
-            try {
-                return new Intl.NumberFormat(props.locale, {
-                    style: 'currency',
-                    currency:
-                        (field as unknown as { currency_code?: string })
-                            .currency_code ??
-                        props.defaultCurrency ??
-                        'MXN',
-                }).format(n);
-            } catch {
-                return String(n);
-            }
-        }
-        return new Intl.NumberFormat(props.locale).format(n);
-    }
-    if (field.type === 'date_range' && value && typeof value === 'object') {
-        const r = value as { from?: string; to?: string };
-        const fmt = (s?: string) => {
-            if (!s) return '—';
-            try {
-                return new Date(s).toLocaleDateString(props.locale);
-            } catch {
-                return s;
-            }
-        };
-        return `${fmt(r.from)} → ${fmt(r.to)}`;
-    }
-    if (field.type === 'file' && value && typeof value === 'object') {
-        const f = value as { original_name?: string; size_bytes?: number };
-        const size = f.size_bytes ?? 0;
-        const sizeStr =
-            size < 1024
-                ? `${size} B`
-                : size < 1024 * 1024
-                  ? `${(size / 1024).toFixed(0)} KB`
-                  : `${(size / 1024 / 1024).toFixed(1)} MB`;
-        return `${f.original_name ?? '(unnamed)'} · ${sizeStr}`;
-    }
-    return String(value);
+/**
+ * A row's display context: the locale plus the server-resolved relation
+ * labels, which are per-row rather than per-column.
+ */
+function contextFor(row: { labels?: Record<string, unknown> }): DisplayContext {
+    return {
+        locale: props.locale,
+        defaultCurrency: props.defaultCurrency,
+        labels: row.labels,
+    };
 }
 
 /**
@@ -337,7 +265,11 @@ function richTextCell(value: unknown): string {
                 </tr>
             </thead>
             <tbody :class="['divide-y', t.rowBorder]">
-                <tr v-for="row in pagedRows" :key="row.id">
+                <tr
+                    v-for="row in pagedRows"
+                    :key="row.id"
+                    class="transition-colors hover:bg-surface-hover"
+                >
                     <td
                         v-for="col in columns"
                         :key="col.id"
@@ -384,9 +316,26 @@ function richTextCell(value: unknown): string {
                             />
                             {{ row.data[col.field.slug] }}
                         </span>
-                        <template v-else>{{
-                            formatCell(col.field, row.data[col.field.slug])
-                        }}</template>
+                        <!--
+                            A description is usually the longest field an object
+                            has; unbounded it eats the width the other columns
+                            need, so it gets a ceiling and an ellipsis, with the
+                            whole text one hover away.
+                        -->
+                        <span
+                            v-else-if="col.field.type === 'long_text'"
+                            class="block max-w-sm truncate"
+                            :title="String(row.data[col.field.slug] ?? '')"
+                        >
+                            {{ row.data[col.field.slug] ?? '—' }}
+                        </span>
+                        <FieldValue
+                            v-else
+                            :field="col.field"
+                            :value="row.data[col.field.slug]"
+                            :context="contextFor(row)"
+                            size="sm"
+                        />
                     </td>
                 </tr>
                 <tr v-if="rows.length === 0">
