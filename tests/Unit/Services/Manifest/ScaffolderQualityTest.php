@@ -2,6 +2,7 @@
 
 use App\Services\Manifest\AppScaffolder;
 use App\Services\Manifest\ManifestValidator;
+use App\Support\Locale\Inflector;
 
 /**
  * @return array<string, mixed>
@@ -532,7 +533,10 @@ it('derives a parent total from a child money field', function () {
         ->first(fn ($f) => ($f['type'] ?? null) === 'rollup' && ($f['aggregator'] ?? null) === 'sum');
 
     expect($sumRollup)->not->toBeNull();
-    expect($sumRollup['name'])->toBe('Total Subtotal');
+    // Named for the children it adds up, not for the field it sums: naming it
+    // after the field produced "Total Costo Total" on an object whose amount
+    // was already called "Costo Total".
+    expect($sumRollup['name'])->toBe('Total Renglones');
 
     $renglones = collect($manifest['objects'])->firstWhere('slug', 'renglones');
     $subtotal = collect($renglones['fields'])->firstWhere('slug', 'subtotal');
@@ -1529,4 +1533,54 @@ it('leaves a plain child its own page — being a child is not being a line', fu
     // Sedes belong to Clientes and have no quantity or unit price. "All the
     // depots" is a page someone wants; dropping it would be a loss.
     expect(collect(scaffoldOperation()['pages'])->pluck('path'))->toContain('/sedes');
+});
+
+it('names an object in the plural, and its record in the singular', function () {
+    // Everything that shows the object name shows MANY records — the list page,
+    // its nav entry, the count KPI — while the detail page and the "add"
+    // button are about one. Taking the model's word for it gave a table of
+    // customers headed "Cliente" and a breadcrumb reading "Cliente › Cliente".
+    $base = [
+        'schema_version' => '1.0.0', 'id' => 'app_scaffold_pl1', 'slug' => 'pl', 'name' => 'PL', 'version' => 1,
+        'objects' => [], 'pages' => [],
+        'permissions' => ['roles' => [['id' => 'rol_admin00001', 'slug' => 'admin', 'name' => 'Admin', 'is_default' => true]]],
+        'settings' => ['default_locale' => 'es-MX', 'default_currency' => 'MXN'],
+    ];
+    $spec = [
+        'objects' => [
+            ['name' => 'Cliente', 'slug' => 'clientes', 'fields' => [
+                ['name' => 'Razon Social', 'slug' => 'razon_social', 'type' => 'string', 'options' => null],
+            ]],
+            ['name' => 'Sede', 'slug' => 'sedes', 'fields' => [
+                ['name' => 'Nombre', 'slug' => 'nombre', 'type' => 'string', 'options' => null],
+            ]],
+        ],
+        'links' => [['from' => 'sedes', 'to' => 'clientes', 'name' => 'cliente']],
+    ];
+
+    $manifest = app(AppScaffolder::class)->assemble($base, $spec);
+
+    expect(collect($manifest['objects'])->pluck('name')->all())->toBe(['Clientes', 'Sedes']);
+
+    $list = pageBySlug($manifest, 'clientes');
+    $detail = collect($manifest['pages'])->firstWhere('path', '/clientes_detail');
+
+    expect($list['name'])->toBe('Clientes')
+        ->and($detail['name'])->toBe('Cliente')
+        // …so the breadcrumb no longer says the same word twice.
+        ->and(blockByType($detail, 'breadcrumb')['items'][0]['label'])->toBe('Clientes')
+        ->and(blockByType($detail, 'breadcrumb')['items'][1]['label'])->toBe('Cliente');
+
+    // The "add" button still speaks about one record.
+    expect(blockByType($list, 'button')['label'])->toBe('Agregar Cliente');
+});
+
+it('leaves a name alone when pluralising it would need an accent it cannot infer', function () {
+    // "Orden" pluralises to "órdenes" — a moved stress this cannot derive, and
+    // a missing accent is a spelling mistake on every screen. A singular
+    // heading is the lesser wrong.
+    expect(Inflector::plural('Orden de Trabajo', 'es'))->toBe('Orden de Trabajo')
+        ->and(Inflector::plural('Refacción', 'es'))->toBe('Refacciones')
+        ->and(Inflector::plural('Cliente', 'es'))->toBe('Clientes')
+        ->and(Inflector::plural('Clientes', 'es'))->toBe('Clientes');
 });

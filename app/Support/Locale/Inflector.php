@@ -23,6 +23,118 @@ class Inflector
         'Á' => 'A', 'É' => 'E', 'Í' => 'I', 'Ó' => 'O', 'Ú' => 'U',
     ];
 
+    /**
+     * Locale-aware pluralization — deliberately partial.
+     *
+     * Object names reach the scaffolder however the model wrote them, singular
+     * or plural, and a list page, a nav entry and a KPI all want the plural:
+     * "Cliente" as the heading of a table of customers reads like one customer,
+     * and it makes the detail page's breadcrumb say "Cliente › Cliente".
+     *
+     * Only the rules that are deterministic are applied. Spanish consonant
+     * stems take -es AND often move the stress ("orden" → "órdenes"), and a
+     * missing accent is a spelling mistake printed on every screen of every
+     * generated app — worse than a singular heading. Those are returned
+     * untouched, on purpose.
+     */
+    public static function plural(string $noun, string $lang = 'en'): string
+    {
+        $noun = trim($noun);
+        if ($noun === '') {
+            return $noun;
+        }
+
+        return match ($lang) {
+            'es' => self::pluralEs($noun),
+            'pt' => self::pluralPt($noun),
+            'fr' => self::pluralFr($noun),
+            default => (string) Str::plural($noun),
+        };
+    }
+
+    /**
+     * Spanish plural, for the endings where the answer is not in doubt: a word
+     * ending in an unstressed vowel takes -s, -ión takes -iones (losing the
+     * accent, which is mechanical), and -z takes -ces. Anything else is left
+     * as written — see plural().
+     */
+    private static function pluralEs(string $noun): string
+    {
+        if (str_contains($noun, ' ')) {
+            [$head, $rest] = explode(' ', $noun, 2);
+
+            return self::pluralEs($head).' '.$rest;
+        }
+
+        $lower = mb_strtolower($noun, 'UTF-8');
+        $len = mb_strlen($noun);
+
+        // Already plural: leave it be.
+        if (str_ends_with($lower, 's')) {
+            return $noun;
+        }
+
+        if (str_ends_with($lower, 'ión')) {
+            return mb_substr($noun, 0, $len - 3, 'UTF-8').'iones';
+        }
+
+        if (str_ends_with($lower, 'z')) {
+            return mb_substr($noun, 0, $len - 1, 'UTF-8').'ces';
+        }
+
+        if (preg_match('/[aeiou]$/u', $lower) === 1) {
+            return $noun.'s';
+        }
+
+        // A consonant stem needs -es and may need an accent it cannot infer.
+        return $noun;
+    }
+
+    /** Portuguese plural, same conservative footing as pluralEs(). */
+    private static function pluralPt(string $noun): string
+    {
+        if (str_contains($noun, ' ')) {
+            [$head, $rest] = explode(' ', $noun, 2);
+
+            return self::pluralPt($head).' '.$rest;
+        }
+
+        $lower = mb_strtolower($noun, 'UTF-8');
+        $len = mb_strlen($noun);
+
+        if (str_ends_with($lower, 's')) {
+            return $noun;
+        }
+        if (str_ends_with($lower, 'ão')) {
+            return mb_substr($noun, 0, $len - 2, 'UTF-8').'ões';
+        }
+        if (str_ends_with($lower, 'm')) {
+            return mb_substr($noun, 0, $len - 1, 'UTF-8').'ns';
+        }
+        if (preg_match('/[aeiou]$/u', $lower) === 1) {
+            return $noun.'s';
+        }
+
+        return $noun;
+    }
+
+    /** French plural: -s, but never after an existing -s/-x/-z. */
+    private static function pluralFr(string $noun): string
+    {
+        if (str_contains($noun, ' ')) {
+            [$head, $rest] = explode(' ', $noun, 2);
+
+            return self::pluralFr($head).' '.$rest;
+        }
+
+        $lower = mb_strtolower($noun, 'UTF-8');
+        if (preg_match('/[sxz]$/u', $lower) === 1) {
+            return $noun;
+        }
+
+        return $noun.'s';
+    }
+
     public static function singular(string $noun, string $lang = 'en'): string
     {
         $noun = trim($noun);

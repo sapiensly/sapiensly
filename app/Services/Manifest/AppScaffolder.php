@@ -777,10 +777,15 @@ class AppScaffolder
         // — and they each guess separately.
         $title = $this->titleField($fieldIndex);
 
+        // Plural, because everything that shows this name shows MANY records:
+        // the list page, its nav entry, the count KPI, the first crumb of the
+        // detail page. The singular is derived where it belongs — "Agregar
+        // Cliente", the detail page itself — which is also what stopped the
+        // breadcrumb reading "Cliente › Cliente".
         return [array_filter([
             'id' => $this->id('obj'),
             'slug' => $object['slug'],
-            'name' => $object['name'],
+            'name' => Inflector::plural($object['name'], $lang),
             'primary_display_field_id' => $title['id'] ?? null,
             'fields' => $fields,
         ], fn ($v): bool => $v !== null), $fieldIndex];
@@ -991,7 +996,10 @@ class AppScaffolder
             $sumField = [
                 'id' => $sumFieldId,
                 'slug' => $sumSlug,
-                'name' => $this->labelTotal($lang, $amount['name']),
+                // Named for the children it adds up, not for the field: a
+                // field already called "Costo Total" made this "Total Costo
+                // Total".
+                'name' => $this->labelTotal($lang, $from['name']),
                 'type' => 'rollup',
                 'via_relation_field_id' => $parentFieldId,
                 'aggregator' => 'sum',
