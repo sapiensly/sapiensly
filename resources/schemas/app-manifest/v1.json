@@ -2293,6 +2293,11 @@
                         "type": {
                             "const": "table"
                         },
+                        "searchable": {
+                            "type": "boolean",
+                            "default": true,
+                            "description": "Set false to withhold the table's search box. It otherwise appears once the list is long enough to be worth searching, and filters the loaded rows against what the cells show."
+                        },
                         "data_source": {
                             "$ref": "#/$defs/query"
                         },
