@@ -6957,6 +6957,14 @@
                     "pattern": "^[A-Z]{3}$",
                     "default": "MXN"
                 },
+                "density": {
+                    "enum": [
+                        "comfortable",
+                        "compact"
+                    ],
+                    "default": "comfortable",
+                    "description": "The vertical rhythm of the app's surfaces. `compact` tightens rows and fields — the same type at a closer spacing — for lists people work through all day. Dashboards want `comfortable`."
+                },
                 "theme": {
                     "enum": [
                         "light",

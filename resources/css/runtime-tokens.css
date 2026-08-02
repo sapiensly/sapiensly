@@ -224,3 +224,22 @@
     --sp-card-pad: 14px;
     --sp-stack: 10px;
 }
+
+/**
+ * The one class that spends the density tokens.
+ *
+ * A token nothing consumes is decoration: both rhythms shipped in the layer
+ * above and every table still measured its rows in a fixed Tailwind step. This
+ * is the seam — cells read their padding from the density the surface declares.
+ */
+.sp-app-surface .sp-cell {
+    padding: var(--sp-cell-py) var(--sp-cell-px);
+}
+
+/* Inputs follow the same rhythm, so a compact form is compact all the way
+   down rather than dense rows above roomy fields. */
+.sp-app-surface[data-density='compact']
+    input:not([type='checkbox']):not([type='radio']),
+.sp-app-surface[data-density='compact'] select {
+    min-height: var(--sp-field-h);
+}

@@ -122,12 +122,22 @@ function format(item: MetricItem, entry: MetricItemData | undefined): string {
                 >
                     {{ item.label }}
                 </p>
-                <RuntimeIcon
+                <!--
+                    A tile, not a loose glyph. At 16px beside a label the icon
+                    read as punctuation; on its own tinted square it reads as
+                    the card's subject, and the tint comes from the tenant's
+                    accent rather than a colour chosen for one brand.
+                -->
+                <span
                     v-if="item.icon"
-                    :name="item.icon"
-                    :size="16"
-                    :class="iconTint(item)"
-                />
+                    class="grid size-7 shrink-0 place-items-center rounded-sp-sm"
+                    :style="{
+                        background: 'var(--sp-accent-soft)',
+                        color: 'var(--sp-accent-text)',
+                    }"
+                >
+                    <RuntimeIcon :name="item.icon" :size="15" />
+                </span>
             </div>
             <div class="mt-2 flex items-end justify-between gap-3">
                 <p :class="['text-2xl font-bold tracking-tight', t.statTint]">

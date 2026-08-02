@@ -27,6 +27,7 @@ interface RuntimeSettings {
     default_currency?: string;
     default_locale?: string;
     theme?: 'light' | 'dark';
+    density?: 'comfortable' | 'compact';
     brand?: {
         name?: string;
         logo?: string;
@@ -95,6 +96,14 @@ const defaultCurrency = computed(
     () => settings.value.default_currency ?? 'MXN',
 );
 const theme = computed(() => settings.value.theme ?? 'light');
+
+/**
+ * How tightly the app's surfaces are packed. The token layer carries both
+ * rhythms; this is what selects one. A list people work through all day wants
+ * the close one, a dashboard the roomy one — and the type scale is the same
+ * either way, so compact is not a synonym for "squint".
+ */
+const density = computed(() => settings.value.density ?? 'comfortable');
 // Dashboards cap at the standard analytics container width; other app
 // kinds keep the full canvas (forms, tables, sites decide their own).
 const contentWidthClass = computed(() =>
@@ -296,7 +305,7 @@ onMounted(() => {
          "exit to Sapiensly" action — no separate platform bar. -->
     <!-- Author CSS, pre-scoped to .sp-app-surface server-side (can't leak out).
          Lives at the root so it applies in either layout. -->
-    <div class="sp-app-surface" :style="surfaceStyle">
+    <div class="sp-app-surface" :data-density="density" :style="surfaceStyle">
         <component :is="'style'" v-if="customCss">{{ customCss }}</component>
 
         <!-- Landing layout: chrome-less + full-bleed. No SiteHeader/Sidebar/Footer

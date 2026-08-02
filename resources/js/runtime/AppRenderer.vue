@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { router } from '@inertiajs/vue3';
 import type { ComputedRef } from 'vue';
 import { computed, defineAsyncComponent, inject, provide } from 'vue';
 import type {
@@ -455,6 +456,36 @@ function outerStyle(block: AnyBlock): Record<string, string> | undefined {
     return Object.keys(merged).length ? merged : undefined;
 }
 
+/**
+ * What a broken block says, and to whom.
+ *
+ * It used to read `Block "blk_01k…" (table) could not load`, followed by the
+ * raw exception in monospace. That is a message for whoever wrote the block,
+ * shown to whoever is trying to use the app — who can do nothing with a block
+ * id, and is left unable to tell a broken page from an empty one.
+ *
+ * So it says the plain thing and offers the one action that ever helps: try
+ * again. The technical detail stays, in the title, for the person who is
+ * debugging — one hover away rather than in everyone's face.
+ */
+const BROKEN_WORD: Record<string, { title: string; retry: string }> = {
+    en: { title: 'This section could not be loaded', retry: 'Try again' },
+    es: { title: 'No se pudo cargar esta sección', retry: 'Reintentar' },
+    pt: {
+        title: 'Não foi possível carregar esta seção',
+        retry: 'Tentar de novo',
+    },
+    fr: { title: 'Cette section n’a pas pu être chargée', retry: 'Réessayer' },
+};
+
+const brokenWords = computed(
+    () => BROKEN_WORD[props.locale.slice(0, 2).toLowerCase()] ?? BROKEN_WORD.en,
+);
+
+function retryBlocks(): void {
+    router.reload({ only: ['blockData'] });
+}
+
 function blockError(blockId: string): string | null {
     const entry = props.blockData[blockId];
     if (
@@ -473,14 +504,23 @@ function blockError(blockId: string): string | null {
     <template v-for="block in blocks" :key="block.id">
         <div
             v-if="blockError(block.id)"
-            class="rounded-sp-sm border border-dashed border-amber-400/40 bg-amber-500/5 p-3 text-[11px] text-amber-400"
+            class="flex flex-wrap items-center gap-3 rounded-sp-sm border border-dashed p-4 text-xs"
+            :style="{
+                borderColor: 'var(--sp-warn-border)',
+                background: 'var(--sp-warn-soft)',
+                color: 'var(--sp-warn)',
+            }"
+            :title="`${block.type} ${block.id}: ${blockError(block.id)}`"
         >
-            <div class="font-medium">
-                Block "{{ block.id }}" ({{ block.type }}) could not load
-            </div>
-            <div class="mt-1 font-mono text-amber-300/70">
-                {{ blockError(block.id) }}
-            </div>
+            <span class="font-medium">{{ brokenWords.title }}</span>
+            <button
+                type="button"
+                class="rounded-pill border px-3 py-1 transition-colors"
+                :style="{ borderColor: 'var(--sp-warn-border)' }"
+                @click="retryBlocks"
+            >
+                {{ brokenWords.retry }}
+            </button>
         </div>
         <div
             v-else-if="isSupported(block.type) && hasWrapper(block)"

@@ -494,12 +494,12 @@ function isNumericColumn(col: Column): boolean {
  * seventeen-column object used to do, turning a row into a paragraph.
  */
 function cellClass(col: Column): string {
-    if (col.kind === 'action') return 'px-3 py-2 whitespace-nowrap';
+    if (col.kind === 'action') return 'sp-cell whitespace-nowrap';
     if (isNumericColumn(col)) {
-        return 'px-3 py-2 text-right tabular-nums whitespace-nowrap';
+        return 'sp-cell text-right tabular-nums whitespace-nowrap';
     }
 
-    return 'max-w-[32ch] truncate px-3 py-2';
+    return 'sp-cell max-w-[32ch] truncate';
 }
 
 /** Which page of the result the reader is on. Reset by anything that changes
@@ -975,7 +975,7 @@ function richTextCell(value: unknown): string {
                         <th
                             v-for="col in columns"
                             :key="col.id"
-                            class="px-3 py-2 text-[11px] font-medium tracking-wider whitespace-nowrap uppercase transition-colors"
+                            class="sp-cell text-[11px] font-medium tracking-wider whitespace-nowrap uppercase transition-colors"
                             :class="[
                                 isNumericColumn(col)
                                     ? 'text-right'
