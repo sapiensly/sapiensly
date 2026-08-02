@@ -137,6 +137,12 @@ class BlockDataResolver
     private function resolveDataBlock(App $app, array $block, array $manifest, array $context): ?array
     {
         if ($block['type'] === 'table') {
+            $source = $this->applyTableView($block, $manifest, $context);
+            // Whether the server answered this table's own question. Sticky, so
+            // a search that happens to return three rows does not hand control
+            // back to the browser mid-interaction and lose the other 297.
+            $paged = $source !== $block['data_source'];
+            $block['data_source'] = $source;
             $rows = $this->queryRows($app, $block['data_source'], $manifest, $context);
 
             // How many there ARE, not just how many were sent. The table sorts
@@ -153,6 +159,7 @@ class BlockDataResolver
                 'rows' => $rows,
                 'total' => $total,
                 'truncated' => $total > count($rows),
+                'paged' => $paged,
             ];
         }
 
@@ -1041,6 +1048,75 @@ class BlockDataResolver
             $this->hiddenSlugsFor($context, $dataSource['object_id'] ?? null),
             $labelPlan,
         );
+    }
+
+    /**
+     * The URL key a table's own sort/search/page ride on.
+     *
+     * Derived identically here and in the browser from the block's id, so the
+     * two cannot drift, and shortened because three of these end up in a URL a
+     * person may share. Two tables on one page would have to collide on the
+     * last six characters of a ULID to clash.
+     */
+    public static function tableParamKey(string $blockId): string
+    {
+        return 't'.substr($blockId, -6);
+    }
+
+    /**
+     * Fold the reader's own view of a table — what they searched for, sorted
+     * by, and which page they are on — into the query that feeds it.
+     *
+     * Present only once they have touched something: until then the block
+     * loads its whole ceiling and the browser sorts and searches that, which is
+     * instant and needs no round trip. Past the ceiling that stops being
+     * possible, so the question goes to the database instead of being answered
+     * from a page of it.
+     *
+     * @param  array<string, mixed>  $block
+     * @param  array<string, mixed>  $manifest
+     * @param  array<string, mixed>  $context
+     * @return array<string, mixed>
+     */
+    private function applyTableView(array $block, array $manifest, array $context): array
+    {
+        $source = $block['data_source'];
+        $params = is_array($context['params'] ?? null) ? $context['params'] : [];
+        $key = self::tableParamKey((string) ($block['id'] ?? ''));
+
+        $search = trim((string) ($params[$key.'_q'] ?? ''));
+        $sort = trim((string) ($params[$key.'_s'] ?? ''));
+        $page = max(1, (int) ($params[$key.'_p'] ?? 1));
+
+        if ($search === '' && $sort === '' && $page === 1) {
+            return $source;
+        }
+
+        if ($search !== '') {
+            $source['search'] = $search;
+        }
+
+        // The URL carries the field's slug, which is readable and stable; the
+        // query layer wants its id.
+        if ($sort !== '') {
+            [$slug, $direction] = array_pad(explode(':', $sort, 2), 2, 'asc');
+            $object = $this->findObject($manifest, $source['object_id'] ?? null);
+            $field = collect($object['fields'] ?? [])->firstWhere('slug', $slug);
+            if ($field !== null) {
+                $source['sort'] = [[
+                    'field_id' => $field['id'],
+                    'direction' => $direction === 'desc' ? 'desc' : 'asc',
+                ]];
+            }
+        }
+
+        // One page at a time now, rather than a ceiling the browser pages
+        // through: the rows past it are exactly what this exists to reach.
+        $pageSize = (int) ($block['pagination']['page_size'] ?? 25);
+        $source['limit'] = $pageSize;
+        $source['offset'] = ($page - 1) * $pageSize;
+
+        return $source;
     }
 
     /**

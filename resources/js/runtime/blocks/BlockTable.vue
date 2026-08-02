@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { router } from '@inertiajs/vue3';
 import {
     ArrowDown,
     ArrowUp,
@@ -378,6 +379,59 @@ function word(
 const truncated = computed(() => props.data?.truncated === true);
 const totalRows = computed(() => props.data?.total ?? rows.value.length);
 
+/**
+ * Who answers this table's questions.
+ *
+ * While the whole object fits under the block's ceiling, the browser does —
+ * instantly, with no round trip, which is better. Past it the browser is
+ * holding a page and cannot honestly sort or search the rest, so the question
+ * goes to the database and the answer arrives through the URL, which makes a
+ * sorted, searched, paged view a link someone can send.
+ */
+const serverMode = computed(
+    () => props.data?.paged === true || truncated.value,
+);
+
+const paramKey = computed(() => 't' + props.block.id.slice(-6));
+
+function urlParam(suffix: string): string {
+    if (typeof window === 'undefined') return '';
+
+    return (
+        new URLSearchParams(window.location.search).get(
+            paramKey.value + suffix,
+        ) ?? ''
+    );
+}
+
+/**
+ * Ask the server for a different view of this table. Only `blockData` is
+ * re-fetched, and the entry replaces rather than stacks — twenty keystrokes
+ * should not be twenty presses of the back button.
+ */
+function pushView(changes: Record<string, string>): void {
+    const params = new URLSearchParams(window.location.search);
+    for (const [suffix, value] of Object.entries(changes)) {
+        if (value === '') {
+            params.delete(paramKey.value + suffix);
+        } else {
+            params.set(paramKey.value + suffix, value);
+        }
+    }
+    const qs = params.toString();
+
+    router.get(
+        window.location.pathname + (qs !== '' ? '?' + qs : ''),
+        {},
+        {
+            only: ['blockData'],
+            preserveState: true,
+            preserveScroll: true,
+            replace: true,
+        },
+    );
+}
+
 const pickerLabel = computed(() => {
     const shown = hideableColumns.value.length - hidden.value.size;
 
@@ -394,11 +448,15 @@ const pickerLabel = computed(() => {
  * the round trip to the keyboard. The threshold reads the LOADED rows, so a
  * table gains the box as its object fills up.
  */
-const showSearch = computed(
-    () =>
-        (props.block as { searchable?: boolean }).searchable !== false &&
-        rows.value.length > 8,
-);
+const showSearch = computed(() => {
+    if ((props.block as { searchable?: boolean }).searchable === false) {
+        return false;
+    }
+    // Never on the row count alone once the server is answering: a search that
+    // narrows to two rows would take the box away mid-typing, and the object is
+    // large by definition or we would not be here.
+    return serverMode.value || rows.value.length > 8;
+});
 
 interface TableRow {
     id: string;
@@ -411,7 +469,18 @@ const rows = computed<TableRow[]>(() => props.data?.rows ?? []);
 /** Which page of the result the reader is on. Reset by anything that changes
  * what the result contains — page 4 of a search that now returns two rows is
  * an empty screen the reader has to work out how to escape. */
-const page = ref(1);
+const page = ref(
+    typeof window === 'undefined'
+        ? 1
+        : Math.max(
+              1,
+              Number(
+                  new URLSearchParams(window.location.search).get(
+                      't' + props.block.id.slice(-6) + '_p',
+                  ),
+              ) || 1,
+          ),
+);
 
 /**
  * A row's display context: the locale plus the server-resolved relation
@@ -446,11 +515,33 @@ function toggleColumn(id: string): void {
  * author ordered this" is a real answer, and without a way back the reader
  * cannot return to it short of reloading the page.
  */
-const sort = computed<SortState | null>(() =>
-    view.value.sort !== null && knownIds.value.has(view.value.sort.id)
+/**
+ * What the reader last asked for, before the server has said anything back.
+ *
+ * The URL is where a sort LIVES — it is what makes the view shareable — but it
+ * only changes once the visit lands, so reading it back is reading the past. A
+ * second click on the same header saw no sort yet and asked for ascending
+ * again, which is why a column would never turn around.
+ */
+const pendingSort = ref<SortState | null | undefined>(undefined);
+
+const sort = computed<SortState | null>(() => {
+    if (serverMode.value) {
+        if (pendingSort.value !== undefined) return pendingSort.value;
+        const [slug, dir] = urlParam('_s').split(':');
+        const col = allColumns.value.find(
+            (c): c is DataColumn => c.kind === 'data' && c.field.slug === slug,
+        );
+
+        return col === undefined
+            ? null
+            : { id: col.id, dir: dir === 'desc' ? 'desc' : 'asc' };
+    }
+
+    return view.value.sort !== null && knownIds.value.has(view.value.sort.id)
         ? view.value.sort
-        : null,
-);
+        : null;
+});
 
 function isSortable(col: Column): col is DataColumn {
     if (col.kind !== 'data') return false;
@@ -470,6 +561,18 @@ function toggleSort(col: Column): void {
             : current.dir === 'asc'
               ? { id: col.id, dir: 'desc' }
               : null;
+
+    if (serverMode.value) {
+        pendingSort.value = next;
+        // The slug, not the column id: it survives an edit that renumbers the
+        // columns, and it is what a person reads in the URL.
+        pushView({
+            _s: next === null ? '' : `${col.field.slug}:${next.dir}`,
+            _p: '',
+        });
+
+        return;
+    }
 
     view.value = { ...view.value, sort: next };
     persist();
@@ -524,7 +627,13 @@ function sortValue(row: TableRow, col: DataColumn): number | string {
  * find that row. Accents are folded, so "direccion" finds "Dirección" —
  * otherwise the search fails exactly where Spanish needs it most.
  */
-const query = ref('');
+const query = ref(
+    typeof window === 'undefined'
+        ? ''
+        : (new URLSearchParams(window.location.search).get(
+              't' + props.block.id.slice(-6) + '_q',
+          ) ?? ''),
+);
 
 function fold(value: string): string {
     return value
@@ -534,6 +643,11 @@ function fold(value: string): string {
 }
 
 const searchableRows = computed(() => {
+    // The database already answered; filtering again would only remove rows it
+    // deliberately kept (it searches every text field, not just the visible
+    // columns).
+    if (serverMode.value) return rows.value;
+
     const needle = fold(query.value.trim());
     if (needle === '') return rows.value;
 
@@ -555,6 +669,8 @@ const searchableRows = computed(() => {
 });
 
 const sortedRows = computed(() => {
+    if (serverMode.value) return searchableRows.value;
+
     const state = sort.value;
     if (state === null) return searchableRows.value;
 
@@ -652,22 +768,46 @@ const pageSize = computed(
         (props.block as { pagination?: { page_size?: number } }).pagination
             ?.page_size ?? 0,
 );
-const pageCount = computed(() =>
-    pageSize.value > 0
+const pageCount = computed(() => {
+    // In server mode the page IS the result, so the count comes from how many
+    // records match rather than from how many arrived.
+    if (serverMode.value) {
+        return Math.max(
+            1,
+            Math.ceil(totalRows.value / Math.max(1, pageSize.value)),
+        );
+    }
+
+    return pageSize.value > 0
         ? Math.max(1, Math.ceil(sortedRows.value.length / pageSize.value))
-        : 1,
-);
+        : 1;
+});
 const pagedRows = computed(() => {
-    if (pageSize.value <= 0) return sortedRows.value;
+    if (serverMode.value || pageSize.value <= 0) return sortedRows.value;
     const start = (Math.min(page.value, pageCount.value) - 1) * pageSize.value;
     return sortedRows.value.slice(start, start + pageSize.value);
 });
 function goToPage(p: number) {
-    page.value = Math.min(Math.max(1, p), pageCount.value);
+    const target = Math.min(Math.max(1, p), pageCount.value);
+    if (serverMode.value) {
+        pushView({ _p: target === 1 ? '' : String(target) });
+
+        return;
+    }
+    page.value = target;
 }
 
-watch(query, () => {
+/**
+ * Typing is not a request per keystroke. Debounced in server mode, immediate in
+ * the browser where there is nothing to wait for.
+ */
+let searchTimer: ReturnType<typeof setTimeout> | undefined;
+watch(query, (value) => {
     page.value = 1;
+    if (!serverMode.value) return;
+
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(() => pushView({ _q: value.trim(), _p: '' }), 300);
 });
 
 /**
@@ -956,9 +1096,11 @@ function richTextCell(value: unknown): string {
         >
             <span
                 >{{ (page - 1) * pageSize + 1 }}–{{
-                    Math.min(page * pageSize, sortedRows.length)
+                    serverMode
+                        ? (page - 1) * pageSize + rows.length
+                        : Math.min(page * pageSize, sortedRows.length)
                 }}
-                / {{ sortedRows.length }}</span
+                / {{ serverMode ? totalRows : sortedRows.length }}</span
             >
             <div class="flex items-center gap-1">
                 <button
