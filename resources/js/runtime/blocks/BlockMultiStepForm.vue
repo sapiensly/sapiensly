@@ -211,6 +211,21 @@ function isRequired(rf: RenderedField): boolean {
 
 const showProgress = computed(() => props.block.show_progress !== false);
 
+const STEP_WORD: Record<string, (a: number, b: number) => string> = {
+    en: (a, b) => `Step ${a} of ${b}`,
+    es: (a, b) => `Paso ${a} de ${b}`,
+    pt: (a, b) => `Passo ${a} de ${b}`,
+    fr: (a, b) => `Étape ${a} sur ${b}`,
+};
+
+const stepCounter = computed(() => {
+    const say =
+        STEP_WORD[(props.locale ?? 'en').slice(0, 2).toLowerCase()] ??
+        STEP_WORD.en;
+
+    return say(currentStepIndex.value + 1, props.block.steps.length);
+});
+
 /**
  * Local pre-flight before moving to the next step: required fields in the
  * current step must be filled. The backend re-validates on final submit,
@@ -309,52 +324,74 @@ async function cancel() {
 <template>
     <form :class="wrapperClass" @submit.prevent="submit">
         <!-- Progress indicator: clickable bubbles for steps the user has already passed. -->
-        <ol v-if="showProgress" class="flex flex-wrap items-center gap-2">
-            <li
-                v-for="(step, idx) in block.steps"
-                :key="step.id"
-                class="flex items-center gap-2"
-            >
-                <button
-                    type="button"
-                    @click="
-                        idx < currentStepIndex ? (currentStepIndex = idx) : null
-                    "
-                    :disabled="idx > currentStepIndex"
-                    :class="[
-                        'flex items-center gap-2 rounded-pill px-2.5 py-1 text-[11px] transition-colors',
-                        idx === currentStepIndex
-                            ? 'bg-accent-blue/15 text-accent-blue'
-                            : idx < currentStepIndex
-                              ? 'text-ink-muted hover:text-ink'
-                              : 'text-ink-subtle opacity-50',
-                    ]"
+        <div
+            v-if="showProgress"
+            class="flex flex-wrap items-center justify-between gap-3"
+        >
+            <ol class="flex flex-wrap items-center gap-2">
+                <li
+                    v-for="(step, idx) in block.steps"
+                    :key="step.id"
+                    class="flex items-center gap-2"
                 >
-                    <span
+                    <button
+                        type="button"
+                        @click="
+                            idx < currentStepIndex
+                                ? (currentStepIndex = idx)
+                                : null
+                        "
+                        :disabled="idx > currentStepIndex"
                         :class="[
-                            'flex size-5 items-center justify-center rounded-full text-[10px] font-semibold',
+                            'flex items-center gap-2 rounded-pill px-2.5 py-1 text-[11px] transition-colors',
                             idx === currentStepIndex
-                                ? 'bg-accent-blue text-white'
+                                ? 'bg-accent-blue/15 text-accent-blue'
                                 : idx < currentStepIndex
-                                  ? 'bg-accent-blue/20 text-accent-blue'
-                                  : 'bg-surface-hover text-ink-subtle',
+                                  ? 'text-ink-muted hover:text-ink'
+                                  : 'text-ink-subtle opacity-50',
                         ]"
                     >
-                        <Check v-if="idx < currentStepIndex" class="size-3" />
-                        <template v-else>{{ idx + 1 }}</template>
-                    </span>
-                    {{ step.title }}
-                </button>
-                <span
-                    v-if="idx < block.steps.length - 1"
-                    :class="[
-                        'text-ink-subtle',
-                        idx < currentStepIndex ? 'opacity-100' : 'opacity-30',
-                    ]"
-                    >·</span
-                >
-            </li>
-        </ol>
+                        <span
+                            :class="[
+                                'flex size-5 items-center justify-center rounded-full text-[10px] font-semibold',
+                                idx === currentStepIndex
+                                    ? 'bg-accent-blue text-white'
+                                    : idx < currentStepIndex
+                                      ? 'bg-accent-blue/20 text-accent-blue'
+                                      : 'bg-surface-hover text-ink-subtle',
+                            ]"
+                        >
+                            <Check
+                                v-if="idx < currentStepIndex"
+                                class="size-3"
+                            />
+                            <template v-else>{{ idx + 1 }}</template>
+                        </span>
+                        {{ step.title }}
+                    </button>
+                    <span
+                        v-if="idx < block.steps.length - 1"
+                        :class="[
+                            'text-ink-subtle',
+                            idx < currentStepIndex
+                                ? 'opacity-100'
+                                : 'opacity-30',
+                        ]"
+                        >·</span
+                    >
+                </li>
+            </ol>
+
+            <!--
+                The count in words, beside the bubbles rather than instead of
+                them. Translated step titles wrap or spill on a narrow screen,
+                and then the bubbles alone stop answering the only question the
+                reader has: how much of this is left.
+            -->
+            <span class="shrink-0 text-[11px] text-ink-subtle tabular-nums">
+                {{ stepCounter }}
+            </span>
+        </div>
 
         <!-- Step header. -->
         <header v-if="currentStep" class="space-y-1">

@@ -178,3 +178,21 @@ it('keeps a row to one line and lines its numbers up', function () {
             "getComputedStyle(document.querySelector('tbody td:first-child')).textOverflow === 'ellipsis'"
         );
 })->group('browser');
+
+it('scrolls a long table inside its card instead of growing the page', function () {
+    $this->seed(RolesAndPermissionsSeeder::class);
+    // Four hundred rows used to make the page taller than the screen and take
+    // the toolbar — search, columns, export — up and away with it.
+    $app = wideTableApp(extraRows: 60);
+
+    visit("/r/{$app->slug}/contratos")->on()->macbookAir()
+        ->assertNoJavaScriptErrors()
+        ->assertScript(<<<'JS'
+        (() => {
+            const head = document.querySelector('thead');
+            const box = head.closest('div');
+            const capped = box.scrollHeight > box.clientHeight;
+            return getComputedStyle(head).position === 'sticky' && capped;
+        })()
+        JS);
+})->group('browser');

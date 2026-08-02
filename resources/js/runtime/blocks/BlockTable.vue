@@ -968,10 +968,19 @@ function richTextCell(value: unknown): string {
                 {{ exportLabel }}
             </a>
         </div>
-        <div class="overflow-x-auto">
+        <!--
+            The table scrolls inside its own card rather than growing the page.
+            Four hundred rows used to make the window taller than the screen
+            and take the toolbar — search, columns, export — up and away with
+            it. A short table is shorter than the ceiling and unaffected.
+        -->
+        <div class="max-h-[70vh] overflow-auto">
             <table class="w-full border-collapse text-sm">
-                <thead>
-                    <tr :class="['border-b', t.divider, t.headerRow]">
+                <thead class="sticky top-0 z-10">
+                    <tr
+                        :class="['border-b', t.divider, t.headerRow]"
+                        :style="{ background: 'var(--sp-surface-2)' }"
+                    >
                         <th
                             v-for="col in columns"
                             :key="col.id"
