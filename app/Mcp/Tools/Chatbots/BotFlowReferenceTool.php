@@ -36,6 +36,20 @@ class BotFlowReferenceTool extends SapiensTool
     /**
      * @return array<string, mixed>
      */
+    /**
+     * The node types a flow is built from, on their own — the admin catalogue
+     * lists exactly what an author is told here rather than restating it.
+     *
+     * @return list<array<string, mixed>>
+     */
+    public static function nodeTypes(): array
+    {
+        $reference = (new self)->reference();
+        $nodes = $reference['definition_shape']['node_types'] ?? $reference['node_types'] ?? [];
+
+        return is_array($nodes) ? array_values($nodes) : [];
+    }
+
     private function reference(): array
     {
         return [

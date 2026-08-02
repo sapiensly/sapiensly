@@ -18,6 +18,7 @@ import {
     NavAccess,
     NavAi,
     NavCloud,
+    NavComponents,
     NavDashboard,
     NavMcp,
     NavStack,
@@ -100,6 +101,13 @@ const navItems = computed<NavItem[]>(() => [
         href: '/admin/mcp',
         icon: NavMcp,
         match: (u) => u.startsWith('/admin/mcp'),
+    },
+    {
+        key: 'components',
+        label: t('admin.nav.components'),
+        href: '/admin/components',
+        icon: NavComponents,
+        match: (u) => u.startsWith('/admin/components'),
     },
     {
         key: 'stack',

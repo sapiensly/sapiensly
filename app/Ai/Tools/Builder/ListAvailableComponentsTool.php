@@ -33,7 +33,27 @@ class ListAvailableComponentsTool implements Tool
 
     public function handle(Request $request): string
     {
-        $catalog = [
+        $catalog = self::catalog();
+
+        return json_encode([
+            'components' => $this->withSchema('component', $catalog),
+            'site' => self::SITE_GUIDANCE,
+            'style' => self::STYLE_GUIDANCE,
+        ], JSON_THROW_ON_ERROR);
+    }
+
+    /**
+     * The block types, with the authoring note each one is introduced by.
+     *
+     * Public because the admin catalogue shows an author exactly what the model
+     * was told — a second telling of it, written somewhere else, is a second
+     * thing to keep true.
+     *
+     * @return list<array{type: string, description: string}>
+     */
+    public static function catalog(): array
+    {
+        return [
             ['type' => 'container', 'description' => 'Layout group. direction: row = equal side-by-side columns that fill the width and stretch to a shared height; column = stacked; masonry = pack children at their NATURAL height into responsive columns, filling vertical gaps (a true masonry wall for INDEPENDENT cards of varying height — reading order is column-major). Plus gap and nested blocks.'],
             ['type' => 'text', 'description' => 'Paragraph of body text. Has content (string) and size (xs|sm|base|lg|xl).'],
             ['type' => 'heading', 'description' => 'Section heading. Props: content, level (1-6, semantic), and optional size (sm|md|lg|xl|2xl|display) to override the visual size. Defaults are already website-scaled (h2 ≈ 2xl/3xl); use size="display" for a big landing section title or size="sm" to tone one down.'],
@@ -87,11 +107,9 @@ class ListAvailableComponentsTool implements Tool
             ['type' => 'card_grid', 'description' => 'Records rendered as cards in a responsive grid (alternative to table when visual scan beats density). Requires data_source and title_field_id. Optional: columns (1-6, default 3), subtitle_field_id, image_field_id (string field with a URL), meta_fields[]. Set `on_click` (an action_sequence) to make each card tappable — it runs with {{row.id}} / {{row.data.<slug>}} of that card and shows a small action button (override its icon with `action_icon`). THE primitive for a product picker that adds to an order: on_click create_record a line with values {<parent_rel>:"{{params.<x>}}", <item_rel>:"{{row.id}}", qty:1} then refresh.'],
             ['type' => 'multi_step_form', 'description' => 'Wizard form that splits fields across N ordered steps. Requires object_id, mode (create|edit), and steps[] where each step has {id, title, description?, fields[{field_id, label_override?, default_expression?, readonly_expression?, visible_if?, required_if?}]} (same per-field options as the `form` block). Optional: show_progress (default true) for the numbered indicator at the top, submit_label, cancel_label, on_submit (action sequence), on_cancel. mode=edit also requires record_id_expression. Use this instead of `form` when you have 8+ fields or a logical grouping (Personal info → Address → Preferences). Required fields are validated locally before advancing; the backend re-checks everything on submit. Each field_id can appear in at most one step.'],
         ];
-
-        return json_encode([
-            'components' => $this->withSchema('component', $catalog),
-            'site' => 'A website should have site chrome + a cohesive look, set in manifest `settings`: `accent` ("#RRGGBB" — the ONE brand colour; drives all buttons/links/highlights, set it once per site), `font` (sans|serif|rounded|mono), `theme` (light|dark, default light), `brand` {name, logo? (URL), cta? {label, href}} → renders a sticky site header, and `footer` {text?, links?[{label,href}]} → renders a site footer. Always set `accent` and `brand` for a real website so it does not look like a bare document.',
-            'style' => 'EVERY block accepts an optional `style` object to turn it into a section: {padding, margin (none|sm|md|lg), background "#RRGGBB", gradient {from,to,direction:to-b|to-r|to-br|to-tr}, color "#RRGGBB", max_width (sm|md|lg|full), full_bleed (bool)}. Build alternating sections by wrapping a `container` with style.padding="lg" + a background (flat `background` or a `gradient` — keep gradient from/to in the same tonal family). TEXT CONTRAST IS AUTOMATIC: setting background/gradient auto-picks a legible text colour (dark on light, light on dark) — do NOT set `color` and do NOT also put a background on inner heading/markdown. Set style.full_bleed=true on top-level coloured sections so the band spans edge-to-edge. Set style.max_width="md" on text sections so lines stay readable and centre on wide screens. Use this for visual rhythm — never leave a content page as plain text.',
-        ], JSON_THROW_ON_ERROR);
     }
+
+    private const SITE_GUIDANCE = 'A website should have site chrome + a cohesive look, set in manifest `settings`: `accent` ("#RRGGBB" — the ONE brand colour; drives all buttons/links/highlights, set it once per site), `font` (sans|serif|rounded|mono), `theme` (light|dark, default light), `brand` {name, logo? (URL), cta? {label, href}} → renders a sticky site header, and `footer` {text?, links?[{label,href}]} → renders a site footer. Always set `accent` and `brand` for a real website so it does not look like a bare document.';
+
+    private const STYLE_GUIDANCE = 'EVERY block accepts an optional `style` object to turn it into a section: {padding, margin (none|sm|md|lg), background "#RRGGBB", gradient {from,to,direction:to-b|to-r|to-br|to-tr}, color "#RRGGBB", max_width (sm|md|lg|full), full_bleed (bool)}. Build alternating sections by wrapping a `container` with style.padding="lg" + a background (flat `background` or a `gradient` — keep gradient from/to in the same tonal family). TEXT CONTRAST IS AUTOMATIC: setting background/gradient auto-picks a legible text colour (dark on light, light on dark) — do NOT set `color` and do NOT also put a background on inner heading/markdown. Set style.full_bleed=true on top-level coloured sections so the band spans edge-to-edge. Set style.max_width="md" on text sections so lines stay readable and centre on wide screens. Use this for visual rhythm — never leave a content page as plain text.';
 }

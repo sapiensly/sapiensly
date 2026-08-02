@@ -3,6 +3,7 @@
 use App\Http\Controllers\Admin\AdminAccessController;
 use App\Http\Controllers\Admin\AdminAiController;
 use App\Http\Controllers\Admin\AdminCloudController;
+use App\Http\Controllers\Admin\AdminComponentsController;
 use App\Http\Controllers\Admin\AdminDashboardController;
 use App\Http\Controllers\Admin\AdminMcpController;
 use App\Http\Controllers\Admin\AdminStackController;
@@ -49,6 +50,7 @@ Route::middleware(['auth', 'verified', 'sysadmin'])->prefix('admin')->group(func
 
     Route::get('/cloud', [AdminCloudController::class, 'index'])->name('admin.cloud.index');
 
+    Route::get('/components', [AdminComponentsController::class, 'index'])->name('admin.components.index');
     Route::get('/stack', [AdminStackController::class, 'index'])->name('admin.stack.index');
 });
 

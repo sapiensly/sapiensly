@@ -44,6 +44,7 @@ export {
     // navigation
     LayoutDashboard as NavDashboard,
     KeyRound as NavMcp,
+    Blocks as NavComponents,
     Layers as NavStack,
     Users as NavUsers,
     Pencil,
