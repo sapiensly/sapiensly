@@ -3,7 +3,7 @@ import NotificationBell from '@/runtime/NotificationBell.vue';
 import PortalAuthBar from '@/runtime/PortalAuthBar.vue';
 import RuntimeUserMenu from '@/runtime/RuntimeUserMenu.vue';
 import { useIsDarkSurface } from '@/runtime/useRuntimeTheme';
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
 
 interface Brand {
     name?: string;
@@ -36,6 +36,10 @@ const props = defineProps<{
     } | null;
     /** Where the portal is mounted, for its auth endpoints. */
     mount?: string;
+    /** The app's own locale. The chrome speaks the app's language, not the
+     *  platform session's — a Spanish app inside an English session was
+     *  labelling its own navigation in English. */
+    locale?: string;
 }>();
 
 // Only directly-addressable pages belong in the top nav; record-scoped detail
@@ -87,72 +91,144 @@ const logoSrc = computed<string | undefined>(
 // Active nav item — the same accent-tinted pill the sidebar uses, so the two
 // navigation layouts read as one system.
 const activeStyle = {
-    background:
-        'color-mix(in srgb, var(--sp-accent, #3b82f6) 14%, transparent)',
-    color: 'var(--sp-accent, #3b82f6)',
+    background: 'var(--sp-accent-soft-2)',
+    color: 'var(--sp-accent-text)',
 };
+
+/**
+ * The narrow-screen menu.
+ *
+ * The nav was `hidden sm:flex`, so below that width it did not shrink or fold —
+ * it vanished, and nothing replaced it. An app with six objects had no way to
+ * reach five of them on a phone. The links ARE the app's navigation; they
+ * cannot be what gets dropped when the space runs out.
+ */
+const menuOpen = ref(false);
+
+const MENU_WORD: Record<string, string> = {
+    en: 'Menu',
+    es: 'Menú',
+    pt: 'Menu',
+    fr: 'Menu',
+};
+
+const menuLabel = computed(
+    () =>
+        MENU_WORD[(props.locale ?? 'en').slice(0, 2).toLowerCase()] ??
+        MENU_WORD.en,
+);
 </script>
 
 <template>
     <header
         :class="[
-            'z-30 -mx-[var(--sp-bleed,1.25rem)] flex items-center justify-between gap-4 border-b px-[var(--sp-bleed,1.25rem)] py-3.5 backdrop-blur',
+            'z-30 -mx-[var(--sp-bleed,1.25rem)] border-b backdrop-blur',
             embedded ? 'relative' : 'sticky top-0',
         ]"
         :style="headerStyle"
     >
-        <a
-            class="flex items-center gap-2 font-semibold"
-            :href="hrefFor ? hrefFor(menuPages[0]?.slug ?? '') : '#'"
-        >
-            <img v-if="logoSrc" :src="logoSrc" alt="" class="h-7 w-auto" />
-            <span v-if="brand?.name" class="text-base tracking-tight">{{
-                brand.name
-            }}</span>
-        </a>
-
-        <nav
-            v-if="menuPages.length > 1"
-            class="hidden items-center gap-1 sm:flex"
+        <!-- The bar spans the window; its CONTENTS sit in the same 1360-wide
+             column the page content uses, so the brand lands directly above the
+             page title instead of drifting to the far edge on a wide screen.
+             The gutter is the same --sp-bleed the content column pads by. -->
+        <div
+            class="mx-auto flex w-full max-w-[1360px] items-center justify-between gap-4 px-[var(--sp-bleed,1.25rem)] py-3.5"
         >
             <a
-                v-for="p in menuPages"
-                :key="p.slug"
-                :href="hrefFor ? hrefFor(p.slug) : '#'"
-                class="rounded-pill px-3 py-1.5 text-sm transition-colors"
-                :style="p.slug === currentSlug ? activeStyle : { opacity: 0.7 }"
+                class="flex items-center gap-2 font-semibold"
+                :href="hrefFor ? hrefFor(menuPages[0]?.slug ?? '') : '#'"
             >
-                {{ p.name }}
-            </a>
-        </nav>
-
-        <div class="flex items-center gap-2">
-            <a
-                v-if="brand?.cta"
-                :href="brand.cta.href"
-                class="inline-flex items-center rounded-pill px-4 py-2 text-sm font-semibold text-white"
-                :style="{ backgroundColor: 'var(--sp-accent, #3b82f6)' }"
-            >
-                {{ brand.cta.label }}
+                <img v-if="logoSrc" :src="logoSrc" alt="" class="h-7 w-auto" />
+                <span v-if="brand?.name" class="text-base tracking-tight">{{
+                    brand.name
+                }}</span>
             </a>
 
-            <!-- Portal sign-in, when this portal has identity at all. -->
-            <PortalAuthBar
-                v-if="portalAuth?.enabled && mount"
-                :mount="mount"
-                :user="portalAuth.user"
-            />
+            <nav
+                v-if="menuPages.length > 1"
+                class="hidden items-center gap-1 sm:flex"
+            >
+                <a
+                    v-for="p in menuPages"
+                    :key="p.slug"
+                    :href="hrefFor ? hrefFor(p.slug) : '#'"
+                    class="rounded-pill px-3 py-1.5 text-sm transition-colors"
+                    :style="
+                        p.slug === currentSlug ? activeStyle : { opacity: 0.7 }
+                    "
+                >
+                    {{ p.name }}
+                </a>
+            </nav>
 
-            <!-- In-app inbox. Absent in the builder preview (`embedded`),
+            <!-- The same destinations where the row does not fit. Not a
+                 different navigation — the same one, folded. -->
+            <div v-if="menuPages.length > 1" class="relative sm:hidden">
+                <button
+                    type="button"
+                    class="rounded-pill px-3 py-1.5 text-sm opacity-70 transition-opacity hover:opacity-100"
+                    :aria-expanded="menuOpen"
+                    aria-haspopup="true"
+                    data-sp-nav-menu
+                    @click="menuOpen = !menuOpen"
+                >
+                    {{ menuLabel }}
+                </button>
+                <template v-if="menuOpen">
+                    <div class="fixed inset-0 z-20" @click="menuOpen = false" />
+                    <div
+                        class="absolute left-0 z-30 mt-1 max-h-80 min-w-44 overflow-y-auto rounded-sp-sm border py-1 shadow-lg"
+                        :style="{
+                            background: 'var(--sp-surface)',
+                            borderColor: 'var(--sp-border-medium)',
+                        }"
+                        role="menu"
+                    >
+                        <a
+                            v-for="p in menuPages"
+                            :key="p.slug"
+                            :href="hrefFor ? hrefFor(p.slug) : '#'"
+                            class="block px-3 py-2 text-sm whitespace-nowrap transition-colors"
+                            :style="
+                                p.slug === currentSlug
+                                    ? activeStyle
+                                    : { opacity: 0.75 }
+                            "
+                        >
+                            {{ p.name }}
+                        </a>
+                    </div>
+                </template>
+            </div>
+
+            <div class="flex items-center gap-2">
+                <a
+                    v-if="brand?.cta"
+                    :href="brand.cta.href"
+                    class="inline-flex items-center rounded-pill px-4 py-2 text-sm font-semibold text-white"
+                    :style="{ backgroundColor: 'var(--sp-accent, #3b82f6)' }"
+                >
+                    {{ brand.cta.label }}
+                </a>
+
+                <!-- Portal sign-in, when this portal has identity at all. -->
+                <PortalAuthBar
+                    v-if="portalAuth?.enabled && mount"
+                    :mount="mount"
+                    :user="portalAuth.user"
+                />
+
+                <!-- In-app inbox. Absent in the builder preview (`embedded`),
                  which has no session to read notifications for, and on a portal,
                  where the viewer is not a platform user. -->
-            <NotificationBell
-                v-if="!embedded && appSlug && !portalAuth"
-                :app-slug="appSlug"
-            />
+                <NotificationBell
+                    v-if="!embedded && appSlug && !portalAuth"
+                    :app-slug="appSlug"
+                />
 
-            <!-- Default user widget: identity + "exit to Sapiensly". -->
-            <RuntimeUserMenu />
+                <!-- Default user widget: identity + "exit to Sapiensly". -->
+                <RuntimeUserMenu />
+            </div>
         </div>
     </header>
 </template>

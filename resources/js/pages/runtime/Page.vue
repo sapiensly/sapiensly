@@ -419,12 +419,13 @@ onMounted(() => {
                     :app-slug="props.mount ? undefined : props.app.slug"
                     :portal-auth="props.portalAuth ?? null"
                     :mount="props.mount"
+                    :locale="locale"
                 />
             </div>
 
             <div
                 ref="sectionsEl"
-                class="relative flex-1 space-y-4 px-5 py-6"
+                class="relative mx-auto w-full max-w-[1360px] flex-1 space-y-4 px-5 py-6"
                 :class="contentWidthClass"
             >
                 <AppRenderer
