@@ -164,7 +164,11 @@ export function formatFieldValue(
         return new Intl.NumberFormat(ctx.locale).format(value);
     }
 
-    if (field.type === 'boolean') return value ? '✓' : EMPTY;
+    // False is an answer. Drawing it as the absence mark made "no" and "never
+    // filled in" the same glyph — on a column of "¿Pagado?" that is the
+    // difference between a debt and a question nobody asked. The blank case is
+    // already handled above, so anything reaching here was actually answered.
+    if (field.type === 'boolean') return value ? '✓' : '✗';
 
     if (field.type === 'single_select' || field.type === 'multi_select') {
         return (valueChips(field, value) ?? []).map((c) => c.label).join(', ');
