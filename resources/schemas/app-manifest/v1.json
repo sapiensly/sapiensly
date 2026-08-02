@@ -2712,18 +2712,79 @@
                         "columns": {
                             "type": "array",
                             "items": {
-                                "type": "object",
-                                "additionalProperties": false,
-                                "properties": {
-                                    "field_id": {
-                                        "$ref": "#/$defs/id"
+                                "oneOf": [
+                                    {
+                                        "type": "object",
+                                        "additionalProperties": false,
+                                        "properties": {
+                                            "field_id": {
+                                                "$ref": "#/$defs/id"
+                                            },
+                                            "label_override": {
+                                                "type": "string",
+                                                "maxLength": 80
+                                            }
+                                        },
+                                        "required": ["field_id"]
                                     },
-                                    "label_override": {
-                                        "type": "string",
-                                        "maxLength": 80
+                                    {
+                                        "type": "object",
+                                        "additionalProperties": false,
+                                        "description": "Action column: a button per row, exactly as on a table. on_click resolves {{row.id}} and {{row.data.<slug>}} from the clicked row. This is where a child record's own edit and delete live — a child object usually has no page of its own, so without it a line item can be added and never corrected.",
+                                        "properties": {
+                                            "id": {
+                                                "$ref": "#/$defs/id"
+                                            },
+                                            "type": {
+                                                "const": "action"
+                                            },
+                                            "label": {
+                                                "type": "string",
+                                                "maxLength": 40
+                                            },
+                                            "icon": {
+                                                "type": "string",
+                                                "maxLength": 40
+                                            },
+                                            "variant": {
+                                                "enum": [
+                                                    "primary",
+                                                    "secondary",
+                                                    "danger",
+                                                    "ghost"
+                                                ],
+                                                "default": "ghost"
+                                            },
+                                            "on_click": {
+                                                "$ref": "#/$defs/action_sequence"
+                                            },
+                                            "confirm": {
+                                                "type": "object",
+                                                "additionalProperties": false,
+                                                "required": [
+                                                    "title",
+                                                    "message"
+                                                ],
+                                                "properties": {
+                                                    "title": {
+                                                        "type": "string",
+                                                        "maxLength": 80
+                                                    },
+                                                    "message": {
+                                                        "type": "string",
+                                                        "maxLength": 300
+                                                    }
+                                                }
+                                            }
+                                        },
+                                        "required": [
+                                            "id",
+                                            "type",
+                                            "label",
+                                            "on_click"
+                                        ]
                                     }
-                                },
-                                "required": ["field_id"]
+                                ]
                             }
                         }
                     },

@@ -291,3 +291,51 @@ it('lets somebody act on the record whose page they are looking at', function ()
         // no longer there.
         ->and(collect($delete['on_click'])->firstWhere('type', 'navigate')['to'])->toBe('/clientes');
 });
+
+it('gives a child row the edit and delete it has nowhere else to put', function () {
+    // A child object has no page of its own, so the related list on the parent
+    // IS its screen. Without row actions a line item could be added and then
+    // never corrected or removed — a mistyped quantity became permanent.
+    Ai::fakeAgent(ChatAgent::class, [json_encode([
+        'summary' => 'Órdenes y sus refacciones.',
+        'objects' => [
+            ['name' => 'Órdenes', 'slug' => 'ordenes', 'fields' => [
+                ['name' => 'Folio', 'slug' => 'folio', 'type' => 'string'],
+            ]],
+            ['name' => 'Refacciones', 'slug' => 'refacciones', 'fields' => [
+                ['name' => 'Pieza', 'slug' => 'pieza', 'type' => 'string'],
+                ['name' => 'Cantidad', 'slug' => 'cantidad', 'type' => 'number'],
+            ]],
+        ],
+        'links' => [['from' => 'refacciones', 'to' => 'ordenes', 'name' => 'orden']],
+    ], JSON_THROW_ON_ERROR)]);
+
+    $base = summaryBase();
+    $base['settings']['default_locale'] = 'es-MX';
+    $manifest = summaryScaffolder()->scaffold($base, 'Taller.', User::factory()->create());
+
+    $detail = collect($manifest['pages'])->first(
+        fn (array $p): bool => str_contains((string) $p['path'], 'ordenes_detail'),
+    );
+    $list = collect($detail['blocks'])->firstWhere('type', 'related_list');
+
+    $actions = collect($list['columns'])->where('type', 'action');
+    expect($actions->pluck('label')->all())->toBe(['Editar', 'Eliminar']);
+
+    // Edit opens a modal carrying the clicked row; delete asks first and names
+    // what it is about to remove.
+    $delete = $actions->firstWhere('label', 'Eliminar');
+    expect($delete['confirm']['title'])->toBe('¿Eliminar Refacción?')
+        ->and(collect($delete['on_click'])->pluck('type')->all())->toBe(['delete_record', 'refresh'])
+        ->and(collect($delete['on_click'])->first()['record_id_expression'])->toBe('{{row.id}}');
+
+    // The edit form edits the row that was clicked, not the page's record.
+    $editModal = collect($detail['blocks'])
+        ->where('type', 'modal')
+        ->pluck('blocks.0')
+        ->first(fn (?array $f): bool => ($f['mode'] ?? null) === 'edit'
+            && $f['object_id'] === collect($manifest['objects'])->firstWhere('slug', 'refacciones')['id']);
+
+    expect($editModal)->not->toBeNull()
+        ->and($editModal['record_id_expression'])->toBe('{{params.record_id}}');
+});

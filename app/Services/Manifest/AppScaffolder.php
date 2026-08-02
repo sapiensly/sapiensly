@@ -3598,16 +3598,77 @@ class AppScaffolder
                 'variant' => 'primary',
                 'on_click' => [['type' => 'open_modal', 'modal_block_id' => $modalId]],
             ];
+            // The child's own edit form. A child object has no page of its
+            // own, so this list IS its screen: without these two columns a line
+            // item could be added and then never corrected or removed, which is
+            // how a mistyped quantity became permanent.
+            $editModalId = $this->id('blk');
+            $editValues = [];
+            foreach ($formIndex as $f) {
+                $editValues[$f['slug']] = '{{form.'.$f['slug'].'}}';
+            }
+
+            $blocks[] = [
+                'id' => $editModalId,
+                'type' => 'modal',
+                'title' => $this->labelEditTitle($lang, $childSingular),
+                'blocks' => [[
+                    'id' => $this->id('blk'),
+                    'type' => 'form',
+                    'object_id' => $childDef['id'],
+                    'mode' => 'edit',
+                    'record_id_expression' => '{{params.record_id}}',
+                    'fields' => $formFields,
+                    'submit_label' => $this->labelSave($lang),
+                    'on_submit' => [
+                        ['type' => 'update_record', 'object_id' => $childDef['id'], 'record_id_expression' => '{{params.record_id}}', 'values' => $editValues],
+                        ['type' => 'close_modal'],
+                        ['type' => 'show_toast', 'level' => 'success', 'message' => $this->toastSaved($lang, $childSingular)],
+                        ['type' => 'refresh'],
+                    ],
+                ]],
+            ];
+
+            $lex = SemanticLexicon::for($lang);
+            $childColumns = array_map(fn (array $f): array => ['field_id' => $f['id']], array_values(array_filter(
+                $child['pageFields'],
+                fn (array $f): bool => $f['id'] !== $childFieldId,
+            )));
+            $childColumns[] = [
+                'id' => $this->id('col'),
+                'type' => 'action',
+                'label' => $this->labelEdit($lang),
+                'icon' => 'pencil',
+                'variant' => 'ghost',
+                'on_click' => [[
+                    'type' => 'open_modal',
+                    'modal_block_id' => $editModalId,
+                    'params' => ['record_id' => '{{row.id}}', 'record' => '{{row.data}}'],
+                ]],
+            ];
+            $childColumns[] = [
+                'id' => $this->id('col'),
+                'type' => 'action',
+                'label' => $lex->label('delete'),
+                'icon' => 'trash-2',
+                'variant' => 'danger',
+                'confirm' => [
+                    'title' => $lex->label('delete_title', singular: $childSingular),
+                    'message' => $lex->label('delete_message'),
+                ],
+                'on_click' => [
+                    ['type' => 'delete_record', 'object_id' => $childDef['id'], 'record_id_expression' => '{{row.id}}'],
+                    ['type' => 'refresh'],
+                ],
+            ];
+
             $blocks[] = [
                 'id' => $this->id('blk'),
                 'type' => 'related_list',
                 'object_id' => $childDef['id'],
                 'via_relation_field_id' => $childFieldId,
                 'parent_id_expression' => '{{params.id}}',
-                'columns' => array_map(fn (array $f): array => ['field_id' => $f['id']], array_values(array_filter(
-                    $child['pageFields'],
-                    fn (array $f): bool => $f['id'] !== $childFieldId,
-                ))),
+                'columns' => $childColumns,
             ];
         }
 
