@@ -17,7 +17,7 @@
             {
                 "id": "obj_01kytgcyx8nx5cp8q0kv1s2ccv",
                 "slug": "tickets",
-                "name": "Ticket",
+                "name": "Tickets",
                 "fields": [
                     {
                         "id": "fld_01kytgcyx8nx5cp8q0kv1s2cce",
@@ -106,7 +106,7 @@
                     {
                         "id": "fld_01kytgcyx8nx5cp8q0kv1s2cd0",
                         "slug": "respuestas",
-                        "name": "Respuesta",
+                        "name": "Respuestas",
                         "type": "relation",
                         "target_object_id": "obj_01kytgcyx8nx5cp8q0kv1s2ccy",
                         "cardinality": "one_to_many",
@@ -115,7 +115,7 @@
                     {
                         "id": "fld_01kytgcyx8nx5cp8q0kv1s2cd1",
                         "slug": "respuestas_count",
-                        "name": "Respuesta",
+                        "name": "N.º de Respuestas",
                         "type": "rollup",
                         "via_relation_field_id": "fld_01kytgcyx8nx5cp8q0kv1s2cd0",
                         "aggregator": "count",
@@ -126,7 +126,7 @@
             {
                 "id": "obj_01kytgcyx8nx5cp8q0kv1s2ccy",
                 "slug": "respuestas",
-                "name": "Respuesta",
+                "name": "Respuestas",
                 "fields": [
                     {
                         "id": "fld_01kytgcyx8nx5cp8q0kv1s2ccw",
@@ -172,7 +172,7 @@
                         "items": [
                             {
                                 "id": "itm_01kytgcyx8nx5cp8q0kv1s2ce4",
-                                "label": "Ticket",
+                                "label": "Tickets",
                                 "query": {
                                     "object_id": "obj_01kytgcyx8nx5cp8q0kv1s2ccv"
                                 },
@@ -180,7 +180,7 @@
                             },
                             {
                                 "id": "itm_01kytgcyx8nx5cp8q0kv1s2ce5",
-                                "label": "Respuesta",
+                                "label": "Respuestas",
                                 "query": {
                                     "object_id": "obj_01kytgcyx8nx5cp8q0kv1s2ccy"
                                 },
@@ -191,7 +191,7 @@
                     {
                         "id": "blk_01kytgcyx8nx5cp8q0kv1s2ce8",
                         "type": "chart",
-                        "label": "Ticket por estado",
+                        "label": "Tickets por estado",
                         "chart_type": "donut",
                         "data_source": {
                             "object_id": "obj_01kytgcyx8nx5cp8q0kv1s2ccv",
@@ -203,7 +203,7 @@
                     {
                         "id": "blk_01kytgcyx8nx5cp8q0kv1s2ce9",
                         "type": "sparkline",
-                        "label": "Ticket en el tiempo",
+                        "label": "Tickets en el tiempo",
                         "data_source": {
                             "object_id": "obj_01kytgcyx8nx5cp8q0kv1s2ccv",
                             "limit": 500
@@ -214,7 +214,7 @@
                     {
                         "id": "blk_01kytgcyx8nx5cp8q0kv1s2cea",
                         "type": "sparkline",
-                        "label": "Respuesta en el tiempo",
+                        "label": "Respuestas en el tiempo",
                         "data_source": {
                             "object_id": "obj_01kytgcyx8nx5cp8q0kv1s2ccy",
                             "limit": 500
@@ -227,13 +227,13 @@
             {
                 "id": "pag_01kytgcyx8nx5cp8q0kv1s2cdf",
                 "slug": "tickets",
-                "name": "Ticket",
+                "name": "Tickets",
                 "path": "/tickets",
                 "blocks": [
                     {
                         "id": "blk_01kytgcyx8nx5cp8q0kv1s2cdd",
                         "type": "heading",
-                        "content": "Ticket"
+                        "content": "Tickets"
                     },
                     {
                         "id": "blk_01kytgcyx8nx5cp8q0kv1s2cd2",
@@ -456,13 +456,13 @@
             {
                 "id": "pag_01kytgcyx8nx5cp8q0kv1s2cdt",
                 "slug": "respuestas",
-                "name": "Respuesta",
+                "name": "Respuestas",
                 "path": "/respuestas",
                 "blocks": [
                     {
                         "id": "blk_01kytgcyx8nx5cp8q0kv1s2cdr",
                         "type": "heading",
-                        "content": "Respuesta"
+                        "content": "Respuestas"
                     },
                     {
                         "id": "blk_01kytgcyx8nx5cp8q0kv1s2cdg",
@@ -514,7 +514,7 @@
                     {
                         "id": "blk_01kyxp3y6j6xavghdt33pxgwxd",
                         "type": "modal",
-                        "title": "Editar Respuestum",
+                        "title": "Editar Respuesta",
                         "blocks": [
                             {
                                 "id": "blk_01kyxp3y6j6xavghdt33pxgwxe",

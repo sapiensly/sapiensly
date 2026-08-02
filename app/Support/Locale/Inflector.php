@@ -86,7 +86,37 @@ class Inflector
             return $noun.'s';
         }
 
-        // A consonant stem needs -es and may need an accent it cannot infer.
+        // A stressed final syllable takes -es and loses its written accent,
+        // which is mechanical: almacén → almacenes, balón → balones.
+        if (preg_match('/[áéíóú][ns]$/u', $lower) === 1) {
+            $len = mb_strlen($noun);
+            $stem = mb_substr($noun, 0, $len - 2, 'UTF-8');
+            $vowel = mb_substr($noun, $len - 2, 1, 'UTF-8');
+            $last = mb_substr($noun, $len - 1, 1, 'UTF-8');
+
+            return $stem.strtr($vowel, self::DEACCENT).$last.'es';
+        }
+
+        // Suffixes rather than final letters, because a final letter cannot
+        // tell Spanish from a loanword and these apps are full of both:
+        // "oportunidad" takes -es, but "email" does not become "emailes" and
+        // "deal" does not become "deales". -dad/-tad/-tud and -or are Spanish
+        // morphology wherever they appear.
+        if (preg_match('/(dad|tad|tud|or)$/u', $lower) === 1) {
+            return $noun.'es';
+        }
+
+        // A word ending in a consonant Spanish does not use word-finally is a
+        // loanword, and those take -s: ticket → tickets, chat → chats.
+        if (preg_match('/[bcfghkpqtvwx]$/u', $lower) === 1) {
+            return $noun.'s';
+        }
+
+        // What is left is -l, -r, -j, -n, -m and a -d outside the suffixes
+        // above. Some take -es (papel → papeles) and some do not (email), and
+        // -n moves the stress onto a syllable that then needs an accent this
+        // cannot infer — orden → órdenes. A missing accent is a spelling
+        // mistake on every screen of the app; a singular heading is only wrong.
         return $noun;
     }
 

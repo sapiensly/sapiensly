@@ -17,7 +17,7 @@
             {
                 "id": "obj_01kytgcymkr9jd2jsn15g47edw",
                 "slug": "clientes",
-                "name": "Cliente",
+                "name": "Clientes",
                 "fields": [
                     {
                         "id": "fld_01kytgcymkr9jd2jsn15g47edq",
@@ -53,7 +53,7 @@
                     {
                         "id": "fld_01kytgcymkr9jd2jsn15g47eec",
                         "slug": "oportunidades",
-                        "name": "Oportunidad",
+                        "name": "Oportunidades",
                         "type": "relation",
                         "target_object_id": "obj_01kytgcymkr9jd2jsn15g47ee6",
                         "cardinality": "one_to_many",
@@ -62,7 +62,7 @@
                     {
                         "id": "fld_01kytgcymkr9jd2jsn15g47eed",
                         "slug": "oportunidades_count",
-                        "name": "Oportunidad",
+                        "name": "N.º de Oportunidades",
                         "type": "rollup",
                         "via_relation_field_id": "fld_01kytgcymkr9jd2jsn15g47eec",
                         "aggregator": "count",
@@ -83,7 +83,7 @@
             {
                 "id": "obj_01kytgcymkr9jd2jsn15g47ee6",
                 "slug": "oportunidades",
-                "name": "Oportunidad",
+                "name": "Oportunidades",
                 "fields": [
                     {
                         "id": "fld_01kytgcymkr9jd2jsn15g47edx",
@@ -157,7 +157,7 @@
                     {
                         "id": "fld_01kytgcymkr9jd2jsn15g47eeg",
                         "slug": "actividades",
-                        "name": "Actividad",
+                        "name": "Actividades",
                         "type": "relation",
                         "target_object_id": "obj_01kytgcymkr9jd2jsn15g47eea",
                         "cardinality": "one_to_many",
@@ -166,7 +166,7 @@
                     {
                         "id": "fld_01kytgcymkr9jd2jsn15g47eeh",
                         "slug": "actividades_count",
-                        "name": "Actividad",
+                        "name": "N.º de Actividades",
                         "type": "rollup",
                         "via_relation_field_id": "fld_01kytgcymkr9jd2jsn15g47eeg",
                         "aggregator": "count",
@@ -177,7 +177,7 @@
             {
                 "id": "obj_01kytgcymkr9jd2jsn15g47eea",
                 "slug": "actividades",
-                "name": "Actividad",
+                "name": "Actividades",
                 "fields": [
                     {
                         "id": "fld_01kytgcymkr9jd2jsn15g47ee7",
@@ -229,7 +229,7 @@
                         "items": [
                             {
                                 "id": "itm_01kytgcymkr9jd2jsn15g47egd",
-                                "label": "Cliente",
+                                "label": "Clientes",
                                 "query": {
                                     "object_id": "obj_01kytgcymkr9jd2jsn15g47edw"
                                 },
@@ -237,7 +237,7 @@
                             },
                             {
                                 "id": "itm_01kytgcymkr9jd2jsn15g47ege",
-                                "label": "Oportunidad",
+                                "label": "Oportunidades",
                                 "query": {
                                     "object_id": "obj_01kytgcymkr9jd2jsn15g47ee6"
                                 },
@@ -245,7 +245,7 @@
                             },
                             {
                                 "id": "itm_01kytgcymkr9jd2jsn15g47egf",
-                                "label": "Actividad",
+                                "label": "Actividades",
                                 "query": {
                                     "object_id": "obj_01kytgcymkr9jd2jsn15g47eea"
                                 },
@@ -253,7 +253,7 @@
                             },
                             {
                                 "id": "itm_01kytgcymkr9jd2jsn15g47egg",
-                                "label": "Total Oportunidad",
+                                "label": "Total Oportunidades",
                                 "query": {
                                     "object_id": "obj_01kytgcymkr9jd2jsn15g47ee6"
                                 },
@@ -263,7 +263,7 @@
                             },
                             {
                                 "id": "itm_01kytgcymkr9jd2jsn15g47egh",
-                                "label": "Promedio Oportunidad",
+                                "label": "Promedio Oportunidades",
                                 "query": {
                                     "object_id": "obj_01kytgcymkr9jd2jsn15g47ee6"
                                 },
@@ -276,7 +276,7 @@
                     {
                         "id": "blk_01kytgcymkr9jd2jsn15g47egn",
                         "type": "chart",
-                        "label": "Oportunidad por estado",
+                        "label": "Oportunidades por estado",
                         "chart_type": "donut",
                         "data_source": {
                             "object_id": "obj_01kytgcymkr9jd2jsn15g47ee6",
@@ -288,7 +288,7 @@
                     {
                         "id": "blk_01kytgcymkr9jd2jsn15g47egm",
                         "type": "sparkline",
-                        "label": "Cliente en el tiempo",
+                        "label": "Clientes en el tiempo",
                         "data_source": {
                             "object_id": "obj_01kytgcymkr9jd2jsn15g47edw",
                             "limit": 500
@@ -299,7 +299,7 @@
                     {
                         "id": "blk_01kytgcymkr9jd2jsn15g47egq",
                         "type": "sparkline",
-                        "label": "Oportunidad en el tiempo",
+                        "label": "Oportunidades en el tiempo",
                         "data_source": {
                             "object_id": "obj_01kytgcymkr9jd2jsn15g47ee6",
                             "limit": 500
@@ -310,7 +310,7 @@
                     {
                         "id": "blk_01kytgcymkr9jd2jsn15g47egr",
                         "type": "sparkline",
-                        "label": "Actividad en el tiempo",
+                        "label": "Actividades en el tiempo",
                         "data_source": {
                             "object_id": "obj_01kytgcymkr9jd2jsn15g47eea",
                             "limit": 500
@@ -321,7 +321,7 @@
                     {
                         "id": "blk_01kytgcymkr9jd2jsn15g47egp",
                         "type": "chart",
-                        "label": "Valor de Oportunidad por estado",
+                        "label": "Valor de Oportunidades por estado",
                         "chart_type": "bar",
                         "data_source": {
                             "object_id": "obj_01kytgcymkr9jd2jsn15g47ee6",
@@ -336,13 +336,13 @@
             {
                 "id": "pag_01kytgcymkr9jd2jsn15g47eez",
                 "slug": "clientes",
-                "name": "Cliente",
+                "name": "Clientes",
                 "path": "/clientes",
                 "blocks": [
                     {
                         "id": "blk_01kytgcymkr9jd2jsn15g47eey",
                         "type": "heading",
-                        "content": "Cliente"
+                        "content": "Clientes"
                     },
                     {
                         "id": "blk_01kytgcymkr9jd2jsn15g47eej",
@@ -551,13 +551,13 @@
             {
                 "id": "pag_01kytgcymkr9jd2jsn15g47efe",
                 "slug": "oportunidades",
-                "name": "Oportunidad",
+                "name": "Oportunidades",
                 "path": "/oportunidades",
                 "blocks": [
                     {
                         "id": "blk_01kytgcymkr9jd2jsn15g47efb",
                         "type": "heading",
-                        "content": "Oportunidad"
+                        "content": "Oportunidades"
                     },
                     {
                         "id": "blk_01kytgcymkr9jd2jsn15g47ef0",
@@ -790,13 +790,13 @@
             {
                 "id": "pag_01kytgcymkr9jd2jsn15g47eft",
                 "slug": "actividades",
-                "name": "Actividad",
+                "name": "Actividades",
                 "path": "/actividades",
                 "blocks": [
                     {
                         "id": "blk_01kytgcymkr9jd2jsn15g47efr",
                         "type": "heading",
-                        "content": "Actividad"
+                        "content": "Actividades"
                     },
                     {
                         "id": "blk_01kytgcymkr9jd2jsn15g47eff",

@@ -1,6 +1,7 @@
 <?php
 
 use App\Services\Manifest\ManifestValidator;
+use App\Support\Locale\Inflector;
 use Illuminate\Support\Str;
 
 /**
@@ -161,4 +162,83 @@ it('gives every role something it may actually do', function () {
             }
         }
     }
+});
+
+/**
+ * A heading over a list of things names the things, not one of them.
+ *
+ * The shipped templates called every collection by its singular: the nav read
+ * "Cliente | Oportunidad | Actividad", and a KPI counting five customers was
+ * headed "CLIENTE". Singular belongs to one record — the detail page, the "add"
+ * button, the belongs-to picker — and nowhere else.
+ */
+it('names collections in the plural across every shipped template', function () {
+    $singularOnly = [];
+
+    foreach (glob(dirname(__DIR__, 4).'/resources/app-templates/*.json') as $file) {
+        $manifest = json_decode((string) file_get_contents($file), true)['manifest'];
+        $name = basename($file);
+
+        $walk = function (array $blocks) use (&$walk): array {
+            $out = [];
+            foreach ($blocks as $block) {
+                $out[] = $block;
+                foreach (['blocks', 'left_blocks', 'right_blocks'] as $key) {
+                    $out = [...$out, ...$walk($block[$key] ?? [])];
+                }
+                foreach (['tabs', 'sections'] as $key) {
+                    foreach ($block[$key] ?? [] as $child) {
+                        $out = [...$out, ...$walk($child['blocks'] ?? [])];
+                    }
+                }
+            }
+
+            return $out;
+        };
+
+        // An object holds many records, so its name is the plural — every
+        // heading, nav entry and count label is derived from it.
+        foreach ($manifest['objects'] as $object) {
+            $plural = Inflector::plural($object['name'], 'es');
+            if ($object['name'] !== $plural) {
+                $singularOnly[] = "{$name}: object \"{$object['name']}\" should be \"{$plural}\"";
+            }
+
+            // A one_to_many field holds many of them too; a many_to_one holds
+            // exactly one and stays singular.
+            foreach ($object['fields'] as $field) {
+                if (($field['cardinality'] ?? null) !== 'one_to_many') {
+                    continue;
+                }
+                $target = collect($manifest['objects'])->firstWhere('id', $field['target_object_id']);
+                if ($target !== null && $field['name'] !== $target['name']) {
+                    $singularOnly[] = "{$name}: field \"{$field['name']}\" holds many {$target['name']}";
+                }
+            }
+        }
+
+        $objectNames = collect($manifest['objects'])->pluck('name')->all();
+        foreach ($manifest['pages'] as $page) {
+            $blocks = $walk($page['blocks'] ?? []);
+            // A detail page is about one record and keeps the singular.
+            if (collect($blocks)->contains(fn (array $b): bool => ($b['type'] ?? null) === 'record_detail')) {
+                continue;
+            }
+            foreach ($blocks as $block) {
+                if (($block['type'] ?? null) !== 'metric_grid') {
+                    continue;
+                }
+                foreach ($block['items'] ?? [] as $item) {
+                    if (($item['aggregation'] ?? null) !== 'count') {
+                        continue;
+                    }
+                    if (! in_array($item['label'], $objectNames, true)) {
+                        $singularOnly[] = "{$name}: KPI \"{$item['label']}\" counts records but is not the object's name";
+                    }
+                }
+            }
+        }
+    }
+
+    expect($singularOnly)->toBeEmpty(implode('; ', $singularOnly));
 });

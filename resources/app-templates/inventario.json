@@ -17,7 +17,7 @@
             {
                 "id": "obj_01kytgcz1ck4197hqe4ky7k5n4",
                 "slug": "productos",
-                "name": "Producto",
+                "name": "Productos",
                 "fields": [
                     {
                         "id": "fld_01kytgcz1ck4197hqe4ky7k5n0",
@@ -48,7 +48,7 @@
                     {
                         "id": "fld_01kytgcz1ck4197hqe4ky7k5nk",
                         "slug": "renglones",
-                        "name": "Renglon",
+                        "name": "Renglones",
                         "type": "relation",
                         "target_object_id": "obj_01kytgcz1ck4197hqe4ky7k5ne",
                         "cardinality": "one_to_many",
@@ -57,7 +57,7 @@
                     {
                         "id": "fld_01kytgcz1ck4197hqe4ky7k5nm",
                         "slug": "renglones_count",
-                        "name": "Renglon",
+                        "name": "N.º de Renglones",
                         "type": "rollup",
                         "via_relation_field_id": "fld_01kytgcz1ck4197hqe4ky7k5nk",
                         "aggregator": "count",
@@ -68,7 +68,7 @@
             {
                 "id": "obj_01kytgcz1ck4197hqe4ky7k5nc",
                 "slug": "pedidos",
-                "name": "Pedido",
+                "name": "Pedidos",
                 "fields": [
                     {
                         "id": "fld_01kytgcz1ck4197hqe4ky7k5n5",
@@ -119,7 +119,7 @@
                     {
                         "id": "fld_01kytgcz1ck4197hqe4ky7k5ng",
                         "slug": "renglones",
-                        "name": "Renglon",
+                        "name": "Renglones",
                         "type": "relation",
                         "target_object_id": "obj_01kytgcz1ck4197hqe4ky7k5ne",
                         "cardinality": "one_to_many",
@@ -128,7 +128,7 @@
                     {
                         "id": "fld_01kytgcz1ck4197hqe4ky7k5nh",
                         "slug": "renglones_count",
-                        "name": "Renglon",
+                        "name": "N.º de Renglones",
                         "type": "rollup",
                         "via_relation_field_id": "fld_01kytgcz1ck4197hqe4ky7k5ng",
                         "aggregator": "count",
@@ -149,7 +149,7 @@
             {
                 "id": "obj_01kytgcz1ck4197hqe4ky7k5ne",
                 "slug": "renglones",
-                "name": "Renglon",
+                "name": "Renglones",
                 "fields": [
                     {
                         "id": "fld_01kytgcz1ck4197hqe4ky7k5nd",
@@ -218,7 +218,7 @@
                         "items": [
                             {
                                 "id": "itm_01kytgcz1ck4197hqe4ky7k5qz",
-                                "label": "Producto",
+                                "label": "Productos",
                                 "query": {
                                     "object_id": "obj_01kytgcz1ck4197hqe4ky7k5n4"
                                 },
@@ -226,7 +226,7 @@
                             },
                             {
                                 "id": "itm_01kytgcz1ck4197hqe4ky7k5r0",
-                                "label": "Pedido",
+                                "label": "Pedidos",
                                 "query": {
                                     "object_id": "obj_01kytgcz1ck4197hqe4ky7k5nc"
                                 },
@@ -234,25 +234,15 @@
                             },
                             {
                                 "id": "itm_01kytgcz1ck4197hqe4ky7k5r1",
-                                "label": "Renglon",
+                                "label": "Renglones",
                                 "query": {
                                     "object_id": "obj_01kytgcz1ck4197hqe4ky7k5ne"
                                 },
                                 "aggregation": "count"
                             },
                             {
-                                "id": "itm_01kytgcz1ck4197hqe4ky7k5r2",
-                                "label": "Total Producto",
-                                "query": {
-                                    "object_id": "obj_01kytgcz1ck4197hqe4ky7k5n4"
-                                },
-                                "aggregation": "sum",
-                                "field_id": "fld_01kytgcz1ck4197hqe4ky7k5n2",
-                                "format": "currency"
-                            },
-                            {
                                 "id": "itm_01kytgcz1ck4197hqe4ky7k5r3",
-                                "label": "Promedio Producto",
+                                "label": "Precio promedio",
                                 "query": {
                                     "object_id": "obj_01kytgcz1ck4197hqe4ky7k5n4"
                                 },
@@ -265,7 +255,7 @@
                     {
                         "id": "blk_01kytgcz1ck4197hqe4ky7k5r7",
                         "type": "chart",
-                        "label": "Pedido por estado",
+                        "label": "Pedidos por estado",
                         "chart_type": "donut",
                         "data_source": {
                             "object_id": "obj_01kytgcz1ck4197hqe4ky7k5nc",
@@ -277,7 +267,7 @@
                     {
                         "id": "blk_01kytgcz1ck4197hqe4ky7k5r6",
                         "type": "sparkline",
-                        "label": "Producto en el tiempo",
+                        "label": "Productos en el tiempo",
                         "data_source": {
                             "object_id": "obj_01kytgcz1ck4197hqe4ky7k5n4",
                             "limit": 500
@@ -288,7 +278,7 @@
                     {
                         "id": "blk_01kytgcz1ck4197hqe4ky7k5r8",
                         "type": "sparkline",
-                        "label": "Pedido en el tiempo",
+                        "label": "Pedidos en el tiempo",
                         "data_source": {
                             "object_id": "obj_01kytgcz1ck4197hqe4ky7k5nc",
                             "limit": 500
@@ -299,7 +289,7 @@
                     {
                         "id": "blk_01kytgcz1ck4197hqe4ky7k5r9",
                         "type": "sparkline",
-                        "label": "Renglon en el tiempo",
+                        "label": "Renglónes en el tiempo",
                         "data_source": {
                             "object_id": "obj_01kytgcz1ck4197hqe4ky7k5ne",
                             "limit": 500
@@ -500,13 +490,13 @@
             {
                 "id": "pag_01kytgcz1ck4197hqe4ky7k5p3",
                 "slug": "productos",
-                "name": "Producto",
+                "name": "Productos",
                 "path": "/productos",
                 "blocks": [
                     {
                         "id": "blk_01kytgcz1ck4197hqe4ky7k5p2",
                         "type": "heading",
-                        "content": "Producto"
+                        "content": "Productos"
                     },
                     {
                         "id": "blk_01kytgcz1ck4197hqe4ky7k5nr",
@@ -699,13 +689,13 @@
             {
                 "id": "pag_01kytgcz1ck4197hqe4ky7k5ph",
                 "slug": "pedidos",
-                "name": "Pedido",
+                "name": "Pedidos",
                 "path": "/pedidos",
                 "blocks": [
                     {
                         "id": "blk_01kytgcz1ck4197hqe4ky7k5pe",
                         "type": "heading",
-                        "content": "Pedido"
+                        "content": "Pedidos"
                     },
                     {
                         "id": "blk_01kytgcz1ck4197hqe4ky7k5p4",
@@ -918,18 +908,18 @@
             {
                 "id": "pag_01kytgcz1ck4197hqe4ky7k5px",
                 "slug": "renglones",
-                "name": "Renglon",
+                "name": "Renglones",
                 "path": "/renglones",
                 "blocks": [
                     {
                         "id": "blk_01kytgcz1ck4197hqe4ky7k5pw",
                         "type": "heading",
-                        "content": "Renglon"
+                        "content": "Renglones"
                     },
                     {
                         "id": "blk_01kytgcz1ck4197hqe4ky7k5pj",
                         "type": "modal",
-                        "title": "Agregar Renglon",
+                        "title": "Agregar Renglón",
                         "blocks": [
                             {
                                 "id": "blk_01kytgcz1ck4197hqe4ky7k5pk",
@@ -976,7 +966,7 @@
                     {
                         "id": "blk_01kyxp3xx2w0snmkzqmrv6ashb",
                         "type": "modal",
-                        "title": "Editar Renglon",
+                        "title": "Editar Renglón",
                         "blocks": [
                             {
                                 "id": "blk_01kyxp3xx2w0snmkzqmrv6ashc",
@@ -1025,7 +1015,7 @@
                     {
                         "id": "blk_01kytgcz1ck4197hqe4ky7k5pm",
                         "type": "button",
-                        "label": "Agregar Renglon",
+                        "label": "Agregar Renglón",
                         "variant": "primary",
                         "on_click": [
                             {
@@ -1145,7 +1135,7 @@
                     {
                         "id": "blk_01kytgcz1ck4197hqe4ky7k5q0",
                         "type": "modal",
-                        "title": "Agregar Renglon",
+                        "title": "Agregar Renglón",
                         "blocks": [
                             {
                                 "id": "blk_01kytgcz1ck4197hqe4ky7k5q2",
@@ -1189,7 +1179,7 @@
                     {
                         "id": "blk_01kytgcz1ck4197hqe4ky7k5q3",
                         "type": "button",
-                        "label": "Agregar Renglon",
+                        "label": "Agregar Renglón",
                         "variant": "primary",
                         "on_click": [
                             {
@@ -1273,7 +1263,7 @@
                     {
                         "id": "blk_01kytgcz1ck4197hqe4ky7k5q9",
                         "type": "modal",
-                        "title": "Agregar Renglon",
+                        "title": "Agregar Renglón",
                         "blocks": [
                             {
                                 "id": "blk_01kytgcz1ck4197hqe4ky7k5qb",
@@ -1317,7 +1307,7 @@
                     {
                         "id": "blk_01kytgcz1ck4197hqe4ky7k5qc",
                         "type": "button",
-                        "label": "Agregar Renglon",
+                        "label": "Agregar Renglón",
                         "variant": "primary",
                         "on_click": [
                             {
