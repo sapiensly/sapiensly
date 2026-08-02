@@ -4,6 +4,7 @@ import type { FieldDef, ObjectDef } from '../types/manifest';
 import { resolveField } from '../types/manifest';
 import { useChartTooltip } from '../useChartTooltip';
 import { themeTokens, useRuntimeTheme } from '../useRuntimeTheme';
+import { runtimeWord } from '../words';
 import ChartTooltip from './ChartTooltip.vue';
 
 interface RowData {
@@ -99,7 +100,7 @@ const words = computed(() => {
             v-if="words.length === 0"
             :class="['py-6 text-center text-xs', t.textMuted]"
         >
-            No data.
+            {{ runtimeWord(locale, 'no_data') }}
         </p>
         <div
             v-else

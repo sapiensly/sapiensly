@@ -8,6 +8,7 @@ import { computed, ref } from 'vue';
 import type { FieldDef, ObjectDef } from '../types/manifest';
 import { resolveField } from '../types/manifest';
 import { themeTokens, useRuntimeTheme } from '../useRuntimeTheme';
+import { runtimeWord } from '../words';
 
 type Agg = 'count' | 'sum' | 'avg' | 'min' | 'max';
 
@@ -560,7 +561,14 @@ const pieSlices = computed<PieSlice[]>(() => {
         const x2 = cx + r * Math.cos(cursor);
         const y2 = cy + r * Math.sin(cursor);
         const large = angle > Math.PI ? 1 : 0;
-        const path = `M ${cx} ${cy} L ${x1} ${y1} A ${r} ${r} 0 ${large} 1 ${x2} ${y2} Z`;
+        // A slice that is the whole circle ends where it began, and an arc from
+        // a point to itself draws nothing at all — so an object whose records
+        // all share one status rendered an empty card with a legend beside it.
+        // Every app looks like that on its first day. Two half-arcs close it.
+        const path =
+            angle >= Math.PI * 2 - 1e-6
+                ? `M ${cx - r} ${cy} A ${r} ${r} 0 1 1 ${cx + r} ${cy} A ${r} ${r} 0 1 1 ${cx - r} ${cy} Z`
+                : `M ${cx} ${cy} L ${x1} ${y1} A ${r} ${r} 0 ${large} 1 ${x2} ${y2} Z`;
         return {
             label: s.label,
             value: s.value,
@@ -1740,7 +1748,7 @@ const boxPlot = computed(() => {
                 v-if="emptyState"
                 :class="['py-8 text-center text-xs', t.textMuted]"
             >
-                No data to plot.
+                {{ runtimeWord(locale, 'no_data') }}
             </p>
 
             <!-- Pareto: dedicated reusable component (vital few, threshold, badge) -->

@@ -3,6 +3,7 @@ import { computed } from 'vue';
 import type { ObjectDef } from '../types/manifest';
 import { resolveField } from '../types/manifest';
 import { themeTokens, useRuntimeTheme } from '../useRuntimeTheme';
+import { runtimeWord } from '../words';
 import FieldValue from './FieldValue.vue';
 import { type DisplayContext } from './fieldDisplay';
 
@@ -80,7 +81,7 @@ function contextFor(row: RowData): DisplayContext {
             v-if="rows.length === 0"
             :class="['px-3 py-6 text-center text-xs', t.textMuted]"
         >
-            No related records.
+            {{ runtimeWord(locale, 'no_related') }}
         </p>
 
         <table v-else class="w-full text-left text-sm">
