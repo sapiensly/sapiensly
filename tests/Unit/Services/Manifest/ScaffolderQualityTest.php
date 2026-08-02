@@ -235,7 +235,7 @@ function posPageCount(array $manifest): int
 
 function blocksByType(array $page, string $type): array
 {
-    return collect($page['blocks'])->where('type', $type)->values()->all();
+    return blocksOfType($page, [$type]);
 }
 
 /**
@@ -248,6 +248,38 @@ function blocksByType(array $page, string $type): array
  * @param  array<string, mixed>  $page
  * @return array<string, mixed>|null
  */
+/**
+ * Every block of these types anywhere in the page, nesting included. The
+ * dashboard pairs its charts inside row containers, so a top-level filter sees
+ * none of them — which is exactly how the tabs change broke a scan once before.
+ *
+ * @param  list<string>  $types
+ * @return list<array<string, mixed>>
+ */
+function blocksOfType(array $page, array $types): array
+{
+    $walk = function (array $blocks) use (&$walk, $types): array {
+        $found = [];
+        foreach ($blocks as $block) {
+            if (in_array($block['type'] ?? null, $types, true)) {
+                $found[] = $block;
+            }
+            foreach (['blocks', 'left_blocks', 'right_blocks'] as $key) {
+                $found = [...$found, ...$walk($block[$key] ?? [])];
+            }
+            foreach (['tabs', 'sections'] as $key) {
+                foreach ($block[$key] ?? [] as $child) {
+                    $found = [...$found, ...$walk($child['blocks'] ?? [])];
+                }
+            }
+        }
+
+        return $found;
+    };
+
+    return $walk($page['blocks'] ?? []);
+}
+
 function blockByTypeDeep(array $page, string $type): ?array
 {
     $walk = function (array $blocks) use (&$walk, $type): ?array {
@@ -426,7 +458,7 @@ it('localises the generated chrome for a Spanish app', function () {
     $createdCol = collect(blockByTypeDeep($page, 'table')['columns'])->firstWhere('field_id', 'sys_created_at');
     expect($createdCol['label_override'])->toBe('Creado');
 
-    $chart = blockByType(pageBySlug($manifest, 'dashboard'), 'chart');
+    $chart = blockByTypeDeep(pageBySlug($manifest, 'dashboard'), 'chart');
     expect($chart['label'])->toBe('Comandas por estado');
 });
 
@@ -438,7 +470,7 @@ it('keeps English chrome for an English app', function () {
     expect(blockByType($page, 'modal')['blocks'][0]['submit_label'])->toBe('Create');
     // Named after the field it groups by, which in this fixture is called
     // "Estado" — the chrome is English, the author's field name is theirs.
-    expect(blockByType(pageBySlug($manifest, 'dashboard'), 'chart')['label'])->toBe('Comandas by estado');
+    expect(blockByTypeDeep(pageBySlug($manifest, 'dashboard'), 'chart')['label'])->toBe('Comandas by estado');
 });
 
 it('adds a currency sum KPI to the dashboard', function () {
@@ -473,12 +505,13 @@ it('leads the dashboard breakdown with a donut and adds a growth trend', functio
     $dashboard = pageBySlug($manifest, 'dashboard');
 
     // The first chart stays the status breakdown, now a share-friendly donut.
-    $chart = blockByType($dashboard, 'chart');
+    // Deep, because the dashboard pairs its charts inside row containers.
+    $chart = blockByTypeDeep($dashboard, 'chart');
     expect($chart['chart_type'])->toBe('donut');
     expect($chart['label'])->toBe('Comandas por estado');
 
     // A sparkline trend over the always-present sys_created_at system field.
-    $trend = blockByType($dashboard, 'sparkline');
+    $trend = blockByTypeDeep($dashboard, 'sparkline');
     expect($trend)->not->toBeNull();
     expect($trend['x_field_id'])->toBe('sys_created_at');
     expect($trend['label'])->toBe('Comandas en el tiempo');
@@ -821,8 +854,7 @@ it('spends the chart budget on the objects the description named', function () {
         'measures' => [],
     ]);
 
-    $labels = collect(pageBySlug($manifest, 'dashboard')['blocks'])
-        ->where('type', 'chart')
+    $labels = collect(blocksByType(pageBySlug($manifest, 'dashboard'), 'chart'))
         ->pluck('label');
 
     expect($labels)->toContain('Pagos por estado')
@@ -837,8 +869,9 @@ it('holds the dashboard to its chart budget', function () {
         'measures' => [],
     ]);
 
-    $visualisations = collect(pageBySlug($manifest, 'dashboard')['blocks'])
-        ->whereIn('type', ['chart', 'sparkline']);
+    $visualisations = collect(
+        blocksOfType(pageBySlug($manifest, 'dashboard'), ['chart', 'sparkline']),
+    );
 
     expect($visualisations->count())->toBeLessThanOrEqual(4);
 });
@@ -1589,7 +1622,7 @@ it('groups the board by the status, so a new record lands in a column', function
 });
 
 it('titles a breakdown after the field it actually groups by', function () {
-    $chart = blockByType(pageBySlug(scaffoldWorkOrders(), 'dashboard'), 'chart');
+    $chart = blockByTypeDeep(pageBySlug(scaffoldWorkOrders(), 'dashboard'), 'chart');
 
     expect($chart['label'])->toBe('Ordenes por estado');
 });
@@ -1623,7 +1656,7 @@ it('builds no board for an object whose only select is a classification', functi
         ->and(blockByTypeDeep($page, 'calendar'))->toBeNull()
         ->and($fields->firstWhere('slug', 'tipo_contrato'))->not->toHaveKey('default')
         // …but the breakdown is still worth drawing, honestly titled.
-        ->and(blockByType(pageBySlug($manifest, 'dashboard'), 'chart')['label'])
+        ->and(blockByTypeDeep(pageBySlug($manifest, 'dashboard'), 'chart')['label'])
         ->toBe('Clientes por tipo de contrato');
 });
 
@@ -1799,8 +1832,13 @@ it('keeps the dashboard to what fits on a first screen', function () {
 
     // Money leads, and it is the operational core's money: an app tracking work
     // orders wants "how much are we billing", not "how many depots".
+    //
+    // The label is the field's own name here. "Costo Total" cannot take the
+    // prefix — "Total Costo Total" — and the object was the old fallback,
+    // which produced "Total Ordenes": a sum of money wearing the same words as
+    // the count of orders beside it. The field already says it is a total.
     expect($kpis[0]['aggregation'])->toBe('sum')
-        ->and($kpis[0]['label'])->toBe('Total Ordenes');
+        ->and($kpis[0]['label'])->toBe('Costo Total');
 
     // One trend, for that same core — not one per object.
     $trends = blocksByType($dashboard, 'sparkline');

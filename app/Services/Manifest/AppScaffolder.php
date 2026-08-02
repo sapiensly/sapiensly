@@ -1216,11 +1216,11 @@ class AppScaffolder
             // Named for the measure ("Total Renta Mensual"), except when two
             // child objects sum a like-named field onto the same parent — then
             // the measure no longer tells them apart and the child's name does.
-            $sumName = $this->labelTotal($lang, $this->moneyMeasureName(
+            $sumName = $this->labelMoneyTotal(
                 $lang,
                 (string) ($amount['name'] ?? ''),
                 $from['name'],
-            ));
+            );
             $takenNames = array_column($to['fields'], 'name');
             $takenNames[] = $rollupField['name'];
             if (in_array($sumName, $takenNames, true)) {
@@ -1869,10 +1869,19 @@ class AppScaffolder
             $items[] = array_filter([
                 'id' => $this->id('itm'),
                 'label' => match ($measure['aggregation']) {
-                    'sum' => $this->labelTotal($lang, $measureName),
+                    'sum' => $this->labelMoneyTotal(
+                        $lang,
+                        (string) ($field['name'] ?? ''),
+                        (string) $object['name'],
+                    ),
                     'avg' => $this->labelAverage($lang, $measureName),
                     default => (string) $object['name'],
                 },
+                // The figures the description asked for by name are most of
+                // what a dashboard ends up showing, and they were the ones
+                // going out without one — so the tile the runtime draws stayed
+                // invisible on the very cards that matter most.
+                'icon' => $this->kpiIcon($measure['aggregation'], $isMoney),
                 'query' => ['object_id' => $object['id']],
                 'aggregation' => $measure['aggregation'],
                 // A count is over records, not over a column.
@@ -1882,6 +1891,23 @@ class AppScaffolder
         }
 
         return $items;
+    }
+
+    /**
+     * The glyph on a KPI's tile, chosen by what the figure IS — money, a
+     * direction, a count of things — rather than by the object it came from.
+     * Same rule the label follows.
+     */
+    private function kpiIcon(string $aggregation, bool $isMoney): string
+    {
+        if ($aggregation === 'count') {
+            return 'layers';
+        }
+        if ($aggregation === 'avg') {
+            return 'trending-up';
+        }
+
+        return $isMoney ? 'banknote' : 'sigma';
     }
 
     private function buildDashboard(string $appName, string $slug, array $objects, string $lang = 'en', array $focus = ['objects' => [], 'measures' => []]): array
@@ -1922,11 +1948,20 @@ class AppScaffolder
             );
             $items[] = [
                 'id' => $this->id('itm'),
-                'label' => $this->labelTotal($lang, $measure),
+                'label' => $this->labelMoneyTotal(
+                    $lang,
+                    (string) ($primaryCurrency['name'] ?? ''),
+                    $primary['name'],
+                ),
                 'query' => ['object_id' => $primary['id']],
                 'aggregation' => 'sum',
                 'field_id' => $primaryCurrency['id'],
                 'format' => 'currency',
+                // The runtime draws a KPI's icon on a tinted tile, and nothing
+                // ever emitted one — so the tile existed and no generated app
+                // could show it. Named for what the figure IS rather than for
+                // the object, which is the same rule its label follows.
+                'icon' => 'banknote',
             ];
             $items[] = [
                 'id' => $this->id('itm'),
@@ -1935,6 +1970,7 @@ class AppScaffolder
                 'aggregation' => 'avg',
                 'field_id' => $primaryCurrency['id'],
                 'format' => 'currency',
+                'icon' => 'trending-up',
             ];
         }
 
@@ -1953,6 +1989,7 @@ class AppScaffolder
                 'label' => $object['name'],
                 'query' => ['object_id' => $object['id']],
                 'aggregation' => 'count',
+                'icon' => 'layers',
             ];
         }
 
@@ -2081,8 +2118,60 @@ class AppScaffolder
             'slug' => $slug,
             'name' => 'Dashboard',
             'path' => '/',
-            'blocks' => $blocks,
+            'blocks' => $this->pairUpVisualisations($blocks),
         ];
+    }
+
+    /**
+     * Put the dashboard's charts side by side instead of one per full-width row.
+     *
+     * Each one is a donut and a short legend: given the whole width it fills a
+     * fifth of its card and leaves the rest empty, so four of them ran a screen
+     * and a half of mostly nothing. Two across halves that, and a donut does not
+     * get better for being wide.
+     *
+     * Odd one out stays full width rather than sitting alone in half a row — a
+     * lone half-card reads like something failed to load beside it.
+     *
+     * @param  list<array<string, mixed>>  $blocks
+     * @return list<array<string, mixed>>
+     */
+    private function pairUpVisualisations(array $blocks): array
+    {
+        $out = [];
+        $pending = [];
+
+        $flush = function () use (&$out, &$pending): void {
+            if (count($pending) >= 2) {
+                $out[] = [
+                    'id' => $this->id('blk'),
+                    'type' => 'container',
+                    'direction' => 'row',
+                    'gap' => 'md',
+                    'blocks' => array_splice($pending, 0, 2),
+                ];
+            }
+            foreach ($pending as $leftover) {
+                $out[] = $leftover;
+            }
+            $pending = [];
+        };
+
+        foreach ($blocks as $block) {
+            if (in_array($block['type'] ?? null, ['chart', 'sparkline'], true)) {
+                $pending[] = $block;
+                if (count($pending) === 2) {
+                    $flush();
+                }
+
+                continue;
+            }
+            $flush();
+            $out[] = $block;
+        }
+        $flush();
+
+        return $out;
     }
 
     /** Numeric field types a sum/avg/min/max (or a percentile KPI) can fold. */
@@ -4223,6 +4312,32 @@ class AppScaffolder
      * "Total Costo Total". Those carry nothing the object doesn't, so the object
      * keeps the naming there.
      */
+    /**
+     * The label for a money TOTAL.
+     *
+     * Three cases, and the middle one is why this is not just moneyMeasureName
+     * wrapped in labelTotal. A field already called "Costo total de reparación"
+     * cannot take the prefix — "Total Costo total de reparación" — but falling
+     * back to the object gave "Total Incidencias", a sum of repair costs
+     * wearing the same words as the count of incidents beside it. The field
+     * already says it is a total; let it say so.
+     */
+    private function labelMoneyTotal(string $lang, string $fieldName, string $objectName): string
+    {
+        $fieldName = trim($fieldName);
+        $lex = SemanticLexicon::for($lang);
+        $totalWord = preg_quote($lex->label('total_word'), '/');
+
+        $bare = ! str_contains($fieldName, ' ') && $lex->matches('amount', $fieldName);
+        $saysTotal = preg_match('/\b'.$totalWord.'\b/iu', $fieldName) === 1;
+
+        if ($fieldName === '' || $bare) {
+            return $this->labelTotal($lang, $objectName);
+        }
+
+        return $saysTotal ? $fieldName : $this->labelTotal($lang, $fieldName);
+    }
+
     private function moneyMeasureName(string $lang, string $fieldName, string $objectName): string
     {
         $fieldName = trim($fieldName);

@@ -103,7 +103,9 @@ it('scaffold_app creates a populated app with a CRUD page per object', function 
     $dashboard = collect($manifest['pages'])->firstWhere('path', '/');
     $metricGrid = collect($dashboard['blocks'])->firstWhere('type', 'metric_grid');
     expect($metricGrid['items'])->toHaveCount(2);
-    expect(collect($dashboard['blocks'])->pluck('type'))->toContain('chart');
+    // Anywhere: the dashboard pairs its charts inside row containers now, so a
+    // top-level scan sees the container and not what is in it.
+    expect(blockTypesAnywhere($dashboard))->toContain('chart');
 
     // The status-bearing object's page gets a kanban board; the other doesn't.
     // Addressed through the whole page rather than its top level: a page with
