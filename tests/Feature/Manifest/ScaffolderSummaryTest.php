@@ -130,3 +130,70 @@ it('leaves a description alone when it is already short enough to be one', funct
 
     expect($manifest['description'])->toBe('Our leasing desk, end to end.');
 });
+
+it('gives a list page the filters its object affords, wired to every view', function () {
+    // A generated list had a search box and sortable headings and no way to ask
+    // "only the ones still open" — so an app built from a brief that said, in
+    // as many words, "show me which ones will miss the promised date" could not
+    // answer it by any route.
+    Ai::fakeAgent(ChatAgent::class, [json_encode([
+        'summary' => 'Órdenes de un taller.',
+        'objects' => [[
+            'name' => 'Órdenes',
+            'slug' => 'ordenes',
+            'fields' => [
+                ['name' => 'Folio', 'slug' => 'folio', 'type' => 'string'],
+                ['name' => 'Fecha prometida de entrega', 'slug' => 'fecha_prometida', 'type' => 'date'],
+                ['name' => 'Estado', 'slug' => 'estado', 'type' => 'single_select', 'options' => [
+                    ['value' => 'recibida', 'label' => 'Recibida'],
+                    ['value' => 'entregada', 'label' => 'Entregada'],
+                ]],
+            ],
+        ]],
+        'links' => [],
+    ], JSON_THROW_ON_ERROR)]);
+
+    $base = summaryBase();
+    $base['settings']['default_locale'] = 'es-MX';
+    $manifest = summaryScaffolder()->scaffold($base, 'Taller.', User::factory()->create());
+
+    $page = collect($manifest['pages'])->firstWhere('path', '/ordenes');
+    $bar = collect($page['blocks'])->firstWhere('type', 'filter_bar');
+
+    expect($bar)->not->toBeNull()
+        ->and(collect($bar['controls'])->pluck('param')->all())->toBe(['status', 'range']);
+
+    // No default window. A list page IS the object, and opening it silently
+    // scoped to thirty days hides records with nothing on screen to say so.
+    expect(collect($bar['controls'])->firstWhere('param', 'range')['default'])->toBe('all');
+
+    // Every view answers to the bar. These tabs are the same records drawn
+    // several ways, and a filter that survived "Lista" but not "Tablero" would
+    // read as the board having different data.
+    $tabs = collect($page['blocks'])->firstWhere('type', 'tabs');
+    $filtered = collect($tabs['tabs'])
+        ->flatMap(fn (array $tab): array => $tab['blocks'])
+        ->map(fn (array $b): mixed => $b['data_source']['filter'] ?? null);
+
+    expect($filtered)->toHaveCount(3)
+        ->and($filtered->filter()->count())->toBe(3);
+});
+
+it('leaves out a filter the object cannot answer', function () {
+    // Only controls at least one block listens to. An object with no status and
+    // no date gets no bar rather than a row of dead controls.
+    Ai::fakeAgent(ChatAgent::class, [json_encode([
+        'summary' => 'Un directorio.',
+        'objects' => [[
+            'name' => 'Contactos',
+            'slug' => 'contactos',
+            'fields' => [['name' => 'Nombre', 'slug' => 'nombre', 'type' => 'string']],
+        ]],
+        'links' => [],
+    ], JSON_THROW_ON_ERROR)]);
+
+    $manifest = summaryScaffolder()->scaffold(summaryBase(), 'Directorio.', User::factory()->create());
+    $page = collect($manifest['pages'])->firstWhere('path', '/contactos');
+
+    expect(collect($page['blocks'])->firstWhere('type', 'filter_bar'))->toBeNull();
+});

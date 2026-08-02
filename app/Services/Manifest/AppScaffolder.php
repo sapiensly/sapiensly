@@ -1251,6 +1251,10 @@ class AppScaffolder
                 fn (array $o): string => (string) ($o['label'] ?? $o['value'] ?? ''),
                 $definition['options'] ?? [],
             )),
+            // The pair, for anything that has to FILTER on this field: a select
+            // control writes the stored value and shows the label, and
+            // option_labels alone cannot say what gets stored.
+            'options' => $definition['options'] ?? [],
         ]];
     }
 
@@ -1627,6 +1631,15 @@ class AppScaffolder
             $button,
         ];
 
+        $filters = $this->buildListFilters($fieldIndex, $lang);
+        if ($filters['controls'] !== []) {
+            $blocks[] = [
+                'id' => $this->id('blk'),
+                'type' => 'filter_bar',
+                'controls' => $filters['controls'],
+            ];
+        }
+
         // The alternative ways to look at the SAME rows: a board when the object
         // has a status, a month grid when it has a date you schedule against, a
         // timeline when it has a real span.
@@ -1643,6 +1656,16 @@ class AppScaffolder
         $kanban = $this->buildKanban($objectId, $fieldIndex, $lang);
         if ($kanban !== null) {
             $views[] = ['label' => $lex->label('view_board'), 'block' => $kanban];
+        }
+
+        // The bar filters the PAGE, not one block on it. These tabs are the same
+        // records drawn four ways, and a filter that survived "Lista" but not
+        // "Tablero" would read as the board having different data.
+        if ($filters['conditions'] !== []) {
+            $this->applyFilter($table, $filters['conditions']);
+            foreach ($views as $i => $view) {
+                $this->applyFilter($views[$i]['block'], $filters['conditions']);
+            }
         }
 
         // Stacked, these were the same records drawn three times over, with the
@@ -1676,6 +1699,88 @@ class AppScaffolder
             'path' => '/'.$object['slug'],
             'blocks' => $blocks,
         ];
+    }
+
+    /**
+     * AND a set of conditions into a block's data source, keeping whatever
+     * filter it already carried.
+     *
+     * @param  array<string, mixed>  $block
+     * @param  list<array<string, mixed>>  $conditions
+     */
+    private function applyFilter(array &$block, array $conditions): void
+    {
+        $existing = $block['data_source']['filter'] ?? null;
+        $all = $existing === null ? $conditions : [$existing, ...$conditions];
+
+        $block['data_source']['filter'] = count($all) === 1
+            ? $all[0]
+            : ['op' => 'and', 'conditions' => array_values($all)];
+    }
+
+    /**
+     * The filters a list page can honestly offer, and the conditions that make
+     * them do something.
+     *
+     * A generated list had a search box and sortable headings and no way to ask
+     * "only the ones still open" — so a workshop app built from a brief that
+     * said, in as many words, "the manager wants to see which ones are going to
+     * miss the promised date" could not answer that question by any route.
+     *
+     * Restrained on purpose, the same way the dashboard's bar is: only controls
+     * at least one block listens to. A status select whenever the object has a
+     * lifecycle, and a window over a date you look FORWARD to. No default
+     * window — a list page IS the object, and opening it silently scoped to
+     * thirty days hides records with nothing on screen to say so.
+     *
+     * @param  array<int, array<string, mixed>>  $fieldIndex
+     * @return array{controls: list<array<string, mixed>>, conditions: list<array<string, mixed>>}
+     */
+    private function buildListFilters(array $fieldIndex, string $lang): array
+    {
+        $controls = [];
+        $conditions = [];
+
+        $status = $this->statusField($fieldIndex, $lang);
+        if ($status !== null && ($status['options'] ?? []) !== []) {
+            $controls[] = [
+                'param' => 'status',
+                'type' => 'select',
+                'label' => (string) $status['name'],
+                'options' => array_values(array_map(
+                    fn (array $o): array => [
+                        'value' => (string) ($o['value'] ?? ''),
+                        'label' => (string) ($o['label'] ?? $o['value'] ?? ''),
+                    ],
+                    $status['options'],
+                )),
+            ];
+            $conditions[] = [
+                'op' => 'eq',
+                'field_id' => $status['id'],
+                'value_expression' => '{{params.status}}',
+            ];
+        }
+
+        $date = null;
+        foreach ($fieldIndex as $field) {
+            if (in_array($field['type'] ?? '', ['date', 'datetime'], true)
+                && $this->isScheduleDate($field, $lang)) {
+                $date = $field;
+                break;
+            }
+        }
+
+        if ($date !== null) {
+            $controls[] = ['param' => 'range', 'type' => 'date_range', 'default' => 'all'];
+            $conditions[] = [
+                'op' => 'gte',
+                'field_id' => $date['id'],
+                'value_expression' => "{{range_start(default(params.range, 'all'))}}",
+            ];
+        }
+
+        return ['controls' => $controls, 'conditions' => $conditions];
     }
 
     /**

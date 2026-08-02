@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { router } from '@inertiajs/vue3';
+import { runtimeWord } from '../words';
 import { computed, inject, ref } from 'vue';
 import RuntimeIcon from '../RuntimeIcon.vue';
 import type { ObjectDef } from '../types/manifest';
@@ -20,13 +21,7 @@ interface Control {
 // is fixed at build time — clearing the in-memory filter can't widen the source,
 // so 'Todo' would silently show the same rows as 'Año' (or fewer). See the reader
 // range push-down that makes 'Año' actually re-fetch a year of connected data.
-const DATE_RANGE_PRESETS: { value: string; label: string }[] = [
-    { value: 'today', label: 'Hoy' },
-    { value: '7d', label: '7 días' },
-    { value: '30d', label: '30 días' },
-    { value: '90d', label: '90 días' },
-    { value: '1y', label: 'Año' },
-];
+const DATE_RANGE_KEYS = ['today', '7d', '30d', '90d', '1y'] as const;
 
 interface FilterBarBlock {
     id: string;
@@ -60,6 +55,11 @@ const rangeMeta = computed<DateRangeMeta | null>(() => {
     return meta && typeof meta.count === 'number' ? meta : null;
 });
 
+/** A phrase in the APP's language — these are the bar's own words. */
+function word(key: string): string {
+    return runtimeWord(props.locale, key);
+}
+
 const dateFmt = new Intl.DateTimeFormat(props.locale || 'es-MX', {
     day: 'numeric',
     month: 'short',
@@ -73,7 +73,7 @@ const fmt = (iso: string) => dateFmt.format(new Date(`${iso}T00:00:00Z`));
 function windowLabel(param: string): string | null {
     const preset = values.value[param];
     if (!preset || preset === 'all') {
-        return preset === 'all' ? 'todo el histórico' : null;
+        return preset === 'all' ? word('range_all_label') : null;
     }
     const days: Record<string, number> = {
         today: 0,
@@ -143,7 +143,24 @@ const values = ref<Record<string, string>>(
 );
 
 function presetsFor(c: Control): { value: string; label: string }[] {
-    return c.options && c.options.length ? c.options : DATE_RANGE_PRESETS;
+    if (c.options && c.options.length) return c.options;
+
+    const presets = DATE_RANGE_KEYS.map((value) => ({
+        value,
+        label: word(`range_${value}`),
+    }));
+
+    // 'Todo' is offered only when the author asked for it by defaulting to it.
+    //
+    // On a CONNECTED source an unbounded window is a trap: the fetch window is
+    // fixed at build time, so clearing the in-memory filter cannot widen the
+    // source and 'Todo' would silently show the same rows as 'Año' or fewer.
+    // On a records-backed list it is the opposite — the page opens unfiltered,
+    // and a bar that could narrow to 30 days with no way back is a dead end
+    // somebody has to reload the page to escape.
+    return c.default === 'all'
+        ? [{ value: 'all', label: word('range_all') }, ...presets]
+        : presets;
 }
 
 function onPreset(param: string, value: string) {
@@ -261,7 +278,9 @@ function onSelect(param: string, event: Event) {
                 ]"
                 @change="onSelect(c.param, $event)"
             >
-                <option value="">{{ c.placeholder ?? 'All' }}</option>
+                <option value="">
+                    {{ c.placeholder ?? word('filter_all') }}
+                </option>
                 <option
                     v-for="o in c.options ?? []"
                     :key="o.value"

@@ -71,5 +71,13 @@ function enKeys(): Record<string, string> {
         picker_more: '',
         picker_clear: '',
         picker_unavailable: '',
+        filter_all: '',
+        range_today: '',
+        range_7d: '',
+        range_30d: '',
+        range_90d: '',
+        range_1y: '',
+        range_all: '',
+        range_all_label: '',
     };
 }
