@@ -33,7 +33,15 @@ export interface ValueChip {
     color?: string;
 }
 
-const EMPTY = '—';
+/**
+ * What a missing value looks like. Exported so the components that need to
+ * RECOGNISE absence — to draw it as absence rather than as content — compare
+ * against the same mark this file writes, instead of a second em dash that can
+ * drift from it.
+ */
+export const EMPTY_MARK = '—';
+
+const EMPTY = EMPTY_MARK;
 
 function isBlank(value: unknown): boolean {
     return (

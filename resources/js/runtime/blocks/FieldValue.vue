@@ -2,6 +2,7 @@
 import { computed } from 'vue';
 import type { FieldDef } from '../types/manifest';
 import {
+    EMPTY_MARK,
     formatFieldValue,
     valueChips,
     type DisplayContext,
@@ -37,6 +38,19 @@ const props = withDefaults(
 const chips = computed(() => valueChips(props.field, props.value));
 const text = computed(() =>
     formatFieldValue(props.field, props.value, props.context),
+);
+
+/**
+ * Absence, drawn as absence.
+ *
+ * A missing value already prints an em dash rather than vanishing — hiding it
+ * would leave the reader unable to tell an empty field from one the object does
+ * not have. But the dash was rendered in the same ink as a real value, so a
+ * column of them read like content. It is a mark meaning "nothing here", and it
+ * says so by receding.
+ */
+const isBlank = computed(
+    () => chips.value === null && text.value === EMPTY_MARK,
 );
 
 /**
@@ -77,5 +91,5 @@ const chipClass = computed(() => [
             <span class="truncate">{{ chip.label }}</span>
         </span>
     </span>
-    <template v-else>{{ text }}</template>
+    <span v-else :class="isBlank ? 'text-ink-subtle' : ''">{{ text }}</span>
 </template>
