@@ -44,3 +44,27 @@ it('returns null when the prompt is too short or ambiguous to tell', function (s
     'NPS',
     '2026',
 ]);
+
+it('reads a real brief in the language it was written in', function () {
+    // Portuguese and French were both read as Spanish, so a Brazilian school
+    // and a French law firm would have been handed an app in the wrong
+    // language — and, since currency and timezone follow it, in the wrong money
+    // too. The plain word lists each hold their words once, but the TEXTS
+    // overlap: pt and fr are full of "de", "que", "para", "la", which sit in
+    // the Spanish list, and a long brief accumulates them by sheer length.
+    $suite = require dirname(__DIR__, 4).'/resources/benchmarks/app-suite.php';
+
+    $wrong = [];
+    foreach ($suite as $case) {
+        $expected = substr($case['locale'], 0, 2);
+        $detected = PromptLanguage::detect(
+            $case['name'].' '.$case['description'],
+        );
+
+        if ($detected !== $expected) {
+            $wrong[] = "{$case['key']}: expected {$expected}, read as ".($detected ?? 'nothing');
+        }
+    }
+
+    expect($wrong)->toBeEmpty(implode('; ', $wrong));
+});

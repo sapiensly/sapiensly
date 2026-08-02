@@ -50,6 +50,30 @@ class PromptLanguage
     ];
 
     /**
+     * Words that essentially do not occur in the other three, weighted to
+     * outrank the shared ones.
+     *
+     * The plain lists above claim each word "mostly appears in only one list",
+     * and as lists that is true — but the TEXTS overlap anyway: Portuguese and
+     * French are both full of "de", "que", "para", "la", "en", which sit in the
+     * Spanish list. On real briefs that was decisive. A Portuguese school and a
+     * French law firm were both read as Spanish, so a Brazilian customer would
+     * have been handed an app in the wrong language, with the currency and
+     * timezone that follow it.
+     *
+     * These are the ones that settle it: Spanish contracts "de el" to "del" and
+     * Portuguese to "do", French to "du". None of the three borrows another's.
+     *
+     * @var array<string, list<string>>
+     */
+    private const STRONG = [
+        'es' => ['el', 'los', 'las', 'del', 'al', 'con', 'por', 'segun', 'cada'],
+        'pt' => ['da', 'do', 'das', 'dos', 'nao', 'voce', 'pelo', 'pela', 'sao', 'situacao', 'mes'],
+        'fr' => ['le', 'les', 'des', 'du', 'aux', 'avec', 'cette', 'chaque', 'doit', 'sont', 'qui', 'leur'],
+        'en' => ['the', 'of', 'and', 'with', 'each', 'are', 'is', 'needs'],
+    ];
+
+    /**
      * Letters/punctuation only ONE of the four uses — a strong, near-certain
      * signal worth two function words. Shared accents (á é í ó ú) are deliberately
      * excluded: they appear in es, pt AND fr, so they cannot separate them.
@@ -83,6 +107,13 @@ class PromptLanguage
         foreach (self::WORDS as $lang => $words) {
             foreach ($words as $word) {
                 $scores[$lang] += $counts[$word] ?? 0;
+            }
+        }
+        // Three apiece, so a handful of them beats the shared vocabulary a
+        // long brief accumulates by sheer length.
+        foreach (self::STRONG as $lang => $words) {
+            foreach ($words as $word) {
+                $scores[$lang] += 3 * ($counts[$word] ?? 0);
             }
         }
         foreach (self::CHARS as $lang => $pattern) {

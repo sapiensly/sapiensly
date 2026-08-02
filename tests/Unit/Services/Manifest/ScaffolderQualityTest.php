@@ -2107,3 +2107,33 @@ it('says what it left out when a spec runs past a cap', function () {
         ->and($notes)->toContain('Reabierta')
         ->and($notes)->toContain('9 relationships were described');
 });
+
+it('refuses to build an app out of nothing', function () {
+    // A benchmark run produced an app with zero objects, no dashboard, and not
+    // one word about it: the model's reply had not parsed, decodeJson returned
+    // null, and normalizeSpec shrugged. The reply-unreadable road went around
+    // the guard that already covers the model-unreachable one.
+    $coercions = [];
+    $spec = app(AppScaffolder::class)->normalizeSpec(null, $coercions);
+
+    expect($spec['objects'])->toBe([]);
+
+    // …and assembling that is what must never reach a save. The scaffolder's
+    // own entry point is what refuses; this pins the shape it refuses on.
+    $manifest = app(AppScaffolder::class)->assemble([
+        'schema_version' => '1.0.0',
+        'id' => 'app_scaffold_e1',
+        'slug' => 'empty',
+        'name' => 'Empty',
+        'version' => 1,
+        'objects' => [],
+        'pages' => [],
+        'permissions' => ['roles' => [['id' => 'rol_admin00001', 'slug' => 'admin', 'name' => 'Admin', 'is_default' => true]]],
+        'settings' => ['default_locale' => 'es-MX', 'default_currency' => 'MXN'],
+    ], $spec);
+
+    // No objects means no pages worth having — which is the state that used to
+    // ship as "app created".
+    expect($manifest['objects'])->toBe([])
+        ->and(collect($manifest['pages'])->pluck('slug'))->not->toContain('dashboard');
+});

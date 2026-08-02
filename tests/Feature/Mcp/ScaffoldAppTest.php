@@ -9,8 +9,10 @@ use App\Models\Record;
 use App\Models\User;
 use App\Services\Ai\AiDefaults;
 use App\Services\AiProviderService;
+use App\Services\Manifest\AppManifestService;
 use App\Services\Manifest\AppScaffolder;
 use App\Services\Manifest\ManifestValidator;
+use Database\Seeders\RolesAndPermissionsSeeder;
 use Illuminate\Support\Str;
 use Laravel\Ai\Ai;
 
@@ -463,4 +465,54 @@ it('scaffold_app names the automation the schema affords, without authoring it',
     // description does not contain, and a half-configured one is clutter.
     $app = App::where('user_id', $this->user->id)->where('slug', 'con_automatizacion')->firstOrFail();
     expect($app->versions()->first()->manifest['workflows'] ?? [])->toBe([]);
+});
+
+it('bills in the money of the language the brief was written in', function () {
+    // A Portuguese school came out charging MX$ 241,00. Currency was a flat
+    // default on the reasoning that it is a separate concern from language —
+    // it is, but the same detection already ran on the description, and a
+    // neutral default that is wrong on every amount is not neutral.
+    //
+    // The app factory makes an organization, whose membership observer assigns
+    // a role that has to exist.
+    $this->seed(RolesAndPermissionsSeeder::class);
+    $service = app(AppManifestService::class);
+
+    // Real briefs, not phrases: the detector reads a description, and a line
+    // too short to have a language is exactly what falls back.
+    $cases = [
+        [
+            'Escola de idiomas',
+            'Escola de idiomas com turmas presenciais e online. ALUNOS: nome completo, e-mail, telefone e nível atual. TURMAS: cada turma tem um professor, com dia e horário, data de início e situação. A secretaria precisa ver quais mensalidades estão atrasadas.',
+            'BRL', 'America/Sao_Paulo',
+        ],
+        [
+            'Cabinet',
+            'Cabinet d\'avocats spécialisé en droit des affaires. DOSSIERS : chaque dossier appartient à un client, avec la date d\'ouverture et les honoraires convenus. Le cabinet doit voir quels dossiers sont ouverts et quelles factures sont en retard.',
+            'EUR', 'Europe/Paris',
+        ],
+        [
+            'Field service',
+            'Field service operation for a company that installs commercial HVAC equipment. WORK ORDERS: each one is for a piece of equipment, with an opened date and a promised date. Dispatch needs to see which work orders are past their promised date.',
+            'USD', 'America/New_York',
+        ],
+        [
+            'Arrendamientos',
+            'Administración de arrendamiento de inmuebles. CONTRATOS: cada contrato es de un inmueble y de un inquilino, con fecha de inicio y renta mensual pactada. La operadora necesita ver la cobranza del mes.',
+            'MXN', 'America/Mexico_City',
+        ],
+    ];
+
+    foreach ($cases as [$name, $description, $currency, $timezone]) {
+        $app = App::factory()->create([
+            'user_id' => $this->user->id,
+            'name' => $name,
+            'description' => $description,
+        ]);
+
+        $settings = $service->initialManifest($app)['settings'];
+
+        expect($settings['default_currency'])->toBe($currency, $name)
+            ->and($settings['default_timezone'])->toBe($timezone, $name);
+    }
 });

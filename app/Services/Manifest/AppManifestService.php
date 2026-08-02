@@ -81,9 +81,9 @@ class AppManifestService
                 // the name + description so an English/Portuguese/French brief gets a
                 // native app instead of Spanish. Undetermined falls back to es-MX,
                 // the product default. Timezone/currency are a separate concern.
-                'default_locale' => $this->deriveLocale($app),
-                'default_timezone' => 'America/Mexico_City',
-                'default_currency' => 'MXN',
+                'default_locale' => $locale = $this->deriveLocale($app),
+                'default_timezone' => self::REGIONAL_DEFAULTS[$locale]['timezone'],
+                'default_currency' => self::REGIONAL_DEFAULTS[$locale]['currency'],
             ],
         ];
 
@@ -118,6 +118,26 @@ class AppManifestService
      * a rich language sample). Falls back to es-MX — the product default — when
      * the language can't be told, preserving prior behaviour for terse names.
      */
+    /**
+     * What money and time mean where the app's language is spoken.
+     *
+     * These used to be flat MXN and Mexico City whatever the brief said, on the
+     * reasoning that currency is a separate concern from language. It is — but
+     * we already spent a language detection on the description, and the same
+     * signal answers this: a Portuguese school billing in Mexican pesos is not
+     * a neutral default, it is a wrong one, and every amount on its screens
+     * says so. An undetermined brief still falls back to the product default,
+     * because that is a guess rather than a detection.
+     *
+     * @var array<string, array{currency: string, timezone: string}>
+     */
+    private const REGIONAL_DEFAULTS = [
+        'en-US' => ['currency' => 'USD', 'timezone' => 'America/New_York'],
+        'pt-BR' => ['currency' => 'BRL', 'timezone' => 'America/Sao_Paulo'],
+        'fr-FR' => ['currency' => 'EUR', 'timezone' => 'Europe/Paris'],
+        'es-MX' => ['currency' => 'MXN', 'timezone' => 'America/Mexico_City'],
+    ];
+
     private function deriveLocale(App $app): string
     {
         $sample = trim(((string) $app->name).' '.((string) $app->description));

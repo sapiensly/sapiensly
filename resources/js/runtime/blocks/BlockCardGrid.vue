@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, inject, reactive } from 'vue';
+import { imageHref } from '../imageValue';
 import RuntimeIcon from '../RuntimeIcon.vue';
 import type { FieldDef, ObjectDef } from '../types/manifest';
 import { resolveField } from '../types/manifest';
@@ -160,8 +161,8 @@ function titleOf(row: RowData): string {
 
 function imageSrc(row: RowData): string | null {
     if (!imageField.value) return null;
-    const v = row.data[imageField.value.slug];
-    return typeof v === 'string' && v !== '' ? v : null;
+
+    return imageHref(row.data[imageField.value.slug]);
 }
 </script>
 

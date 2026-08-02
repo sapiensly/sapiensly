@@ -244,7 +244,7 @@ class AppScaffolder
                 // Usage accounting is best-effort.
             }
 
-            return $this->normalizeSpec($this->decodeJson((string) ($response->text ?? '')), $coercions);
+            $spec = $this->normalizeSpec($this->decodeJson((string) ($response->text ?? '')), $coercions);
         } catch (\Throwable $e) {
             Log::warning('App scaffold: model call failed', ['error' => $e->getMessage()]);
 
@@ -260,6 +260,27 @@ class AppScaffolder
                 previous: $e,
             );
         }
+
+        // An app with no objects is not an app.
+        //
+        // The catch above refuses when the model cannot be REACHED, and this
+        // used to be treated as the opposite case: a model that ANSWERS "there
+        // is nothing here" has answered, so the empty app shipped. From the
+        // caller's side the distinction does not survive contact — a benchmark
+        // run described a dental clinic and got back an app with zero objects,
+        // no dashboard, and not one word about it, reported as created.
+        //
+        // Outside the try on purpose, or the catch relabels it "the model could
+        // not be reached", which is the one thing it was not.
+        if ($spec['objects'] === []) {
+            throw new ScaffoldFailedException(
+                'the model did not describe a single object for this app. Its '
+                .'reply could not be read as a design — try again, or name the '
+                .'entities the app should hold more plainly.',
+            );
+        }
+
+        return $spec;
     }
 
     /**

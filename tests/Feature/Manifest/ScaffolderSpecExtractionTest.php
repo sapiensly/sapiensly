@@ -51,12 +51,16 @@ it('does not attempt to load credentials when no user is available', function ()
     $providers->shouldReceive('applyRuntimeConfig')->never();
     $providers->shouldReceive('resolveProviderForCatalogModel')->andReturnNull();
 
-    Ai::fakeAgent(ChatAgent::class, ['{"objects":[],"links":[]}']);
+    // A real spec, because an empty one is now refused — see the test below.
+    // What this pins is the credentials call, not what came back.
+    Ai::fakeAgent(ChatAgent::class, [
+        '{"objects":[{"name":"Contactos","slug":"contactos","fields":[{"name":"Nombre","slug":"nombre","type":"string","options":null}]}],"links":[]}',
+    ]);
 
     $scaffolder = new AppScaffolder(app(AiDefaults::class), $providers);
     $manifest = $scaffolder->scaffold(cfgBaseManifest(), 'Anything.', null);
 
-    expect($manifest['objects'])->toBe([]);
+    expect($manifest['objects'])->toHaveCount(1);
 });
 
 it('hands back every downgrade it applied to the model spec', function () {
@@ -120,9 +124,16 @@ it('fails loudly when the model cannot be reached', function () {
         ->toThrow(ScaffoldFailedException::class, 'no API key configured');
 });
 
-it('still returns an empty app when the model answers with no objects', function () {
-    // A model that ANSWERS "there is nothing here" is not a failure — only an
-    // unreachable one is. Pinned so the throw above never widens into this.
+it('refuses an app with nothing in it, however the model failed to describe one', function () {
+    // This used to assert the opposite: a model that ANSWERS "there is nothing
+    // here" has answered, so the empty app shipped, and only an unreachable
+    // model was a failure.
+    //
+    // That distinction does not survive contact with the caller. A benchmark
+    // run described a dental clinic and got back an app with zero objects, no
+    // dashboard, and not one word about it — reported as created. Whether the
+    // model was unreachable or merely unreadable is a difference in the
+    // MESSAGE, not in whether the person can use what they were handed.
     $providers = Mockery::mock(AiProviderService::class);
     $providers->shouldReceive('applyRuntimeConfig')->andReturnNull();
     $providers->shouldReceive('resolveProviderForCatalogModel')->andReturnNull();
@@ -131,5 +142,9 @@ it('still returns an empty app when the model answers with no objects', function
 
     $scaffolder = new AppScaffolder(app(AiDefaults::class), $providers);
 
-    expect($scaffolder->scaffold(cfgBaseManifest(), 'Anything.', User::factory()->create())['objects'])->toBe([]);
+    expect(fn () => $scaffolder->scaffold(
+        cfgBaseManifest(),
+        'Anything.',
+        User::factory()->create(),
+    ))->toThrow(ScaffoldFailedException::class, 'did not describe a single object');
 });
