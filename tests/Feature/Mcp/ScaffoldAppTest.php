@@ -516,3 +516,27 @@ it('bills in the money of the language the brief was written in', function () {
             ->and($settings['default_timezone'])->toBe($timezone, $name);
     }
 });
+
+it('leaves the app row holding a description, not the build brief it was made from', function () {
+    // The row is created with the brief, because the brief is what scaffolding
+    // needs. What it must be left holding is the line a person reads in a list
+    // of apps — otherwise `syncIdentity` copies the brief back over the
+    // manifest on the next save and the long text wins anyway.
+    $brief = 'Mesa de ayuda para soporte técnico. '
+        .str_repeat('Cada ticket lleva asunto, prioridad, estado y el correo de quien lo levanta. ', 12);
+
+    Ai::fakeAgent(ChatAgent::class, [
+        '{"summary":"Recibe y da seguimiento a los tickets de soporte del equipo.",'
+        .'"objects":[{"name":"Tickets","slug":"tickets","fields":['
+        .'{"name":"Asunto","slug":"asunto","type":"string"}]}],"links":[]}',
+    ]);
+
+    SapiensServer::actingAs($this->user)
+        ->tool(ScaffoldAppTool::class, ['name' => 'Mesa Ayuda', 'description' => $brief])
+        ->assertOk();
+
+    $app = App::where('user_id', $this->user->id)->where('slug', 'mesa_ayuda')->firstOrFail();
+
+    expect($app->description)->toBe('Recibe y da seguimiento a los tickets de soporte del equipo.')
+        ->and($app->currentVersion->manifest['description'])->toBe($app->description);
+});

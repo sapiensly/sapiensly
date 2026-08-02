@@ -87,6 +87,7 @@ import {
     AlignRight,
     ArrowDown,
     ArrowLeft,
+    BookOpen,
     ArrowUp,
     BarChart3,
     Camera,
@@ -3957,6 +3958,25 @@ function statusTone(status: Message['status']): string {
                             :class="headerMenuOpen && 'rotate-180'"
                         />
                     </button>
+
+                    <!-- The app's two documents: what it does, for whoever
+                         uses it, and how it is built, for whoever changes it.
+                         Both are derived from the current manifest when opened,
+                         so this is always the app as it stands right now.
+                         Not for a landing: a landing page has no screens to
+                         walk somebody through and no data model to describe. -->
+                    <a
+                        v-if="!previewIsLanding"
+                        :href="`/apps/${app.id}/docs`"
+                        target="_blank"
+                        rel="noopener"
+                        data-sp-docs-link
+                        :title="`${t('apps.builder.docs_manual')} · ${t('apps.builder.docs_technical')}`"
+                        class="inline-flex items-center gap-1.5 rounded-pill border border-medium bg-surface px-3 py-1.5 text-xs text-ink-muted transition-colors hover:border-strong hover:text-ink"
+                    >
+                        <BookOpen class="size-3.5" />
+                        {{ t('apps.builder.docs') }}
+                    </a>
 
                     <!-- Run the app in its real runtime, in a fresh tab. Uses the
                          LIVE slug (appMeta), not the page prop: the first prompt

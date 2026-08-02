@@ -294,6 +294,18 @@ DESC;
             ['op' => 'replace', 'path' => '/pages', 'value' => $assembled['pages']],
         ];
 
+        // The assembler shortens a description that is still the build brief —
+        // the paragraphs someone typed to have the app made, printed under its
+        // name in every list. It only acts when the current one is too long to
+        // be a description, so a hand-written one is left alone.
+        if (($assembled['description'] ?? null) !== ($base['description'] ?? null)) {
+            $ops[] = [
+                'op' => array_key_exists('description', $base) ? 'replace' : 'add',
+                'path' => '/description',
+                'value' => $assembled['description'],
+            ];
+        }
+
         // The policies the assembler wrote for those objects. Without this op
         // they would be assembled and dropped on the floor, and an app built in
         // the chat would ship with roles that mean nothing while the same app

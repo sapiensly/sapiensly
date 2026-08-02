@@ -82,6 +82,18 @@ class ScaffoldAppTool extends SapiensTool
             );
 
             $version = $manifestService->createVersion($app, $manifest, $user, 'Scaffolded from description');
+
+            // The row was created holding the BRIEF — up to two thousand
+            // characters of instructions for building the app, shown under its
+            // name wherever apps are listed. The scaffolder replaced it on the
+            // manifest with the line that says what the app is for; mirror that
+            // back, or `syncIdentity` copies the brief over it on the next save.
+            // The brief itself is not lost: it is the prompt on this call, and
+            // what the app actually does is documented at length in its manual
+            // and its technical sheet.
+            if (($manifest['description'] ?? null) !== null && $manifest['description'] !== $app->description) {
+                $app->update(['description' => $manifest['description']]);
+            }
         } catch (\Throwable $e) {
             // Roll back the orphaned app row so a failed scaffold leaves nothing behind.
             $app->delete();

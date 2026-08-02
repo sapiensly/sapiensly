@@ -19,6 +19,21 @@
  * the same method, not whether the wording is any good. A shallow rule that
  * catches the next silent cap is worth more than a deep one nobody adds to.
  */
+/**
+ * Methods that cut to a cap and are right not to report it.
+ *
+ * The rule above is about the SPEC — the objects, fields, relations and options
+ * that make up the app. Something cut from those is gone with nothing on screen
+ * to say so, which is the whole reason for the check.
+ *
+ * `normalizeSummary` cuts prose, not spec: the app's one-line description, whose
+ * truncation is visible in the description itself (it ends in an ellipsis, and
+ * the reader is looking straight at it). Nothing the app can DO is lost. Listed
+ * by name rather than loosening the pattern, so the next silent cap still
+ * fails and adding to this list stays a decision somebody has to defend.
+ */
+const CAPS_THAT_LOSE_NOTHING = ['normalizeSummary'];
+
 it('never trims a spec to a cap without saying what it dropped', function () {
     $path = dirname(__DIR__, 3).'/app/Services/Manifest/AppScaffolder.php';
     $source = file_get_contents($path) ?: '';
@@ -63,7 +78,7 @@ it('never trims a spec to a cap without saying what it dropped', function () {
             || preg_match('/self::MAX_[A-Z_]+\s*\)?\s*;?\s*$/m', $method['body']) === 1
                 && preg_match('/>\s*self::MAX_[A-Z_]+/', $method['body']) === 1;
 
-        if (! $cuts) {
+        if (! $cuts || in_array($method['name'], CAPS_THAT_LOSE_NOTHING, true)) {
             continue;
         }
         // …must be accompanied by telling the caller, in the same method.

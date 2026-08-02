@@ -180,6 +180,7 @@ class SapiensServer extends Server
         Tools\Build\CreateAppTool::class,
         Tools\Build\ScaffoldAppTool::class,
         Tools\Build\ReadManifestTool::class,
+        Tools\Build\ReadAppDocsTool::class,
         Tools\Build\GetManifestSchemaTool::class,
         // Builder chat sessions (debug / resume the in-app AI app-builder).
         Tools\Build\ListBuilderConversationsTool::class,

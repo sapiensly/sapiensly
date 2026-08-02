@@ -147,6 +147,9 @@ class AppScaffolder
 
     private const DASHBOARD_VALUE_BAR_CAP = 1;
 
+    /** The app description is one line in a list of apps; past this it is truncated with an ellipsis. */
+    private const MAX_SUMMARY_LENGTH = 180;
+
     /** Max KPI cards in the dashboard's opening metric_grid — the headline few, not a wall. */
     private const DASHBOARD_KPI_CAP = 5;
 
@@ -163,8 +166,9 @@ class AppScaffolder
     private const SYSTEM = <<<'SYS'
         You design simple internal business apps as a set of data objects (like database tables) with fields, and the links between them.
         Given a description, respond with ONLY a single minified JSON object — no markdown, no code fences, no commentary — using exactly this schema:
-        {"objects":[{"name":string,"slug":string,"fields":[{"name":string,"slug":string,"type":"string"|"email"|"url"|"phone"|"long_text"|"number"|"currency"|"boolean"|"date"|"datetime"|"single_select"|"multi_select"|"rating","options":[{"value":string,"label":string}]|null}]}],"links":[{"from":string,"to":string,"name":string,"type":"belongs_to"|"many_to_many"}]|null,"focus":{"objects":[string],"measures":[{"object":string,"field":string,"aggregation":"sum"|"avg"|"count"}]}|null}
+        {"summary":string,"objects":[{"name":string,"slug":string,"fields":[{"name":string,"slug":string,"type":"string"|"email"|"url"|"phone"|"long_text"|"number"|"currency"|"boolean"|"date"|"datetime"|"single_select"|"multi_select"|"rating","options":[{"value":string,"label":string}]|null}]}],"links":[{"from":string,"to":string,"name":string,"type":"belongs_to"|"many_to_many"}]|null,"focus":{"objects":[string],"measures":[{"object":string,"field":string,"aggregation":"sum"|"avg"|"count"}]}|null}
         Rules:
+        - summary: ONE short sentence, at most 180 characters, answering only WHAT this app is for — the job it does and for whom, in the language of the description. Not how it does it, not what it stores, no feature list, no "this app allows you to". "Tracks rental contracts, their payments and the incidents on each property." is the whole shape of it. The screens, the fields and the automation are documented elsewhere; this is the line someone reads in a list of apps to know which one to open.
         - objects: the main entities the app tracks (e.g. for a content engine: Ideas, Drafts, Published). At most 6. Each needs a human `name` and a snake_case `slug`.
         - fields: the columns of each object. At most 12 per object. Each needs a `name`, a snake_case `slug`, and a `type`. Give every object a short text title/name field FIRST.
         - STAY GROUNDED: only include fields the description actually implies or that are obviously essential to the entity. Do NOT pad objects with invented or generic extra fields — fewer, relevant fields beat a long speculative list.
@@ -355,10 +359,88 @@ class AppScaffolder
         $this->dropRestatedRelations($objects, $links, $coercions);
 
         return [
+            'summary' => $this->normalizeSummary($decoded['summary'] ?? null),
             'objects' => $objects,
             'links' => $links,
             'focus' => $this->normalizeFocus($decoded['focus'] ?? null, $objects, $coercions),
         ];
+    }
+
+    /**
+     * The one line that answers "what is this app for?".
+     *
+     * The app's description used to BE the brief — the whole two thousand
+     * characters someone typed to have it built, headings and bullet lists and
+     * all, printed under the app's name in every list. That text is an
+     * instruction, not a description: it says what to build, at the length it
+     * takes to build it. What the reader of a list needs is the one sentence
+     * that tells them which app to open.
+     *
+     * Kept to a sentence here rather than trusted to the prompt: a model asked
+     * for one short sentence returns three about a third of the time, and this
+     * is rendered in a fixed-height card.
+     */
+    private function normalizeSummary(mixed $raw): ?string
+    {
+        if (! is_string($raw)) {
+            return null;
+        }
+
+        // One paragraph: a model that answered in several returns the first.
+        $summary = trim((string) preg_replace('/\s*\n\s*\n.*$/su', '', trim($raw)));
+        $summary = trim((string) preg_replace('/\s+/u', ' ', $summary));
+
+        if ($summary === '') {
+            return null;
+        }
+
+        if (mb_strlen($summary) > self::MAX_SUMMARY_LENGTH) {
+            // Cut at the last sentence that fits, so the line still ends
+            // somewhere a person would end it; failing that, at a word.
+            $head = mb_substr($summary, 0, self::MAX_SUMMARY_LENGTH);
+            $cut = max(mb_strrpos($head, '. ') ?: 0, mb_strrpos($head, '.') === mb_strlen($head) - 1 ? mb_strlen($head) - 1 : 0);
+            $summary = $cut > self::MAX_SUMMARY_LENGTH / 2
+                ? rtrim(mb_substr($head, 0, $cut + 1))
+                : rtrim(mb_substr($head, 0, (int) (mb_strrpos($head, ' ') ?: self::MAX_SUMMARY_LENGTH))).'…';
+        }
+
+        return $summary;
+    }
+
+    /**
+     * What the app is for, when the model did not say.
+     *
+     * Names the objects it holds, in the app's language. Mechanical, and
+     * deliberately so — it is the floor under a missing summary, not a
+     * substitute for one, and a mechanical sentence still beats printing the
+     * two-thousand-character brief.
+     *
+     * @param  array<int, array{name: string}>  $objects
+     */
+    private function summaryFromObjects(array $objects, string $lang): string
+    {
+        $names = array_slice(array_values(array_filter(array_map(
+            fn (array $o): string => trim((string) ($o['name'] ?? '')),
+            $objects,
+        ))), 0, 4);
+
+        if ($names === []) {
+            return '';
+        }
+
+        $and = ['en' => 'and', 'es' => 'y', 'pt' => 'e', 'fr' => 'et'][$lang] ?? 'and';
+        $list = count($names) === 1
+            ? $names[0]
+            : implode(', ', array_slice($names, 0, -1)).' '.$and.' '.end($names);
+
+        $template = [
+            'en' => 'Keeps track of {list}.',
+            'es' => 'Lleva el control de {list}.',
+            'pt' => 'Controla {list}.',
+            'fr' => 'Assure le suivi de {list}.',
+        ][$lang] ?? 'Keeps track of {list}.';
+
+        return str_replace('{list}', $list, $template);
     }
 
     /**
@@ -903,6 +985,24 @@ class AppScaffolder
 
         $base['objects'] = $objects;
         $base['pages'] = $pages;
+
+        // The description the app carries from here on. `initialManifest` seeded
+        // it with the brief (clamped to 500 chars mid-word); this replaces it
+        // with the line that says what the app is for. The caller mirrors it
+        // back onto the App row — see ScaffoldAppTool.
+        //
+        // A summary the model wrote always wins: it was asked for exactly this.
+        // The mechanical fallback only displaces a description that is already
+        // too long to be one — the in-app builder assembles over a manifest
+        // whose description may have been written by hand, and "Keeps track of
+        // A, B and C." is not an improvement on that.
+        $summary = trim((string) ($spec['summary'] ?? ''));
+        if ($summary === '' && mb_strlen(trim((string) ($base['description'] ?? ''))) > self::MAX_SUMMARY_LENGTH) {
+            $summary = $this->summaryFromObjects($spec['objects'], $lang);
+        }
+        if ($summary !== '') {
+            $base['description'] = $summary;
+        }
 
         return $this->ensureObjectPolicies($base);
     }

@@ -4,6 +4,7 @@ use App\Http\Controllers\AppAccessController;
 use App\Http\Controllers\AppActionController;
 use App\Http\Controllers\AppBuilderController;
 use App\Http\Controllers\AppController;
+use App\Http\Controllers\AppDocsController;
 use App\Http\Controllers\AppExportController;
 use App\Http\Controllers\AppFileController;
 use App\Http\Controllers\AppNotificationController;
@@ -37,6 +38,14 @@ Route::middleware([
     Route::delete('/apps/templates/{template}', [AppController::class, 'destroyTemplate'])
         ->where('template', 'tpl_[a-z0-9]+')
         ->name('apps.templates.destroy');
+
+    // What the app is and how it works, derived from its manifest on read.
+    // Outside the /builder prefix on purpose: they are about the APP, opened
+    // from the builder and readable by anyone who can see it.
+    Route::get('/apps/{app}/docs', [AppDocsController::class, 'show'])->name('apps.docs');
+    Route::get('/apps/{app}/docs/{kind}.md', [AppDocsController::class, 'download'])
+        ->where('kind', 'manual|technical')
+        ->name('apps.docs.download');
 
     // Builder AI surface — chat that edits the manifest via JSON Patches.
     Route::get('/apps/{app}/builder', [AppBuilderController::class, 'show'])->name('apps.builder');
