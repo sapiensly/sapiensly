@@ -25,7 +25,10 @@ describe('asking before something irreversible', () => {
     });
 
     it('carries the title, which the browser dialog could not', () => {
-        void confirmAction({ message: 'Se quita para todos.', title: '¿Eliminar Cliente?' });
+        void confirmAction({
+            message: 'Se quita para todos.',
+            title: '¿Eliminar Cliente?',
+        });
 
         expect(pendingConfirm.value?.title).toBe('¿Eliminar Cliente?');
         expect(pendingConfirm.value?.message).toBe('Se quita para todos.');

@@ -160,6 +160,7 @@ class BlockDataResolver
                 'total' => $total,
                 'truncated' => $total > count($rows),
                 'paged' => $paged,
+                'totals' => $this->moneyTotals($app, $block, $manifest, $context),
             ];
         }
 
@@ -1117,6 +1118,89 @@ class BlockDataResolver
         $source['offset'] = ($page - 1) * $pageSize;
 
         return $source;
+    }
+
+    /**
+     * The sum of every money column in a table, over the WHOLE result.
+     *
+     * A column of amounts with nothing at the bottom is a column somebody adds
+     * up by hand. Computed server-side against the table's own query, so it
+     * honours the filters and the access row_filter and stays right across
+     * pages — summing the loaded rows would answer a different question than
+     * the one the footer appears to be answering, which is worse than no
+     * answer.
+     *
+     * Money ONLY. A `number` column is as likely to hold a year, a mileage or a
+     * count of bedrooms, and "Año: 6,073" is not a fact about anything. A
+     * rollup counts as money when what it sums is.
+     *
+     * @param  array<string, mixed>  $block
+     * @param  array<string, mixed>  $manifest
+     * @param  array<string, mixed>  $context
+     * @return array<string, float>
+     */
+    private function moneyTotals(App $app, array $block, array $manifest, array $context): array
+    {
+        $object = $this->findObject($manifest, $block['data_source']['object_id'] ?? null);
+        if ($object === null) {
+            return [];
+        }
+
+        $totals = [];
+        foreach ($block['columns'] ?? [] as $column) {
+            $fieldId = $column['field_id'] ?? null;
+            if (! is_string($fieldId) || isset($totals[$fieldId])) {
+                continue;
+            }
+
+            $field = collect($object['fields'] ?? [])->firstWhere('id', $fieldId);
+            if ($field === null || ! $this->isMoneyField($field, $object, $manifest)) {
+                continue;
+            }
+
+            try {
+                $totals[$fieldId] = (float) $this->records->aggregate(
+                    $app,
+                    $block['data_source'],
+                    'sum',
+                    $fieldId,
+                    $manifest,
+                    $context,
+                );
+            } catch (Throwable) {
+                // A total is a courtesy. Losing it must never cost the table.
+            }
+        }
+
+        return $totals;
+    }
+
+    /**
+     * Whether a field holds an amount of money — directly, or by summing one.
+     *
+     * @param  array<string, mixed>  $field
+     * @param  array<string, mixed>  $object
+     * @param  array<string, mixed>  $manifest
+     */
+    private function isMoneyField(array $field, array $object, array $manifest): bool
+    {
+        $type = $field['type'] ?? null;
+
+        if ($type === 'currency') {
+            return true;
+        }
+
+        if ($type !== 'rollup' || ($field['aggregator'] ?? null) === 'count') {
+            return false;
+        }
+
+        // A rollup is money when the column it adds up is. The target lives on
+        // another object, reached through the relation the rollup reads over.
+        $via = collect($object['fields'] ?? [])->firstWhere('id', $field['via_relation_field_id'] ?? null);
+        $target = $this->findObject($manifest, $via['target_object_id'] ?? null);
+        $sourceField = collect($target['fields'] ?? [])->firstWhere('id', $field['target_field_id'] ?? null);
+
+        return ($sourceField['type'] ?? null) === 'currency';
     }
 
     /**

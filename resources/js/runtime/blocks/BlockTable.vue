@@ -468,6 +468,27 @@ interface TableRow {
 const rows = computed<TableRow[]>(() => props.data?.rows ?? []);
 
 /**
+ * The server's per-column sums, and what to print in each footer cell.
+ *
+ * Only the columns the server actually summed get a figure; every other cell
+ * stays blank rather than showing a dash, which would read as "zero".
+ */
+const columnTotals = computed<Record<string, number>>(
+    () => props.data?.totals ?? {},
+);
+const hasTotals = computed(() => Object.keys(columnTotals.value).length > 0);
+
+function totalFor(col: Column): string {
+    if (col.kind !== 'data') return '';
+
+    const total = columnTotals.value[col.field.id];
+    if (total === undefined) return '';
+
+    // No row, so no relation labels — a money column never needs them.
+    return formatFieldValue(col.field, total, contextFor({}));
+}
+
+/**
  * Types that are quantities. They share an alignment and tabular figures, so a
  * column of money reads as a column: twelve digits line up under one, and the
  * eye compares magnitudes down the edge instead of hunting for the decimal.
@@ -1155,6 +1176,22 @@ function richTextCell(value: unknown): string {
                         </td>
                     </tr>
                 </tbody>
+
+                <!-- A column of amounts with nothing at the bottom is a column
+                     somebody adds up by hand. The server sums the whole result,
+                     not the page, so the figure survives paging and filtering.
+                     Money only: "Año: 6,073" is not a fact about anything. -->
+                <tfoot v-if="hasTotals" :class="['border-t-2', t.rowBorder]">
+                    <tr>
+                        <td
+                            v-for="col in columns"
+                            :key="col.id"
+                            :class="[cellClass(col), t.text, 'font-medium']"
+                        >
+                            {{ totalFor(col) }}
+                        </td>
+                    </tr>
+                </tfoot>
             </table>
         </div>
 

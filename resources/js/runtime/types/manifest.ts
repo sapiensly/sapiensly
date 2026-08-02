@@ -271,6 +271,12 @@ export interface TableBlockData {
     total?: number;
     /** True when `rows` is a page of a larger result. */
     truncated?: boolean;
+    /**
+     * Sum per money column, keyed by field id, over the WHOLE result rather
+     * than the page — summing what happens to be loaded would answer a
+     * different question than the footer appears to be answering.
+     */
+    totals?: Record<string, number>;
 }
 
 export interface StatBlockData {
