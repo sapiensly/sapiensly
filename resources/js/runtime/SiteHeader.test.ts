@@ -69,22 +69,17 @@ describe('the app bar', () => {
     });
 
     it('keeps every destination reachable from the folded menu too', () => {
-        // Today both are rendered and a breakpoint chooses: the row above `sm`,
-        // the menu below. jsdom applies no CSS, so this sees both — which is
-        // the point worth pinning. Whichever one the reader gets, the same
-        // destinations are in it, so narrowing a window can never lose one.
+        // Today a breakpoint chooses: the row above `sm`, the menu below.
+        // jsdom applies no CSS so it sees both — which is the point worth
+        // pinning. Whichever the reader gets, the same destinations are in
+        // it, so narrowing a window can never lose one.
         const bar = header();
         bar.find('[data-sp-nav-menu]').trigger('click');
 
         return bar.vm.$nextTick().then(() => {
-            const inMenu = bar.findAll('[role="menu"] a').map((a) => a.text());
-
-            expect(inMenu).toEqual([
-                'Clientes',
-                'Oportunidades',
-                'Actividades',
-                'Contratos',
-            ]);
+            expect(bar.findAll('[role="menu"] a').map((a) => a.text())).toEqual(
+                ['Clientes', 'Oportunidades', 'Actividades', 'Contratos'],
+            );
         });
     });
 
