@@ -85,6 +85,38 @@ const submitParams = computed(() => ({
 // already supplies the border + background + padding. Without this the user
 // sees a "card inside a card" with an awkward gap between the two surfaces.
 const insideModal = inject<boolean>('insideModal', false);
+/**
+ * Types that need the width of the whole form: a paragraph, a document, a file
+ * drop, a picker that lists records by name. Squeezed into half a row they
+ * either wrap badly or truncate the very thing being chosen.
+ */
+const WIDE_FIELD_TYPES = [
+    'long_text',
+    'rich_text',
+    'file',
+    'relation',
+    'multi_select',
+];
+
+function spansBothColumns(rf: { field: { type: string } }): boolean {
+    return WIDE_FIELD_TYPES.includes(rf.field.type);
+}
+
+/**
+ * One column, or two.
+ *
+ * A thirteen-field create form in a modal was one column thirteen rows tall —
+ * taller than the screen, so the submit button lived below the fold and the
+ * shape of what was being asked was invisible. Past a handful of fields a
+ * second column halves that, and collapses back to one where there is no room
+ * for two.
+ */
+const gridClass = computed(() =>
+    visibleFields.value.length > 5
+        ? 'grid grid-cols-1 gap-x-4 gap-y-3 md:grid-cols-2'
+        : 'space-y-4',
+);
+
 const wrapperClass = computed(() =>
     insideModal
         ? ['space-y-4']
@@ -285,31 +317,54 @@ async function cancel() {
 
 <template>
     <form :class="wrapperClass" @submit.prevent="submit">
-        <div v-for="rf in visibleFields" :key="rf.fieldId" class="space-y-1.5">
-            <label
-                :for="`form_${block.id}_${rf.slug}`"
-                :class="['text-xs', t.textMuted]"
+        <div :class="gridClass">
+            <div
+                v-for="rf in visibleFields"
+                :key="rf.fieldId"
+                class="space-y-1.5"
+                :class="spansBothColumns(rf) ? 'md:col-span-2' : ''"
             >
-                {{ rf.label }}
-                <span v-if="isRequired(rf)" class="text-red-400">*</span>
-            </label>
+                <label
+                    :for="`form_${block.id}_${rf.slug}`"
+                    :class="['text-xs', t.textMuted]"
+                >
+                    {{ rf.label }}
+                    <span v-if="isRequired(rf)" class="text-red-400">*</span>
+                </label>
 
-            <div :inert="rf.readonly" :class="rf.readonly ? 'opacity-60' : ''">
-                <FormFieldInput
-                    :field="rf.field"
-                    :input-id="`form_${block.id}_${rf.slug}`"
-                    v-model="formData[rf.slug]"
-                    :app-slug="appSlug"
-                />
+                <div
+                    :inert="rf.readonly"
+                    :class="rf.readonly ? 'opacity-60' : ''"
+                >
+                    <FormFieldInput
+                        :field="rf.field"
+                        :input-id="`form_${block.id}_${rf.slug}`"
+                        v-model="formData[rf.slug]"
+                        :app-slug="appSlug"
+                    />
+                </div>
+
+                <!--
+                One line under the field, always there. The error REPLACES the
+                help rather than joining it, so validating a form does not
+                shove everything below it down the page — and the help text a
+                manifest can set finally has somewhere to appear at all.
+            -->
+                <p
+                    class="min-h-[1.05rem] text-[11px] leading-tight"
+                    :class="
+                        (fieldErrors[rf.slug] ?? []).length > 0
+                            ? 'text-red-400'
+                            : t.textSubtle
+                    "
+                >
+                    {{
+                        (fieldErrors[rf.slug] ?? [])[0] ??
+                        rf.field.help_text ??
+                        ''
+                    }}
+                </p>
             </div>
-
-            <p
-                v-for="msg in fieldErrors[rf.slug] ?? []"
-                :key="msg"
-                class="text-[11px] text-red-400"
-            >
-                {{ msg }}
-            </p>
         </div>
 
         <div class="flex justify-end gap-2 pt-2">
