@@ -8,6 +8,8 @@ use App\Models\Organization;
 use App\Models\OrganizationMembership;
 use App\Models\Record;
 use App\Models\User;
+use App\Services\Apps\AppAccessContext;
+use App\Services\Apps\BlockVisibilityFilter;
 use App\Services\Manifest\AppManifestService;
 use Database\Seeders\RolesAndPermissionsSeeder;
 use Illuminate\Support\Str;
@@ -185,4 +187,36 @@ it('lets the app owner bypass write policies', function () {
         ->assertJsonPath('ok', true);
 
     expect(Record::query()->where('app_id', $this->testApp->id)->count())->toBe(3);
+});
+
+it('never offers a row button to a role that may not press it', function () {
+    // A block carries `visibility` and could be filtered out; an action COLUMN
+    // could not, so Delete on a table row was shown to everyone while the same
+    // Delete as a page button was correctly hidden. The executor refused either
+    // way, so the inconsistency cost only trust — a control that answers "no"
+    // is a control that should not have been there.
+    $filter = app(BlockVisibilityFilter::class);
+
+    // A real context for somebody holding only `user` — the role the scaffold
+    // never grants delete to.
+    $access = new AppAccessContext(
+        bypass: false,
+        hasAccess: true,
+        roleSlugs: ['user'],
+    );
+
+    $blocks = [[
+        'id' => 'blk_tabla00001',
+        'type' => 'table',
+        'columns' => [
+            ['id' => 'col_folio00001', 'field_id' => 'fld_folio00001'],
+            ['id' => 'col_editar0001', 'type' => 'action', 'label' => 'Editar', 'on_click' => []],
+            ['id' => 'col_borrar0001', 'type' => 'action', 'label' => 'Eliminar', 'on_click' => [], 'visibility' => ['roles' => ['admin']]],
+        ],
+    ]];
+
+    $kept = $filter->visibleBlocks($blocks, $access, []);
+
+    expect(collect($kept[0]['columns'])->pluck('id')->all())
+        ->toBe(['col_folio00001', 'col_editar0001']);
 });

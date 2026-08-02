@@ -3652,6 +3652,10 @@ class AppScaffolder
                 'label' => $lex->label('delete'),
                 'icon' => 'trash-2',
                 'variant' => 'danger',
+                // Same gate the detail page's Delete carries: the scaffold
+                // grants delete to `admin` alone, so nobody else is offered a
+                // button the executor is going to refuse.
+                'visibility' => ['roles' => ['admin']],
                 'confirm' => [
                     'title' => $lex->label('delete_title', singular: $childSingular),
                     'message' => $lex->label('delete_message'),

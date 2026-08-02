@@ -41,6 +41,7 @@ class BlockVisibilityFilter
             }
 
             $block = $this->stripHiddenFormFields($block, $access, $objects);
+            $block = $this->stripHiddenActionColumns($block, $access, $context);
 
             foreach (['blocks', 'left_blocks', 'right_blocks'] as $key) {
                 if (isset($block[$key]) && is_array($block[$key])) {
@@ -81,6 +82,43 @@ class BlockVisibilityFilter
      * @param  list<array<string, mixed>>  $objects
      * @return array<string, mixed>
      */
+    /**
+     * Drop the row buttons this role must not press.
+     *
+     * A block carries `visibility` and a whole block can be filtered out; an
+     * action COLUMN could not, so a Delete on a table row was offered to every
+     * role while the same Delete on a detail page — a button, which does carry
+     * visibility — was correctly hidden. The executor refused either way, so
+     * the inconsistency cost nothing but trust: a control that answers "no" is
+     * a control that should not have been there.
+     *
+     * Applies to any block with `columns` — a table and a related list share
+     * the shape.
+     *
+     * @param  array<string, mixed>  $block
+     * @param  array<string, mixed>  $context
+     * @return array<string, mixed>
+     */
+    private function stripHiddenActionColumns(array $block, AppAccessContext $access, array $context): array
+    {
+        if (! is_array($block['columns'] ?? null)) {
+            return $block;
+        }
+
+        $kept = [];
+        foreach ($block['columns'] as $column) {
+            $rule = is_array($column) ? ($column['visibility'] ?? null) : null;
+            if ($rule !== null && (! $access->isBlockVisible($rule) || ! $this->passesExpression($rule, $context))) {
+                continue;
+            }
+            $kept[] = $column;
+        }
+
+        $block['columns'] = array_values($kept);
+
+        return $block;
+    }
+
     private function stripHiddenFormFields(array $block, AppAccessContext $access, array $objects): array
     {
         $type = $block['type'] ?? null;

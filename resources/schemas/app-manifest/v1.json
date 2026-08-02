@@ -2093,6 +2093,9 @@
                                             "type": {
                                                 "const": "action"
                                             },
+                                            "visibility": {
+                                                "$ref": "#/$defs/visibility_rule"
+                                            },
                                             "label": {
                                                 "type": "string",
                                                 "maxLength": 40
@@ -2737,6 +2740,9 @@
                                             },
                                             "type": {
                                                 "const": "action"
+                                            },
+                                            "visibility": {
+                                                "$ref": "#/$defs/visibility_rule"
                                             },
                                             "label": {
                                                 "type": "string",

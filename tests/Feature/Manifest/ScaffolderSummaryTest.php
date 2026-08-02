@@ -326,6 +326,10 @@ it('gives a child row the edit and delete it has nowhere else to put', function 
     // what it is about to remove.
     $delete = $actions->firstWhere('label', 'Eliminar');
     expect($delete['confirm']['title'])->toBe('¿Eliminar Refacción?')
+        // Same gate the detail page's Delete carries — an action column takes
+        // `visibility` now, so a row button and a page button agree about who
+        // may press them.
+        ->and($delete['visibility']['roles'])->toBe(['admin'])
         ->and(collect($delete['on_click'])->pluck('type')->all())->toBe(['delete_record', 'refresh'])
         ->and(collect($delete['on_click'])->first()['record_id_expression'])->toBe('{{row.id}}');
 
