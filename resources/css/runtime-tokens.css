@@ -1,0 +1,226 @@
+/**
+ * Runtime design tokens — the surface generated apps are painted on.
+ *
+ * Scoped to `.sp-app-surface` on purpose. The platform's own chrome (admin,
+ * builder, settings) has its own signed-off language in tokens.css and must not
+ * move because an app got a new look; this file only redresses what a manifest
+ * renders. The names are the EXISTING `--sp-*` ones, so all ~55 block
+ * components pick the new values up without being touched.
+ *
+ * Two things here that tokens.css never had:
+ *
+ * 1. The accent is three HSL channels, and everything derived from it — hover,
+ *    press, the tint behind a chip, the focus ring, the accent as readable TEXT
+ *    — is computed with color-mix rather than authored. A tenant picking green
+ *    gets a coherent green; nothing is a blue that was hand-tuned once.
+ *
+ * 2. Density. The same type scale at two vertical rhythms: a dashboard wants
+ *    room, a working list wants rows you can scan forty of.
+ *
+ * No shadow and no gradient carries colour. A tinted shadow only looks right
+ * under the accent it was mixed for, and the accent is not ours to assume.
+ */
+
+.sp-app-surface {
+    color-scheme: light;
+
+    /* The accent, as channels. runtimeStyle.ts writes these from the brand. */
+    --sp-accent-h: 205;
+    --sp-accent-s: 100%;
+    --sp-accent-l: 50%;
+
+    --sp-accent: hsl(var(--sp-accent-h) var(--sp-accent-s) var(--sp-accent-l));
+    --sp-accent-hover: hsl(
+        var(--sp-accent-h) var(--sp-accent-s) calc(var(--sp-accent-l) - 7%)
+    );
+    --sp-accent-press: hsl(
+        var(--sp-accent-h) var(--sp-accent-s) calc(var(--sp-accent-l) - 13%)
+    );
+    /* The accent as TEXT on a surface: darkened, because a colour that reads as
+       a button rarely reads as a word. */
+    --sp-accent-text: hsl(
+        var(--sp-accent-h) calc(var(--sp-accent-s) * 0.9)
+            calc(var(--sp-accent-l) - 9%)
+    );
+    --sp-accent-soft: color-mix(
+        in oklab,
+        var(--sp-accent) 9%,
+        var(--sp-surface)
+    );
+    --sp-accent-soft-2: color-mix(
+        in oklab,
+        var(--sp-accent) 16%,
+        var(--sp-surface)
+    );
+    --sp-accent-border: color-mix(
+        in oklab,
+        var(--sp-accent) 45%,
+        var(--sp-border-medium)
+    );
+    --sp-accent-ring: color-mix(in oklab, var(--sp-accent) 35%, transparent);
+    /* Text on top of an accent fill. A tenant choosing lime or yellow needs
+       this flipped to a dark tone; runtimeStyle.ts decides it from luminance. */
+    --sp-on-accent: #ffffff;
+
+    /* Surfaces */
+    --sp-bg: #f2f4f8;
+    --sp-surface: #ffffff;
+    --sp-surface-2: #f8fafc;
+    --sp-surface-hover: #edeff5;
+    --sp-surface-sunken: #e8ebf2;
+    --sp-overlay: rgba(14, 18, 32, 0.44);
+
+    /* Lines */
+    --sp-border-soft: #eaedf4;
+    --sp-border-medium: #e2e5ee;
+    --sp-border-strong: #cbd0dd;
+
+    /* Text */
+    --sp-text-primary: #171b28;
+    --sp-text-secondary: #454c60;
+    --sp-text-muted: #6d7488;
+    --sp-text-subtle: #949bad;
+
+    /* State, independent of the accent — a red that means danger must not
+       become a shade of the brand. */
+    --sp-ok: #0f7a52;
+    --sp-ok-soft: #e4f4ec;
+    --sp-ok-border: #b6dfcb;
+    --sp-warn: #8f5c07;
+    --sp-warn-soft: #fbf1de;
+    --sp-warn-border: #ead0a0;
+    --sp-danger: #c02f28;
+    --sp-danger-soft: #fdeceb;
+    --sp-danger-border: #f0bfbc;
+    --sp-info: #35507a;
+    --sp-info-soft: #eaeef6;
+    --sp-info-border: #c6d0e2;
+
+    /* Chart series. A luminance ramp, so they stay distinct printed in grey or
+       read by someone who cannot separate the hues. */
+    --sp-chart-1: #1e2f6e;
+    --sp-chart-2: #7c2352;
+    --sp-chart-3: #0b6b60;
+    --sp-chart-4: #a8452c;
+    --sp-chart-5: #6b5fd0;
+    --sp-chart-6: #3f9a5c;
+    --sp-chart-7: #c08a1e;
+    --sp-chart-8: #6fb6d8;
+
+    /* Neutral shadows only. */
+    --sp-shadow-1: 0 1px 2px rgba(16, 20, 35, 0.06);
+    --sp-shadow-2: 0 4px 14px rgba(16, 20, 35, 0.08);
+    --sp-shadow-3: 0 16px 40px rgba(16, 20, 35, 0.16);
+
+    /* Radii and rhythm. */
+    --sp-radius-xs: 4px;
+    --sp-radius-sm: 6px;
+    --sp-radius-md: 10px;
+    --sp-radius-lg: 14px;
+    --sp-radius-xl: 18px;
+
+    --sp-t-fast: 110ms;
+    --sp-t: 170ms;
+    --sp-ease: cubic-bezier(0.2, 0, 0.2, 1);
+
+    background: var(--sp-bg);
+    color: var(--sp-text-primary);
+}
+
+/* Dark is authored, not inverted: the accent has to climb in luminance to stay
+   legible on a near-black surface, the series ramp starts lighter, and a border
+   does the work a shadow cannot do in the dark. */
+.sp-app-surface.theme-dark,
+.dark .sp-app-surface:not(.theme-light) {
+    color-scheme: dark;
+
+    --sp-accent-l: 57%;
+    --sp-accent-hover: hsl(
+        var(--sp-accent-h) var(--sp-accent-s) calc(var(--sp-accent-l) + 7%)
+    );
+    --sp-accent-press: hsl(
+        var(--sp-accent-h) var(--sp-accent-s) calc(var(--sp-accent-l) + 12%)
+    );
+    --sp-accent-text: hsl(
+        var(--sp-accent-h) calc(var(--sp-accent-s) * 0.85) 72%
+    );
+    --sp-accent-soft: color-mix(
+        in oklab,
+        var(--sp-accent) 15%,
+        var(--sp-surface)
+    );
+    --sp-accent-soft-2: color-mix(
+        in oklab,
+        var(--sp-accent) 26%,
+        var(--sp-surface)
+    );
+    --sp-accent-border: color-mix(
+        in oklab,
+        var(--sp-accent) 50%,
+        var(--sp-border-medium)
+    );
+    --sp-accent-ring: color-mix(in oklab, var(--sp-accent) 45%, transparent);
+
+    --sp-bg: #070a14;
+    --sp-surface: #0f1422;
+    --sp-surface-2: #0b0f1b;
+    --sp-surface-hover: #192032;
+    --sp-surface-sunken: #060910;
+    --sp-overlay: rgba(2, 4, 10, 0.66);
+
+    --sp-border-soft: #1a2133;
+    --sp-border-medium: #222a3f;
+    --sp-border-strong: #364159;
+
+    --sp-text-primary: #eef1f8;
+    --sp-text-secondary: #bcc4d6;
+    --sp-text-muted: #8b93a8;
+    --sp-text-subtle: #666e83;
+
+    --sp-ok: #3ec08a;
+    --sp-ok-soft: #10261e;
+    --sp-ok-border: #235741;
+    --sp-warn: #e3ac4c;
+    --sp-warn-soft: #2a1f0d;
+    --sp-warn-border: #5c4620;
+    --sp-danger: #f0736a;
+    --sp-danger-soft: #2c1417;
+    --sp-danger-border: #5e2a2b;
+    --sp-info: #9fb2d4;
+    --sp-info-soft: #151b2b;
+    --sp-info-border: #2e3a54;
+
+    --sp-chart-1: #6f8fe8;
+    --sp-chart-2: #d371ab;
+    --sp-chart-3: #2fb6a4;
+    --sp-chart-4: #e88a63;
+    --sp-chart-5: #a89bf2;
+    --sp-chart-6: #63c98a;
+    --sp-chart-7: #e0bb5c;
+    --sp-chart-8: #9fd9f0;
+
+    --sp-shadow-1: 0 1px 2px rgba(0, 0, 0, 0.5);
+    --sp-shadow-2: 0 4px 14px rgba(0, 0, 0, 0.5);
+    --sp-shadow-3: 0 16px 40px rgba(0, 0, 0, 0.62);
+}
+
+/* Density changes the vertical rhythm and nothing else — the type scale is the
+   same, so a compact table is not a table you have to squint at. */
+.sp-app-surface,
+.sp-app-surface[data-density='comfortable'] {
+    --sp-row-h: 44px;
+    --sp-cell-py: 11px;
+    --sp-cell-px: 14px;
+    --sp-field-h: 38px;
+    --sp-card-pad: 22px;
+    --sp-stack: 16px;
+}
+
+.sp-app-surface[data-density='compact'] {
+    --sp-row-h: 30px;
+    --sp-cell-py: 5px;
+    --sp-cell-px: 10px;
+    --sp-field-h: 30px;
+    --sp-card-pad: 14px;
+    --sp-stack: 10px;
+}
