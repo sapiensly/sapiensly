@@ -8,10 +8,14 @@ import {
     Database,
     LayoutDashboard,
     Link2,
+    Loader2,
+    RotateCcw,
     Workflow as WorkflowIcon,
 } from '@lucide/vue';
+import axios from 'axios';
 import { computed, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
+import { toast } from 'vue-sonner';
 
 const { t } = useI18n();
 
@@ -19,7 +23,13 @@ const { t } = useI18n();
  * Unified, at-a-glance explorer of every layer of a built app — objects &
  * fields, pages & blocks, workflows, integrations, the agent, and version
  * history — so the maker can consult the whole structure without leaving the
- * builder. Read-only: it reflects the active manifest, it does not edit it.
+ * builder.
+ *
+ * Read-only about the manifest — it reflects the active one, it does not edit
+ * it — with one exception, and the exception is the point: the version history
+ * was here all along with no way to act on it. Restoring is the one thing you
+ * come to a history FOR, and rolling back was possible only over MCP, so a chat
+ * turn that restructured your app left you describing the old shape and hoping.
  */
 interface VersionEntry {
     id: string;
@@ -33,7 +43,47 @@ const props = defineProps<{
     manifest: Record<string, unknown> | null;
     schema: { record_counts?: Record<string, number> } | null;
     versions?: VersionEntry[];
+    /** Needed only to restore — omit it and the history stays read-only. */
+    appId?: string;
 }>();
+
+const emit = defineEmits<{ (e: 'restored'): void }>();
+
+const restoringId = ref<string | null>(null);
+/**
+ * Which row is asking to be confirmed. Restoring is one click away from undoing
+ * somebody's afternoon, so it takes two — on the row itself, rather than in a
+ * dialog that covers the list it is about to replace.
+ */
+const confirmingId = ref<string | null>(null);
+
+async function restore(version: VersionEntry): Promise<void> {
+    if (!props.appId || version.current) return;
+
+    if (confirmingId.value !== version.id) {
+        confirmingId.value = version.id;
+        return;
+    }
+
+    restoringId.value = version.id;
+    confirmingId.value = null;
+    try {
+        const { data } = await axios.post(
+            `/apps/${props.appId}/versions/${version.id}/restore`,
+        );
+        toast.success(
+            t('apps.versions.restored', {
+                from: version.version,
+                to: data.version_number,
+            }),
+        );
+        emit('restored');
+    } catch {
+        toast.error(t('apps.versions.restore_failed'));
+    } finally {
+        restoringId.value = null;
+    }
+}
 
 // Generic helpers — the manifest is loosely typed (it comes from JSON), so we
 // read each layer defensively and never assume a shape that may be absent.
@@ -232,11 +282,25 @@ function agentCapabilitySummary(): string {
             </button>
             <div v-if="openSections.has('versions')" class="pb-2">
                 <p v-if="versionList.length === 0" class="lx-empty">{{ t('apps.builder.layers.no_versions') }}</p>
+                <p v-else-if="appId" class="px-3 pb-1 text-[10px] leading-relaxed text-ink-subtle">{{ t('apps.versions.note') }}</p>
                 <div v-for="v in versionList" :key="v.id" class="px-3 py-1.5">
                     <div class="flex items-center gap-2">
                         <span class="text-xs font-medium text-ink">v{{ v.version }}</span>
                         <Badge v-if="v.current" variant="default" class="text-[10px]">{{ t('apps.builder.layers.badge_current') }}</Badge>
                         <span class="ml-auto text-[10px] text-ink-subtle">{{ fmtDate(v.created_at) }}</span>
+                        <button
+                            v-if="appId && !v.current"
+                            type="button"
+                            :data-sp-restore="v.version"
+                            :disabled="restoringId !== null"
+                            class="shrink-0 rounded-pill border border-medium px-2 py-0.5 text-[10px] text-ink-muted transition-colors hover:text-ink disabled:opacity-40"
+                            :class="confirmingId === v.id && 'border-accent-blue/40 text-accent-blue'"
+                            @click="restore(v)"
+                        >
+                            <Loader2 v-if="restoringId === v.id" class="inline size-3 animate-spin" />
+                            <RotateCcw v-else class="mr-0.5 inline size-3" />
+                            {{ confirmingId === v.id ? t('apps.versions.confirm') : t('apps.versions.restore') }}
+                        </button>
                     </div>
                     <p v-if="v.summary" class="mt-0.5 truncate text-xs text-ink-muted">{{ v.summary }}</p>
                 </div>

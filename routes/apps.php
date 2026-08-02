@@ -11,6 +11,7 @@ use App\Http\Controllers\AppNotificationController;
 use App\Http\Controllers\AppRecordOptionsController;
 use App\Http\Controllers\AppRuntimeAgentController;
 use App\Http\Controllers\AppRuntimeController;
+use App\Http\Controllers\AppVersionsController;
 use App\Http\Controllers\AppWorkflowController;
 use Illuminate\Support\Facades\Route;
 
@@ -39,6 +40,14 @@ Route::middleware([
     Route::delete('/apps/templates/{template}', [AppController::class, 'destroyTemplate'])
         ->where('template', 'tpl_[a-z0-9]+')
         ->name('apps.templates.destroy');
+
+    // The app's history, and the way back. Rolling back has always been
+    // possible over MCP and unreachable from the builder — a history nobody
+    // can reach is a backup nobody has.
+    Route::get('/apps/{app}/versions', [AppVersionsController::class, 'index'])->name('apps.versions');
+    Route::post('/apps/{app}/versions/{version}/restore', [AppVersionsController::class, 'restore'])
+        ->where('version', 'apv_[a-z0-9]+')
+        ->name('apps.versions.restore');
 
     // What the app is and how it works, derived from its manifest on read.
     // Outside the /builder prefix on purpose: they are about the APP, opened

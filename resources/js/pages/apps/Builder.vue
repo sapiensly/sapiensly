@@ -6512,6 +6512,18 @@ function statusTone(status: Message['status']): string {
                     :manifest="manifest"
                     :schema="schema ?? null"
                     :versions="versions"
+                    :app-id="app.id"
+                    @restored="
+                        router.reload({
+                            only: [
+                                'preview',
+                                'previewBlockData',
+                                'manifest',
+                                'schema',
+                                'versions',
+                            ],
+                        })
+                    "
                 />
             </SheetContent>
         </Sheet>

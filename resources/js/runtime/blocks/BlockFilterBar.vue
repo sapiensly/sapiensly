@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import { router } from '@inertiajs/vue3';
-import { runtimeWord } from '../words';
 import { computed, inject, ref } from 'vue';
 import RuntimeIcon from '../RuntimeIcon.vue';
 import type { ObjectDef } from '../types/manifest';
 import { themeTokens, useRuntimeTheme } from '../useRuntimeTheme';
+import { runtimeWord } from '../words';
 
 interface Control {
     param: string;
