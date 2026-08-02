@@ -25,6 +25,13 @@ use Throwable;
  */
 class BlockDataResolver
 {
+    /**
+     * The row ceiling a block gets when its data source names none. Mirrors
+     * RecordQueryService's own default — this class only needs it to tell a
+     * full page from a short one.
+     */
+    private const DEFAULT_ROW_LIMIT = 50;
+
     public function __construct(
         private RecordQueryService $records,
         private ExpressionResolver $expressions,
@@ -130,7 +137,23 @@ class BlockDataResolver
     private function resolveDataBlock(App $app, array $block, array $manifest, array $context): ?array
     {
         if ($block['type'] === 'table') {
-            return ['rows' => $this->queryRows($app, $block['data_source'], $manifest, $context)];
+            $rows = $this->queryRows($app, $block['data_source'], $manifest, $context);
+
+            // How many there ARE, not just how many were sent. The table sorts
+            // and searches what it was given, and without this it cannot tell
+            // the difference between "no such record" and "not in the first
+            // page" — so it said the first one. Only asked when the result
+            // filled the limit: a short page already knows its own size.
+            $limit = (int) ($block['data_source']['limit'] ?? self::DEFAULT_ROW_LIMIT);
+            $total = count($rows) < $limit
+                ? count($rows)
+                : $this->records->count($app, $block['data_source'], $manifest, $context);
+
+            return [
+                'rows' => $rows,
+                'total' => $total,
+                'truncated' => $total > count($rows),
+            ];
         }
 
         if ($block['type'] === 'stat' || $block['type'] === 'gauge' || $block['type'] === 'progress') {

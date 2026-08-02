@@ -174,3 +174,39 @@ it('leaves a has-many alone — many records have no single label', function () 
 
     expect($data['blk_lbl_tickets1']['rows'][0]['labels'] ?? null)->toBeNull();
 });
+
+it('says how many there are, not just how many it sent', function () {
+    // The lie this closes: a table shows the first page, its search runs over
+    // what it was given, and a record past the limit comes back as "no row
+    // matches" — which reads as "no such record".
+    $writer = app(RecordWriteService::class);
+    foreach (range(1, 12) as $n) {
+        $writer->create($this->appModel, $this->manifest, 'obj_lbl_replies1', [
+            'mensaje' => "Respuesta {$n}",
+        ], $this->user);
+    }
+
+    $block = $this->manifest['pages'][0]['blocks'][0];
+    $block['data_source']['limit'] = 5;
+
+    $data = app(BlockDataResolver::class)->resolve($this->appModel, [$block], $this->manifest, []);
+    $payload = $data['blk_lbl_table001'];
+
+    expect($payload['rows'])->toHaveCount(5)
+        ->and($payload['total'])->toBe(13)
+        ->and($payload['truncated'])->toBeTrue();
+});
+
+it('does not go counting when it already has everything', function () {
+    // A short page knows its own size, and a count per table on every render
+    // is a query nobody asked for.
+    $data = app(BlockDataResolver::class)->resolve(
+        $this->appModel,
+        [$this->manifest['pages'][0]['blocks'][0]],
+        $this->manifest,
+        [],
+    );
+
+    expect($data['blk_lbl_table001']['truncated'])->toBeFalse()
+        ->and($data['blk_lbl_table001']['total'])->toBe(1);
+});

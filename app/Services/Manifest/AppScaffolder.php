@@ -50,6 +50,17 @@ class AppScaffolder
 
     private const MAX_OPTIONS = 8;
 
+    /**
+     * Rows a list page loads, and how many it shows at once.
+     *
+     * The ceiling is what the browser sorts and searches over, so it is set
+     * where a person's whole object usually fits; past it the table says so
+     * rather than pretending the page is the object.
+     */
+    private const LIST_PAGE_ROW_LIMIT = 400;
+
+    private const LIST_PAGE_SIZE = 25;
+
     private const MAX_LINKS = 8;
 
     /**
@@ -1478,7 +1489,13 @@ class AppScaffolder
             'data_source' => [
                 'object_id' => $objectId,
                 'sort' => [['field_id' => 'sys_created_at', 'direction' => 'desc']],
+                // Named, rather than left to the query layer's default of 50: a
+                // list page IS the object, and stopping at fifty records with a
+                // pager that only knows about fifty is how a search answered
+                // "no such record" about the two hundredth one.
+                'limit' => self::LIST_PAGE_ROW_LIMIT,
             ],
+            'pagination' => ['page_size' => self::LIST_PAGE_SIZE],
             'columns' => $columns,
         ];
 

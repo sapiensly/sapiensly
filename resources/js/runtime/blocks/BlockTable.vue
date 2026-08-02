@@ -337,13 +337,46 @@ const WORDS: Record<string, Record<string, string>> = {
         pt: 'Nenhuma linha corresponde a',
         fr: 'Aucune ligne ne correspond à',
     },
+    // Said out loud, because the alternative is a search that answers "no such
+    // record" about a record that exists further down the object.
+    ofLoaded: {
+        en: 'among the first {n} of {total}',
+        es: 'entre los primeros {n} de {total}',
+        pt: 'entre os primeiros {n} de {total}',
+        fr: 'parmi les {n} premiers sur {total}',
+    },
+    showingOf: {
+        en: 'Showing {n} of {total}',
+        es: 'Mostrando {n} de {total}',
+        pt: 'Mostrando {n} de {total}',
+        fr: 'Affichage de {n} sur {total}',
+    },
 };
 
-function word(key: string): string {
+function word(
+    key: string,
+    replace: Record<string, string | number> = {},
+): string {
     const lang = props.locale.slice(0, 2).toLowerCase();
+    let out = WORDS[key][lang] ?? WORDS[key].en;
+    for (const [token, value] of Object.entries(replace)) {
+        out = out.replace(`{${token}}`, String(value));
+    }
 
-    return WORDS[key][lang] ?? WORDS[key].en;
+    return out;
 }
+
+/**
+ * The rows on screen are a page of a bigger result.
+ *
+ * Everything this table does — sorting, searching, the pager — works on what it
+ * was sent. That is fine when it was sent everything, and a lie when it was
+ * not: a search for a record sitting past the limit answers "no row matches",
+ * which reads as "it does not exist". The count is how the reader learns to
+ * doubt the answer.
+ */
+const truncated = computed(() => props.data?.truncated === true);
+const totalRows = computed(() => props.data?.total ?? rows.value.length);
 
 const pickerLabel = computed(() => {
     const shown = hideableColumns.value.length - hidden.value.size;
@@ -651,7 +684,7 @@ function richTextCell(value: unknown): string {
 <template>
     <div :class="['overflow-hidden rounded-sp-sm border', t.surface]">
         <div
-            v-if="exportHref || showPicker || showSearch"
+            v-if="exportHref || showPicker || showSearch || truncated"
             :class="['flex items-center gap-1 border-b px-3 py-1.5', t.divider]"
         >
             <label v-if="showSearch" class="relative mr-auto flex items-center">
@@ -673,6 +706,17 @@ function richTextCell(value: unknown): string {
                 />
             </label>
             <span v-else class="mr-auto" />
+            <!--
+                Standing notice, not just on an empty search: the reader has to
+                know the list is partial BEFORE concluding anything from it.
+            -->
+            <span
+                v-if="truncated"
+                :class="['mr-1 text-[11px]', t.textMuted]"
+                :title="word('showingOf', { n: rows.length, total: totalRows })"
+            >
+                {{ word('showingOf', { n: rows.length, total: totalRows }) }}
+            </span>
             <div v-if="showPicker" class="relative">
                 <button
                     type="button"
@@ -883,7 +927,16 @@ function richTextCell(value: unknown): string {
                             which sends them looking for a bug in their data.
                         -->
                         <template v-if="rows.length > 0">
-                            {{ word('noMatches') }} “{{ query }}”
+                            {{ word('noMatches') }} “{{ query }}”<template
+                                v-if="truncated"
+                            >
+                                {{
+                                    word('ofLoaded', {
+                                        n: rows.length,
+                                        total: totalRows,
+                                    })
+                                }}</template
+                            >.
                         </template>
                         <template v-else>
                             {{ block.empty_state_message ?? 'No records yet.' }}

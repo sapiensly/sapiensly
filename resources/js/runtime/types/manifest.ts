@@ -267,6 +267,10 @@ export type BlockData = Record<
 
 export interface TableBlockData {
     rows: Array<{ id: string; data: Record<string, unknown> }>;
+    /** How many records match, which is not always how many were sent. */
+    total?: number;
+    /** True when `rows` is a page of a larger result. */
+    truncated?: boolean;
 }
 
 export interface StatBlockData {
