@@ -27,20 +27,31 @@ let request;
 try {
     request = JSON.parse(readFileSync(0, 'utf8') || '{}');
 } catch (e) {
-    respond({ ok: false, error: 'invalid runner input: ' + (e && e.message ? e.message : String(e)) });
+    respond({
+        ok: false,
+        error:
+            'invalid runner input: ' + (e && e.message ? e.message : String(e)),
+    });
     process.exit(0);
 }
 
 const code = typeof request.code === 'string' ? request.code : '';
 const input = request.input ?? null;
 const timeoutMs = clamp(request.timeout_ms, 50, 10000, 2000);
-const memoryBytes = clamp(request.memory_bytes, 1024 * 1024, 256 * 1024 * 1024, 64 * 1024 * 1024);
+const memoryBytes = clamp(
+    request.memory_bytes,
+    1024 * 1024,
+    256 * 1024 * 1024,
+    64 * 1024 * 1024,
+);
 
 const QuickJS = await getQuickJS();
 const runtime = QuickJS.newRuntime();
 runtime.setMemoryLimit(memoryBytes);
 runtime.setMaxStackSize(320 * 1024);
-runtime.setInterruptHandler(shouldInterruptAfterDeadline(Date.now() + timeoutMs));
+runtime.setInterruptHandler(
+    shouldInterruptAfterDeadline(Date.now() + timeoutMs),
+);
 
 const vm = runtime.newContext();
 
@@ -51,15 +62,19 @@ try {
 
     // The user code is run as a function body with `input` in scope, so a
     // top-level `return` yields the step's output.
-    const wrapped = '(function(input){\n' + code + '\n})(JSON.parse(globalThis.__inputJson__))';
+    const wrapped =
+        '(function(input){\n' +
+        code +
+        '\n})(JSON.parse(globalThis.__inputJson__))';
     const result = vm.evalCode(wrapped);
 
     if (result.error) {
         const dumped = vm.dump(result.error);
         result.error.dispose();
-        const message = dumped && typeof dumped === 'object'
-            ? dumped.message || JSON.stringify(dumped)
-            : String(dumped);
+        const message =
+            dumped && typeof dumped === 'object'
+                ? dumped.message || JSON.stringify(dumped)
+                : String(dumped);
         respond({ ok: false, error: message });
     } else {
         const dumped = vm.dump(result.value);
@@ -68,7 +83,10 @@ try {
         try {
             value = JSON.parse(JSON.stringify(dumped ?? null));
         } catch {
-            respond({ ok: false, error: 'script return value is not JSON-serialisable' });
+            respond({
+                ok: false,
+                error: 'script return value is not JSON-serialisable',
+            });
             value = undefined;
         }
         if (value !== undefined) {

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { HumanHandoffNodeConfig } from '@/types/botFlows';
-import { Handle, Position } from '@vue-flow/core';
 import { UserRound } from '@lucide/vue';
+import { Handle, Position } from '@vue-flow/core';
 import { useI18n } from 'vue-i18n';
 
 const { t } = useI18n();
@@ -14,10 +14,14 @@ defineProps<{
 
 <template>
     <div
-        class="flex min-w-[160px] max-w-[220px] items-center gap-2 rounded-sp-sm border-2 px-3 py-2.5 shadow-sp-float"
+        class="flex max-w-[220px] min-w-[160px] items-center gap-2 rounded-sp-sm border-2 px-3 py-2.5 shadow-sp-float"
         style="
             border-color: var(--sp-warning);
-            background: color-mix(in oklab, var(--sp-warning) 15%, var(--sp-bg-secondary));
+            background: color-mix(
+                in oklab,
+                var(--sp-warning) 15%,
+                var(--sp-bg-secondary)
+            );
         "
     >
         <Handle type="target" :position="Position.Top" class="!bg-sp-warning" />
@@ -25,7 +29,11 @@ defineProps<{
         <div
             class="flex size-7 shrink-0 items-center justify-center rounded-xs"
             style="
-                background: color-mix(in oklab, var(--sp-warning) 22%, transparent);
+                background: color-mix(
+                    in oklab,
+                    var(--sp-warning) 22%,
+                    transparent
+                );
                 color: var(--sp-warning);
             "
         >

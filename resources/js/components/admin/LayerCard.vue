@@ -21,7 +21,9 @@ defineProps<Props>();
 <template>
     <div
         class="relative overflow-hidden rounded-sp-sm border bg-navy p-5 transition-all hover:-translate-y-0.5"
-        :style="{ borderColor: `color-mix(in oklab, ${tint} 35%, transparent)` }"
+        :style="{
+            borderColor: `color-mix(in oklab, ${tint} 35%, transparent)`,
+        }"
     >
         <div
             class="pointer-events-none absolute -top-12 -right-12 h-32 w-32 rounded-full opacity-40 blur-2xl"

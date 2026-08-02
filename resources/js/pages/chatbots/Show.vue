@@ -32,7 +32,6 @@ import type {
 import { Head, Link, router } from '@inertiajs/vue3';
 import {
     BarChart3,
-    Bot,
     Code,
     Eye,
     MessageSquare,
@@ -43,7 +42,6 @@ import {
     Users,
     Workflow,
 } from '@lucide/vue';
-import { computed } from 'vue';
 import { useI18n } from 'vue-i18n';
 
 const { t } = useI18n();
@@ -86,325 +84,321 @@ const formatDate = (date: string) => {
 
     <AppLayoutV2 :title="t('app_v2.nav.chatbots')">
         <div class="mx-auto max-w-4xl space-y-6">
-                <PageHeader :description="chatbot.description" wrap-actions>
-                    <template #title>
-                        <div class="flex min-w-0 flex-wrap items-center gap-3">
-                            <h1 class="text-[22px] font-semibold leading-tight text-ink">{{ chatbot.name }}</h1>
-                            <Badge :variant="statusVariant(chatbot.status)">
-                                {{ chatbot.status }}
-                            </Badge>
-                        </div>
-                    </template>
-                    <template #actions>
-                        <Button variant="outline" as-child>
-                            <Link
-                                :href="
-                                    ChatbotController.preview({
-                                        chatbot: chatbot.id,
-                                    }).url
-                                "
-                            >
-                                <Eye class="mr-2 h-4 w-4" />
-                                {{ t('chatbots.show.preview') }}
-                            </Link>
-                        </Button>
-                        <Button variant="outline" as-child>
-                            <Link
-                                :href="
-                                    ChatbotAnalyticsController.show({
-                                        chatbot: chatbot.id,
-                                    }).url
-                                "
-                            >
-                                <BarChart3 class="mr-2 h-4 w-4" />
-                                {{ t('chatbots.show.analytics') }}
-                            </Link>
-                        </Button>
-                        <Button as-child>
-                            <Link
-                                :href="
-                                    BotFlowController.editForChatbot({
-                                        chatbot: chatbot.id,
-                                    }).url
-                                "
-                            >
-                                <Workflow class="mr-2 h-4 w-4" />
-                                {{ t('chatbots.show.edit_flow') }}
-                            </Link>
-                        </Button>
-                        <Button variant="outline" as-child>
-                            <Link
-                                :href="
-                                    ChatbotController.embed({
-                                        chatbot: chatbot.id,
-                                    }).url
-                                "
-                            >
-                                <Code class="mr-2 h-4 w-4" />
-                                {{ t('chatbots.show.embed') }}
-                            </Link>
-                        </Button>
-                        <Button variant="outline" as-child>
-                            <Link
-                                :href="
-                                    ChatbotController.edit({
-                                        chatbot: chatbot.id,
-                                    }).url
-                                "
-                            >
-                                <Pencil class="mr-2 h-4 w-4" />
-                                {{ t('common.edit') }}
-                            </Link>
-                        </Button>
-                        <Dialog>
-                            <DialogTrigger as-child>
-                                <Button variant="destructive">
-                                    <Trash2 class="mr-2 h-4 w-4" />
+            <PageHeader :description="chatbot.description" wrap-actions>
+                <template #title>
+                    <div class="flex min-w-0 flex-wrap items-center gap-3">
+                        <h1
+                            class="text-[22px] leading-tight font-semibold text-ink"
+                        >
+                            {{ chatbot.name }}
+                        </h1>
+                        <Badge :variant="statusVariant(chatbot.status)">
+                            {{ chatbot.status }}
+                        </Badge>
+                    </div>
+                </template>
+                <template #actions>
+                    <Button variant="outline" as-child>
+                        <Link
+                            :href="
+                                ChatbotController.preview({
+                                    chatbot: chatbot.id,
+                                }).url
+                            "
+                        >
+                            <Eye class="mr-2 h-4 w-4" />
+                            {{ t('chatbots.show.preview') }}
+                        </Link>
+                    </Button>
+                    <Button variant="outline" as-child>
+                        <Link
+                            :href="
+                                ChatbotAnalyticsController.show({
+                                    chatbot: chatbot.id,
+                                }).url
+                            "
+                        >
+                            <BarChart3 class="mr-2 h-4 w-4" />
+                            {{ t('chatbots.show.analytics') }}
+                        </Link>
+                    </Button>
+                    <Button as-child>
+                        <Link
+                            :href="
+                                BotFlowController.editForChatbot({
+                                    chatbot: chatbot.id,
+                                }).url
+                            "
+                        >
+                            <Workflow class="mr-2 h-4 w-4" />
+                            {{ t('chatbots.show.edit_flow') }}
+                        </Link>
+                    </Button>
+                    <Button variant="outline" as-child>
+                        <Link
+                            :href="
+                                ChatbotController.embed({
+                                    chatbot: chatbot.id,
+                                }).url
+                            "
+                        >
+                            <Code class="mr-2 h-4 w-4" />
+                            {{ t('chatbots.show.embed') }}
+                        </Link>
+                    </Button>
+                    <Button variant="outline" as-child>
+                        <Link
+                            :href="
+                                ChatbotController.edit({
+                                    chatbot: chatbot.id,
+                                }).url
+                            "
+                        >
+                            <Pencil class="mr-2 h-4 w-4" />
+                            {{ t('common.edit') }}
+                        </Link>
+                    </Button>
+                    <Dialog>
+                        <DialogTrigger as-child>
+                            <Button variant="destructive">
+                                <Trash2 class="mr-2 h-4 w-4" />
+                                {{ t('common.delete') }}
+                            </Button>
+                        </DialogTrigger>
+                        <DialogContent>
+                            <DialogHeader>
+                                <DialogTitle>{{
+                                    t('chatbots.show.delete_chatbot')
+                                }}</DialogTitle>
+                                <DialogDescription>
+                                    {{ t('common.confirm_delete') }} "{{
+                                        chatbot.name
+                                    }}"?
+                                    {{ t('chatbots.show.delete_warning') }}
+                                    {{ t('common.action_irreversible') }}
+                                </DialogDescription>
+                            </DialogHeader>
+                            <DialogFooter>
+                                <DialogClose as-child>
+                                    <Button variant="outline">{{
+                                        t('common.cancel')
+                                    }}</Button>
+                                </DialogClose>
+                                <Button
+                                    variant="destructive"
+                                    @click="deleteChatbot"
+                                >
                                     {{ t('common.delete') }}
                                 </Button>
-                            </DialogTrigger>
-                            <DialogContent>
-                                <DialogHeader>
-                                    <DialogTitle>{{
-                                        t('chatbots.show.delete_chatbot')
-                                    }}</DialogTitle>
-                                    <DialogDescription>
-                                        {{ t('common.confirm_delete') }} "{{
-                                            chatbot.name
-                                        }}"?
-                                        {{ t('chatbots.show.delete_warning') }}
-                                        {{ t('common.action_irreversible') }}
-                                    </DialogDescription>
-                                </DialogHeader>
-                                <DialogFooter>
-                                    <DialogClose as-child>
-                                        <Button variant="outline">{{
-                                            t('common.cancel')
-                                        }}</Button>
-                                    </DialogClose>
-                                    <Button
-                                        variant="destructive"
-                                        @click="deleteChatbot"
-                                    >
-                                        {{ t('common.delete') }}
-                                    </Button>
-                                </DialogFooter>
-                            </DialogContent>
-                        </Dialog>
-                    </template>
-                </PageHeader>
+                            </DialogFooter>
+                        </DialogContent>
+                    </Dialog>
+                </template>
+            </PageHeader>
 
-                <!-- Stats Cards -->
-                <div class="mb-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                    <Card>
-                        <CardHeader
-                            class="flex flex-row items-center justify-between pb-2"
-                        >
-                            <CardTitle class="text-sm font-medium">
-                                Conversations
-                            </CardTitle>
-                            <MessageSquare
-                                class="h-4 w-4 text-muted-foreground"
-                            />
-                        </CardHeader>
-                        <CardContent>
-                            <div class="text-2xl font-bold">
-                                {{ stats.total_conversations }}
-                            </div>
-                        </CardContent>
-                    </Card>
-
-                    <Card>
-                        <CardHeader
-                            class="flex flex-row items-center justify-between pb-2"
-                        >
-                            <CardTitle class="text-sm font-medium">
-                                Sessions
-                            </CardTitle>
-                            <Users class="h-4 w-4 text-muted-foreground" />
-                        </CardHeader>
-                        <CardContent>
-                            <div class="text-2xl font-bold">
-                                {{ stats.total_sessions }}
-                            </div>
-                        </CardContent>
-                    </Card>
-
-                    <Card>
-                        <CardHeader
-                            class="flex flex-row items-center justify-between pb-2"
-                        >
-                            <CardTitle class="text-sm font-medium">
-                                Avg Rating
-                            </CardTitle>
-                            <Star class="h-4 w-4 text-muted-foreground" />
-                        </CardHeader>
-                        <CardContent>
-                            <div class="text-2xl font-bold">
-                                {{
-                                    stats.avg_rating
-                                        ? stats.avg_rating.toFixed(1)
-                                        : '-'
-                                }}
-                            </div>
-                        </CardContent>
-                    </Card>
-
-                    <Card>
-                        <CardHeader
-                            class="flex flex-row items-center justify-between pb-2"
-                        >
-                            <CardTitle class="text-sm font-medium">
-                                Resolution Rate
-                            </CardTitle>
-                            <Target class="h-4 w-4 text-muted-foreground" />
-                        </CardHeader>
-                        <CardContent>
-                            <div class="text-2xl font-bold">
-                                {{ stats.resolution_rate }}%
-                            </div>
-                        </CardContent>
-                    </Card>
-                </div>
-
-                <!-- Bot Flow -->
-                <div class="mb-8 space-y-6">
-                    <HeadingSmall
-                        :title="t('chatbots.create.agents_title')"
-                        :description="t('chatbots.create.agents_description')"
-                    />
-
-                    <Card>
-                        <CardHeader>
-                            <div class="flex items-center gap-3">
-                                <Workflow class="h-5 w-5 text-muted-foreground" />
-                                <div>
-                                    <CardTitle class="text-base">
-                                        {{
-                                            chatbot.bot_flow?.name ||
-                                            t('chatbots.show.edit_flow')
-                                        }}
-                                    </CardTitle>
-                                    <CardDescription>
-                                        {{ t('chatbots.create.agents_note') }}
-                                    </CardDescription>
-                                </div>
-                            </div>
-                        </CardHeader>
-                    </Card>
-                </div>
-
-                <!-- Recent Conversations -->
-                <div class="space-y-6">
-                    <div class="flex items-center justify-between">
-                        <HeadingSmall
-                            title="Recent Conversations"
-                            description="Latest conversations from visitors"
-                        />
-                        <Button variant="outline" size="sm" as-child>
-                            <Link
-                                :href="
-                                    ChatbotController.conversations({
-                                        chatbot: chatbot.id,
-                                    }).url
-                                "
-                            >
-                                View All
-                            </Link>
-                        </Button>
-                    </div>
-
-                    <div
-                        v-if="recentConversations.length === 0"
-                        class="rounded-lg border border-dashed p-8 text-center"
+            <!-- Stats Cards -->
+            <div class="mb-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                <Card>
+                    <CardHeader
+                        class="flex flex-row items-center justify-between pb-2"
                     >
-                        <MessageSquare
-                            class="mx-auto h-8 w-8 text-muted-foreground"
-                        />
-                        <p class="mt-2 text-sm text-muted-foreground">
-                            No conversations yet. Embed the widget to start
-                            receiving messages.
-                        </p>
-                    </div>
+                        <CardTitle class="text-sm font-medium">
+                            Conversations
+                        </CardTitle>
+                        <MessageSquare class="h-4 w-4 text-muted-foreground" />
+                    </CardHeader>
+                    <CardContent>
+                        <div class="text-2xl font-bold">
+                            {{ stats.total_conversations }}
+                        </div>
+                    </CardContent>
+                </Card>
 
-                    <div v-else class="space-y-3">
-                        <Card
-                            v-for="conversation in recentConversations"
-                            :key="conversation.id"
-                            class="cursor-pointer transition-colors hover:border-primary/50"
+                <Card>
+                    <CardHeader
+                        class="flex flex-row items-center justify-between pb-2"
+                    >
+                        <CardTitle class="text-sm font-medium">
+                            Sessions
+                        </CardTitle>
+                        <Users class="h-4 w-4 text-muted-foreground" />
+                    </CardHeader>
+                    <CardContent>
+                        <div class="text-2xl font-bold">
+                            {{ stats.total_sessions }}
+                        </div>
+                    </CardContent>
+                </Card>
+
+                <Card>
+                    <CardHeader
+                        class="flex flex-row items-center justify-between pb-2"
+                    >
+                        <CardTitle class="text-sm font-medium">
+                            Avg Rating
+                        </CardTitle>
+                        <Star class="h-4 w-4 text-muted-foreground" />
+                    </CardHeader>
+                    <CardContent>
+                        <div class="text-2xl font-bold">
+                            {{
+                                stats.avg_rating
+                                    ? stats.avg_rating.toFixed(1)
+                                    : '-'
+                            }}
+                        </div>
+                    </CardContent>
+                </Card>
+
+                <Card>
+                    <CardHeader
+                        class="flex flex-row items-center justify-between pb-2"
+                    >
+                        <CardTitle class="text-sm font-medium">
+                            Resolution Rate
+                        </CardTitle>
+                        <Target class="h-4 w-4 text-muted-foreground" />
+                    </CardHeader>
+                    <CardContent>
+                        <div class="text-2xl font-bold">
+                            {{ stats.resolution_rate }}%
+                        </div>
+                    </CardContent>
+                </Card>
+            </div>
+
+            <!-- Bot Flow -->
+            <div class="mb-8 space-y-6">
+                <HeadingSmall
+                    :title="t('chatbots.create.agents_title')"
+                    :description="t('chatbots.create.agents_description')"
+                />
+
+                <Card>
+                    <CardHeader>
+                        <div class="flex items-center gap-3">
+                            <Workflow class="h-5 w-5 text-muted-foreground" />
+                            <div>
+                                <CardTitle class="text-base">
+                                    {{
+                                        chatbot.bot_flow?.name ||
+                                        t('chatbots.show.edit_flow')
+                                    }}
+                                </CardTitle>
+                                <CardDescription>
+                                    {{ t('chatbots.create.agents_note') }}
+                                </CardDescription>
+                            </div>
+                        </div>
+                    </CardHeader>
+                </Card>
+            </div>
+
+            <!-- Recent Conversations -->
+            <div class="space-y-6">
+                <div class="flex items-center justify-between">
+                    <HeadingSmall
+                        title="Recent Conversations"
+                        description="Latest conversations from visitors"
+                    />
+                    <Button variant="outline" size="sm" as-child>
+                        <Link
+                            :href="
+                                ChatbotController.conversations({
+                                    chatbot: chatbot.id,
+                                }).url
+                            "
                         >
-                            <Link
-                                :href="
-                                    ChatbotController.conversation({
-                                        chatbot: chatbot.id,
-                                        conversation: conversation.id,
-                                    }).url
-                                "
-                            >
-                                <CardHeader class="py-4">
-                                    <div
-                                        class="flex items-center justify-between"
-                                    >
-                                        <div class="flex items-center gap-3">
-                                            <div
-                                                class="flex h-8 w-8 items-center justify-center rounded-full bg-muted text-xs font-medium"
-                                            >
-                                                {{
-                                                    conversation.session?.visitor_name?.[0]?.toUpperCase() ||
-                                                    '?'
-                                                }}
-                                            </div>
-                                            <div>
-                                                <CardTitle class="text-sm">
-                                                    {{
-                                                        conversation.session
-                                                            ?.visitor_name ||
-                                                        conversation.session
-                                                            ?.visitor_email ||
-                                                        'Anonymous'
-                                                    }}
-                                                </CardTitle>
-                                                <CardDescription
-                                                    class="text-xs"
-                                                >
-                                                    {{
-                                                        conversation.message_count
-                                                    }}
-                                                    messages
-                                                </CardDescription>
-                                            </div>
+                            View All
+                        </Link>
+                    </Button>
+                </div>
+
+                <div
+                    v-if="recentConversations.length === 0"
+                    class="rounded-lg border border-dashed p-8 text-center"
+                >
+                    <MessageSquare
+                        class="mx-auto h-8 w-8 text-muted-foreground"
+                    />
+                    <p class="mt-2 text-sm text-muted-foreground">
+                        No conversations yet. Embed the widget to start
+                        receiving messages.
+                    </p>
+                </div>
+
+                <div v-else class="space-y-3">
+                    <Card
+                        v-for="conversation in recentConversations"
+                        :key="conversation.id"
+                        class="cursor-pointer transition-colors hover:border-primary/50"
+                    >
+                        <Link
+                            :href="
+                                ChatbotController.conversation({
+                                    chatbot: chatbot.id,
+                                    conversation: conversation.id,
+                                }).url
+                            "
+                        >
+                            <CardHeader class="py-4">
+                                <div class="flex items-center justify-between">
+                                    <div class="flex items-center gap-3">
+                                        <div
+                                            class="flex h-8 w-8 items-center justify-center rounded-full bg-muted text-xs font-medium"
+                                        >
+                                            {{
+                                                conversation.session?.visitor_name?.[0]?.toUpperCase() ||
+                                                '?'
+                                            }}
                                         </div>
-                                        <div class="flex items-center gap-2">
-                                            <Badge
-                                                v-if="conversation.is_resolved"
-                                                variant="default"
-                                            >
-                                                Resolved
-                                            </Badge>
-                                            <Badge
-                                                v-else-if="
-                                                    conversation.is_abandoned
-                                                "
-                                                variant="secondary"
-                                            >
-                                                Abandoned
-                                            </Badge>
-                                            <span
-                                                class="text-xs text-muted-foreground"
-                                            >
+                                        <div>
+                                            <CardTitle class="text-sm">
                                                 {{
-                                                    formatDate(
-                                                        conversation.created_at,
-                                                    )
+                                                    conversation.session
+                                                        ?.visitor_name ||
+                                                    conversation.session
+                                                        ?.visitor_email ||
+                                                    'Anonymous'
                                                 }}
-                                            </span>
+                                            </CardTitle>
+                                            <CardDescription class="text-xs">
+                                                {{ conversation.message_count }}
+                                                messages
+                                            </CardDescription>
                                         </div>
                                     </div>
-                                </CardHeader>
-                            </Link>
-                        </Card>
-                    </div>
+                                    <div class="flex items-center gap-2">
+                                        <Badge
+                                            v-if="conversation.is_resolved"
+                                            variant="default"
+                                        >
+                                            Resolved
+                                        </Badge>
+                                        <Badge
+                                            v-else-if="
+                                                conversation.is_abandoned
+                                            "
+                                            variant="secondary"
+                                        >
+                                            Abandoned
+                                        </Badge>
+                                        <span
+                                            class="text-xs text-muted-foreground"
+                                        >
+                                            {{
+                                                formatDate(
+                                                    conversation.created_at,
+                                                )
+                                            }}
+                                        </span>
+                                    </div>
+                                </div>
+                            </CardHeader>
+                        </Link>
+                    </Card>
                 </div>
+            </div>
         </div>
     </AppLayoutV2>
 </template>

@@ -1,8 +1,14 @@
 <script setup lang="ts">
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import {
+    AlertTriangle,
+    CheckCircle2,
+    Database,
+    Loader2,
+    XCircle,
+} from '@lucide/vue';
 import axios from 'axios';
-import { AlertTriangle, CheckCircle2, Database, Loader2, XCircle } from '@lucide/vue';
 import { onMounted, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 
@@ -141,7 +147,8 @@ async function install(): Promise<void> {
                 reachable: data.state.reachable,
                 hasExtension: data.state.has_extension,
                 hasSchema: data.state.has_schema,
-                chunkCount: (data.state as { chunk_count?: number }).chunk_count ?? 0,
+                chunkCount:
+                    (data.state as { chunk_count?: number }).chunk_count ?? 0,
             };
         }
     } catch (e: unknown) {
@@ -211,19 +218,21 @@ watch(
             <XCircle class="mt-0.5 h-4 w-4 shrink-0" />
             <div class="min-w-0 flex-1">
                 <p>{{ tk('unreachable') }}</p>
-                <p v-if="inspectState.error" class="mt-1 break-words opacity-80">
+                <p
+                    v-if="inspectState.error"
+                    class="mt-1 break-words opacity-80"
+                >
                     {{ inspectState.error }}
                 </p>
             </div>
         </div>
 
-        <div
-            v-else-if="inspectState.status === 'ready'"
-            class="space-y-3"
-        >
+        <div v-else-if="inspectState.status === 'ready'" class="space-y-3">
             <div class="flex flex-wrap gap-2">
                 <Badge
-                    :variant="inspectState.hasExtension ? 'default' : 'destructive'"
+                    :variant="
+                        inspectState.hasExtension ? 'default' : 'destructive'
+                    "
                     class="gap-1"
                 >
                     <CheckCircle2
@@ -304,11 +313,13 @@ watch(
                 >
                     <div class="flex items-start gap-2">
                         <AlertTriangle class="mt-0.5 h-4 w-4 shrink-0" />
-                        <span class="font-medium">{{ installState.message }}</span>
+                        <span class="font-medium">{{
+                            installState.message
+                        }}</span>
                     </div>
                     <p
                         v-if="installState.detail"
-                        class="break-words pl-6 opacity-80"
+                        class="pl-6 break-words opacity-80"
                     >
                         {{ installState.detail }}
                     </p>

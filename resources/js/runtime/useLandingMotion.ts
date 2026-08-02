@@ -187,11 +187,13 @@ export function useLandingMotion(root: Ref<HTMLElement | null>) {
                   )
                 : // No name: the sequence this control belongs to. Closest
                   // ancestor that holds one, then the section it sits in.
-                  (control.closest('[data-sp-sequence]') as HTMLElement | null) ??
+                  ((control.closest(
+                      '[data-sp-sequence]',
+                  ) as HTMLElement | null) ??
                   control
                       .closest('section, div')
                       ?.querySelector<HTMLElement>('[data-sp-sequence]') ??
-                  null;
+                  null);
 
             const play = target ? replays.get(target) : undefined;
             if (!play) {
@@ -318,7 +320,9 @@ export function useLandingMotion(root: Ref<HTMLElement | null>) {
     }
 
     function show(el: HTMLElement, animate: boolean): void {
-        el.style.transition = animate ? 'opacity .3s ease, transform .3s ease' : '';
+        el.style.transition = animate
+            ? 'opacity .3s ease, transform .3s ease'
+            : '';
         el.style.opacity = '1';
         el.style.transform = 'none';
         el.style.pointerEvents = '';

@@ -45,7 +45,9 @@ export function useAppWorkflowEditor() {
 
     const selectedNode = computed<AppWorkflowNode | null>(() => {
         if (!graph.value || !selectedNodeId.value) return null;
-        return graph.value.nodes.find((n) => n.id === selectedNodeId.value) ?? null;
+        return (
+            graph.value.nodes.find((n) => n.id === selectedNodeId.value) ?? null
+        );
     });
 
     function select(nodeId: string | null): void {
@@ -64,7 +66,11 @@ export function useAppWorkflowEditor() {
 
         // Order = trigger first, then existing steps, then the new one.
         const existingSteps = graphToManifest(graph.value).steps;
-        const orderedIds = [TRIGGER_NODE_ID, ...existingSteps.map((s) => s.id), step.id];
+        const orderedIds = [
+            TRIGGER_NODE_ID,
+            ...existingSteps.map((s) => s.id),
+            step.id,
+        ];
 
         const newNode: AppWorkflowNode = {
             id: step.id,
@@ -113,12 +119,17 @@ export function useAppWorkflowEditor() {
      * The merge is shallow at the top level; nested objects (e.g. `values`
      * on a record.update) should be replaced wholesale by the panel.
      */
-    function updateNodeData(nodeId: string, patch: Record<string, unknown>): void {
+    function updateNodeData(
+        nodeId: string,
+        patch: Record<string, unknown>,
+    ): void {
         if (!graph.value) return;
         graph.value = {
             ...graph.value,
             nodes: graph.value.nodes.map((n) =>
-                n.id === nodeId ? { ...n, data: { ...n.data, ...patch } as never } : n,
+                n.id === nodeId
+                    ? { ...n, data: { ...n.data, ...patch } as never }
+                    : n,
             ),
         };
         dirty.value = true;
@@ -140,7 +151,10 @@ export function useAppWorkflowEditor() {
      * rely on `autoLayout` for structural changes (add/remove) — manual
      * drags only override positions.
      */
-    function updateNodePosition(nodeId: string, position: { x: number; y: number }): void {
+    function updateNodePosition(
+        nodeId: string,
+        position: { x: number; y: number },
+    ): void {
         if (!graph.value) return;
         graph.value = {
             ...graph.value,

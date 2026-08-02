@@ -2,8 +2,6 @@
 import * as CloudProviderController from '@/actions/App/Http/Controllers/CloudProviderController';
 import PageHeader from '@/components/app-v2/PageHeader.vue';
 import InputError from '@/components/InputError.vue';
-import VectorStoreStatus from '@/components/VectorStoreStatus.vue';
-import WipeConfirmDialog, { type WipeCounts } from '@/components/WipeConfirmDialog.vue';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
@@ -14,9 +12,12 @@ import {
     SelectValue,
 } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import VectorStoreStatus from '@/components/VectorStoreStatus.vue';
+import WipeConfirmDialog, {
+    type WipeCounts,
+} from '@/components/WipeConfirmDialog.vue';
 import AppLayoutV2 from '@/layouts/AppLayoutV2.vue';
 import { Head, router, useForm, usePage } from '@inertiajs/vue3';
-import axios from 'axios';
 import {
     CheckCircle2,
     Cloud,
@@ -28,6 +29,7 @@ import {
     Trash2,
     XCircle,
 } from '@lucide/vue';
+import axios from 'axios';
 import { computed, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 
@@ -100,9 +102,14 @@ const storageOptionalFields = computed<string[]>(
     () => selectedStorageDriver.value?.optional_fields ?? [],
 );
 
-const canSubmitStorage = computed<boolean>(() =>
-    !!storageForm.driver &&
-    isPayloadComplete(storageFields.value, storageOptionalFields.value, storageForm.credentials),
+const canSubmitStorage = computed<boolean>(
+    () =>
+        !!storageForm.driver &&
+        isPayloadComplete(
+            storageFields.value,
+            storageOptionalFields.value,
+            storageForm.credentials,
+        ),
 );
 
 watch(
@@ -142,9 +149,14 @@ const databaseOptionalFields = computed<string[]>(
     () => selectedDatabaseDriver.value?.optional_fields ?? [],
 );
 
-const canSubmitDatabase = computed<boolean>(() =>
-    !!databaseForm.driver &&
-    isPayloadComplete(databaseFields.value, databaseOptionalFields.value, databaseForm.credentials),
+const canSubmitDatabase = computed<boolean>(
+    () =>
+        !!databaseForm.driver &&
+        isPayloadComplete(
+            databaseFields.value,
+            databaseOptionalFields.value,
+            databaseForm.credentials,
+        ),
 );
 
 watch(
@@ -162,11 +174,14 @@ const wipeCounts = ref<WipeCounts | null>(null);
 const wipePendingAction = ref<'save' | 'destroy' | null>(null);
 
 const readFlashWipe = (): WipeCounts | undefined =>
-    (usePage().props.flash as { wipe_required?: WipeCounts } | undefined)?.wipe_required;
+    (usePage().props.flash as { wipe_required?: WipeCounts } | undefined)
+        ?.wipe_required;
 
 const postDatabase = (withConfirm: boolean) => {
     databaseForm
-        .transform((data) => (withConfirm ? { ...data, confirm: 'DELETE' } : data))
+        .transform((data) =>
+            withConfirm ? { ...data, confirm: 'DELETE' } : data,
+        )
         .post(CloudProviderController.storeDatabase().url, {
             preserveScroll: true,
             onSuccess: () => {
@@ -248,7 +263,11 @@ const databaseTestState = ref<TestState>({ status: 'idle' });
 const canTestStorage = computed<boolean>(() => {
     if (
         !!storageForm.driver &&
-        isPayloadComplete(storageFields.value, storageOptionalFields.value, storageForm.credentials)
+        isPayloadComplete(
+            storageFields.value,
+            storageOptionalFields.value,
+            storageForm.credentials,
+        )
     ) {
         return true;
     }
@@ -258,7 +277,11 @@ const canTestStorage = computed<boolean>(() => {
 const canTestDatabase = computed<boolean>(() => {
     if (
         !!databaseForm.driver &&
-        isPayloadComplete(databaseFields.value, databaseOptionalFields.value, databaseForm.credentials)
+        isPayloadComplete(
+            databaseFields.value,
+            databaseOptionalFields.value,
+            databaseForm.credentials,
+        )
     ) {
         return true;
     }
@@ -274,7 +297,11 @@ async function runTest(
     try {
         const { data } = await axios.post(url, payload);
         state.value = data.success
-            ? { status: 'success', message: data.message || t('system.cloud_providers.test_success') }
+            ? {
+                  status: 'success',
+                  message:
+                      data.message || t('system.cloud_providers.test_success'),
+              }
             : {
                   status: 'error',
                   message:
@@ -299,7 +326,11 @@ async function runTest(
 const testStorageConnection = () => {
     if (
         storageForm.driver &&
-        isPayloadComplete(storageFields.value, storageOptionalFields.value, storageForm.credentials)
+        isPayloadComplete(
+            storageFields.value,
+            storageOptionalFields.value,
+            storageForm.credentials,
+        )
     ) {
         runTest(storageTestState, CloudProviderController.testStorage().url, {
             driver: storageForm.driver,
@@ -307,13 +338,19 @@ const testStorageConnection = () => {
         });
         return;
     }
-    runTest(storageTestState, CloudProviderController.testStorage().url, { use_saved: true });
+    runTest(storageTestState, CloudProviderController.testStorage().url, {
+        use_saved: true,
+    });
 };
 
 const testDatabaseConnection = () => {
     if (
         databaseForm.driver &&
-        isPayloadComplete(databaseFields.value, databaseOptionalFields.value, databaseForm.credentials)
+        isPayloadComplete(
+            databaseFields.value,
+            databaseOptionalFields.value,
+            databaseForm.credentials,
+        )
     ) {
         runTest(databaseTestState, CloudProviderController.testDatabase().url, {
             driver: databaseForm.driver,
@@ -321,7 +358,9 @@ const testDatabaseConnection = () => {
         });
         return;
     }
-    runTest(databaseTestState, CloudProviderController.testDatabase().url, { use_saved: true });
+    runTest(databaseTestState, CloudProviderController.testDatabase().url, {
+        use_saved: true,
+    });
 };
 
 watch(
@@ -389,7 +428,14 @@ watch(
                                 </p>
                                 <span
                                     class="inline-flex items-center rounded-pill border px-2 py-0.5 text-[10px] font-semibold tracking-wider uppercase"
-                                    style="color: var(--sp-success); border-color: color-mix(in oklab, var(--sp-success) 45%, transparent)"
+                                    style="
+                                        color: var(--sp-success);
+                                        border-color: color-mix(
+                                            in oklab,
+                                            var(--sp-success) 45%,
+                                            transparent
+                                        );
+                                    "
                                 >
                                     {{ t('system.cloud_providers.active') }}
                                 </span>
@@ -399,12 +445,23 @@ watch(
                                 class="mt-0.5 truncate text-xs text-ink-muted"
                             >
                                 {{ tenant.storage.masked_credentials.bucket }}
-                                <span v-if="tenant.storage.masked_credentials.region">
-                                    · {{ tenant.storage.masked_credentials.region }}
+                                <span
+                                    v-if="
+                                        tenant.storage.masked_credentials.region
+                                    "
+                                >
+                                    ·
+                                    {{
+                                        tenant.storage.masked_credentials.region
+                                    }}
                                 </span>
                             </p>
                             <p class="mt-1 text-[11px] text-ink-subtle">
-                                {{ t('system.cloud_providers.override_active_storage') }}
+                                {{
+                                    t(
+                                        'system.cloud_providers.override_active_storage',
+                                    )
+                                }}
                             </p>
                         </div>
                         <button
@@ -426,9 +483,12 @@ watch(
                         <Info class="mt-0.5 size-4 shrink-0" />
                         <span>
                             {{
-                                t('system.cloud_providers.using_global_storage', {
-                                    provider: global.storage.display_name,
-                                })
+                                t(
+                                    'system.cloud_providers.using_global_storage',
+                                    {
+                                        provider: global.storage.display_name,
+                                    },
+                                )
                             }}
                         </span>
                     </div>
@@ -438,7 +498,11 @@ watch(
                         class="flex items-start gap-2 rounded-sp-sm border border-sp-danger/30 bg-sp-danger/10 px-4 py-3 text-sm text-sp-danger"
                     >
                         <Info class="mt-0.5 size-4 shrink-0" />
-                        <span>{{ t('system.cloud_providers.using_global_storage_unconfigured') }}</span>
+                        <span>{{
+                            t(
+                                'system.cloud_providers.using_global_storage_unconfigured',
+                            )
+                        }}</span>
                     </div>
 
                     <!-- Storage config form. -->
@@ -454,10 +518,18 @@ watch(
                             </div>
                             <div>
                                 <h3 class="text-sm font-medium text-ink">
-                                    {{ t('system.cloud_providers.storage_heading') }}
+                                    {{
+                                        t(
+                                            'system.cloud_providers.storage_heading',
+                                        )
+                                    }}
                                 </h3>
                                 <p class="text-xs text-ink-muted">
-                                    {{ t('system.cloud_providers.storage_description') }}
+                                    {{
+                                        t(
+                                            'system.cloud_providers.storage_description',
+                                        )
+                                    }}
                                 </p>
                             </div>
                         </header>
@@ -473,7 +545,11 @@ watch(
                                         class="h-9"
                                     >
                                         <SelectValue
-                                            :placeholder="t('system.cloud_providers.select_provider')"
+                                            :placeholder="
+                                                t(
+                                                    'system.cloud_providers.select_provider',
+                                                )
+                                            "
                                         />
                                     </SelectTrigger>
                                     <SelectContent>
@@ -486,7 +562,9 @@ watch(
                                         </SelectItem>
                                     </SelectContent>
                                 </Select>
-                                <InputError :message="storageForm.errors.driver" />
+                                <InputError
+                                    :message="storageForm.errors.driver"
+                                />
                             </div>
 
                             <template v-if="storageForm.driver">
@@ -498,7 +576,11 @@ watch(
                                     <Label :for="`tenant_storage_${field}`">
                                         {{ fieldLabel(field) }}
                                         <span
-                                            v-if="storageOptionalFields.includes(field)"
+                                            v-if="
+                                                storageOptionalFields.includes(
+                                                    field,
+                                                )
+                                            "
                                             class="ml-1 text-[10px] font-normal text-ink-subtle"
                                         >
                                             (optional)
@@ -507,17 +589,26 @@ watch(
                                     <Input
                                         :id="`tenant_storage_${field}`"
                                         v-model="storageForm.credentials[field]"
-                                        :type="isSecret(field) ? 'password' : 'text'"
+                                        :type="
+                                            isSecret(field)
+                                                ? 'password'
+                                                : 'text'
+                                        "
                                         :placeholder="
-                                            tenant.storage?.masked_credentials[field] as string ?? ''
+                                            (tenant.storage?.masked_credentials[
+                                                field
+                                            ] as string) ?? ''
                                         "
                                         class="h-9"
                                     />
                                     <InputError
                                         :message="
-                                            (storageForm.errors as Record<string, string>)[
-                                                `credentials.${field}`
-                                            ]
+                                            (
+                                                storageForm.errors as Record<
+                                                    string,
+                                                    string
+                                                >
+                                            )[`credentials.${field}`]
                                         "
                                     />
                                 </div>
@@ -527,35 +618,57 @@ watch(
                                         type="button"
                                         :disabled="
                                             !canTestStorage ||
-                                            storageTestState.status === 'loading'
+                                            storageTestState.status ===
+                                                'loading'
                                         "
-                                        class="inline-flex self-start items-center gap-1.5 rounded-pill border border-medium bg-surface px-3 py-1 text-xs text-ink transition-colors hover:border-strong hover:bg-surface-hover disabled:opacity-50"
+                                        class="inline-flex items-center gap-1.5 self-start rounded-pill border border-medium bg-surface px-3 py-1 text-xs text-ink transition-colors hover:border-strong hover:bg-surface-hover disabled:opacity-50"
                                         @click="testStorageConnection"
                                     >
                                         <Loader2
-                                            v-if="storageTestState.status === 'loading'"
+                                            v-if="
+                                                storageTestState.status ===
+                                                'loading'
+                                            "
                                             class="size-3.5 animate-spin"
                                         />
                                         <Plug v-else class="size-3.5" />
                                         {{
-                                            storageTestState.status === 'loading'
-                                                ? t('system.cloud_providers.testing')
-                                                : t('system.cloud_providers.test_connection')
+                                            storageTestState.status ===
+                                            'loading'
+                                                ? t(
+                                                      'system.cloud_providers.testing',
+                                                  )
+                                                : t(
+                                                      'system.cloud_providers.test_connection',
+                                                  )
                                         }}
                                     </button>
                                     <div
-                                        v-if="storageTestState.status === 'success'"
+                                        v-if="
+                                            storageTestState.status ===
+                                            'success'
+                                        "
                                         class="flex items-start gap-2 rounded-xs border border-sp-success/30 bg-sp-success/10 p-2 text-[11px] text-sp-success"
                                     >
-                                        <CheckCircle2 class="mt-0.5 size-3.5 shrink-0" />
-                                        <span>{{ storageTestState.message }}</span>
+                                        <CheckCircle2
+                                            class="mt-0.5 size-3.5 shrink-0"
+                                        />
+                                        <span>{{
+                                            storageTestState.message
+                                        }}</span>
                                     </div>
                                     <div
-                                        v-else-if="storageTestState.status === 'error'"
+                                        v-else-if="
+                                            storageTestState.status === 'error'
+                                        "
                                         class="flex items-start gap-2 rounded-xs border border-sp-danger/30 bg-sp-danger/10 p-2 text-[11px] text-sp-danger"
                                     >
-                                        <XCircle class="mt-0.5 size-3.5 shrink-0" />
-                                        <span>{{ storageTestState.message }}</span>
+                                        <XCircle
+                                            class="mt-0.5 size-3.5 shrink-0"
+                                        />
+                                        <span>{{
+                                            storageTestState.message
+                                        }}</span>
                                     </div>
                                 </div>
                             </template>
@@ -563,7 +676,10 @@ watch(
                             <div class="flex justify-end pt-1">
                                 <button
                                     type="submit"
-                                    :disabled="storageForm.processing || !canSubmitStorage"
+                                    :disabled="
+                                        storageForm.processing ||
+                                        !canSubmitStorage
+                                    "
                                     class="inline-flex items-center gap-1.5 rounded-pill bg-accent-blue px-3.5 py-1.5 text-xs font-medium text-white shadow-btn-primary transition-colors hover:bg-accent-blue-hover disabled:opacity-50"
                                 >
                                     {{ t('system.cloud_providers.save') }}
@@ -592,7 +708,14 @@ watch(
                                 </p>
                                 <span
                                     class="inline-flex items-center rounded-pill border px-2 py-0.5 text-[10px] font-semibold tracking-wider uppercase"
-                                    style="color: var(--sp-success); border-color: color-mix(in oklab, var(--sp-success) 45%, transparent)"
+                                    style="
+                                        color: var(--sp-success);
+                                        border-color: color-mix(
+                                            in oklab,
+                                            var(--sp-success) 45%,
+                                            transparent
+                                        );
+                                    "
                                 >
                                     {{ t('system.cloud_providers.active') }}
                                 </span>
@@ -601,16 +724,34 @@ watch(
                                 v-if="tenant.database.masked_credentials.host"
                                 class="mt-0.5 truncate text-xs text-ink-muted"
                             >
-                                {{ tenant.database.masked_credentials.host }}<span
-                                    v-if="tenant.database.masked_credentials.port"
-                                    >:{{ tenant.database.masked_credentials.port }}</span
+                                {{ tenant.database.masked_credentials.host
+                                }}<span
+                                    v-if="
+                                        tenant.database.masked_credentials.port
+                                    "
+                                    >:{{
+                                        tenant.database.masked_credentials.port
+                                    }}</span
                                 >
-                                <span v-if="tenant.database.masked_credentials.database">
-                                    · {{ tenant.database.masked_credentials.database }}
+                                <span
+                                    v-if="
+                                        tenant.database.masked_credentials
+                                            .database
+                                    "
+                                >
+                                    ·
+                                    {{
+                                        tenant.database.masked_credentials
+                                            .database
+                                    }}
                                 </span>
                             </p>
                             <p class="mt-1 text-[11px] text-ink-subtle">
-                                {{ t('system.cloud_providers.override_active_database') }}
+                                {{
+                                    t(
+                                        'system.cloud_providers.override_active_database',
+                                    )
+                                }}
                             </p>
                         </div>
                         <button
@@ -631,9 +772,12 @@ watch(
                         <Info class="mt-0.5 size-4 shrink-0" />
                         <span>
                             {{
-                                t('system.cloud_providers.using_global_database', {
-                                    provider: global.database.display_name,
-                                })
+                                t(
+                                    'system.cloud_providers.using_global_database',
+                                    {
+                                        provider: global.database.display_name,
+                                    },
+                                )
                             }}
                         </span>
                     </div>
@@ -643,7 +787,11 @@ watch(
                         class="flex items-start gap-2 rounded-sp-sm border border-sp-danger/30 bg-sp-danger/10 px-4 py-3 text-sm text-sp-danger"
                     >
                         <Info class="mt-0.5 size-4 shrink-0" />
-                        <span>{{ t('system.cloud_providers.using_global_database_unconfigured') }}</span>
+                        <span>{{
+                            t(
+                                'system.cloud_providers.using_global_database_unconfigured',
+                            )
+                        }}</span>
                     </div>
 
                     <!-- Database config form. -->
@@ -659,15 +807,26 @@ watch(
                             </div>
                             <div>
                                 <h3 class="text-sm font-medium text-ink">
-                                    {{ t('system.cloud_providers.database_heading') }}
+                                    {{
+                                        t(
+                                            'system.cloud_providers.database_heading',
+                                        )
+                                    }}
                                 </h3>
                                 <p class="text-xs text-ink-muted">
-                                    {{ t('system.cloud_providers.database_description') }}
+                                    {{
+                                        t(
+                                            'system.cloud_providers.database_description',
+                                        )
+                                    }}
                                 </p>
                             </div>
                         </header>
 
-                        <form class="space-y-3" @submit.prevent="submitDatabase">
+                        <form
+                            class="space-y-3"
+                            @submit.prevent="submitDatabase"
+                        >
                             <div class="space-y-1.5">
                                 <Label for="tenant_database_driver">
                                     {{ t('system.cloud_providers.provider') }}
@@ -678,7 +837,11 @@ watch(
                                         class="h-9"
                                     >
                                         <SelectValue
-                                            :placeholder="t('system.cloud_providers.select_provider')"
+                                            :placeholder="
+                                                t(
+                                                    'system.cloud_providers.select_provider',
+                                                )
+                                            "
                                         />
                                     </SelectTrigger>
                                     <SelectContent>
@@ -691,7 +854,9 @@ watch(
                                         </SelectItem>
                                     </SelectContent>
                                 </Select>
-                                <InputError :message="databaseForm.errors.driver" />
+                                <InputError
+                                    :message="databaseForm.errors.driver"
+                                />
                             </div>
 
                             <template v-if="databaseForm.driver">
@@ -703,7 +868,11 @@ watch(
                                     <Label :for="`tenant_database_${field}`">
                                         {{ fieldLabel(field) }}
                                         <span
-                                            v-if="databaseOptionalFields.includes(field)"
+                                            v-if="
+                                                databaseOptionalFields.includes(
+                                                    field,
+                                                )
+                                            "
                                             class="ml-1 text-[10px] font-normal text-ink-subtle"
                                         >
                                             (optional)
@@ -711,18 +880,30 @@ watch(
                                     </Label>
                                     <Input
                                         :id="`tenant_database_${field}`"
-                                        v-model="databaseForm.credentials[field]"
-                                        :type="isSecret(field) ? 'password' : 'text'"
+                                        v-model="
+                                            databaseForm.credentials[field]
+                                        "
+                                        :type="
+                                            isSecret(field)
+                                                ? 'password'
+                                                : 'text'
+                                        "
                                         :placeholder="
-                                            tenant.database?.masked_credentials[field] as string ?? ''
+                                            (tenant.database
+                                                ?.masked_credentials[
+                                                field
+                                            ] as string) ?? ''
                                         "
                                         class="h-9"
                                     />
                                     <InputError
                                         :message="
-                                            (databaseForm.errors as Record<string, string>)[
-                                                `credentials.${field}`
-                                            ]
+                                            (
+                                                databaseForm.errors as Record<
+                                                    string,
+                                                    string
+                                                >
+                                            )[`credentials.${field}`]
                                         "
                                     />
                                 </div>
@@ -732,35 +913,57 @@ watch(
                                         type="button"
                                         :disabled="
                                             !canTestDatabase ||
-                                            databaseTestState.status === 'loading'
+                                            databaseTestState.status ===
+                                                'loading'
                                         "
-                                        class="inline-flex self-start items-center gap-1.5 rounded-pill border border-medium bg-surface px-3 py-1 text-xs text-ink transition-colors hover:border-strong hover:bg-surface-hover disabled:opacity-50"
+                                        class="inline-flex items-center gap-1.5 self-start rounded-pill border border-medium bg-surface px-3 py-1 text-xs text-ink transition-colors hover:border-strong hover:bg-surface-hover disabled:opacity-50"
                                         @click="testDatabaseConnection"
                                     >
                                         <Loader2
-                                            v-if="databaseTestState.status === 'loading'"
+                                            v-if="
+                                                databaseTestState.status ===
+                                                'loading'
+                                            "
                                             class="size-3.5 animate-spin"
                                         />
                                         <Plug v-else class="size-3.5" />
                                         {{
-                                            databaseTestState.status === 'loading'
-                                                ? t('system.cloud_providers.testing')
-                                                : t('system.cloud_providers.test_connection')
+                                            databaseTestState.status ===
+                                            'loading'
+                                                ? t(
+                                                      'system.cloud_providers.testing',
+                                                  )
+                                                : t(
+                                                      'system.cloud_providers.test_connection',
+                                                  )
                                         }}
                                     </button>
                                     <div
-                                        v-if="databaseTestState.status === 'success'"
+                                        v-if="
+                                            databaseTestState.status ===
+                                            'success'
+                                        "
                                         class="flex items-start gap-2 rounded-xs border border-sp-success/30 bg-sp-success/10 p-2 text-[11px] text-sp-success"
                                     >
-                                        <CheckCircle2 class="mt-0.5 size-3.5 shrink-0" />
-                                        <span>{{ databaseTestState.message }}</span>
+                                        <CheckCircle2
+                                            class="mt-0.5 size-3.5 shrink-0"
+                                        />
+                                        <span>{{
+                                            databaseTestState.message
+                                        }}</span>
                                     </div>
                                     <div
-                                        v-else-if="databaseTestState.status === 'error'"
+                                        v-else-if="
+                                            databaseTestState.status === 'error'
+                                        "
                                         class="flex items-start gap-2 rounded-xs border border-sp-danger/30 bg-sp-danger/10 p-2 text-[11px] text-sp-danger"
                                     >
-                                        <XCircle class="mt-0.5 size-3.5 shrink-0" />
-                                        <span>{{ databaseTestState.message }}</span>
+                                        <XCircle
+                                            class="mt-0.5 size-3.5 shrink-0"
+                                        />
+                                        <span>{{
+                                            databaseTestState.message
+                                        }}</span>
                                     </div>
                                 </div>
                             </template>
@@ -768,7 +971,10 @@ watch(
                             <div class="flex justify-end pt-1">
                                 <button
                                     type="submit"
-                                    :disabled="databaseForm.processing || !canSubmitDatabase"
+                                    :disabled="
+                                        databaseForm.processing ||
+                                        !canSubmitDatabase
+                                    "
                                     class="inline-flex items-center gap-1.5 rounded-pill bg-accent-blue px-3.5 py-1.5 text-xs font-medium text-white shadow-btn-primary transition-colors hover:bg-accent-blue-hover disabled:opacity-50"
                                 >
                                     {{ t('system.cloud_providers.save') }}
@@ -780,8 +986,12 @@ watch(
                     <VectorStoreStatus
                         v-if="tenant.database"
                         i18n-namespace="system.cloud_providers"
-                        :inspect-url="CloudProviderController.inspectVector().url"
-                        :install-url="CloudProviderController.installVector().url"
+                        :inspect-url="
+                            CloudProviderController.inspectVector().url
+                        "
+                        :install-url="
+                            CloudProviderController.installVector().url
+                        "
                         :refresh-token="vectorRefreshToken"
                     />
                 </TabsContent>

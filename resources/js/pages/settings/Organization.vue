@@ -48,7 +48,9 @@ const inviteForm = useForm({
 const { getInitials } = useInitials();
 
 const deleteConfirmation = ref('');
-const canDelete = computed(() => deleteConfirmation.value === props.organization.name);
+const canDelete = computed(
+    () => deleteConfirmation.value === props.organization.name,
+);
 
 const submitInvite = () => {
     inviteForm.post('/settings/organization/invite', {
@@ -105,7 +107,9 @@ const submitInvite = () => {
                                 </AvatarFallback>
                             </Avatar>
                             <div class="min-w-0">
-                                <p class="truncate text-sm font-medium text-ink">
+                                <p
+                                    class="truncate text-sm font-medium text-ink"
+                                >
                                     {{ member.user.name }}
                                 </p>
                                 <p class="truncate text-[11px] text-ink-subtle">
@@ -130,7 +134,10 @@ const submitInvite = () => {
                 :description="t('settings.organization.invite_description')"
                 tint="var(--sp-accent-cyan)"
             >
-                <form class="flex items-end gap-3" @submit.prevent="submitInvite">
+                <form
+                    class="flex items-end gap-3"
+                    @submit.prevent="submitInvite"
+                >
                     <div class="flex-1 space-y-1.5">
                         <Label for="invite-email">
                             {{ t('common.email_address') }}
@@ -139,7 +146,9 @@ const submitInvite = () => {
                             id="invite-email"
                             v-model="inviteForm.email"
                             type="email"
-                            :placeholder="t('settings.organization.invite_placeholder')"
+                            :placeholder="
+                                t('settings.organization.invite_placeholder')
+                            "
                             class="h-9"
                         />
                         <InputError :message="inviteForm.errors.email" />
@@ -165,7 +174,9 @@ const submitInvite = () => {
                 <div
                     class="flex items-start gap-2 rounded-xs border border-sp-danger/30 bg-sp-danger/10 p-3"
                 >
-                    <AlertTriangle class="mt-0.5 size-4 shrink-0 text-sp-danger" />
+                    <AlertTriangle
+                        class="mt-0.5 size-4 shrink-0 text-sp-danger"
+                    />
                     <div class="space-y-0.5">
                         <p class="text-sm font-medium text-sp-danger">
                             {{ t('settings.organization.delete.warning') }}
@@ -197,23 +208,40 @@ const submitInvite = () => {
                         >
                             <DialogHeader class="space-y-3">
                                 <DialogTitle>
-                                    {{ t('settings.organization.delete.confirm_title') }}
+                                    {{
+                                        t(
+                                            'settings.organization.delete.confirm_title',
+                                        )
+                                    }}
                                 </DialogTitle>
                                 <DialogDescription>
-                                    {{ t('settings.organization.delete.confirm_description') }}
+                                    {{
+                                        t(
+                                            'settings.organization.delete.confirm_description',
+                                        )
+                                    }}
                                 </DialogDescription>
                             </DialogHeader>
 
                             <div class="space-y-1.5">
                                 <Label for="delete-organization-name">
-                                    {{ t('settings.organization.delete.confirm_label', { name: organization.name }) }}
+                                    {{
+                                        t(
+                                            'settings.organization.delete.confirm_label',
+                                            { name: organization.name },
+                                        )
+                                    }}
                                 </Label>
                                 <Input
                                     id="delete-organization-name"
                                     v-model="deleteConfirmation"
                                     name="name"
                                     autocomplete="off"
-                                    :placeholder="t('settings.organization.delete.confirm_placeholder')"
+                                    :placeholder="
+                                        t(
+                                            'settings.organization.delete.confirm_placeholder',
+                                        )
+                                    "
                                     class="h-9"
                                 />
                                 <InputError :message="errors.name" />
@@ -236,7 +264,9 @@ const submitInvite = () => {
                                     class="inline-flex items-center gap-1.5 rounded-pill border border-sp-danger/40 bg-sp-danger/10 px-3.5 py-1.5 text-xs text-sp-danger transition-colors hover:bg-sp-danger/20 disabled:opacity-50"
                                 >
                                     <Trash2 class="size-3.5" />
-                                    {{ t('settings.organization.delete.button') }}
+                                    {{
+                                        t('settings.organization.delete.button')
+                                    }}
                                 </button>
                             </DialogFooter>
                         </Form>

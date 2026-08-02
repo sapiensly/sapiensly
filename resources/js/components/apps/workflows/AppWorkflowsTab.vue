@@ -45,10 +45,15 @@ const selectedWorkflowId = ref<string | null>(null);
 const draftWorkflow = ref<ManifestWorkflow | null>(null);
 
 const selectedWorkflow = computed<ManifestWorkflow | null>(() => {
-    if (draftWorkflow.value && draftWorkflow.value.id === selectedWorkflowId.value) {
+    if (
+        draftWorkflow.value &&
+        draftWorkflow.value.id === selectedWorkflowId.value
+    ) {
         return draftWorkflow.value;
     }
-    return props.workflows.find((w) => w.id === selectedWorkflowId.value) ?? null;
+    return (
+        props.workflows.find((w) => w.id === selectedWorkflowId.value) ?? null
+    );
 });
 
 // If the parent reloads the manifest (e.g. Claude proposed a change while
@@ -58,7 +63,9 @@ watch(
     () => props.workflows,
     (next) => {
         if (selectedWorkflowId.value && !draftWorkflow.value) {
-            const stillExists = next.some((w) => w.id === selectedWorkflowId.value);
+            const stillExists = next.some(
+                (w) => w.id === selectedWorkflowId.value,
+            );
             if (!stillExists) {
                 selectedWorkflowId.value = null;
             }
@@ -145,13 +152,15 @@ async function onDeleted(workflowId: string) {
     // we haven't built. Fall back: report that delete needs to go through
     // Claude for now.
     try {
-        await axios.delete(`/apps/${props.appId}/builder/workflows/${workflowId}`);
+        await axios.delete(
+            `/apps/${props.appId}/builder/workflows/${workflowId}`,
+        );
         selectedWorkflowId.value = null;
         // Optimistic: parent should reload, but the endpoint doesn't
         // exist yet so this will 404. The catch block surfaces it.
     } catch {
         // Friendly fallback — Claude can delete it via the chat.
-         
+
         window.alert(
             t('apps.builder.workflows.delete_unavailable', { id: workflowId }),
         );

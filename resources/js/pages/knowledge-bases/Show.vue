@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import * as KnowledgeBaseController from '@/actions/App/Http/Controllers/KnowledgeBaseController';
 import * as KnowledgeBaseDocumentController from '@/actions/App/Http/Controllers/KnowledgeBaseDocumentController';
+import PageHeader from '@/components/app-v2/PageHeader.vue';
 import DocumentSelectorDialog from '@/components/documents/DocumentSelectorDialog.vue';
 import DocumentUploadDialog from '@/components/documents/DocumentUploadDialog.vue';
 import HeadingSmall from '@/components/HeadingSmall.vue';
-import PageHeader from '@/components/app-v2/PageHeader.vue';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {

@@ -1,9 +1,17 @@
 <script setup lang="ts">
-import { ref } from 'vue';
 import { ChevronDown } from '@lucide/vue';
+import { ref } from 'vue';
 
-interface FaqItem { id?: string; question: string; answer: string }
-interface FaqBlock { id: string; type: 'faq'; items: FaqItem[] }
+interface FaqItem {
+    id?: string;
+    question: string;
+    answer: string;
+}
+interface FaqBlock {
+    id: string;
+    type: 'faq';
+    items: FaqItem[];
+}
 
 defineOptions({ inheritAttrs: false });
 
@@ -21,7 +29,10 @@ function toggle(i: number) {
             v-for="(item, i) in block.items"
             :key="item.id ?? i"
             class="border-b"
-            :style="{ borderColor: 'color-mix(in srgb, currentColor 14%, transparent)' }"
+            :style="{
+                borderColor:
+                    'color-mix(in srgb, currentColor 14%, transparent)',
+            }"
         >
             <button
                 type="button"
@@ -29,9 +40,18 @@ function toggle(i: number) {
                 @click="toggle(i)"
             >
                 {{ item.question }}
-                <ChevronDown class="size-4 shrink-0 transition-transform" :class="open === i ? 'rotate-180' : ''" />
+                <ChevronDown
+                    class="size-4 shrink-0 transition-transform"
+                    :class="open === i ? 'rotate-180' : ''"
+                />
             </button>
-            <p v-show="open === i" class="pb-4 text-sm leading-relaxed" :style="{ opacity: 0.8 }">{{ item.answer }}</p>
+            <p
+                v-show="open === i"
+                class="pb-4 text-sm leading-relaxed"
+                :style="{ opacity: 0.8 }"
+            >
+                {{ item.answer }}
+            </p>
         </div>
     </div>
 </template>

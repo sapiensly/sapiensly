@@ -50,9 +50,9 @@ const filtered = computed<ManifestObject[]>(() => {
     if (q === '') return props.objects;
     return props.objects.filter(
         (o) =>
-            o.name.toLowerCase().includes(q)
-            || o.slug.toLowerCase().includes(q)
-            || o.id.toLowerCase().includes(q),
+            o.name.toLowerCase().includes(q) ||
+            o.slug.toLowerCase().includes(q) ||
+            o.id.toLowerCase().includes(q),
     );
 });
 
@@ -109,12 +109,15 @@ function onSearchKeydown(event: KeyboardEvent) {
     } else if (event.key === 'ArrowDown') {
         event.preventDefault();
         if (filtered.value.length > 0) {
-            highlightedIndex.value = (highlightedIndex.value + 1) % filtered.value.length;
+            highlightedIndex.value =
+                (highlightedIndex.value + 1) % filtered.value.length;
         }
     } else if (event.key === 'ArrowUp') {
         event.preventDefault();
         if (filtered.value.length > 0) {
-            highlightedIndex.value = (highlightedIndex.value - 1 + filtered.value.length) % filtered.value.length;
+            highlightedIndex.value =
+                (highlightedIndex.value - 1 + filtered.value.length) %
+                filtered.value.length;
         }
     } else if (event.key === 'Enter') {
         event.preventDefault();
@@ -138,12 +141,17 @@ function onSearchKeydown(event: KeyboardEvent) {
                 <Database class="size-3.5 shrink-0 text-ink-muted" />
                 <template v-if="selectedObject">
                     <span class="truncate">{{ selectedObject.name }}</span>
-                    <span class="truncate font-mono text-xs text-ink-subtle">{{ selectedObject.slug }}</span>
+                    <span class="truncate font-mono text-xs text-ink-subtle">{{
+                        selectedObject.slug
+                    }}</span>
                 </template>
                 <span v-else class="truncate text-ink-subtle">
-                    {{ objects.length === 0
-                        ? t('apps.builder.workflows.picker.no_objects')
-                        : (placeholder ?? t('apps.builder.workflows.picker.placeholder')) }}
+                    {{
+                        objects.length === 0
+                            ? t('apps.builder.workflows.picker.no_objects')
+                            : (placeholder ??
+                              t('apps.builder.workflows.picker.placeholder'))
+                    }}
                 </span>
             </div>
             <div class="flex shrink-0 items-center gap-1">
@@ -159,9 +167,11 @@ function onSearchKeydown(event: KeyboardEvent) {
         <!-- Popover -->
         <div
             v-if="open"
-            class="absolute left-0 right-0 top-full z-30 mt-1 max-h-72 overflow-hidden rounded-md border border-soft bg-navy shadow-sp-float"
+            class="absolute top-full right-0 left-0 z-30 mt-1 max-h-72 overflow-hidden rounded-md border border-soft bg-navy shadow-sp-float"
         >
-            <div class="flex items-center gap-2 border-b border-soft px-2 py-1.5">
+            <div
+                class="flex items-center gap-2 border-b border-soft px-2 py-1.5"
+            >
                 <Search class="size-3.5 text-ink-subtle" />
                 <input
                     ref="searchInput"
@@ -181,19 +191,29 @@ function onSearchKeydown(event: KeyboardEvent) {
                     @mouseenter="highlightedIndex = idx"
                     :class="[
                         'cursor-pointer px-2 py-1.5 transition-colors',
-                        idx === highlightedIndex ? 'bg-accent-blue/15' : 'hover:bg-surface',
+                        idx === highlightedIndex
+                            ? 'bg-accent-blue/15'
+                            : 'hover:bg-surface',
                     ]"
                 >
                     <div class="flex items-baseline gap-2">
                         <span
                             :class="[
                                 'truncate text-sm font-medium',
-                                idx === highlightedIndex ? 'text-accent-blue' : 'text-ink',
+                                idx === highlightedIndex
+                                    ? 'text-accent-blue'
+                                    : 'text-ink',
                             ]"
-                        >{{ obj.name }}</span>
-                        <span class="truncate font-mono text-xs text-ink-muted">{{ obj.slug }}</span>
+                            >{{ obj.name }}</span
+                        >
+                        <span
+                            class="truncate font-mono text-xs text-ink-muted"
+                            >{{ obj.slug }}</span
+                        >
                     </div>
-                    <div class="truncate font-mono text-xs text-ink-subtle">{{ obj.id }}</div>
+                    <div class="truncate font-mono text-xs text-ink-subtle">
+                        {{ obj.id }}
+                    </div>
                 </li>
             </ul>
 

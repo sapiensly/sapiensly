@@ -95,13 +95,15 @@ function uptime(seconds: number | null): string {
                                     {{ t('admin.cloud.storage.driver') }}
                                 </dt>
                                 <dd class="flex items-center gap-1.5">
-                                    <span class="font-mono text-xs text-ink uppercase">
+                                    <span
+                                        class="font-mono text-xs text-ink uppercase"
+                                    >
                                         {{ storage.driver }}
                                     </span>
                                     <Badge
                                         v-if="storage.source === 'env'"
                                         variant="outline"
-                                        class="border-soft font-normal text-[10px] text-ink-subtle"
+                                        class="border-soft text-[10px] font-normal text-ink-subtle"
                                     >
                                         {{ t('admin.cloud.storage.from_env') }}
                                     </Badge>

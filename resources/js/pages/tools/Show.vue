@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import * as ToolController from '@/actions/App/Http/Controllers/ToolController';
 import ToolDetailCard from '@/components/tools/ToolDetailCard.vue';
-import { Input } from '@/components/ui/input';
 import {
     Dialog,
     DialogClose,
@@ -12,10 +11,10 @@ import {
     DialogTitle,
     DialogTrigger,
 } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
 import AppLayoutV2 from '@/layouts/AppLayoutV2.vue';
 import type { McpConfig, McpServerTool, Tool, ToolType } from '@/types/tools';
 import { Head, Link, router } from '@inertiajs/vue3';
-import axios from 'axios';
 import {
     Braces,
     CheckCircle2,
@@ -33,6 +32,7 @@ import {
     Trash2,
     Wrench,
 } from '@lucide/vue';
+import axios from 'axios';
 import { computed, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 
@@ -65,7 +65,9 @@ const props = withDefaults(defineProps<Props>(), {
 const initialMcpConfig =
     props.tool.type === 'mcp' ? (props.tool.config as McpConfig | null) : null;
 const mcpServerTools = ref<McpServerTool[]>(initialMcpConfig?.mcp_tools ?? []);
-const mcpSyncedAt = ref<string | null>(initialMcpConfig?.mcp_tools_synced_at ?? null);
+const mcpSyncedAt = ref<string | null>(
+    initialMcpConfig?.mcp_tools_synced_at ?? null,
+);
 const refreshing = ref(false);
 const refreshError = ref<string | null>(null);
 
@@ -73,7 +75,9 @@ async function reloadMcpTools(): Promise<void> {
     refreshing.value = true;
     refreshError.value = null;
     try {
-        const { data } = await axios.post(`/tools/${props.tool.id}/mcp/refresh`);
+        const { data } = await axios.post(
+            `/tools/${props.tool.id}/mcp/refresh`,
+        );
         mcpServerTools.value = data.tools ?? [];
         mcpSyncedAt.value = data.synced_at ?? null;
     } catch (error) {
@@ -243,11 +247,13 @@ const databaseConfig = computed(() => {
                     </div>
                     <div class="min-w-0">
                         <div class="flex items-center gap-2.5">
-                            <h1 class="truncate text-[22px] font-semibold leading-tight text-ink">
+                            <h1
+                                class="truncate text-[22px] leading-tight font-semibold text-ink"
+                            >
                                 {{ tool.name }}
                             </h1>
                             <span
-                                class="inline-flex shrink-0 items-center rounded-pill border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider"
+                                class="inline-flex shrink-0 items-center rounded-pill border px-2 py-0.5 text-[10px] font-semibold tracking-wider uppercase"
                                 :style="{
                                     color: tintForStatus(tool.status),
                                     borderColor: `color-mix(in oklab, ${tintForStatus(tool.status)} 45%, transparent)`,
@@ -256,7 +262,10 @@ const databaseConfig = computed(() => {
                                 {{ tool.status }}
                             </span>
                         </div>
-                        <p v-if="tool.description" class="mt-1 text-xs text-ink-muted">
+                        <p
+                            v-if="tool.description"
+                            class="mt-1 text-xs text-ink-muted"
+                        >
                             {{ tool.description }}
                         </p>
                     </div>
@@ -283,9 +292,13 @@ const databaseConfig = computed(() => {
                         </DialogTrigger>
                         <DialogContent class="sp-admin-dialog">
                             <DialogHeader>
-                                <DialogTitle>{{ t('tools.show.delete_tool') }}</DialogTitle>
+                                <DialogTitle>{{
+                                    t('tools.show.delete_tool')
+                                }}</DialogTitle>
                                 <DialogDescription>
-                                    {{ t('common.confirm_delete') }} "{{ tool.name }}"?
+                                    {{ t('common.confirm_delete') }} "{{
+                                        tool.name
+                                    }}"?
                                     {{ t('common.action_irreversible') }}
                                 </DialogDescription>
                             </DialogHeader>
@@ -340,7 +353,9 @@ const databaseConfig = computed(() => {
                     v-else-if="mcpAuthorization && mcpAuthorization.connected"
                     class="flex items-start gap-3 rounded-sp-sm border border-sp-success/30 bg-sp-success/10 p-4"
                 >
-                    <CheckCircle2 class="mt-0.5 size-5 shrink-0 text-sp-success" />
+                    <CheckCircle2
+                        class="mt-0.5 size-5 shrink-0 text-sp-success"
+                    />
                     <div class="min-w-0 flex-1">
                         <p class="text-sm font-medium text-ink">
                             {{ t('tools.show.connected_title') }}
@@ -366,13 +381,19 @@ const databaseConfig = computed(() => {
                 >
                     <dl class="grid gap-4 sm:grid-cols-3">
                         <div>
-                            <dt class="text-[10px] font-semibold uppercase tracking-wider text-ink-faint">
+                            <dt
+                                class="text-[10px] font-semibold tracking-wider text-ink-faint uppercase"
+                            >
                                 {{ t('common.type') }}
                             </dt>
-                            <dd class="mt-1 text-sm capitalize text-ink">{{ tool.type }}</dd>
+                            <dd class="mt-1 text-sm text-ink capitalize">
+                                {{ tool.type }}
+                            </dd>
                         </div>
                         <div v-if="linkedIntegration">
-                            <dt class="text-[10px] font-semibold uppercase tracking-wider text-ink-faint">
+                            <dt
+                                class="text-[10px] font-semibold tracking-wider text-ink-faint uppercase"
+                            >
                                 {{ t('tools.show.integration') }}
                             </dt>
                             <dd class="mt-1">
@@ -386,12 +407,18 @@ const databaseConfig = computed(() => {
                             </dd>
                         </div>
                         <div v-if="mcpAuthorization">
-                            <dt class="text-[10px] font-semibold uppercase tracking-wider text-ink-faint">
+                            <dt
+                                class="text-[10px] font-semibold tracking-wider text-ink-faint uppercase"
+                            >
                                 {{ t('tools.show.connection') }}
                             </dt>
                             <dd
                                 class="mt-1 text-sm"
-                                :class="mcpAuthorization.connected ? 'text-sp-success' : 'text-sp-warning'"
+                                :class="
+                                    mcpAuthorization.connected
+                                        ? 'text-sp-success'
+                                        : 'text-sp-warning'
+                                "
                             >
                                 {{
                                     mcpAuthorization.connected
@@ -401,11 +428,17 @@ const databaseConfig = computed(() => {
                             </dd>
                         </div>
                         <div v-else>
-                            <dt class="text-[10px] font-semibold uppercase tracking-wider text-ink-faint">
+                            <dt
+                                class="text-[10px] font-semibold tracking-wider text-ink-faint uppercase"
+                            >
                                 {{ t('tools.show.validated') }}
                             </dt>
                             <dd class="mt-1 text-sm text-ink">
-                                {{ tool.is_validated ? t('common.yes') : t('common.no') }}
+                                {{
+                                    tool.is_validated
+                                        ? t('common.yes')
+                                        : t('common.no')
+                                }}
                             </dd>
                         </div>
                     </dl>
@@ -425,7 +458,11 @@ const databaseConfig = computed(() => {
                                 v-if="mcpServerTools.length > 0"
                                 class="inline-flex items-center rounded-pill border border-soft bg-surface px-2 py-0.5 text-[10px] font-medium text-ink-muted"
                             >
-                                {{ t('tools.show.mcp_tools_count', { count: mcpServerTools.length }) }}
+                                {{
+                                    t('tools.show.mcp_tools_count', {
+                                        count: mcpServerTools.length,
+                                    })
+                                }}
                             </span>
                             <button
                                 type="button"
@@ -433,7 +470,12 @@ const databaseConfig = computed(() => {
                                 class="inline-flex items-center gap-1.5 rounded-pill border border-medium bg-surface px-3 py-1 text-xs text-ink transition-colors hover:border-strong hover:bg-surface-hover disabled:opacity-50"
                                 @click="reloadMcpTools"
                             >
-                                <RefreshCw :class="['size-3.5', refreshing ? 'animate-spin' : '']" />
+                                <RefreshCw
+                                    :class="[
+                                        'size-3.5',
+                                        refreshing ? 'animate-spin' : '',
+                                    ]"
+                                />
                                 {{ t('tools.show.reload_tools') }}
                             </button>
                         </div>
@@ -455,15 +497,22 @@ const databaseConfig = computed(() => {
 
                     <template v-if="mcpServerTools.length > 0">
                         <div class="relative mb-3">
-                            <Search class="pointer-events-none absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-ink-subtle" />
+                            <Search
+                                class="pointer-events-none absolute top-1/2 left-3 size-3.5 -translate-y-1/2 text-ink-subtle"
+                            />
                             <Input
                                 v-model="mcpSearch"
-                                :placeholder="t('tools.show.mcp_search_placeholder')"
+                                :placeholder="
+                                    t('tools.show.mcp_search_placeholder')
+                                "
                                 class="h-9 pl-9"
                             />
                         </div>
 
-                        <div v-if="filteredMcpTools.length > 0" class="grid gap-2 sm:grid-cols-2">
+                        <div
+                            v-if="filteredMcpTools.length > 0"
+                            class="grid gap-2 sm:grid-cols-2"
+                        >
                             <div
                                 v-for="serverTool in filteredMcpTools"
                                 :key="serverTool.name"
@@ -471,8 +520,12 @@ const databaseConfig = computed(() => {
                                 class="rounded-xs border border-soft bg-white/[0.02] p-3 transition-colors hover:border-strong hover:bg-white/[0.04]"
                             >
                                 <div class="flex items-center gap-2">
-                                    <Wrench class="size-3.5 shrink-0 text-ink-subtle" />
-                                    <p class="truncate font-mono text-sm font-medium text-ink">
+                                    <Wrench
+                                        class="size-3.5 shrink-0 text-ink-subtle"
+                                    />
+                                    <p
+                                        class="truncate font-mono text-sm font-medium text-ink"
+                                    >
                                         {{ serverTool.name }}
                                     </p>
                                 </div>
@@ -487,7 +540,9 @@ const databaseConfig = computed(() => {
                                     class="mt-2 flex flex-wrap gap-1"
                                 >
                                     <span
-                                        v-for="param in requiredParams(serverTool)"
+                                        v-for="param in requiredParams(
+                                            serverTool,
+                                        )"
                                         :key="param"
                                         class="inline-flex items-center rounded-pill border border-soft bg-surface px-2 py-0.5 font-mono text-[10px] text-ink-muted"
                                     >
@@ -497,7 +552,10 @@ const databaseConfig = computed(() => {
                             </div>
                         </div>
 
-                        <p v-else class="py-6 text-center text-sm text-ink-muted">
+                        <p
+                            v-else
+                            class="py-6 text-center text-sm text-ink-muted"
+                        >
                             {{ t('tools.show.mcp_no_results') }}
                         </p>
                     </template>
@@ -523,14 +581,20 @@ const databaseConfig = computed(() => {
                 >
                     <div class="space-y-4">
                         <div v-if="functionConfig.name">
-                            <dt class="text-[10px] font-semibold uppercase tracking-wider text-ink-faint">
+                            <dt
+                                class="text-[10px] font-semibold tracking-wider text-ink-faint uppercase"
+                            >
                                 {{ t('tools.config.function.name') }}
                             </dt>
-                            <dd class="mt-1 font-mono text-sm text-ink">{{ functionConfig.name }}</dd>
+                            <dd class="mt-1 font-mono text-sm text-ink">
+                                {{ functionConfig.name }}
+                            </dd>
                         </div>
 
                         <div>
-                            <dt class="mb-2 text-[10px] font-semibold uppercase tracking-wider text-ink-faint">
+                            <dt
+                                class="mb-2 text-[10px] font-semibold tracking-wider text-ink-faint uppercase"
+                            >
                                 {{ t('tools.config.function.parameters') }}
                             </dt>
                             <div
@@ -539,30 +603,52 @@ const databaseConfig = computed(() => {
                             >
                                 {{ t('tools.config.function.no_params') }}
                             </div>
-                            <div v-else class="overflow-hidden rounded-xs border border-soft">
+                            <div
+                                v-else
+                                class="overflow-hidden rounded-xs border border-soft"
+                            >
                                 <div
-                                    class="grid grid-cols-[1fr_90px_1.6fr] gap-3 border-b border-soft bg-white/[0.03] px-3 py-2 text-[10px] font-semibold uppercase tracking-wider text-ink-faint"
+                                    class="grid grid-cols-[1fr_90px_1.6fr] gap-3 border-b border-soft bg-white/[0.03] px-3 py-2 text-[10px] font-semibold tracking-wider text-ink-faint uppercase"
                                 >
-                                    <span>{{ t('tools.config.function.param_name') }}</span>
-                                    <span>{{ t('tools.config.function.param_type') }}</span>
-                                    <span>{{ t('tools.config.function.param_description') }}</span>
+                                    <span>{{
+                                        t('tools.config.function.param_name')
+                                    }}</span>
+                                    <span>{{
+                                        t('tools.config.function.param_type')
+                                    }}</span>
+                                    <span>{{
+                                        t(
+                                            'tools.config.function.param_description',
+                                        )
+                                    }}</span>
                                 </div>
                                 <div
                                     v-for="param in functionParams"
                                     :key="param.name"
                                     class="grid grid-cols-[1fr_90px_1.6fr] items-center gap-3 border-b border-soft px-3 py-2 last:border-b-0"
                                 >
-                                    <span class="flex items-center gap-1.5 truncate font-mono text-xs text-ink">
+                                    <span
+                                        class="flex items-center gap-1.5 truncate font-mono text-xs text-ink"
+                                    >
                                         {{ param.name }}
                                         <span
                                             v-if="param.required"
-                                            :title="t('tools.config.function.param_required')"
+                                            :title="
+                                                t(
+                                                    'tools.config.function.param_required',
+                                                )
+                                            "
                                             class="text-sp-danger"
                                             >*</span
                                         >
                                     </span>
-                                    <span class="text-xs text-ink-muted">{{ param.type }}</span>
-                                    <span class="truncate text-xs text-ink-muted">{{ param.description || '—' }}</span>
+                                    <span class="text-xs text-ink-muted">{{
+                                        param.type
+                                    }}</span>
+                                    <span
+                                        class="truncate text-xs text-ink-muted"
+                                        >{{ param.description || '—' }}</span
+                                    >
                                 </div>
                             </div>
                         </div>
@@ -579,16 +665,26 @@ const databaseConfig = computed(() => {
                 >
                     <dl class="grid gap-4 sm:grid-cols-2">
                         <div v-if="mcpConfig.endpoint">
-                            <dt class="text-[10px] font-semibold uppercase tracking-wider text-ink-faint">
+                            <dt
+                                class="text-[10px] font-semibold tracking-wider text-ink-faint uppercase"
+                            >
                                 {{ t('tools.show.f.endpoint') }}
                             </dt>
-                            <dd class="mt-1 break-all font-mono text-xs text-ink">{{ mcpConfig.endpoint }}</dd>
+                            <dd
+                                class="mt-1 font-mono text-xs break-all text-ink"
+                            >
+                                {{ mcpConfig.endpoint }}
+                            </dd>
                         </div>
                         <div v-if="mcpConfig.auth_type">
-                            <dt class="text-[10px] font-semibold uppercase tracking-wider text-ink-faint">
+                            <dt
+                                class="text-[10px] font-semibold tracking-wider text-ink-faint uppercase"
+                            >
                                 {{ t('tools.show.f.auth') }}
                             </dt>
-                            <dd class="mt-1 text-sm capitalize text-ink">{{ mcpConfig.auth_type }}</dd>
+                            <dd class="mt-1 text-sm text-ink capitalize">
+                                {{ mcpConfig.auth_type }}
+                            </dd>
                         </div>
                     </dl>
                 </ToolDetailCard>
@@ -603,32 +699,52 @@ const databaseConfig = computed(() => {
                 >
                     <dl class="grid gap-4 sm:grid-cols-2">
                         <div v-if="restApiConfig.method">
-                            <dt class="text-[10px] font-semibold uppercase tracking-wider text-ink-faint">
+                            <dt
+                                class="text-[10px] font-semibold tracking-wider text-ink-faint uppercase"
+                            >
                                 {{ t('tools.show.f.method') }}
                             </dt>
                             <dd class="mt-1">
-                                <span class="inline-flex items-center rounded-pill border border-soft bg-surface px-2 py-0.5 font-mono text-[11px] font-semibold text-ink">
+                                <span
+                                    class="inline-flex items-center rounded-pill border border-soft bg-surface px-2 py-0.5 font-mono text-[11px] font-semibold text-ink"
+                                >
                                     {{ restApiConfig.method }}
                                 </span>
                             </dd>
                         </div>
                         <div v-if="restApiConfig.path">
-                            <dt class="text-[10px] font-semibold uppercase tracking-wider text-ink-faint">
+                            <dt
+                                class="text-[10px] font-semibold tracking-wider text-ink-faint uppercase"
+                            >
                                 {{ t('tools.show.f.path') }}
                             </dt>
-                            <dd class="mt-1 break-all font-mono text-xs text-ink">{{ restApiConfig.path }}</dd>
+                            <dd
+                                class="mt-1 font-mono text-xs break-all text-ink"
+                            >
+                                {{ restApiConfig.path }}
+                            </dd>
                         </div>
                         <div v-if="restApiConfig.base_url">
-                            <dt class="text-[10px] font-semibold uppercase tracking-wider text-ink-faint">
+                            <dt
+                                class="text-[10px] font-semibold tracking-wider text-ink-faint uppercase"
+                            >
                                 {{ t('tools.show.f.base_url') }}
                             </dt>
-                            <dd class="mt-1 break-all font-mono text-xs text-ink">{{ restApiConfig.base_url }}</dd>
+                            <dd
+                                class="mt-1 font-mono text-xs break-all text-ink"
+                            >
+                                {{ restApiConfig.base_url }}
+                            </dd>
                         </div>
                         <div v-if="restApiConfig.auth_config_is_set">
-                            <dt class="text-[10px] font-semibold uppercase tracking-wider text-ink-faint">
+                            <dt
+                                class="text-[10px] font-semibold tracking-wider text-ink-faint uppercase"
+                            >
                                 {{ t('tools.show.f.credentials') }}
                             </dt>
-                            <dd class="mt-1 text-sm text-sp-success">{{ t('tools.show.f.configured') }}</dd>
+                            <dd class="mt-1 text-sm text-sp-success">
+                                {{ t('tools.show.f.configured') }}
+                            </dd>
                         </div>
                     </dl>
                 </ToolDetailCard>
@@ -644,23 +760,38 @@ const databaseConfig = computed(() => {
                     <div class="space-y-4">
                         <dl class="grid gap-4 sm:grid-cols-2">
                             <div v-if="graphqlConfig.endpoint">
-                                <dt class="text-[10px] font-semibold uppercase tracking-wider text-ink-faint">
+                                <dt
+                                    class="text-[10px] font-semibold tracking-wider text-ink-faint uppercase"
+                                >
                                     {{ t('tools.show.f.endpoint') }}
                                 </dt>
-                                <dd class="mt-1 break-all font-mono text-xs text-ink">{{ graphqlConfig.endpoint }}</dd>
+                                <dd
+                                    class="mt-1 font-mono text-xs break-all text-ink"
+                                >
+                                    {{ graphqlConfig.endpoint }}
+                                </dd>
                             </div>
                             <div v-if="graphqlConfig.operation_type">
-                                <dt class="text-[10px] font-semibold uppercase tracking-wider text-ink-faint">
+                                <dt
+                                    class="text-[10px] font-semibold tracking-wider text-ink-faint uppercase"
+                                >
                                     {{ t('tools.show.f.operation_type') }}
                                 </dt>
-                                <dd class="mt-1 text-sm capitalize text-ink">{{ graphqlConfig.operation_type }}</dd>
+                                <dd class="mt-1 text-sm text-ink capitalize">
+                                    {{ graphqlConfig.operation_type }}
+                                </dd>
                             </div>
                         </dl>
                         <div v-if="graphqlConfig.operation">
-                            <dt class="mb-1 text-[10px] font-semibold uppercase tracking-wider text-ink-faint">
+                            <dt
+                                class="mb-1 text-[10px] font-semibold tracking-wider text-ink-faint uppercase"
+                            >
                                 {{ t('tools.show.f.operation') }}
                             </dt>
-                            <pre class="overflow-x-auto rounded-xs border border-soft bg-navy-deep p-3 font-mono text-xs whitespace-pre-wrap text-ink">{{ graphqlConfig.operation }}</pre>
+                            <pre
+                                class="overflow-x-auto rounded-xs border border-soft bg-navy-deep p-3 font-mono text-xs whitespace-pre-wrap text-ink"
+                                >{{ graphqlConfig.operation }}</pre
+                            >
                         </div>
                     </div>
                 </ToolDetailCard>
@@ -676,27 +807,45 @@ const databaseConfig = computed(() => {
                     <div class="space-y-4">
                         <dl class="grid gap-4 sm:grid-cols-3">
                             <div v-if="databaseConfig.driver">
-                                <dt class="text-[10px] font-semibold uppercase tracking-wider text-ink-faint">
+                                <dt
+                                    class="text-[10px] font-semibold tracking-wider text-ink-faint uppercase"
+                                >
                                     {{ t('tools.show.f.driver') }}
                                 </dt>
-                                <dd class="mt-1 text-sm uppercase text-ink">{{ databaseConfig.driver }}</dd>
+                                <dd class="mt-1 text-sm text-ink uppercase">
+                                    {{ databaseConfig.driver }}
+                                </dd>
                             </div>
                             <div v-if="databaseConfig.host">
-                                <dt class="text-[10px] font-semibold uppercase tracking-wider text-ink-faint">
+                                <dt
+                                    class="text-[10px] font-semibold tracking-wider text-ink-faint uppercase"
+                                >
                                     {{ t('tools.show.f.host') }}
                                 </dt>
-                                <dd class="mt-1 break-all font-mono text-xs text-ink">
-                                    {{ databaseConfig.host }}:{{ databaseConfig.port }}
+                                <dd
+                                    class="mt-1 font-mono text-xs break-all text-ink"
+                                >
+                                    {{ databaseConfig.host }}:{{
+                                        databaseConfig.port
+                                    }}
                                 </dd>
                             </div>
                             <div v-if="databaseConfig.database">
-                                <dt class="text-[10px] font-semibold uppercase tracking-wider text-ink-faint">
+                                <dt
+                                    class="text-[10px] font-semibold tracking-wider text-ink-faint uppercase"
+                                >
                                     {{ t('tools.show.f.database') }}
                                 </dt>
-                                <dd class="mt-1 break-all font-mono text-xs text-ink">{{ databaseConfig.database }}</dd>
+                                <dd
+                                    class="mt-1 font-mono text-xs break-all text-ink"
+                                >
+                                    {{ databaseConfig.database }}
+                                </dd>
                             </div>
                             <div>
-                                <dt class="text-[10px] font-semibold uppercase tracking-wider text-ink-faint">
+                                <dt
+                                    class="text-[10px] font-semibold tracking-wider text-ink-faint uppercase"
+                                >
                                     {{ t('tools.show.f.mode') }}
                                 </dt>
                                 <dd class="mt-1">
@@ -708,35 +857,59 @@ const databaseConfig = computed(() => {
                                                 : 'border-sp-danger/40 bg-sp-danger/10 text-sp-danger'
                                         "
                                     >
-                                        {{ databaseConfig.read_only ? t('tools.show.f.read_only') : t('tools.show.f.read_write') }}
+                                        {{
+                                            databaseConfig.read_only
+                                                ? t('tools.show.f.read_only')
+                                                : t('tools.show.f.read_write')
+                                        }}
                                     </span>
                                 </dd>
                             </div>
-                            <div v-if="databaseConfig.username_is_set || databaseConfig.password_is_set">
-                                <dt class="text-[10px] font-semibold uppercase tracking-wider text-ink-faint">
+                            <div
+                                v-if="
+                                    databaseConfig.username_is_set ||
+                                    databaseConfig.password_is_set
+                                "
+                            >
+                                <dt
+                                    class="text-[10px] font-semibold tracking-wider text-ink-faint uppercase"
+                                >
                                     {{ t('tools.show.f.credentials') }}
                                 </dt>
-                                <dd class="mt-1 text-sm text-sp-success">{{ t('tools.show.f.configured') }}</dd>
+                                <dd class="mt-1 text-sm text-sp-success">
+                                    {{ t('tools.show.f.configured') }}
+                                </dd>
                             </div>
                         </dl>
                         <div v-if="databaseConfig.query_template">
-                            <dt class="mb-1 text-[10px] font-semibold uppercase tracking-wider text-ink-faint">
+                            <dt
+                                class="mb-1 text-[10px] font-semibold tracking-wider text-ink-faint uppercase"
+                            >
                                 {{ t('tools.show.f.query') }}
                             </dt>
-                            <pre class="overflow-x-auto rounded-xs border border-soft bg-navy-deep p-3 font-mono text-xs whitespace-pre-wrap text-ink">{{ databaseConfig.query_template }}</pre>
+                            <pre
+                                class="overflow-x-auto rounded-xs border border-soft bg-navy-deep p-3 font-mono text-xs whitespace-pre-wrap text-ink"
+                                >{{ databaseConfig.query_template }}</pre
+                            >
                         </div>
                     </div>
                 </ToolDetailCard>
 
                 <!-- Group members. -->
                 <ToolDetailCard
-                    v-if="tool.type === 'group' && tool.group_items && tool.group_items.length > 0"
+                    v-if="
+                        tool.type === 'group' &&
+                        tool.group_items &&
+                        tool.group_items.length > 0
+                    "
                     :title="t('tools.show.sec.group')"
                     :description="t('tools.show.sec.group_desc')"
                     :icon="ListChecks"
                     :tint="typeTint('group')"
                 >
-                    <ul class="divide-y divide-soft overflow-hidden rounded-xs border border-soft">
+                    <ul
+                        class="divide-y divide-soft overflow-hidden rounded-xs border border-soft"
+                    >
                         <li
                             v-for="item in tool.group_items"
                             :key="item.id"
@@ -746,13 +919,25 @@ const databaseConfig = computed(() => {
                                 class="flex size-7 shrink-0 items-center justify-center rounded-xs"
                                 :style="{
                                     backgroundColor: `color-mix(in oklab, ${typeTint(item.tool?.type ?? 'function')} 15%, transparent)`,
-                                    color: typeTint(item.tool?.type ?? 'function'),
+                                    color: typeTint(
+                                        item.tool?.type ?? 'function',
+                                    ),
                                 }"
                             >
-                                <component :is="toolIcon(item.tool?.type ?? 'function')" class="size-3.5" />
+                                <component
+                                    :is="
+                                        toolIcon(item.tool?.type ?? 'function')
+                                    "
+                                    class="size-3.5"
+                                />
                             </div>
-                            <span class="min-w-0 flex-1 truncate text-sm text-ink">{{ item.tool?.name }}</span>
-                            <span class="shrink-0 rounded-pill border border-soft bg-surface px-2 py-0.5 text-[10px] capitalize text-ink-muted">
+                            <span
+                                class="min-w-0 flex-1 truncate text-sm text-ink"
+                                >{{ item.tool?.name }}</span
+                            >
+                            <span
+                                class="shrink-0 rounded-pill border border-soft bg-surface px-2 py-0.5 text-[10px] text-ink-muted capitalize"
+                            >
                                 {{ item.tool?.type }}
                             </span>
                         </li>

@@ -120,10 +120,14 @@ const valueLabel = computed(() => {
         const v = Math.round(displayValue.value * 10) / 10;
         return `${v.toLocaleString(props.locale)}%`;
     }
-    return nf.value.format(settled ? props.value : Math.round(displayValue.value));
+    return nf.value.format(
+        settled ? props.value : Math.round(displayValue.value),
+    );
 });
 const targetLabel = computed(() =>
-    isPct.value ? `${nf.value.format(props.target)}%` : nf.value.format(props.target),
+    isPct.value
+        ? `${nf.value.format(props.target)}%`
+        : nf.value.format(props.target),
 );
 const statusColor = computed(() => (onTarget.value ? '#1f9d61' : '#e08a1e'));
 const statusBg = computed(() => (onTarget.value ? '#e7f6ee' : '#fdf3e3'));
@@ -195,7 +199,11 @@ const tickB = computed(() => pt(tf.value, R + SW / 2 + 2));
         <!-- horseshoe -->
         <div
             class="relative"
-            :class="fitHeight ? 'flex min-h-0 flex-1 items-center' : 'my-auto py-1.5'"
+            :class="
+                fitHeight
+                    ? 'flex min-h-0 flex-1 items-center'
+                    : 'my-auto py-1.5'
+            "
         >
             <svg
                 viewBox="0 0 300 250"

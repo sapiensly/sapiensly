@@ -46,7 +46,8 @@ const sidebarButtonLabel = computed(() => {
 });
 
 const modKey = computed(() =>
-    typeof navigator !== 'undefined' && /Mac|iPhone|iPad/i.test(navigator.platform)
+    typeof navigator !== 'undefined' &&
+    /Mac|iPhone|iPad/i.test(navigator.platform)
         ? '⌘'
         : 'Ctrl',
 );

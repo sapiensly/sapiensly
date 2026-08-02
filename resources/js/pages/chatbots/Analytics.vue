@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import * as ChatbotController from '@/actions/App/Http/Controllers/ChatbotController';
 import PageHeader from '@/components/app-v2/PageHeader.vue';
 import { Button } from '@/components/ui/button';
 import {
@@ -21,6 +20,17 @@ import type {
 } from '@/types/chatbot';
 import { Head, router } from '@inertiajs/vue3';
 import {
+    ArrowDown,
+    ArrowUp,
+    Clock,
+    MessageCircle,
+    MessageSquare,
+    Star,
+    Target,
+    TrendingUp,
+    Users,
+} from '@lucide/vue';
+import {
     ArcElement,
     BarElement,
     CategoryScale,
@@ -33,17 +43,6 @@ import {
     Title,
     Tooltip,
 } from 'chart.js';
-import {
-    ArrowDown,
-    ArrowUp,
-    Clock,
-    MessageCircle,
-    MessageSquare,
-    Star,
-    Target,
-    TrendingUp,
-    Users,
-} from '@lucide/vue';
 import { computed, ref } from 'vue';
 import { Bar, Doughnut, Line } from 'vue-chartjs';
 import { useI18n } from 'vue-i18n';
@@ -239,324 +238,312 @@ const hasResponseTimes = computed(() => {
                 description="Track conversations, performance, and engagement"
             />
 
-                <!-- Date Range Filter -->
-                <Card class="mb-6">
-                    <CardContent class="pt-6">
-                        <form
-                            class="flex flex-wrap items-end gap-4"
-                            @submit.prevent="applyDateRange"
+            <!-- Date Range Filter -->
+            <Card class="mb-6">
+                <CardContent class="pt-6">
+                    <form
+                        class="flex flex-wrap items-end gap-4"
+                        @submit.prevent="applyDateRange"
+                    >
+                        <div class="flex-1 space-y-2">
+                            <Label for="start_date">Start Date</Label>
+                            <Input
+                                id="start_date"
+                                v-model="startDate"
+                                type="date"
+                            />
+                        </div>
+                        <div class="flex-1 space-y-2">
+                            <Label for="end_date">End Date</Label>
+                            <Input
+                                id="end_date"
+                                v-model="endDate"
+                                type="date"
+                            />
+                        </div>
+                        <Button type="submit">Apply</Button>
+                    </form>
+                </CardContent>
+            </Card>
+
+            <!-- Overview Stats -->
+            <div class="mb-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                <Card>
+                    <CardHeader
+                        class="flex flex-row items-center justify-between pb-2"
+                    >
+                        <CardTitle class="text-sm font-medium"
+                            >Conversations</CardTitle
                         >
-                            <div class="flex-1 space-y-2">
-                                <Label for="start_date">Start Date</Label>
-                                <Input
-                                    id="start_date"
-                                    v-model="startDate"
-                                    type="date"
-                                />
-                            </div>
-                            <div class="flex-1 space-y-2">
-                                <Label for="end_date">End Date</Label>
-                                <Input
-                                    id="end_date"
-                                    v-model="endDate"
-                                    type="date"
-                                />
-                            </div>
-                            <Button type="submit">Apply</Button>
-                        </form>
+                        <MessageSquare class="h-4 w-4 text-muted-foreground" />
+                    </CardHeader>
+                    <CardContent>
+                        <div class="text-2xl font-bold">
+                            {{ overview.total_conversations }}
+                        </div>
+                        <div class="flex items-center text-xs">
+                            <component
+                                :is="
+                                    overview.conversations_trend >= 0
+                                        ? ArrowUp
+                                        : ArrowDown
+                                "
+                                :class="[
+                                    'mr-1 h-3 w-3',
+                                    overview.conversations_trend >= 0
+                                        ? 'text-green-500'
+                                        : 'text-red-500',
+                                ]"
+                            />
+                            <span
+                                :class="
+                                    overview.conversations_trend >= 0
+                                        ? 'text-green-500'
+                                        : 'text-red-500'
+                                "
+                            >
+                                {{ Math.abs(overview.conversations_trend) }}%
+                            </span>
+                            <span class="ml-1 text-muted-foreground"
+                                >vs previous period</span
+                            >
+                        </div>
                     </CardContent>
                 </Card>
 
-                <!-- Overview Stats -->
-                <div class="mb-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                    <Card>
-                        <CardHeader
-                            class="flex flex-row items-center justify-between pb-2"
-                        >
-                            <CardTitle class="text-sm font-medium"
-                                >Conversations</CardTitle
-                            >
-                            <MessageSquare
-                                class="h-4 w-4 text-muted-foreground"
-                            />
-                        </CardHeader>
-                        <CardContent>
-                            <div class="text-2xl font-bold">
-                                {{ overview.total_conversations }}
-                            </div>
-                            <div class="flex items-center text-xs">
-                                <component
-                                    :is="
-                                        overview.conversations_trend >= 0
-                                            ? ArrowUp
-                                            : ArrowDown
-                                    "
-                                    :class="[
-                                        'mr-1 h-3 w-3',
-                                        overview.conversations_trend >= 0
-                                            ? 'text-green-500'
-                                            : 'text-red-500',
-                                    ]"
-                                />
-                                <span
-                                    :class="
-                                        overview.conversations_trend >= 0
-                                            ? 'text-green-500'
-                                            : 'text-red-500'
-                                    "
-                                >
-                                    {{
-                                        Math.abs(overview.conversations_trend)
-                                    }}%
-                                </span>
-                                <span class="ml-1 text-muted-foreground"
-                                    >vs previous period</span
-                                >
-                            </div>
-                        </CardContent>
-                    </Card>
-
-                    <Card>
-                        <CardHeader
-                            class="flex flex-row items-center justify-between pb-2"
-                        >
-                            <CardTitle class="text-sm font-medium"
-                                >Messages</CardTitle
-                            >
-                            <MessageCircle
-                                class="h-4 w-4 text-muted-foreground"
-                            />
-                        </CardHeader>
-                        <CardContent>
-                            <div class="text-2xl font-bold">
-                                {{ overview.total_messages }}
-                            </div>
-                            <p class="text-xs text-muted-foreground">
-                                {{ overview.messages_per_conversation }} avg per
-                                conversation
-                            </p>
-                        </CardContent>
-                    </Card>
-
-                    <Card>
-                        <CardHeader
-                            class="flex flex-row items-center justify-between pb-2"
-                        >
-                            <CardTitle class="text-sm font-medium"
-                                >Unique Sessions</CardTitle
-                            >
-                            <Users class="h-4 w-4 text-muted-foreground" />
-                        </CardHeader>
-                        <CardContent>
-                            <div class="text-2xl font-bold">
-                                {{ overview.unique_sessions }}
-                            </div>
-                            <p class="text-xs text-muted-foreground">
-                                Unique visitors
-                            </p>
-                        </CardContent>
-                    </Card>
-
-                    <Card>
-                        <CardHeader
-                            class="flex flex-row items-center justify-between pb-2"
-                        >
-                            <CardTitle class="text-sm font-medium"
-                                >Avg Response Time</CardTitle
-                            >
-                            <Clock class="h-4 w-4 text-muted-foreground" />
-                        </CardHeader>
-                        <CardContent>
-                            <div class="text-2xl font-bold">
-                                {{
-                                    formatResponseTime(
-                                        overview.avg_response_time_ms,
-                                    )
-                                }}
-                            </div>
-                            <p class="text-xs text-muted-foreground">
-                                Per response
-                            </p>
-                        </CardContent>
-                    </Card>
-                </div>
-
-                <!-- Second Row Stats -->
-                <div class="mb-8 grid gap-4 sm:grid-cols-3">
-                    <Card>
-                        <CardHeader
-                            class="flex flex-row items-center justify-between pb-2"
-                        >
-                            <CardTitle class="text-sm font-medium"
-                                >Avg Rating</CardTitle
-                            >
-                            <Star class="h-4 w-4 text-muted-foreground" />
-                        </CardHeader>
-                        <CardContent>
-                            <div class="text-2xl font-bold">
-                                {{
-                                    overview.avg_rating
-                                        ? overview.avg_rating.toFixed(1)
-                                        : '-'
-                                }}
-                            </div>
-                            <p class="text-xs text-muted-foreground">
-                                {{ overview.total_ratings }} total ratings
-                            </p>
-                        </CardContent>
-                    </Card>
-
-                    <Card>
-                        <CardHeader
-                            class="flex flex-row items-center justify-between pb-2"
-                        >
-                            <CardTitle class="text-sm font-medium"
-                                >Resolution Rate</CardTitle
-                            >
-                            <Target class="h-4 w-4 text-muted-foreground" />
-                        </CardHeader>
-                        <CardContent>
-                            <div class="text-2xl font-bold">
-                                {{ overview.resolution_rate }}%
-                            </div>
-                            <p class="text-xs text-muted-foreground">
-                                {{ overview.resolved_count }} resolved,
-                                {{ overview.abandoned_count }} abandoned
-                            </p>
-                        </CardContent>
-                    </Card>
-
-                    <Card>
-                        <CardHeader
-                            class="flex flex-row items-center justify-between pb-2"
-                        >
-                            <CardTitle class="text-sm font-medium"
-                                >Engagement</CardTitle
-                            >
-                            <TrendingUp class="h-4 w-4 text-muted-foreground" />
-                        </CardHeader>
-                        <CardContent>
-                            <div class="text-2xl font-bold">
-                                {{ overview.messages_per_conversation }}
-                            </div>
-                            <p class="text-xs text-muted-foreground">
-                                Messages per conversation
-                            </p>
-                        </CardContent>
-                    </Card>
-                </div>
-
-                <!-- Charts -->
-                <div class="mb-8 grid gap-6 lg:grid-cols-2">
-                    <!-- Conversations Over Time -->
-                    <Card class="lg:col-span-2">
-                        <CardHeader>
-                            <CardTitle>Conversations Over Time</CardTitle>
-                            <CardDescription
-                                >Daily conversation and message
-                                counts</CardDescription
-                            >
-                        </CardHeader>
-                        <CardContent>
-                            <div class="h-[300px]">
-                                <Line
-                                    :data="conversationsChartData"
-                                    :options="conversationsChartOptions"
-                                />
-                            </div>
-                        </CardContent>
-                    </Card>
-
-                    <!-- Rating Distribution -->
-                    <Card>
-                        <CardHeader>
-                            <CardTitle>Rating Distribution</CardTitle>
-                            <CardDescription
-                                >How visitors rate their
-                                experience</CardDescription
-                            >
-                        </CardHeader>
-                        <CardContent>
-                            <div v-if="hasRatings" class="h-[250px]">
-                                <Bar
-                                    :data="ratingsChartData"
-                                    :options="ratingsChartOptions"
-                                />
-                            </div>
-                            <div
-                                v-else
-                                class="flex h-[250px] items-center justify-center text-muted-foreground"
-                            >
-                                No ratings yet
-                            </div>
-                        </CardContent>
-                    </Card>
-
-                    <!-- Response Time Distribution -->
-                    <Card>
-                        <CardHeader>
-                            <CardTitle>Response Time Distribution</CardTitle>
-                            <CardDescription
-                                >How fast the chatbot responds</CardDescription
-                            >
-                        </CardHeader>
-                        <CardContent>
-                            <div v-if="hasResponseTimes" class="h-[250px]">
-                                <Doughnut
-                                    :data="responseTimeChartData"
-                                    :options="responseTimeChartOptions"
-                                />
-                            </div>
-                            <div
-                                v-else
-                                class="flex h-[250px] items-center justify-center text-muted-foreground"
-                            >
-                                No response data yet
-                            </div>
-                        </CardContent>
-                    </Card>
-                </div>
-
-                <!-- Top Topics -->
                 <Card>
+                    <CardHeader
+                        class="flex flex-row items-center justify-between pb-2"
+                    >
+                        <CardTitle class="text-sm font-medium"
+                            >Messages</CardTitle
+                        >
+                        <MessageCircle class="h-4 w-4 text-muted-foreground" />
+                    </CardHeader>
+                    <CardContent>
+                        <div class="text-2xl font-bold">
+                            {{ overview.total_messages }}
+                        </div>
+                        <p class="text-xs text-muted-foreground">
+                            {{ overview.messages_per_conversation }} avg per
+                            conversation
+                        </p>
+                    </CardContent>
+                </Card>
+
+                <Card>
+                    <CardHeader
+                        class="flex flex-row items-center justify-between pb-2"
+                    >
+                        <CardTitle class="text-sm font-medium"
+                            >Unique Sessions</CardTitle
+                        >
+                        <Users class="h-4 w-4 text-muted-foreground" />
+                    </CardHeader>
+                    <CardContent>
+                        <div class="text-2xl font-bold">
+                            {{ overview.unique_sessions }}
+                        </div>
+                        <p class="text-xs text-muted-foreground">
+                            Unique visitors
+                        </p>
+                    </CardContent>
+                </Card>
+
+                <Card>
+                    <CardHeader
+                        class="flex flex-row items-center justify-between pb-2"
+                    >
+                        <CardTitle class="text-sm font-medium"
+                            >Avg Response Time</CardTitle
+                        >
+                        <Clock class="h-4 w-4 text-muted-foreground" />
+                    </CardHeader>
+                    <CardContent>
+                        <div class="text-2xl font-bold">
+                            {{
+                                formatResponseTime(
+                                    overview.avg_response_time_ms,
+                                )
+                            }}
+                        </div>
+                        <p class="text-xs text-muted-foreground">
+                            Per response
+                        </p>
+                    </CardContent>
+                </Card>
+            </div>
+
+            <!-- Second Row Stats -->
+            <div class="mb-8 grid gap-4 sm:grid-cols-3">
+                <Card>
+                    <CardHeader
+                        class="flex flex-row items-center justify-between pb-2"
+                    >
+                        <CardTitle class="text-sm font-medium"
+                            >Avg Rating</CardTitle
+                        >
+                        <Star class="h-4 w-4 text-muted-foreground" />
+                    </CardHeader>
+                    <CardContent>
+                        <div class="text-2xl font-bold">
+                            {{
+                                overview.avg_rating
+                                    ? overview.avg_rating.toFixed(1)
+                                    : '-'
+                            }}
+                        </div>
+                        <p class="text-xs text-muted-foreground">
+                            {{ overview.total_ratings }} total ratings
+                        </p>
+                    </CardContent>
+                </Card>
+
+                <Card>
+                    <CardHeader
+                        class="flex flex-row items-center justify-between pb-2"
+                    >
+                        <CardTitle class="text-sm font-medium"
+                            >Resolution Rate</CardTitle
+                        >
+                        <Target class="h-4 w-4 text-muted-foreground" />
+                    </CardHeader>
+                    <CardContent>
+                        <div class="text-2xl font-bold">
+                            {{ overview.resolution_rate }}%
+                        </div>
+                        <p class="text-xs text-muted-foreground">
+                            {{ overview.resolved_count }} resolved,
+                            {{ overview.abandoned_count }} abandoned
+                        </p>
+                    </CardContent>
+                </Card>
+
+                <Card>
+                    <CardHeader
+                        class="flex flex-row items-center justify-between pb-2"
+                    >
+                        <CardTitle class="text-sm font-medium"
+                            >Engagement</CardTitle
+                        >
+                        <TrendingUp class="h-4 w-4 text-muted-foreground" />
+                    </CardHeader>
+                    <CardContent>
+                        <div class="text-2xl font-bold">
+                            {{ overview.messages_per_conversation }}
+                        </div>
+                        <p class="text-xs text-muted-foreground">
+                            Messages per conversation
+                        </p>
+                    </CardContent>
+                </Card>
+            </div>
+
+            <!-- Charts -->
+            <div class="mb-8 grid gap-6 lg:grid-cols-2">
+                <!-- Conversations Over Time -->
+                <Card class="lg:col-span-2">
                     <CardHeader>
-                        <CardTitle>Top Topics</CardTitle>
+                        <CardTitle>Conversations Over Time</CardTitle>
                         <CardDescription
-                            >Most common conversation starters</CardDescription
+                            >Daily conversation and message
+                            counts</CardDescription
                         >
                     </CardHeader>
                     <CardContent>
-                        <div v-if="topTopics.length > 0" class="space-y-3">
-                            <div
-                                v-for="(topic, index) in topTopics"
-                                :key="index"
-                                class="flex items-center justify-between rounded-lg border p-3"
-                            >
-                                <div class="flex items-center gap-3">
-                                    <span
-                                        class="flex h-6 w-6 items-center justify-center rounded-full bg-primary/10 text-xs font-medium text-primary"
-                                    >
-                                        {{ index + 1 }}
-                                    </span>
-                                    <span class="text-sm">{{
-                                        topic.topic
-                                    }}</span>
-                                </div>
-                                <span
-                                    class="text-sm font-medium text-muted-foreground"
-                                >
-                                    {{ topic.count }} conversations
-                                </span>
-                            </div>
-                        </div>
-                        <div
-                            v-else
-                            class="py-8 text-center text-muted-foreground"
-                        >
-                            No conversation data yet
+                        <div class="h-[300px]">
+                            <Line
+                                :data="conversationsChartData"
+                                :options="conversationsChartOptions"
+                            />
                         </div>
                     </CardContent>
                 </Card>
+
+                <!-- Rating Distribution -->
+                <Card>
+                    <CardHeader>
+                        <CardTitle>Rating Distribution</CardTitle>
+                        <CardDescription
+                            >How visitors rate their experience</CardDescription
+                        >
+                    </CardHeader>
+                    <CardContent>
+                        <div v-if="hasRatings" class="h-[250px]">
+                            <Bar
+                                :data="ratingsChartData"
+                                :options="ratingsChartOptions"
+                            />
+                        </div>
+                        <div
+                            v-else
+                            class="flex h-[250px] items-center justify-center text-muted-foreground"
+                        >
+                            No ratings yet
+                        </div>
+                    </CardContent>
+                </Card>
+
+                <!-- Response Time Distribution -->
+                <Card>
+                    <CardHeader>
+                        <CardTitle>Response Time Distribution</CardTitle>
+                        <CardDescription
+                            >How fast the chatbot responds</CardDescription
+                        >
+                    </CardHeader>
+                    <CardContent>
+                        <div v-if="hasResponseTimes" class="h-[250px]">
+                            <Doughnut
+                                :data="responseTimeChartData"
+                                :options="responseTimeChartOptions"
+                            />
+                        </div>
+                        <div
+                            v-else
+                            class="flex h-[250px] items-center justify-center text-muted-foreground"
+                        >
+                            No response data yet
+                        </div>
+                    </CardContent>
+                </Card>
+            </div>
+
+            <!-- Top Topics -->
+            <Card>
+                <CardHeader>
+                    <CardTitle>Top Topics</CardTitle>
+                    <CardDescription
+                        >Most common conversation starters</CardDescription
+                    >
+                </CardHeader>
+                <CardContent>
+                    <div v-if="topTopics.length > 0" class="space-y-3">
+                        <div
+                            v-for="(topic, index) in topTopics"
+                            :key="index"
+                            class="flex items-center justify-between rounded-lg border p-3"
+                        >
+                            <div class="flex items-center gap-3">
+                                <span
+                                    class="flex h-6 w-6 items-center justify-center rounded-full bg-primary/10 text-xs font-medium text-primary"
+                                >
+                                    {{ index + 1 }}
+                                </span>
+                                <span class="text-sm">{{ topic.topic }}</span>
+                            </div>
+                            <span
+                                class="text-sm font-medium text-muted-foreground"
+                            >
+                                {{ topic.count }} conversations
+                            </span>
+                        </div>
+                    </div>
+                    <div v-else class="py-8 text-center text-muted-foreground">
+                        No conversation data yet
+                    </div>
+                </CardContent>
+            </Card>
         </div>
     </AppLayoutV2>
 </template>

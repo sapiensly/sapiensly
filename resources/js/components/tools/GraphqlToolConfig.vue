@@ -139,7 +139,9 @@ const placeholder = computed(() =>
 
         <!-- Connection: when set, the endpoint + auth come from it. -->
         <div class="grid gap-2">
-            <Label for="connection">{{ t('tools.config.connection.label') }}</Label>
+            <Label for="connection">{{
+                t('tools.config.connection.label')
+            }}</Label>
             <Select v-if="connections.length > 0" v-model="connectionValue">
                 <SelectTrigger id="connection">
                     <SelectValue />

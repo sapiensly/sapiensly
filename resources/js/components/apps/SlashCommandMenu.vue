@@ -23,7 +23,10 @@ const emit = defineEmits<{
 // non-existent row.
 const safeIndex = computed(() => {
     if (props.commands.length === 0) return -1;
-    return Math.max(0, Math.min(props.highlightedIndex, props.commands.length - 1));
+    return Math.max(
+        0,
+        Math.min(props.highlightedIndex, props.commands.length - 1),
+    );
 });
 
 function descriptionKey(cmd: SlashCommand): string {
@@ -37,9 +40,11 @@ function usageKey(cmd: SlashCommand): string {
 <template>
     <div
         v-if="open"
-        class="absolute bottom-full left-0 right-0 z-20 mb-2 max-h-72 overflow-auto rounded-sp-sm border border-soft bg-navy shadow-lg"
+        class="absolute right-0 bottom-full left-0 z-20 mb-2 max-h-72 overflow-auto rounded-sp-sm border border-soft bg-navy shadow-lg"
     >
-        <header class="flex items-center gap-1.5 border-b border-soft px-3 py-2 text-[10px] uppercase tracking-wider text-ink-subtle">
+        <header
+            class="flex items-center gap-1.5 border-b border-soft px-3 py-2 text-[10px] tracking-wider text-ink-subtle uppercase"
+        >
             <Sparkles class="size-3" />
             {{ $t('apps.builder.slash.menu_heading') }}
         </header>
@@ -59,7 +64,9 @@ function usageKey(cmd: SlashCommand): string {
                 @mouseenter="emit('hover', idx)"
                 :class="[
                     'cursor-pointer px-3 py-2 transition-colors',
-                    idx === safeIndex ? 'bg-accent-blue/15' : 'hover:bg-surface',
+                    idx === safeIndex
+                        ? 'bg-accent-blue/15'
+                        : 'hover:bg-surface',
                 ]"
             >
                 <div class="flex items-baseline gap-2">
@@ -68,11 +75,13 @@ function usageKey(cmd: SlashCommand): string {
                             'font-mono text-[13px]',
                             idx === safeIndex ? 'text-accent-blue' : 'text-ink',
                         ]"
-                    >/{{ cmd.name }}</code>
+                        >/{{ cmd.name }}</code
+                    >
                     <span
                         v-if="$t(usageKey(cmd))"
                         class="font-mono text-[10px] text-ink-subtle"
-                    >{{ $t(usageKey(cmd)) }}</span>
+                        >{{ $t(usageKey(cmd)) }}</span
+                    >
                 </div>
                 <p class="mt-0.5 text-[11px] leading-snug text-ink-muted">
                     {{ $t(descriptionKey(cmd)) }}

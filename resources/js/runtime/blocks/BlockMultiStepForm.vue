@@ -427,6 +427,7 @@ async function cancel() {
                         :input-id="`msf_${block.id}_${rf.slug}`"
                         v-model="formData[rf.slug]"
                         :app-slug="appSlug"
+                        :locale="locale"
                     />
                 </div>
 

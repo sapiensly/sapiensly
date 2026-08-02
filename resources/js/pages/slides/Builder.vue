@@ -632,7 +632,6 @@ async function shareDeck() {
             </a>
         </header>
 
-
         <div class="flex min-h-0 flex-1 flex-col lg:flex-row">
             <!-- Left: AI chat -->
             <aside
@@ -705,7 +704,9 @@ async function shareDeck() {
                 <div
                     class="flex h-11 shrink-0 items-center gap-1 overflow-x-auto border-b border-soft px-3"
                 >
-                    <span class="mr-2 hidden shrink-0 text-xs text-ink-subtle sm:inline">
+                    <span
+                        class="mr-2 hidden shrink-0 text-xs text-ink-subtle sm:inline"
+                    >
                         {{
                             t('slides.builder.slide_of', {
                                 n: selected + 1,

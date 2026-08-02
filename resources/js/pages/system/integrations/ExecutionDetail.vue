@@ -48,83 +48,133 @@ const { t } = useI18n();
                 </template>
             </PageHeader>
 
-                <Card class="mb-4">
-                    <CardContent class="space-y-3 pt-6">
-                        <div class="flex flex-wrap items-center gap-2">
-                            <Badge :variant="execution.success ? 'default' : 'destructive'">
-                                {{ execution.response_status ?? 'ERR' }}
-                            </Badge>
-                            <Badge variant="outline">{{ execution.method }}</Badge>
-                            <span class="text-xs text-muted-foreground">
-                                {{ execution.duration_ms }} ms
-                            </span>
-                            <span v-if="execution.response_size_bytes !== null" class="text-xs text-muted-foreground">
-                                · {{ Math.round((execution.response_size_bytes ?? 0) / 1024) }} KB
-                            </span>
-                            <span class="ml-auto text-xs text-muted-foreground">
-                                {{ execution.created_at }}
-                            </span>
-                        </div>
-                        <p class="break-all font-mono text-xs">{{ execution.url }}</p>
-                        <div
-                            v-if="execution.error_message"
-                            class="rounded-md border border-red-200 bg-red-50 p-2 text-xs text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-300"
+            <Card class="mb-4">
+                <CardContent class="space-y-3 pt-6">
+                    <div class="flex flex-wrap items-center gap-2">
+                        <Badge
+                            :variant="
+                                execution.success ? 'default' : 'destructive'
+                            "
                         >
-                            {{ execution.error_message }}
-                        </div>
-                    </CardContent>
-                </Card>
+                            {{ execution.response_status ?? 'ERR' }}
+                        </Badge>
+                        <Badge variant="outline">{{ execution.method }}</Badge>
+                        <span class="text-xs text-muted-foreground">
+                            {{ execution.duration_ms }} ms
+                        </span>
+                        <span
+                            v-if="execution.response_size_bytes !== null"
+                            class="text-xs text-muted-foreground"
+                        >
+                            ·
+                            {{
+                                Math.round(
+                                    (execution.response_size_bytes ?? 0) / 1024,
+                                )
+                            }}
+                            KB
+                        </span>
+                        <span class="ml-auto text-xs text-muted-foreground">
+                            {{ execution.created_at }}
+                        </span>
+                    </div>
+                    <p class="font-mono text-xs break-all">
+                        {{ execution.url }}
+                    </p>
+                    <div
+                        v-if="execution.error_message"
+                        class="rounded-md border border-red-200 bg-red-50 p-2 text-xs text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-300"
+                    >
+                        {{ execution.error_message }}
+                    </div>
+                </CardContent>
+            </Card>
 
-                <Tabs default-value="response">
-                    <TabsList>
-                        <TabsTrigger value="response">Response</TabsTrigger>
-                        <TabsTrigger value="request">Request</TabsTrigger>
-                        <TabsTrigger value="metadata">Metadata</TabsTrigger>
-                    </TabsList>
+            <Tabs default-value="response">
+                <TabsList>
+                    <TabsTrigger value="response">Response</TabsTrigger>
+                    <TabsTrigger value="request">Request</TabsTrigger>
+                    <TabsTrigger value="metadata">Metadata</TabsTrigger>
+                </TabsList>
 
-                    <TabsContent value="response" class="mt-3 space-y-3">
-                        <div>
-                            <h4 class="mb-2 text-xs font-semibold uppercase text-muted-foreground">
-                                Body
-                            </h4>
-                            <JsonViewer
-                                :value="execution.response_body"
-                                :content-type="(execution.response_headers?.['content-type'] as string) ?? null"
-                            />
-                        </div>
-                        <div>
-                            <h4 class="mb-2 text-xs font-semibold uppercase text-muted-foreground">
-                                Headers
-                            </h4>
-                            <pre
-                                class="max-h-[200px] overflow-auto rounded-md border bg-muted/30 p-3 font-mono text-xs leading-5"
-                            >{{ execution.response_headers ? JSON.stringify(execution.response_headers, null, 2) : '—' }}</pre>
-                        </div>
-                    </TabsContent>
-
-                    <TabsContent value="request" class="mt-3 space-y-3">
-                        <div>
-                            <h4 class="mb-2 text-xs font-semibold uppercase text-muted-foreground">
-                                Headers (redacted)
-                            </h4>
-                            <pre
-                                class="max-h-[200px] overflow-auto rounded-md border bg-muted/30 p-3 font-mono text-xs leading-5"
-                            >{{ execution.request_headers ? JSON.stringify(execution.request_headers, null, 2) : '—' }}</pre>
-                        </div>
-                        <div>
-                            <h4 class="mb-2 text-xs font-semibold uppercase text-muted-foreground">
-                                Body
-                            </h4>
-                            <JsonViewer :value="execution.request_body" />
-                        </div>
-                    </TabsContent>
-
-                    <TabsContent value="metadata" class="mt-3">
+                <TabsContent value="response" class="mt-3 space-y-3">
+                    <div>
+                        <h4
+                            class="mb-2 text-xs font-semibold text-muted-foreground uppercase"
+                        >
+                            Body
+                        </h4>
+                        <JsonViewer
+                            :value="execution.response_body"
+                            :content-type="
+                                (execution.response_headers?.[
+                                    'content-type'
+                                ] as string) ?? null
+                            "
+                        />
+                    </div>
+                    <div>
+                        <h4
+                            class="mb-2 text-xs font-semibold text-muted-foreground uppercase"
+                        >
+                            Headers
+                        </h4>
                         <pre
-                            class="max-h-[400px] overflow-auto rounded-md border bg-muted/30 p-3 font-mono text-xs leading-5"
-                        >{{ execution.metadata ? JSON.stringify(execution.metadata, null, 2) : '—' }}</pre>
-                    </TabsContent>
-                </Tabs>
+                            class="max-h-[200px] overflow-auto rounded-md border bg-muted/30 p-3 font-mono text-xs leading-5"
+                            >{{
+                                execution.response_headers
+                                    ? JSON.stringify(
+                                          execution.response_headers,
+                                          null,
+                                          2,
+                                      )
+                                    : '—'
+                            }}</pre
+                        >
+                    </div>
+                </TabsContent>
+
+                <TabsContent value="request" class="mt-3 space-y-3">
+                    <div>
+                        <h4
+                            class="mb-2 text-xs font-semibold text-muted-foreground uppercase"
+                        >
+                            Headers (redacted)
+                        </h4>
+                        <pre
+                            class="max-h-[200px] overflow-auto rounded-md border bg-muted/30 p-3 font-mono text-xs leading-5"
+                            >{{
+                                execution.request_headers
+                                    ? JSON.stringify(
+                                          execution.request_headers,
+                                          null,
+                                          2,
+                                      )
+                                    : '—'
+                            }}</pre
+                        >
+                    </div>
+                    <div>
+                        <h4
+                            class="mb-2 text-xs font-semibold text-muted-foreground uppercase"
+                        >
+                            Body
+                        </h4>
+                        <JsonViewer :value="execution.request_body" />
+                    </div>
+                </TabsContent>
+
+                <TabsContent value="metadata" class="mt-3">
+                    <pre
+                        class="max-h-[400px] overflow-auto rounded-md border bg-muted/30 p-3 font-mono text-xs leading-5"
+                        >{{
+                            execution.metadata
+                                ? JSON.stringify(execution.metadata, null, 2)
+                                : '—'
+                        }}</pre
+                    >
+                </TabsContent>
+            </Tabs>
         </div>
     </AppLayoutV2>
 </template>

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { AgentNodeConfig, AgentRole } from '@/types/botFlows';
-import { Handle, Position } from '@vue-flow/core';
 import { AlertTriangle, Bot } from '@lucide/vue';
+import { Handle, Position } from '@vue-flow/core';
 import { computed } from 'vue';
 import { useI18n } from 'vue-i18n';
 
@@ -27,10 +27,19 @@ const unassigned = computed(() => !props.data.agent_id);
         class="min-w-[200px] rounded-sp-sm border bg-navy p-3 shadow-sp-float"
         :class="unassigned ? 'border-sp-warning/60' : 'border-soft'"
     >
-        <Handle type="target" :position="Position.Top" class="!bg-accent-blue" />
+        <Handle
+            type="target"
+            :position="Position.Top"
+            class="!bg-accent-blue"
+        />
 
-        <div class="mb-2 flex items-center gap-1.5 text-xs font-medium text-ink-muted">
-            <AlertTriangle v-if="unassigned" class="h-3.5 w-3.5 text-sp-warning" />
+        <div
+            class="mb-2 flex items-center gap-1.5 text-xs font-medium text-ink-muted"
+        >
+            <AlertTriangle
+                v-if="unassigned"
+                class="h-3.5 w-3.5 text-sp-warning"
+            />
             <Bot v-else class="h-3.5 w-3.5" />
             {{ t('botFlows.nodes.agent') }}
         </div>
@@ -52,6 +61,10 @@ const unassigned = computed(() => !props.data.agent_id);
             </span>
         </div>
 
-        <Handle type="source" :position="Position.Bottom" class="!bg-accent-blue" />
+        <Handle
+            type="source"
+            :position="Position.Bottom"
+            class="!bg-accent-blue"
+        />
     </div>
 </template>

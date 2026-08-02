@@ -1147,14 +1147,9 @@ class BlockDataResolver
                 continue;
             }
 
-            $display = null;
-            foreach ($target['fields'] ?? [] as $candidate) {
-                if (($candidate['id'] ?? null) === ($target['primary_display_field_id'] ?? null)) {
-                    $display = $candidate['slug'] ?? null;
-                    break;
-                }
-            }
-            $display ??= $this->firstTextSlug($target);
+            // Shared with the relation picker: choosing a vehicle by its plate
+            // and then seeing its id in the column would read as two records.
+            $display = RecordLabel::displaySlug($target);
 
             if ($display !== null) {
                 $plan[$field['id']] = ['slug' => $field['slug'], 'display' => $display];
@@ -1162,23 +1157,6 @@ class BlockDataResolver
         }
 
         return $plan;
-    }
-
-    /**
-     * The slug of the first field that reads as a name, or null when the object
-     * has nothing text-like to label a row with.
-     *
-     * @param  array<string, mixed>  $object
-     */
-    private function firstTextSlug(array $object): ?string
-    {
-        foreach ($object['fields'] ?? [] as $field) {
-            if (in_array($field['type'] ?? null, ['string', 'long_text', 'rich_text'], true)) {
-                return $field['slug'] ?? null;
-            }
-        }
-
-        return null;
     }
 
     /**

@@ -71,10 +71,7 @@ function close() {
                         placeholder="name@example.com"
                         autocomplete="off"
                     />
-                    <p
-                        v-if="form.errors.email"
-                        class="text-xs text-sp-danger"
-                    >
+                    <p v-if="form.errors.email" class="text-xs text-sp-danger">
                         {{ form.errors.email }}
                     </p>
                 </div>
@@ -96,7 +93,9 @@ function close() {
                     }}</Label>
                     <Select v-model="form.role">
                         <SelectTrigger id="invite-role" class="w-full">
-                            <SelectValue :placeholder="t('admin.users.role.member')" />
+                            <SelectValue
+                                :placeholder="t('admin.users.role.member')"
+                            />
                         </SelectTrigger>
                         <SelectContent>
                             <SelectItem value="member">{{
@@ -110,10 +109,7 @@ function close() {
                             }}</SelectItem>
                         </SelectContent>
                     </Select>
-                    <p
-                        v-if="form.errors.role"
-                        class="text-xs text-sp-danger"
-                    >
+                    <p v-if="form.errors.role" class="text-xs text-sp-danger">
                         {{ form.errors.role }}
                     </p>
                 </div>

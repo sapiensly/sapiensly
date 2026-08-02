@@ -6,10 +6,8 @@
  * shows a stale one and there is nothing to regenerate. Opened from the
  * builder's header, and readable by anyone who can see the app.
  */
-import DocBody, {
-    type DocSection,
-} from '@/components/apps/DocBody.vue';
 import PageHeader from '@/components/app-v2/PageHeader.vue';
+import DocBody, { type DocSection } from '@/components/apps/DocBody.vue';
 import AppLayoutV2 from '@/layouts/AppLayoutV2.vue';
 import { Head, Link } from '@inertiajs/vue3';
 import { ArrowLeft, BookOpen, Download, Wrench } from '@lucide/vue';
@@ -129,7 +127,9 @@ const tabs = [
                 <article class="min-w-0 flex-1">
                     <DocBody :sections="doc.sections" />
 
-                    <p class="mt-10 border-t border-soft pt-4 text-xs text-ink-subtle">
+                    <p
+                        class="mt-10 border-t border-soft pt-4 text-xs text-ink-subtle"
+                    >
                         {{
                             t('apps.docs.generated', {
                                 version: app.version ?? '—',

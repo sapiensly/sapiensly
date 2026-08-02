@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import type { HealthCheck } from '@/lib/admin/types';
 import {
     Activity,
     Cpu,
@@ -10,6 +9,7 @@ import {
     Sparkles,
     Zap,
 } from '@/lib/admin/icons';
+import type { HealthCheck } from '@/lib/admin/types';
 import { BatteryCharging, Wifi } from '@lucide/vue';
 import type { Component } from 'vue';
 import { computed } from 'vue';

@@ -146,7 +146,8 @@ const formatFileSize = (bytes: number) => {
 // Pick an icon + tint for the selected file so HTML artifacts read as
 // different from plain docs at a glance.
 const fileKind = computed(() => {
-    if (!selectedFile.value) return { icon: FileIcon, tint: 'var(--sp-text-secondary)' };
+    if (!selectedFile.value)
+        return { icon: FileIcon, tint: 'var(--sp-text-secondary)' };
     const ext = selectedFile.value.name.split('.').pop()?.toLowerCase() ?? '';
     if (ext === 'html' || ext === 'htm') {
         return { icon: Code2, tint: 'var(--sp-accent-cyan)' };
@@ -237,10 +238,15 @@ const handleClose = () => {
                                         color: fileKind.tint,
                                     }"
                                 >
-                                    <component :is="fileKind.icon" class="size-4" />
+                                    <component
+                                        :is="fileKind.icon"
+                                        class="size-4"
+                                    />
                                 </div>
                                 <div class="min-w-0 flex-1 text-left">
-                                    <p class="truncate text-sm font-medium text-ink">
+                                    <p
+                                        class="truncate text-sm font-medium text-ink"
+                                    >
                                         {{ selectedFile.name }}
                                     </p>
                                     <p class="text-xs text-ink-subtle">
@@ -305,7 +311,9 @@ const handleClose = () => {
                     </Label>
                     <Select v-model="form.folder_id">
                         <SelectTrigger class="h-9">
-                            <SelectValue :placeholder="t('documents.upload.folder_none')" />
+                            <SelectValue
+                                :placeholder="t('documents.upload.folder_none')"
+                            />
                         </SelectTrigger>
                         <SelectContent>
                             <SelectItem :value="null">
@@ -324,11 +332,15 @@ const handleClose = () => {
                                             paddingLeft: `${folder.depth * 12}px`,
                                         }"
                                     >
-                                        <FolderIcon class="mr-1 inline size-4" />
+                                        <FolderIcon
+                                            class="mr-1 inline size-4"
+                                        />
                                         {{ folder.name }}
                                     </span>
                                     <Users
-                                        v-if="folder.visibility === 'organization'"
+                                        v-if="
+                                            folder.visibility === 'organization'
+                                        "
                                         class="size-3 text-ink-subtle"
                                     />
                                 </div>
@@ -345,7 +357,10 @@ const handleClose = () => {
                     <Label for="visibility">
                         {{ t('documents.upload.visibility_label') }}
                     </Label>
-                    <Select v-model="form.visibility" :disabled="!canShareWithOrg">
+                    <Select
+                        v-model="form.visibility"
+                        :disabled="!canShareWithOrg"
+                    >
                         <SelectTrigger class="h-9">
                             <SelectValue />
                         </SelectTrigger>
@@ -396,7 +411,10 @@ const handleClose = () => {
                         :disabled="!form.file || form.processing"
                         class="inline-flex items-center gap-1.5 rounded-pill bg-accent-blue px-3.5 py-1.5 text-xs font-medium text-white shadow-btn-primary transition-colors hover:bg-accent-blue-hover disabled:opacity-50"
                     >
-                        <Loader2 v-if="form.processing" class="size-3.5 animate-spin" />
+                        <Loader2
+                            v-if="form.processing"
+                            class="size-3.5 animate-spin"
+                        />
                         <Upload v-else class="size-3.5" />
                         {{
                             form.processing

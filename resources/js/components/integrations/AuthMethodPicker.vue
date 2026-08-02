@@ -62,7 +62,10 @@ function purposeFor(value: string): string {
                         : 'bg-white/[0.04] text-ink-muted'
                 "
             >
-                <component :is="iconFor[option.value] ?? KeyRound" class="size-4" />
+                <component
+                    :is="iconFor[option.value] ?? KeyRound"
+                    class="size-4"
+                />
             </div>
             <div class="min-w-0">
                 <p class="text-sm font-medium text-ink">{{ option.label }}</p>

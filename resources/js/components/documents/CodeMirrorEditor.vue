@@ -91,7 +91,8 @@ onBeforeUnmount(() => {
     min-height: 320px;
 }
 .cm-editor-host :deep(.cm-scroller) {
-    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-family:
+        ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 }
 .cm-editor-host :deep(.cm-editor.cm-focused) {
     outline: none;

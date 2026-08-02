@@ -65,7 +65,11 @@ function onKeydown(e: KeyboardEvent) {
     if (e.key === 'Enter' || e.key === ',') {
         e.preventDefault();
         add();
-    } else if (e.key === 'Backspace' && input.value === '' && props.modelValue.length) {
+    } else if (
+        e.key === 'Backspace' &&
+        input.value === '' &&
+        props.modelValue.length
+    ) {
         emit('update:modelValue', props.modelValue.slice(0, -1));
     }
 }

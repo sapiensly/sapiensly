@@ -14,7 +14,8 @@ export function manifestFontHrefs(fonts: unknown): string[] {
     if (!Array.isArray(fonts)) return [];
     return fonts
         .filter(
-            (f): f is string => typeof f === 'string' && FONT_SPEC.test(f.trim()),
+            (f): f is string =>
+                typeof f === 'string' && FONT_SPEC.test(f.trim()),
         )
         .slice(0, MAX_FAMILIES)
         .map((spec) => {

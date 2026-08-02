@@ -41,10 +41,10 @@ export {
     Shield as NavAccess,
     Brain as NavAi,
     Cloud as NavCloud,
+    Blocks as NavComponents,
     // navigation
     LayoutDashboard as NavDashboard,
     KeyRound as NavMcp,
-    Blocks as NavComponents,
     Layers as NavStack,
     Users as NavUsers,
     Pencil,

@@ -11,7 +11,10 @@ const props = defineProps<{ block: BlockHeading }>();
 
 const t = themeTokens(useRuntimeTheme());
 
-const tag = computed(() => `h${props.block.level ?? 2}` as 'h1' | 'h2' | 'h3' | 'h4' | 'h5' | 'h6');
+const tag = computed(
+    () =>
+        `h${props.block.level ?? 2}` as 'h1' | 'h2' | 'h3' | 'h4' | 'h5' | 'h6',
+);
 
 // Website-appropriate type scale (responsive). `size` overrides the
 // level-based default when the author wants a bigger/smaller heading.
@@ -34,7 +37,11 @@ const BY_SIZE: Record<string, string> = {
 
 const sizeClass = computed(() => {
     const size = (props.block as { size?: string }).size;
-    return (size && BY_SIZE[size]) || BY_LEVEL[props.block.level ?? 2] || BY_LEVEL[2];
+    return (
+        (size && BY_SIZE[size]) ||
+        BY_LEVEL[props.block.level ?? 2] ||
+        BY_LEVEL[2]
+    );
 });
 </script>
 

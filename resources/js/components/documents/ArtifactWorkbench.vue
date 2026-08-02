@@ -2,7 +2,6 @@
 import ArtifactVisualEditor from '@/components/documents/ArtifactVisualEditor.vue';
 import HtmlCodeEditor from '@/components/documents/HtmlCodeEditor.vue';
 import KeywordsInput from '@/components/KeywordsInput.vue';
-import echo from '@/echo';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
@@ -12,9 +11,9 @@ import {
     SelectTrigger,
     SelectValue,
 } from '@/components/ui/select';
+import echo from '@/echo';
 import type { VisibilityOption } from '@/types/document';
 import { router, useForm } from '@inertiajs/vue3';
-import axios from 'axios';
 import {
     Bot,
     Code,
@@ -25,7 +24,8 @@ import {
     Sparkles,
     User,
 } from '@lucide/vue';
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import axios from 'axios';
+import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 
 interface ChatTurn {
@@ -182,14 +182,17 @@ function subscribeToInitialStream(streamId: string) {
 
     const channel = echo.private(channelName);
 
-    channel.listen('.DocumentStreamChunk', async (payload: { content: string }) => {
-        if (typeof payload?.content !== 'string') return;
-        body.value += payload.content;
-        await nextTick();
-        if (streamScroll.value) {
-            streamScroll.value.scrollTop = streamScroll.value.scrollHeight;
-        }
-    });
+    channel.listen(
+        '.DocumentStreamChunk',
+        async (payload: { content: string }) => {
+            if (typeof payload?.content !== 'string') return;
+            body.value += payload.content;
+            await nextTick();
+            if (streamScroll.value) {
+                streamScroll.value.scrollTop = streamScroll.value.scrollHeight;
+            }
+        },
+    );
 
     channel.listen('.DocumentStreamComplete', () => {
         // `body` was accumulated from DocumentStreamChunk deltas; the
@@ -230,7 +233,10 @@ onMounted(() => {
 
 const streamElapsedSeconds = computed(() => {
     if (!streamStartedAt.value) return 0;
-    return Math.max(0, Math.floor((streamNow.value - streamStartedAt.value) / 1000));
+    return Math.max(
+        0,
+        Math.floor((streamNow.value - streamStartedAt.value) / 1000),
+    );
 });
 
 async function sendMessage() {
@@ -427,7 +433,8 @@ const availableVisibilityOptions = computed(() =>
 );
 
 const canSave = computed(
-    () => name.value.trim().length > 0 && body.value.length > 0 && !saving.value,
+    () =>
+        name.value.trim().length > 0 && body.value.length > 0 && !saving.value,
 );
 </script>
 
@@ -438,7 +445,9 @@ const canSave = computed(
         class="flex h-full min-h-0 flex-col overflow-hidden rounded-sp-sm border border-soft bg-navy"
     >
         <header class="flex items-center gap-3 border-b border-soft px-5 py-3">
-            <LoaderCircle class="size-4 shrink-0 animate-spin text-accent-blue" />
+            <LoaderCircle
+                class="size-4 shrink-0 animate-spin text-accent-blue"
+            />
             <div class="min-w-0 leading-tight">
                 <p class="text-sm font-medium text-ink">
                     {{ t('documents.workbench.streaming.title') }}
@@ -447,19 +456,17 @@ const canSave = computed(
                     {{ t('documents.workbench.streaming.subtitle') }}
                 </p>
             </div>
-            <div class="ml-auto flex items-center gap-3 font-mono text-[11px] text-ink-subtle">
+            <div
+                class="ml-auto flex items-center gap-3 font-mono text-[11px] text-ink-subtle"
+            >
                 <span>{{ body.length.toLocaleString() }} chars</span>
                 <span class="text-ink-faint">·</span>
                 <span>{{ streamElapsedSeconds }}s</span>
             </div>
         </header>
-        <div
-            ref="streamScroll"
-            class="flex-1 overflow-auto bg-navy-deep p-5"
-        >
+        <div ref="streamScroll" class="flex-1 overflow-auto bg-navy-deep p-5">
             <pre
-                class="font-mono text-[12px] leading-relaxed text-ink whitespace-pre-wrap break-all"
-                >{{ body || t('documents.workbench.streaming.waiting') }}<span
+                class="font-mono text-[12px] leading-relaxed break-all whitespace-pre-wrap text-ink">{{ body || t('documents.workbench.streaming.waiting') }}<span
                     v-if="body"
                     class="ml-0.5 inline-block h-3 w-1.5 animate-pulse bg-accent-blue align-middle"
                 /></pre>
@@ -489,7 +496,7 @@ const canSave = computed(
     <div v-else class="flex h-full min-h-0 flex-col gap-4">
         <!-- Top bar: name + save / discard / options -->
         <header class="flex flex-wrap items-center gap-3">
-            <div class="flex-1 min-w-[240px] space-y-1">
+            <div class="min-w-[240px] flex-1 space-y-1">
                 <Label for="artifact-name" class="sr-only">
                     {{ t('documents.create.name') }}
                 </Label>
@@ -523,24 +530,24 @@ const canSave = computed(
                     class="inline-flex items-center gap-1.5 rounded-pill bg-accent-blue px-3.5 py-1.5 text-xs font-medium text-white shadow-btn-primary transition-colors hover:bg-accent-blue-hover disabled:cursor-not-allowed disabled:opacity-60"
                     @click="save"
                 >
-                    <LoaderCircle
-                        v-if="saving"
-                        class="size-3.5 animate-spin"
-                    />
+                    <LoaderCircle v-if="saving" class="size-3.5 animate-spin" />
                     {{ t('documents.workbench.save') }}
                 </button>
 
                 <!-- Options popover -->
                 <div
                     v-if="optionsOpen"
-                    class="absolute right-0 top-full z-20 mt-2 w-80 space-y-3 rounded-sp-sm border border-soft bg-navy p-4 shadow-sp-float"
+                    class="absolute top-full right-0 z-20 mt-2 w-80 space-y-3 rounded-sp-sm border border-soft bg-navy p-4 shadow-sp-float"
                 >
                     <div class="space-y-1.5">
                         <Label for="artifact-visibility">
                             {{ t('documents.create.visibility') }}
                         </Label>
                         <Select v-model="visibility">
-                            <SelectTrigger id="artifact-visibility" class="w-full">
+                            <SelectTrigger
+                                id="artifact-visibility"
+                                class="w-full"
+                            >
                                 <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
@@ -567,7 +574,9 @@ const canSave = computed(
         <p v-if="saveError" class="text-xs text-sp-danger">{{ saveError }}</p>
 
         <!-- Mode tabs -->
-        <div class="inline-flex rounded-pill border border-soft bg-surface p-0.5 text-[11px] font-medium self-start">
+        <div
+            class="inline-flex self-start rounded-pill border border-soft bg-surface p-0.5 text-[11px] font-medium"
+        >
             <button
                 type="button"
                 :class="[
@@ -610,10 +619,14 @@ const canSave = computed(
         </div>
 
         <!-- Body region — fills remaining vertical space -->
-        <div class="flex min-h-0 flex-1 overflow-hidden rounded-sp-sm border border-soft bg-navy">
+        <div
+            class="flex min-h-0 flex-1 overflow-hidden rounded-sp-sm border border-soft bg-navy"
+        >
             <!-- AI mode: chat column + iframe preview -->
             <template v-if="mode === 'ai'">
-                <aside class="flex w-[360px] shrink-0 flex-col border-r border-soft">
+                <aside
+                    class="flex w-[360px] shrink-0 flex-col border-r border-soft"
+                >
                     <div
                         ref="chatScroll"
                         class="flex-1 space-y-3 overflow-y-auto p-4"
@@ -622,7 +635,9 @@ const canSave = computed(
                             v-for="(msg, idx) in messages"
                             :key="idx"
                             class="flex gap-2.5"
-                            :class="msg.role === 'user' ? 'flex-row-reverse' : ''"
+                            :class="
+                                msg.role === 'user' ? 'flex-row-reverse' : ''
+                            "
                         >
                             <div
                                 class="flex size-7 shrink-0 items-center justify-center rounded-pill"
@@ -632,7 +647,10 @@ const canSave = computed(
                                         : 'bg-surface text-ink-muted'
                                 "
                             >
-                                <User v-if="msg.role === 'user'" class="size-3.5" />
+                                <User
+                                    v-if="msg.role === 'user'"
+                                    class="size-3.5"
+                                />
                                 <Bot v-else class="size-3.5" />
                             </div>
                             <div
@@ -675,7 +693,11 @@ const canSave = computed(
                         >
                             <SelectTrigger class="h-8 w-full text-[11px]">
                                 <SelectValue
-                                    :placeholder="t('documents.create.ai.model_placeholder')"
+                                    :placeholder="
+                                        t(
+                                            'documents.create.ai.model_placeholder',
+                                        )
+                                    "
                                 />
                             </SelectTrigger>
                             <SelectContent>
@@ -685,7 +707,9 @@ const canSave = computed(
                                     :value="m.value"
                                 >
                                     {{ m.label }}
-                                    <span class="ml-1 text-[10px] text-ink-subtle">
+                                    <span
+                                        class="ml-1 text-[10px] text-ink-subtle"
+                                    >
                                         · {{ m.provider }}
                                     </span>
                                 </SelectItem>
@@ -694,7 +718,11 @@ const canSave = computed(
                         <div class="flex items-end gap-2">
                             <textarea
                                 v-model="chatInput"
-                                :placeholder="t('documents.workbench.ai.composer_placeholder')"
+                                :placeholder="
+                                    t(
+                                        'documents.workbench.ai.composer_placeholder',
+                                    )
+                                "
                                 rows="2"
                                 class="flex-1 resize-none rounded-xs border border-medium bg-surface p-2 text-[13px] text-ink placeholder:text-ink-subtle focus-visible:border-accent-blue focus-visible:ring-3 focus-visible:ring-accent-blue/25 focus-visible:outline-none"
                                 :disabled="chatPending"
@@ -737,4 +765,3 @@ const canSave = computed(
         </div>
     </div>
 </template>
-

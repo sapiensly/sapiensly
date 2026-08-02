@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import * as ImpersonateController from '@/actions/App/Http/Controllers/Admin/ImpersonateController';
 import {
     AlertDialog,
     AlertDialogAction,
@@ -17,19 +18,10 @@ import {
     SheetHeader,
     SheetTitle,
 } from '@/components/ui/sheet';
-import {
-    Ban,
-    Check,
-    Key,
-    Mail,
-    Plug,
-    Shield,
-    Trash2,
-} from '@/lib/admin/icons';
-import * as ImpersonateController from '@/actions/App/Http/Controllers/Admin/ImpersonateController';
-import { AlertCircle } from '@lucide/vue';
+import { Ban, Check, Key, Mail, Plug, Shield, Trash2 } from '@/lib/admin/icons';
 import type { AdminUser } from '@/lib/admin/types';
 import { router, useForm } from '@inertiajs/vue3';
+import { AlertCircle } from '@lucide/vue';
 import type { Component } from 'vue';
 import { computed, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
@@ -184,7 +176,9 @@ const statusStyles: Record<AdminUser['status'], StatusStyle> = {
                             {{ initials(user.name) }}
                         </span>
                         <div class="min-w-0 flex-1">
-                            <SheetTitle class="truncate text-base font-semibold text-ink">
+                            <SheetTitle
+                                class="truncate text-base font-semibold text-ink"
+                            >
                                 {{ user.name }}
                             </SheetTitle>
                             <p class="truncate text-xs text-ink-muted">
@@ -281,7 +275,10 @@ const statusStyles: Record<AdminUser['status'], StatusStyle> = {
                         </h3>
 
                         <button
-                            v-if="user.status === 'unverified' || !user.emailVerifiedAt"
+                            v-if="
+                                user.status === 'unverified' ||
+                                !user.emailVerifiedAt
+                            "
                             type="button"
                             class="flex w-full items-center gap-2.5 rounded-xs border border-soft bg-white/[0.02] px-3 py-2.5 text-left text-sm text-ink transition-colors hover:bg-white/[0.04]"
                             @click="resendVerification"

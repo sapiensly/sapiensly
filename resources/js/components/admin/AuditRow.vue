@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import type { AuditEntry } from '@/lib/admin/types';
 import {
     Activity,
     Ban,
@@ -8,8 +7,9 @@ import {
     RefreshCw as Refresh,
     SlidersHorizontal as Sliders,
 } from '@/lib/admin/icons';
-import { User } from '@lucide/vue';
+import type { AuditEntry } from '@/lib/admin/types';
 import { Link } from '@inertiajs/vue3';
+import { User } from '@lucide/vue';
 import type { Component } from 'vue';
 import { computed } from 'vue';
 

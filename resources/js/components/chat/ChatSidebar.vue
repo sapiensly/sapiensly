@@ -8,7 +8,11 @@ import {
     DialogHeader,
     DialogTitle,
 } from '@/components/ui/dialog';
-import type { ChatListItem, ChatProjectDto, KnowledgeBaseOption } from '@/types/chatModule';
+import type {
+    ChatListItem,
+    ChatProjectDto,
+    KnowledgeBaseOption,
+} from '@/types/chatModule';
 import { router } from '@inertiajs/vue3';
 import {
     Check,
@@ -48,7 +52,11 @@ const visibleChats = computed(() =>
 // Group by recency buckets for the Claude-style history list.
 const groups = computed(() => {
     const now = new Date();
-    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+    const startOfToday = new Date(
+        now.getFullYear(),
+        now.getMonth(),
+        now.getDate(),
+    ).getTime();
     const dayMs = 86400000;
     const buckets: Record<string, ChatListItem[]> = {
         today: [],
@@ -57,7 +65,9 @@ const groups = computed(() => {
         older: [],
     };
     for (const c of visibleChats.value) {
-        const ts = c.last_message_at ? new Date(c.last_message_at).getTime() : 0;
+        const ts = c.last_message_at
+            ? new Date(c.last_message_at).getTime()
+            : 0;
         if (ts >= startOfToday) buckets.today.push(c);
         else if (ts >= startOfToday - dayMs) buckets.yesterday.push(c);
         else if (ts >= startOfToday - 7 * dayMs) buckets.previous7.push(c);
@@ -65,8 +75,16 @@ const groups = computed(() => {
     }
     return [
         { key: 'today', label: t('chat.history.today'), items: buckets.today },
-        { key: 'yesterday', label: t('chat.history.yesterday'), items: buckets.yesterday },
-        { key: 'previous7', label: t('chat.history.previous_7_days'), items: buckets.previous7 },
+        {
+            key: 'yesterday',
+            label: t('chat.history.yesterday'),
+            items: buckets.yesterday,
+        },
+        {
+            key: 'previous7',
+            label: t('chat.history.previous_7_days'),
+            items: buckets.previous7,
+        },
         { key: 'older', label: t('chat.history.older'), items: buckets.older },
     ].filter((g) => g.items.length > 0);
 });
@@ -77,7 +95,11 @@ function newChat() {
 
 function openChat(id: string) {
     if (id === props.activeId) return;
-    router.get(`/chat/${id}`, {}, { only: ['activeChat'], preserveState: true, preserveScroll: true });
+    router.get(
+        `/chat/${id}`,
+        {},
+        { only: ['activeChat'], preserveState: true, preserveScroll: true },
+    );
 }
 
 function startRename(c: ChatListItem) {
@@ -89,7 +111,15 @@ function commitRename(c: ChatListItem) {
     const title = editingTitle.value.trim();
     editingId.value = null;
     if (title === '' || title === (c.title ?? '')) return;
-    router.patch(`/chat/${c.id}`, { title }, { only: ['chats', 'activeChat'], preserveScroll: true, preserveState: true });
+    router.patch(
+        `/chat/${c.id}`,
+        { title },
+        {
+            only: ['chats', 'activeChat'],
+            preserveScroll: true,
+            preserveState: true,
+        },
+    );
 }
 
 function deleteChat(c: ChatListItem) {
@@ -151,12 +181,18 @@ function saveProject() {
 function deleteProject(p: ChatProjectDto) {
     if (!window.confirm(t('chat.delete_project_confirm'))) return;
     if (projectFilter.value === p.id) projectFilter.value = null;
-    router.delete(`/chat-projects/${p.id}`, { only: ['projects', 'chats'], preserveScroll: true, preserveState: true });
+    router.delete(`/chat-projects/${p.id}`, {
+        only: ['projects', 'chats'],
+        preserveScroll: true,
+        preserveState: true,
+    });
 }
 </script>
 
 <template>
-    <aside class="flex h-full w-72 shrink-0 flex-col border-r border-soft bg-navy">
+    <aside
+        class="flex h-full w-72 shrink-0 flex-col border-r border-soft bg-navy"
+    >
         <div class="p-3">
             <button
                 type="button"
@@ -173,42 +209,60 @@ function deleteProject(p: ChatProjectDto) {
             <div class="mb-2">
                 <button
                     type="button"
-                    class="flex w-full items-center justify-between rounded-lg px-2 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-ink-subtle hover:text-ink-muted"
+                    class="flex w-full items-center justify-between rounded-lg px-2 py-1.5 text-[11px] font-semibold tracking-wider text-ink-subtle uppercase hover:text-ink-muted"
                     @click="projectsOpen = !projectsOpen"
                 >
                     <span>{{ t('chat.projects') }}</span>
-                    <ChevronDown :class="['size-3.5 transition-transform', projectsOpen ? '' : '-rotate-90']" />
+                    <ChevronDown
+                        :class="[
+                            'size-3.5 transition-transform',
+                            projectsOpen ? '' : '-rotate-90',
+                        ]"
+                    />
                 </button>
                 <div v-if="projectsOpen" class="mt-0.5 space-y-0.5">
                     <div
                         v-for="p in projects"
                         :key="p.id"
                         :class="[
-                            'group flex items-center gap-1 rounded-lg pl-2 pr-1 transition-colors',
-                            projectFilter === p.id ? 'bg-accent-blue/10' : 'hover:bg-white/5',
+                            'group flex items-center gap-1 rounded-lg pr-1 pl-2 transition-colors',
+                            projectFilter === p.id
+                                ? 'bg-accent-blue/10'
+                                : 'hover:bg-white/5',
                         ]"
                     >
                         <button
                             type="button"
                             :class="[
                                 'flex min-w-0 flex-1 items-center gap-2 py-1.5 text-left text-sm transition-colors',
-                                projectFilter === p.id ? 'text-ink' : 'text-ink-muted group-hover:text-ink',
+                                projectFilter === p.id
+                                    ? 'text-ink'
+                                    : 'text-ink-muted group-hover:text-ink',
                             ]"
-                            @click="projectFilter = projectFilter === p.id ? null : p.id"
+                            @click="
+                                projectFilter =
+                                    projectFilter === p.id ? null : p.id
+                            "
                         >
                             <FolderClosed class="size-3.5 shrink-0" />
                             <span class="truncate">{{ p.name }}</span>
                             <span
                                 v-if="p.knowledge_base_ids.length"
-                                :title="t('chat.kb_attached', { count: p.knowledge_base_ids.length })"
+                                :title="
+                                    t('chat.kb_attached', {
+                                        count: p.knowledge_base_ids.length,
+                                    })
+                                "
                                 class="inline-flex items-center gap-0.5 text-[10px] text-ink-subtle"
                             >
-                                <Database class="size-3" />{{ p.knowledge_base_ids.length }}
+                                <Database class="size-3" />{{
+                                    p.knowledge_base_ids.length
+                                }}
                             </span>
                         </button>
                         <button
                             type="button"
-                            class="shrink-0 rounded p-1 text-ink-subtle opacity-0 transition-opacity hover:text-ink group-hover:opacity-100"
+                            class="shrink-0 rounded p-1 text-ink-subtle opacity-0 transition-opacity group-hover:opacity-100 hover:text-ink"
                             :title="t('chat.edit_project')"
                             @click.stop="openEditProject(p)"
                         >
@@ -216,7 +270,7 @@ function deleteProject(p: ChatProjectDto) {
                         </button>
                         <button
                             type="button"
-                            class="shrink-0 rounded p-1 text-ink-subtle opacity-0 transition-opacity hover:text-sp-danger group-hover:opacity-100"
+                            class="shrink-0 rounded p-1 text-ink-subtle opacity-0 transition-opacity group-hover:opacity-100 hover:text-sp-danger"
                             :title="t('chat.delete')"
                             @click.stop="deleteProject(p)"
                         >
@@ -236,7 +290,9 @@ function deleteProject(p: ChatProjectDto) {
 
             <!-- History -->
             <div v-for="g in groups" :key="g.key" class="mb-3">
-                <p class="px-2 py-1 text-[11px] font-semibold uppercase tracking-wider text-ink-subtle">
+                <p
+                    class="px-2 py-1 text-[11px] font-semibold tracking-wider text-ink-subtle uppercase"
+                >
                     {{ g.label }}
                 </p>
                 <div class="space-y-0.5">
@@ -244,8 +300,10 @@ function deleteProject(p: ChatProjectDto) {
                         v-for="c in g.items"
                         :key="c.id"
                         :class="[
-                            'group flex items-center gap-1 rounded-lg pl-2 pr-1 transition-colors',
-                            c.id === activeId ? 'bg-accent-blue/10' : 'hover:bg-white/5',
+                            'group flex items-center gap-1 rounded-lg pr-1 pl-2 transition-colors',
+                            c.id === activeId
+                                ? 'bg-accent-blue/10'
+                                : 'hover:bg-white/5',
                         ]"
                     >
                         <template v-if="editingId === c.id">
@@ -257,7 +315,11 @@ function deleteProject(p: ChatProjectDto) {
                                 @keydown.esc="editingId = null"
                                 @blur="commitRename(c)"
                             />
-                            <button type="button" class="rounded p-1 text-ink-subtle hover:text-ink" @mousedown.prevent="commitRename(c)">
+                            <button
+                                type="button"
+                                class="rounded p-1 text-ink-subtle hover:text-ink"
+                                @mousedown.prevent="commitRename(c)"
+                            >
                                 <Check class="size-3.5" />
                             </button>
                         </template>
@@ -265,14 +327,16 @@ function deleteProject(p: ChatProjectDto) {
                             <button
                                 type="button"
                                 class="min-w-0 flex-1 truncate py-1.5 text-left text-sm text-ink-muted group-hover:text-ink"
-                                :class="{ 'font-medium text-ink': c.id === activeId }"
+                                :class="{
+                                    'font-medium text-ink': c.id === activeId,
+                                }"
                                 @click="openChat(c.id)"
                             >
                                 {{ c.title || t('chat.untitled') }}
                             </button>
                             <button
                                 type="button"
-                                class="shrink-0 rounded p-1 text-ink-subtle opacity-0 transition-opacity hover:text-ink group-hover:opacity-100"
+                                class="shrink-0 rounded p-1 text-ink-subtle opacity-0 transition-opacity group-hover:opacity-100 hover:text-ink"
                                 :title="t('chat.rename')"
                                 @click.stop="startRename(c)"
                             >
@@ -280,7 +344,7 @@ function deleteProject(p: ChatProjectDto) {
                             </button>
                             <button
                                 type="button"
-                                class="shrink-0 rounded p-1 text-ink-subtle opacity-0 transition-opacity hover:text-sp-danger group-hover:opacity-100"
+                                class="shrink-0 rounded p-1 text-ink-subtle opacity-0 transition-opacity group-hover:opacity-100 hover:text-sp-danger"
                                 :title="t('chat.delete')"
                                 @click.stop="deleteChat(c)"
                             >
@@ -291,7 +355,10 @@ function deleteProject(p: ChatProjectDto) {
                 </div>
             </div>
 
-            <p v-if="!chats.length" class="px-2 py-6 text-center text-xs text-ink-subtle">
+            <p
+                v-if="!chats.length"
+                class="px-2 py-6 text-center text-xs text-ink-subtle"
+            >
                 {{ t('chat.no_history') }}
             </p>
         </div>
@@ -301,8 +368,14 @@ function deleteProject(p: ChatProjectDto) {
         <Dialog v-model:open="projectDialog">
             <DialogContent>
                 <DialogHeader>
-                    <DialogTitle>{{ projectEditId ? t('chat.edit_project') : t('chat.new_project') }}</DialogTitle>
-                    <DialogDescription>{{ t('chat.project_dialog_hint') }}</DialogDescription>
+                    <DialogTitle>{{
+                        projectEditId
+                            ? t('chat.edit_project')
+                            : t('chat.new_project')
+                    }}</DialogTitle>
+                    <DialogDescription>{{
+                        t('chat.project_dialog_hint')
+                    }}</DialogDescription>
                 </DialogHeader>
                 <div class="space-y-3">
                     <input
@@ -312,21 +385,31 @@ function deleteProject(p: ChatProjectDto) {
                     />
                     <textarea
                         v-model="projectInstructions"
-                        :placeholder="t('chat.project_instructions_placeholder')"
+                        :placeholder="
+                            t('chat.project_instructions_placeholder')
+                        "
                         rows="3"
                         class="w-full resize-none rounded-lg border border-medium bg-surface px-3 py-2 text-sm text-ink placeholder:text-ink-subtle focus:border-strong focus:outline-none"
                     />
 
                     <!-- Knowledge bases -->
                     <div>
-                        <p class="mb-1.5 flex items-center gap-1.5 text-xs font-medium text-ink-muted">
+                        <p
+                            class="mb-1.5 flex items-center gap-1.5 text-xs font-medium text-ink-muted"
+                        >
                             <Database class="size-3.5" />
                             {{ t('chat.project_knowledge') }}
                         </p>
-                        <p v-if="!knowledgeBases.length" class="rounded-lg border border-dashed border-medium px-3 py-2.5 text-xs text-ink-subtle">
+                        <p
+                            v-if="!knowledgeBases.length"
+                            class="rounded-lg border border-dashed border-medium px-3 py-2.5 text-xs text-ink-subtle"
+                        >
                             {{ t('chat.no_knowledge_bases') }}
                         </p>
-                        <div v-else class="max-h-44 space-y-0.5 overflow-y-auto rounded-lg border border-medium p-1">
+                        <div
+                            v-else
+                            class="max-h-44 space-y-0.5 overflow-y-auto rounded-lg border border-medium p-1"
+                        >
                             <button
                                 v-for="kb in knowledgeBases"
                                 :key="kb.id"
@@ -337,16 +420,29 @@ function deleteProject(p: ChatProjectDto) {
                                 <span
                                     :class="[
                                         'flex size-4 shrink-0 items-center justify-center rounded border',
-                                        projectKbIds.includes(kb.id) ? 'border-accent-blue bg-accent-blue text-white' : 'border-medium',
+                                        projectKbIds.includes(kb.id)
+                                            ? 'border-accent-blue bg-accent-blue text-white'
+                                            : 'border-medium',
                                     ]"
                                 >
-                                    <Check v-if="projectKbIds.includes(kb.id)" class="size-3" />
+                                    <Check
+                                        v-if="projectKbIds.includes(kb.id)"
+                                        class="size-3"
+                                    />
                                 </span>
-                                <span class="min-w-0 flex-1 truncate text-ink">{{ kb.name }}</span>
-                                <span class="shrink-0 text-[10px] text-ink-subtle">{{ kb.document_count }} docs</span>
+                                <span
+                                    class="min-w-0 flex-1 truncate text-ink"
+                                    >{{ kb.name }}</span
+                                >
+                                <span
+                                    class="shrink-0 text-[10px] text-ink-subtle"
+                                    >{{ kb.document_count }} docs</span
+                                >
                             </button>
                         </div>
-                        <p class="mt-1.5 text-[11px] text-ink-subtle">{{ t('chat.project_knowledge_hint') }}</p>
+                        <p class="mt-1.5 text-[11px] text-ink-subtle">
+                            {{ t('chat.project_knowledge_hint') }}
+                        </p>
                     </div>
                 </div>
                 <DialogFooter>
@@ -365,7 +461,11 @@ function deleteProject(p: ChatProjectDto) {
                         @click="saveProject"
                     >
                         <Check class="size-3.5" />
-                        {{ projectEditId ? t('common.save') : t('chat.create_project') }}
+                        {{
+                            projectEditId
+                                ? t('common.save')
+                                : t('chat.create_project')
+                        }}
                     </button>
                 </DialogFooter>
             </DialogContent>

@@ -45,10 +45,7 @@ const activeIndex = computed<number>(() => {
     <SidebarGroup class="px-2 py-0">
         <SidebarGroupLabel>{{ label ?? t('nav.platform') }}</SidebarGroupLabel>
         <SidebarMenu>
-            <SidebarMenuItem
-                v-for="(item, index) in items"
-                :key="item.title"
-            >
+            <SidebarMenuItem v-for="(item, index) in items" :key="item.title">
                 <SidebarMenuButton
                     as-child
                     :is-active="index === activeIndex"

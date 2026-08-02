@@ -112,7 +112,7 @@ function openPalette() {
         <ImpersonationBanner />
 
         <div
-            class="sp-app-shell flex flex-1 min-h-0"
+            class="sp-app-shell flex min-h-0 flex-1"
             :class="{ 'is-impersonating': impersonating }"
             :data-bg="bg"
         >
@@ -148,7 +148,10 @@ function openPalette() {
                   topbar simply sits at the top as a regular flex item.
                 -->
                 <main
-                    :class="['flex min-h-0 flex-1 flex-col', !fullBleed && 'overflow-y-auto']"
+                    :class="[
+                        'flex min-h-0 flex-1 flex-col',
+                        !fullBleed && 'overflow-y-auto',
+                    ]"
                     @scroll.passive="onMainScroll"
                 >
                     <Topbar
@@ -160,10 +163,7 @@ function openPalette() {
                         @open-palette="openPalette"
                     />
 
-                    <div
-                        v-if="fullBleed"
-                        class="flex min-h-0 flex-1 flex-col"
-                    >
+                    <div v-if="fullBleed" class="flex min-h-0 flex-1 flex-col">
                         <slot
                             :open-palette="openPalette"
                             :toggle-sidebar="toggleSidebar"

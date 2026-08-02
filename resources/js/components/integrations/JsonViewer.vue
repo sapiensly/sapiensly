@@ -15,7 +15,11 @@ const copied = ref(false);
 const prettyBody = computed<string>(() => {
     if (!props.value) return '';
     const ct = props.contentType ?? '';
-    if (ct.includes('json') || props.value.trim().startsWith('{') || props.value.trim().startsWith('[')) {
+    if (
+        ct.includes('json') ||
+        props.value.trim().startsWith('{') ||
+        props.value.trim().startsWith('[')
+    ) {
         try {
             return JSON.stringify(JSON.parse(props.value), null, 2);
         } catch {
@@ -43,7 +47,7 @@ async function copyBody(): Promise<void> {
             type="button"
             variant="ghost"
             size="icon"
-            class="absolute right-2 top-2 z-10"
+            class="absolute top-2 right-2 z-10"
             @click="copyBody"
         >
             <Check v-if="copied" class="h-4 w-4 text-emerald-500" />
@@ -51,6 +55,7 @@ async function copyBody(): Promise<void> {
         </Button>
         <pre
             class="max-h-[400px] overflow-auto rounded-md border bg-muted/30 p-3 font-mono text-xs leading-5"
-        >{{ prettyBody || '—' }}</pre>
+            >{{ prettyBody || '—' }}</pre
+        >
     </div>
 </template>

@@ -1,7 +1,17 @@
 <script setup lang="ts">
+import {
+    Bold,
+    Heading2,
+    Heading3,
+    Italic,
+    Link as LinkIcon,
+    List,
+    ListOrdered,
+    Underline as UnderlineIcon,
+    Unlink,
+} from '@lucide/vue';
 import StarterKit from '@tiptap/starter-kit';
 import { Editor, EditorContent } from '@tiptap/vue-3';
-import { Bold, Heading2, Heading3, Italic, Link as LinkIcon, List, ListOrdered, Underline as UnderlineIcon, Unlink } from '@lucide/vue';
 import { onBeforeUnmount, ref, watch } from 'vue';
 import { themeTokens, useRuntimeTheme } from '../useRuntimeTheme';
 
@@ -55,28 +65,47 @@ const editor = new Editor({
         emit('update:modelValue', editor.getHTML());
         // Flip back next tick so an external value change (e.g. form reset)
         // is still applied.
-        Promise.resolve().then(() => { editing.value = false; });
+        Promise.resolve().then(() => {
+            editing.value = false;
+        });
     },
 });
 
-watch(() => props.modelValue, (value) => {
-    if (editing.value) return;
-    const current = editor.getHTML();
-    if (current === value) return;
-    editor.commands.setContent(value || '', { emitUpdate: false });
-});
+watch(
+    () => props.modelValue,
+    (value) => {
+        if (editing.value) return;
+        const current = editor.getHTML();
+        if (current === value) return;
+        editor.commands.setContent(value || '', { emitUpdate: false });
+    },
+);
 
 onBeforeUnmount(() => {
     editor.destroy();
 });
 
-function toggleBold() { editor.chain().focus().toggleBold().run(); }
-function toggleItalic() { editor.chain().focus().toggleItalic().run(); }
-function toggleUnderline() { editor.chain().focus().toggleUnderline().run(); }
-function toggleH2() { editor.chain().focus().toggleHeading({ level: 2 }).run(); }
-function toggleH3() { editor.chain().focus().toggleHeading({ level: 3 }).run(); }
-function toggleBullet() { editor.chain().focus().toggleBulletList().run(); }
-function toggleOrdered() { editor.chain().focus().toggleOrderedList().run(); }
+function toggleBold() {
+    editor.chain().focus().toggleBold().run();
+}
+function toggleItalic() {
+    editor.chain().focus().toggleItalic().run();
+}
+function toggleUnderline() {
+    editor.chain().focus().toggleUnderline().run();
+}
+function toggleH2() {
+    editor.chain().focus().toggleHeading({ level: 2 }).run();
+}
+function toggleH3() {
+    editor.chain().focus().toggleHeading({ level: 3 }).run();
+}
+function toggleBullet() {
+    editor.chain().focus().toggleBulletList().run();
+}
+function toggleOrdered() {
+    editor.chain().focus().toggleOrderedList().run();
+}
 
 function setLink() {
     const previousUrl = editor.getAttributes('link').href ?? '';
@@ -103,11 +132,19 @@ function isActive(name: string, attrs?: Record<string, unknown>): boolean {
 <template>
     <div :class="['rounded-md border', t.surfaceMuted]" :id="inputId">
         <!-- Toolbar -->
-        <div :class="['flex flex-wrap items-center gap-0.5 border-b border-soft px-2 py-1.5', t.text]">
+        <div
+            :class="[
+                'flex flex-wrap items-center gap-0.5 border-b border-soft px-2 py-1.5',
+                t.text,
+            ]"
+        >
             <button
                 type="button"
                 @click="toggleBold"
-                :class="['rounded p-1.5 transition-colors hover:bg-surface-hover', isActive('bold') ? 'bg-surface-hover text-accent-blue' : '']"
+                :class="[
+                    'rounded p-1.5 transition-colors hover:bg-surface-hover',
+                    isActive('bold') ? 'bg-surface-hover text-accent-blue' : '',
+                ]"
                 title="Bold (⌘B)"
             >
                 <Bold class="size-3.5" />
@@ -115,7 +152,12 @@ function isActive(name: string, attrs?: Record<string, unknown>): boolean {
             <button
                 type="button"
                 @click="toggleItalic"
-                :class="['rounded p-1.5 transition-colors hover:bg-surface-hover', isActive('italic') ? 'bg-surface-hover text-accent-blue' : '']"
+                :class="[
+                    'rounded p-1.5 transition-colors hover:bg-surface-hover',
+                    isActive('italic')
+                        ? 'bg-surface-hover text-accent-blue'
+                        : '',
+                ]"
                 title="Italic (⌘I)"
             >
                 <Italic class="size-3.5" />
@@ -123,7 +165,12 @@ function isActive(name: string, attrs?: Record<string, unknown>): boolean {
             <button
                 type="button"
                 @click="toggleUnderline"
-                :class="['rounded p-1.5 transition-colors hover:bg-surface-hover', isActive('underline') ? 'bg-surface-hover text-accent-blue' : '']"
+                :class="[
+                    'rounded p-1.5 transition-colors hover:bg-surface-hover',
+                    isActive('underline')
+                        ? 'bg-surface-hover text-accent-blue'
+                        : '',
+                ]"
                 title="Underline (⌘U)"
             >
                 <UnderlineIcon class="size-3.5" />
@@ -132,7 +179,12 @@ function isActive(name: string, attrs?: Record<string, unknown>): boolean {
             <button
                 type="button"
                 @click="toggleH2"
-                :class="['rounded p-1.5 transition-colors hover:bg-surface-hover', isActive('heading', { level: 2 }) ? 'bg-surface-hover text-accent-blue' : '']"
+                :class="[
+                    'rounded p-1.5 transition-colors hover:bg-surface-hover',
+                    isActive('heading', { level: 2 })
+                        ? 'bg-surface-hover text-accent-blue'
+                        : '',
+                ]"
                 title="Heading 2"
             >
                 <Heading2 class="size-3.5" />
@@ -140,7 +192,12 @@ function isActive(name: string, attrs?: Record<string, unknown>): boolean {
             <button
                 type="button"
                 @click="toggleH3"
-                :class="['rounded p-1.5 transition-colors hover:bg-surface-hover', isActive('heading', { level: 3 }) ? 'bg-surface-hover text-accent-blue' : '']"
+                :class="[
+                    'rounded p-1.5 transition-colors hover:bg-surface-hover',
+                    isActive('heading', { level: 3 })
+                        ? 'bg-surface-hover text-accent-blue'
+                        : '',
+                ]"
                 title="Heading 3"
             >
                 <Heading3 class="size-3.5" />
@@ -149,7 +206,12 @@ function isActive(name: string, attrs?: Record<string, unknown>): boolean {
             <button
                 type="button"
                 @click="toggleBullet"
-                :class="['rounded p-1.5 transition-colors hover:bg-surface-hover', isActive('bulletList') ? 'bg-surface-hover text-accent-blue' : '']"
+                :class="[
+                    'rounded p-1.5 transition-colors hover:bg-surface-hover',
+                    isActive('bulletList')
+                        ? 'bg-surface-hover text-accent-blue'
+                        : '',
+                ]"
                 title="Bullet list"
             >
                 <List class="size-3.5" />
@@ -157,7 +219,12 @@ function isActive(name: string, attrs?: Record<string, unknown>): boolean {
             <button
                 type="button"
                 @click="toggleOrdered"
-                :class="['rounded p-1.5 transition-colors hover:bg-surface-hover', isActive('orderedList') ? 'bg-surface-hover text-accent-blue' : '']"
+                :class="[
+                    'rounded p-1.5 transition-colors hover:bg-surface-hover',
+                    isActive('orderedList')
+                        ? 'bg-surface-hover text-accent-blue'
+                        : '',
+                ]"
                 title="Numbered list"
             >
                 <ListOrdered class="size-3.5" />
@@ -166,7 +233,10 @@ function isActive(name: string, attrs?: Record<string, unknown>): boolean {
             <button
                 type="button"
                 @click="setLink"
-                :class="['rounded p-1.5 transition-colors hover:bg-surface-hover', isActive('link') ? 'bg-surface-hover text-accent-blue' : '']"
+                :class="[
+                    'rounded p-1.5 transition-colors hover:bg-surface-hover',
+                    isActive('link') ? 'bg-surface-hover text-accent-blue' : '',
+                ]"
                 title="Add / edit link"
             >
                 <LinkIcon class="size-3.5" />

@@ -40,7 +40,14 @@ interface JsonSchema {
     required?: string[];
 }
 
-const paramTypes = ['string', 'number', 'integer', 'boolean', 'array', 'object'];
+const paramTypes = [
+    'string',
+    'number',
+    'integer',
+    'boolean',
+    'array',
+    'object',
+];
 
 function rowsFromSchema(schema: unknown): ParamRow[] {
     const s = (schema ?? {}) as JsonSchema;
@@ -66,7 +73,11 @@ function schemaFromRows(rows: ParamRow[]): JsonSchema {
         };
         if (row.required) required.push(name);
     }
-    return { type: 'object', properties, ...(required.length ? { required } : {}) };
+    return {
+        type: 'object',
+        properties,
+        ...(required.length ? { required } : {}),
+    };
 }
 
 // The builder is the source of truth while it's open; we seed it once from the
@@ -90,7 +101,8 @@ const mode = ref<'builder' | 'json'>(
 
 const functionName = computed({
     get: () => props.config.name ?? '',
-    set: (value: string) => emit('update:config', { ...props.config, name: value }),
+    set: (value: string) =>
+        emit('update:config', { ...props.config, name: value }),
 });
 
 const functionDescription = computed({
@@ -109,7 +121,12 @@ function applyRows(): void {
 watch(rows, applyRows, { deep: true });
 
 function addParam(): void {
-    rows.value.push({ name: '', type: 'string', description: '', required: false });
+    rows.value.push({
+        name: '',
+        type: 'string',
+        description: '',
+        required: false,
+    });
 }
 
 function removeParam(index: number): void {
@@ -234,12 +251,16 @@ function switchTo(next: 'builder' | 'json'): void {
                 <div v-else class="space-y-2">
                     <!-- Column headers. -->
                     <div
-                        class="grid grid-cols-[1fr_120px_1.4fr_auto_auto] items-center gap-2 px-1 text-[10px] font-semibold uppercase tracking-wider text-ink-faint"
+                        class="grid grid-cols-[1fr_120px_1.4fr_auto_auto] items-center gap-2 px-1 text-[10px] font-semibold tracking-wider text-ink-faint uppercase"
                     >
                         <span>{{ t('tools.config.function.param_name') }}</span>
                         <span>{{ t('tools.config.function.param_type') }}</span>
-                        <span>{{ t('tools.config.function.param_description') }}</span>
-                        <span>{{ t('tools.config.function.param_required') }}</span>
+                        <span>{{
+                            t('tools.config.function.param_description')
+                        }}</span>
+                        <span>{{
+                            t('tools.config.function.param_required')
+                        }}</span>
                         <span class="sr-only">{{ t('common.remove') }}</span>
                     </div>
 
@@ -250,7 +271,11 @@ function switchTo(next: 'builder' | 'json'): void {
                     >
                         <Input
                             v-model="row.name"
-                            :placeholder="t('tools.config.function.param_name_placeholder')"
+                            :placeholder="
+                                t(
+                                    'tools.config.function.param_name_placeholder',
+                                )
+                            "
                             class="h-9 font-mono text-xs"
                         />
                         <Select v-model="row.type">
@@ -269,7 +294,11 @@ function switchTo(next: 'builder' | 'json'): void {
                         </Select>
                         <Input
                             v-model="row.description"
-                            :placeholder="t('tools.config.function.param_description_placeholder')"
+                            :placeholder="
+                                t(
+                                    'tools.config.function.param_description_placeholder',
+                                )
+                            "
                             class="h-9 text-xs"
                         />
                         <label
@@ -278,7 +307,9 @@ function switchTo(next: 'builder' | 'json'): void {
                         >
                             <Checkbox
                                 :model-value="row.required"
-                                @update:model-value="row.required = $event === true"
+                                @update:model-value="
+                                    row.required = $event === true
+                                "
                             />
                         </label>
                         <button

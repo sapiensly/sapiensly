@@ -89,7 +89,9 @@ const close = () => {
                 v-if="counts"
                 class="rounded-md border border-red-200 bg-red-50 p-4 text-sm text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-300"
             >
-                <p class="mb-2 font-medium">{{ t('wipe_dialog.counts_heading') }}</p>
+                <p class="mb-2 font-medium">
+                    {{ t('wipe_dialog.counts_heading') }}
+                </p>
                 <ul class="space-y-1 text-xs">
                     <li>
                         <strong>{{ counts.knowledge_bases }}</strong>
@@ -132,7 +134,11 @@ const close = () => {
                     :disabled="!canConfirm || processing"
                     @click="onConfirm"
                 >
-                    {{ processing ? t('wipe_dialog.processing') : t('wipe_dialog.confirm') }}
+                    {{
+                        processing
+                            ? t('wipe_dialog.processing')
+                            : t('wipe_dialog.confirm')
+                    }}
                 </Button>
             </DialogFooter>
         </DialogContent>

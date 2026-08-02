@@ -154,7 +154,9 @@ const toolTypeLabel = (type: string) => {
                 <p class="text-[11px] text-ink-subtle">
                     Maximum time to wait for tool execution.
                 </p>
-                <InputError :message="errors['config.tool_execution.timeout']" />
+                <InputError
+                    :message="errors['config.tool_execution.timeout']"
+                />
             </div>
 
             <div class="space-y-1.5">
@@ -172,7 +174,9 @@ const toolTypeLabel = (type: string) => {
                 <p class="text-[11px] text-ink-subtle">
                     Number of retries on failure.
                 </p>
-                <InputError :message="errors['config.tool_execution.retry_count']" />
+                <InputError
+                    :message="errors['config.tool_execution.retry_count']"
+                />
             </div>
         </div>
     </div>

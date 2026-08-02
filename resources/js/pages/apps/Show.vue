@@ -46,11 +46,37 @@ interface VersionItem {
 }
 
 interface Overview {
-    stats: { pages: number; objects: number; records: number; workflows: number };
-    pages: Array<{ id: string; slug: string; name: string; icon: string | null; block_count: number }>;
-    objects: Array<{ id: string; slug: string; name: string; field_count: number; record_count: number }>;
-    workflows: Array<{ id: string; name: string; trigger_type: string | null; object_name: string | null }>;
-    settings: { default_locale: string | null; default_currency: string | null; default_timezone: string | null };
+    stats: {
+        pages: number;
+        objects: number;
+        records: number;
+        workflows: number;
+    };
+    pages: Array<{
+        id: string;
+        slug: string;
+        name: string;
+        icon: string | null;
+        block_count: number;
+    }>;
+    objects: Array<{
+        id: string;
+        slug: string;
+        name: string;
+        field_count: number;
+        record_count: number;
+    }>;
+    workflows: Array<{
+        id: string;
+        name: string;
+        trigger_type: string | null;
+        object_name: string | null;
+    }>;
+    settings: {
+        default_locale: string | null;
+        default_currency: string | null;
+        default_timezone: string | null;
+    };
 }
 
 interface Props {
@@ -108,23 +134,62 @@ interface VisibilityPill {
 const visibilityPill = computed<VisibilityPill>(() => {
     switch (props.app.visibility) {
         case 'organization':
-            return { icon: Building2, classes: 'border-accent-blue/30 bg-accent-blue/10 text-accent-blue', label: 'Org' };
+            return {
+                icon: Building2,
+                classes:
+                    'border-accent-blue/30 bg-accent-blue/10 text-accent-blue',
+                label: 'Org',
+            };
         case 'public':
-            return { icon: Globe, classes: 'border-emerald-400/30 bg-emerald-400/10 text-emerald-300', label: 'Public' };
+            return {
+                icon: Globe,
+                classes:
+                    'border-emerald-400/30 bg-emerald-400/10 text-emerald-300',
+                label: 'Public',
+            };
         case 'global':
-            return { icon: Globe, classes: 'border-spectrum-magenta/30 bg-spectrum-magenta/10 text-spectrum-magenta', label: 'Global' };
+            return {
+                icon: Globe,
+                classes:
+                    'border-spectrum-magenta/30 bg-spectrum-magenta/10 text-spectrum-magenta',
+                label: 'Global',
+            };
         default:
-            return { icon: Lock, classes: 'border-medium bg-surface text-ink-muted', label: 'Private' };
+            return {
+                icon: Lock,
+                classes: 'border-medium bg-surface text-ink-muted',
+                label: 'Private',
+            };
     }
 });
 
 const stats = computed(() => {
     const s = props.overview?.stats;
     return [
-        { id: 'pages', icon: LayoutDashboard, label: t('apps.show.stat_pages'), value: s?.pages ?? 0 },
-        { id: 'objects', icon: Database, label: t('apps.show.stat_objects'), value: s?.objects ?? 0 },
-        { id: 'records', icon: FileText, label: t('apps.show.stat_records'), value: s?.records ?? 0 },
-        { id: 'workflows', icon: WorkflowIcon, label: t('apps.show.stat_workflows'), value: s?.workflows ?? 0 },
+        {
+            id: 'pages',
+            icon: LayoutDashboard,
+            label: t('apps.show.stat_pages'),
+            value: s?.pages ?? 0,
+        },
+        {
+            id: 'objects',
+            icon: Database,
+            label: t('apps.show.stat_objects'),
+            value: s?.objects ?? 0,
+        },
+        {
+            id: 'records',
+            icon: FileText,
+            label: t('apps.show.stat_records'),
+            value: s?.records ?? 0,
+        },
+        {
+            id: 'workflows',
+            icon: WorkflowIcon,
+            label: t('apps.show.stat_workflows'),
+            value: s?.workflows ?? 0,
+        },
     ];
 });
 
@@ -181,16 +246,21 @@ function formatDate(value: string | null): string {
                     <div class="min-w-0 flex-1 space-y-1">
                         <template v-if="!editing">
                             <div class="flex flex-wrap items-center gap-2">
-                                <h1 class="text-[22px] font-semibold leading-tight text-ink">
+                                <h1
+                                    class="text-[22px] leading-tight font-semibold text-ink"
+                                >
                                     {{ app.name }}
                                 </h1>
                                 <span
                                     :class="[
-                                        'inline-flex items-center gap-1 rounded-pill border px-2 py-0.5 text-[10px] uppercase tracking-wider',
+                                        'inline-flex items-center gap-1 rounded-pill border px-2 py-0.5 text-[10px] tracking-wider uppercase',
                                         visibilityPill.classes,
                                     ]"
                                 >
-                                    <component :is="visibilityPill.icon" class="size-3" />
+                                    <component
+                                        :is="visibilityPill.icon"
+                                        class="size-3"
+                                    />
                                     {{ visibilityPill.label }}
                                 </span>
                                 <button
@@ -202,8 +272,13 @@ function formatDate(value: string | null): string {
                                     <Pencil class="size-3.5" />
                                 </button>
                             </div>
-                            <p class="font-mono text-[11px] text-ink-subtle">/r/{{ app.slug }}</p>
-                            <p v-if="app.description" class="text-xs text-ink-muted">
+                            <p class="font-mono text-[11px] text-ink-subtle">
+                                /r/{{ app.slug }}
+                            </p>
+                            <p
+                                v-if="app.description"
+                                class="text-xs text-ink-muted"
+                            >
                                 {{ app.description }}
                             </p>
                         </template>
@@ -220,13 +295,17 @@ function formatDate(value: string | null): string {
                             />
                             <p class="font-mono text-[11px] text-ink-subtle">
                                 /r/{{ app.slug }}
-                                <span class="ml-1 italic">· {{ t('apps.show.slug_locked') }}</span>
+                                <span class="ml-1 italic"
+                                    >· {{ t('apps.show.slug_locked') }}</span
+                                >
                             </p>
                             <textarea
                                 v-model="editDescription"
                                 rows="3"
                                 maxlength="500"
-                                :placeholder="t('apps.show.description_placeholder')"
+                                :placeholder="
+                                    t('apps.show.description_placeholder')
+                                "
                                 class="w-full max-w-xl rounded-md border border-medium bg-surface px-2.5 py-1.5 text-xs text-ink focus:border-strong focus:outline-none"
                             />
                             <div class="flex items-center gap-2 pt-1">
@@ -262,7 +341,12 @@ function formatDate(value: string | null): string {
                             {{ t('apps.show.open_builder') }}
                         </button>
                     </Link>
-                    <a v-if="overview && overview.pages.length" :href="`/r/${app.slug}`" target="_blank" rel="noopener">
+                    <a
+                        v-if="overview && overview.pages.length"
+                        :href="`/r/${app.slug}`"
+                        target="_blank"
+                        rel="noopener"
+                    >
                         <button
                             type="button"
                             class="inline-flex items-center gap-1.5 rounded-pill border border-medium bg-surface px-3.5 py-1.5 text-xs text-ink transition-colors hover:border-strong hover:bg-surface-hover"
@@ -283,9 +367,15 @@ function formatDate(value: string | null): string {
                 >
                     <div class="flex items-center gap-1.5 text-ink-muted">
                         <component :is="stat.icon" class="size-3.5" />
-                        <span class="text-[11px] uppercase tracking-wider">{{ stat.label }}</span>
+                        <span class="text-[11px] tracking-wider uppercase">{{
+                            stat.label
+                        }}</span>
                     </div>
-                    <p class="mt-1.5 text-2xl font-semibold leading-none text-ink">{{ stat.value }}</p>
+                    <p
+                        class="mt-1.5 text-2xl leading-none font-semibold text-ink"
+                    >
+                        {{ stat.value }}
+                    </p>
                 </div>
             </section>
 
@@ -296,9 +386,16 @@ function formatDate(value: string | null): string {
                 class="rounded-sp-sm border border-dashed border-soft bg-navy px-5 py-10 text-center"
             >
                 <Sparkles class="mx-auto size-7 text-accent-blue" />
-                <p class="mt-3 text-sm font-medium text-ink">{{ t('apps.show.empty_title') }}</p>
-                <p class="mx-auto mt-1 max-w-sm text-xs text-ink-muted">{{ t('apps.show.empty_hint') }}</p>
-                <Link :href="AppBuilderController.show(app.id).url" class="mt-4 inline-block">
+                <p class="mt-3 text-sm font-medium text-ink">
+                    {{ t('apps.show.empty_title') }}
+                </p>
+                <p class="mx-auto mt-1 max-w-sm text-xs text-ink-muted">
+                    {{ t('apps.show.empty_hint') }}
+                </p>
+                <Link
+                    :href="AppBuilderController.show(app.id).url"
+                    class="mt-4 inline-block"
+                >
                     <button
                         type="button"
                         class="inline-flex items-center gap-1.5 rounded-pill bg-accent-blue px-3.5 py-1.5 text-xs font-medium text-white shadow-btn-primary transition-colors hover:bg-accent-blue-hover"
@@ -311,13 +408,22 @@ function formatDate(value: string | null): string {
 
             <template v-else-if="overview">
                 <!-- Pages — the user-facing surfaces, each opens in the runtime. -->
-                <section v-if="overview.pages.length" class="rounded-sp-sm border border-soft bg-navy">
-                    <header class="flex items-center justify-between border-b border-soft px-5 py-3">
-                        <h2 class="flex items-center gap-2 text-sm font-medium text-ink">
+                <section
+                    v-if="overview.pages.length"
+                    class="rounded-sp-sm border border-soft bg-navy"
+                >
+                    <header
+                        class="flex items-center justify-between border-b border-soft px-5 py-3"
+                    >
+                        <h2
+                            class="flex items-center gap-2 text-sm font-medium text-ink"
+                        >
                             <LayoutDashboard class="size-4 text-ink-muted" />
                             {{ t('apps.show.pages_section') }}
                         </h2>
-                        <span class="text-[11px] text-ink-subtle">{{ overview.pages.length }}</span>
+                        <span class="text-[11px] text-ink-subtle">{{
+                            overview.pages.length
+                        }}</span>
                     </header>
                     <ul class="divide-y divide-soft">
                         <li
@@ -326,9 +432,15 @@ function formatDate(value: string | null): string {
                             class="flex items-center justify-between gap-3 px-5 py-3"
                         >
                             <div class="min-w-0">
-                                <p class="truncate text-sm text-ink">{{ p.name }}</p>
+                                <p class="truncate text-sm text-ink">
+                                    {{ p.name }}
+                                </p>
                                 <p class="text-[11px] text-ink-subtle">
-                                    {{ t('apps.show.block_count', { count: p.block_count }) }}
+                                    {{
+                                        t('apps.show.block_count', {
+                                            count: p.block_count,
+                                        })
+                                    }}
                                 </p>
                             </div>
                             <a
@@ -346,13 +458,22 @@ function formatDate(value: string | null): string {
 
                 <!-- Data model — objects with their live record counts. Clicking
                      jumps to the Builder where records can be browsed/edited. -->
-                <section v-if="overview.objects.length" class="rounded-sp-sm border border-soft bg-navy">
-                    <header class="flex items-center justify-between border-b border-soft px-5 py-3">
-                        <h2 class="flex items-center gap-2 text-sm font-medium text-ink">
+                <section
+                    v-if="overview.objects.length"
+                    class="rounded-sp-sm border border-soft bg-navy"
+                >
+                    <header
+                        class="flex items-center justify-between border-b border-soft px-5 py-3"
+                    >
+                        <h2
+                            class="flex items-center gap-2 text-sm font-medium text-ink"
+                        >
                             <Database class="size-4 text-ink-muted" />
                             {{ t('apps.show.data_model_section') }}
                         </h2>
-                        <span class="text-[11px] text-ink-subtle">{{ overview.objects.length }}</span>
+                        <span class="text-[11px] text-ink-subtle">{{
+                            overview.objects.length
+                        }}</span>
                     </header>
                     <ul class="divide-y divide-soft">
                         <li
@@ -361,13 +482,25 @@ function formatDate(value: string | null): string {
                             class="flex items-center justify-between gap-3 px-5 py-3"
                         >
                             <div class="min-w-0">
-                                <p class="truncate text-sm text-ink">{{ o.name }}</p>
+                                <p class="truncate text-sm text-ink">
+                                    {{ o.name }}
+                                </p>
                                 <p class="text-[11px] text-ink-subtle">
-                                    {{ t('apps.show.field_count', { count: o.field_count }) }}
+                                    {{
+                                        t('apps.show.field_count', {
+                                            count: o.field_count,
+                                        })
+                                    }}
                                 </p>
                             </div>
-                            <span class="shrink-0 text-right text-xs text-ink-muted">
-                                {{ t('apps.show.record_count', { count: o.record_count }) }}
+                            <span
+                                class="shrink-0 text-right text-xs text-ink-muted"
+                            >
+                                {{
+                                    t('apps.show.record_count', {
+                                        count: o.record_count,
+                                    })
+                                }}
                             </span>
                         </li>
                     </ul>
@@ -376,30 +509,46 @@ function formatDate(value: string | null): string {
                 <!-- Automations — always shown so the user knows automations
                      exist as a concept even before they add one. -->
                 <section class="rounded-sp-sm border border-soft bg-navy">
-                    <header class="flex items-center justify-between border-b border-soft px-5 py-3">
-                        <h2 class="flex items-center gap-2 text-sm font-medium text-ink">
+                    <header
+                        class="flex items-center justify-between border-b border-soft px-5 py-3"
+                    >
+                        <h2
+                            class="flex items-center gap-2 text-sm font-medium text-ink"
+                        >
                             <WorkflowIcon class="size-4 text-ink-muted" />
                             {{ t('apps.show.workflows_section') }}
                         </h2>
-                        <span class="text-[11px] text-ink-subtle">{{ overview.workflows.length }}</span>
+                        <span class="text-[11px] text-ink-subtle">{{
+                            overview.workflows.length
+                        }}</span>
                     </header>
-                    <ul v-if="overview.workflows.length" class="divide-y divide-soft">
+                    <ul
+                        v-if="overview.workflows.length"
+                        class="divide-y divide-soft"
+                    >
                         <li
                             v-for="w in overview.workflows"
                             :key="w.id"
                             class="flex items-center justify-between gap-3 px-5 py-3"
                         >
-                            <p class="truncate text-sm text-ink">{{ w.name }}</p>
+                            <p class="truncate text-sm text-ink">
+                                {{ w.name }}
+                            </p>
                             <span
                                 v-if="workflowTriggerLabel(w)"
-                                class="shrink-0 rounded-pill border border-medium bg-surface px-2 py-0.5 text-[10px] uppercase tracking-wider text-ink-muted"
+                                class="shrink-0 rounded-pill border border-medium bg-surface px-2 py-0.5 text-[10px] tracking-wider text-ink-muted uppercase"
                             >
                                 {{ workflowTriggerLabel(w) }}
                             </span>
                         </li>
                     </ul>
-                    <div v-else class="flex flex-col items-center gap-2 px-5 py-8 text-center">
-                        <p class="text-xs text-ink-muted">{{ t('apps.show.no_workflows') }}</p>
+                    <div
+                        v-else
+                        class="flex flex-col items-center gap-2 px-5 py-8 text-center"
+                    >
+                        <p class="text-xs text-ink-muted">
+                            {{ t('apps.show.no_workflows') }}
+                        </p>
                         <Link
                             :href="AppBuilderController.show(app.id).url"
                             class="inline-flex items-center gap-1 rounded-pill border border-medium bg-surface px-2.5 py-1 text-[11px] text-ink-muted transition-colors hover:border-accent-blue/40 hover:bg-accent-blue/10 hover:text-accent-blue"
@@ -420,7 +569,9 @@ function formatDate(value: string | null): string {
                     :aria-expanded="showAdvanced"
                     @click="showAdvanced = !showAdvanced"
                 >
-                    <span class="flex items-center gap-2 text-sm font-medium text-ink">
+                    <span
+                        class="flex items-center gap-2 text-sm font-medium text-ink"
+                    >
                         <History class="size-4 text-ink-muted" />
                         {{ t('apps.show.advanced_section') }}
                     </span>
@@ -430,15 +581,25 @@ function formatDate(value: string | null): string {
                     />
                 </button>
 
-                <div v-if="showAdvanced" class="space-y-6 border-t border-soft px-5 py-4">
+                <div
+                    v-if="showAdvanced"
+                    class="space-y-6 border-t border-soft px-5 py-4"
+                >
                     <div>
                         <div class="mb-2 flex items-center justify-between">
-                            <h3 class="text-xs font-medium uppercase tracking-wider text-ink-muted">
+                            <h3
+                                class="text-xs font-medium tracking-wider text-ink-muted uppercase"
+                            >
                                 {{ t('apps.show.versions_section') }}
                             </h3>
-                            <span class="text-[11px] text-ink-subtle">{{ versions.length }}</span>
+                            <span class="text-[11px] text-ink-subtle">{{
+                                versions.length
+                            }}</span>
                         </div>
-                        <ul v-if="versions.length" class="divide-y divide-soft rounded-xs border border-soft">
+                        <ul
+                            v-if="versions.length"
+                            class="divide-y divide-soft rounded-xs border border-soft"
+                        >
                             <li
                                 v-for="v in versions"
                                 :key="v.id"
@@ -446,36 +607,56 @@ function formatDate(value: string | null): string {
                             >
                                 <div class="min-w-0">
                                     <p class="text-ink">
-                                        {{ t('apps.show.version_short', { number: v.version_number }) }}
+                                        {{
+                                            t('apps.show.version_short', {
+                                                number: v.version_number,
+                                            })
+                                        }}
                                         <span
-                                            v-if="app.current_version_id === v.id"
-                                            class="ml-1.5 text-[10px] uppercase tracking-wider text-accent-blue"
+                                            v-if="
+                                                app.current_version_id === v.id
+                                            "
+                                            class="ml-1.5 text-[10px] tracking-wider text-accent-blue uppercase"
                                         >
                                             current
                                         </span>
                                     </p>
-                                    <p v-if="v.change_summary" class="truncate text-xs text-ink-muted">
+                                    <p
+                                        v-if="v.change_summary"
+                                        class="truncate text-xs text-ink-muted"
+                                    >
                                         {{ v.change_summary }}
                                     </p>
                                 </div>
-                                <div class="shrink-0 text-right text-[11px] text-ink-subtle">
-                                    <div>{{ v.created_by?.name ?? 'system' }}</div>
+                                <div
+                                    class="shrink-0 text-right text-[11px] text-ink-subtle"
+                                >
+                                    <div>
+                                        {{ v.created_by?.name ?? 'system' }}
+                                    </div>
                                     <div>{{ formatDate(v.created_at) }}</div>
                                 </div>
                             </li>
                         </ul>
-                        <p v-else class="text-xs text-ink-muted">{{ t('apps.show.no_versions') }}</p>
+                        <p v-else class="text-xs text-ink-muted">
+                            {{ t('apps.show.no_versions') }}
+                        </p>
                     </div>
 
                     <div>
-                        <h3 class="mb-2 text-xs font-medium uppercase tracking-wider text-ink-muted">
+                        <h3
+                            class="mb-2 text-xs font-medium tracking-wider text-ink-muted uppercase"
+                        >
                             {{ t('apps.show.manifest_section') }}
                         </h3>
                         <pre
                             v-if="manifest"
                             class="max-h-96 overflow-auto rounded-xs border border-soft bg-black/20 p-4 font-mono text-[11px] leading-snug text-ink"
-                        >{{ JSON.stringify(manifest, null, 2) }}</pre>
-                        <p v-else class="text-xs text-ink-muted">{{ t('apps.show.no_manifest') }}</p>
+                            >{{ JSON.stringify(manifest, null, 2) }}</pre
+                        >
+                        <p v-else class="text-xs text-ink-muted">
+                            {{ t('apps.show.no_manifest') }}
+                        </p>
                     </div>
                 </div>
             </section>

@@ -27,7 +27,8 @@ const emit = defineEmits<{
 const { t } = useI18n();
 
 const modKey = computed(() =>
-    typeof navigator !== 'undefined' && /Mac|iPhone|iPad/i.test(navigator.platform)
+    typeof navigator !== 'undefined' &&
+    /Mac|iPhone|iPad/i.test(navigator.platform)
         ? '⌘'
         : 'Ctrl',
 );

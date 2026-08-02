@@ -110,7 +110,9 @@ function rangeCaption(c: Control): string | null {
             return 'sin registros en la ventana';
         }
         const span =
-            meta.min && meta.max ? `${fmt(meta.min)} – ${fmt(meta.max)} · ` : '';
+            meta.min && meta.max
+                ? `${fmt(meta.min)} – ${fmt(meta.max)} · `
+                : '';
         const noun = meta.count === 1 ? 'registro' : 'registros';
         return `${span}${meta.count} ${noun}`;
     }

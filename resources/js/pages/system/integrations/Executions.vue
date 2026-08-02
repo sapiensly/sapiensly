@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import PageHeader from '@/components/app-v2/PageHeader.vue';
 import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import AppLayoutV2 from '@/layouts/AppLayoutV2.vue';
 import { Head, Link } from '@inertiajs/vue3';
@@ -30,7 +29,9 @@ const { t } = useI18n();
 </script>
 
 <template>
-    <Head :title="`${integration.name} — ${t('system.integrations.tabs.executions')}`" />
+    <Head
+        :title="`${integration.name} — ${t('system.integrations.tabs.executions')}`"
+    />
 
     <AppLayoutV2 :title="t('app_v2.nav.integrations')">
         <div class="mx-auto max-w-5xl space-y-6">
@@ -54,7 +55,11 @@ const { t } = useI18n();
                         v-if="executions.length === 0"
                         class="py-8 text-center text-sm text-muted-foreground"
                     >
-                        {{ t('common.no_results', { default: 'No executions yet' }) }}
+                        {{
+                            t('common.no_results', {
+                                default: 'No executions yet',
+                            })
+                        }}
                     </p>
 
                     <div v-else class="divide-y rounded-md border">
@@ -65,19 +70,28 @@ const { t } = useI18n();
                             class="flex items-center gap-3 px-4 py-3 transition hover:bg-muted/50"
                         >
                             <Badge
-                                :variant="exec.success ? 'default' : 'destructive'"
+                                :variant="
+                                    exec.success ? 'default' : 'destructive'
+                                "
                                 class="w-12 justify-center text-xs"
                             >
                                 {{ exec.status ?? 'ERR' }}
                             </Badge>
-                            <Badge variant="outline" class="w-16 justify-center text-xs">
+                            <Badge
+                                variant="outline"
+                                class="w-16 justify-center text-xs"
+                            >
                                 {{ exec.method }}
                             </Badge>
                             <div class="min-w-0 flex-1">
-                                <p class="truncate font-mono text-xs">{{ exec.url }}</p>
+                                <p class="truncate font-mono text-xs">
+                                    {{ exec.url }}
+                                </p>
                                 <p class="text-xs text-muted-foreground">
                                     {{ exec.created_at }}
-                                    <span v-if="exec.duration_ms !== null">· {{ exec.duration_ms }} ms</span>
+                                    <span v-if="exec.duration_ms !== null"
+                                        >· {{ exec.duration_ms }} ms</span
+                                    >
                                 </p>
                             </div>
                         </Link>

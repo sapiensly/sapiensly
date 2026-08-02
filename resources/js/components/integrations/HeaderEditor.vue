@@ -52,19 +52,27 @@ function removeRow(index: number) {
             <Checkbox
                 v-if="showEnabled"
                 :model-value="row.enabled !== false"
-                @update:model-value="updateRow(index, { enabled: $event === true })"
+                @update:model-value="
+                    updateRow(index, { enabled: $event === true })
+                "
             />
             <Input
                 :model-value="row.key"
-                :placeholder="t('system.integrations.key_value.key_placeholder')"
+                :placeholder="
+                    t('system.integrations.key_value.key_placeholder')
+                "
                 class="flex-1"
                 @update:model-value="updateRow(index, { key: String($event) })"
             />
             <Input
                 :model-value="row.value"
-                :placeholder="t('system.integrations.key_value.value_placeholder')"
+                :placeholder="
+                    t('system.integrations.key_value.value_placeholder')
+                "
                 class="flex-1"
-                @update:model-value="updateRow(index, { value: String($event) })"
+                @update:model-value="
+                    updateRow(index, { value: String($event) })
+                "
             />
             <Button
                 type="button"
@@ -76,19 +84,11 @@ function removeRow(index: number) {
             </Button>
         </div>
 
-        <p
-            v-if="modelValue.length === 0"
-            class="text-xs text-muted-foreground"
-        >
+        <p v-if="modelValue.length === 0" class="text-xs text-muted-foreground">
             {{ t('system.integrations.key_value.no_rows') }}
         </p>
 
-        <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            @click="addRow"
-        >
+        <Button type="button" variant="outline" size="sm" @click="addRow">
             <Plus class="mr-2 h-4 w-4" />
             {{ t('system.integrations.key_value.add_row') }}
         </Button>

@@ -8,6 +8,7 @@ use App\Http\Controllers\AppDocsController;
 use App\Http\Controllers\AppExportController;
 use App\Http\Controllers\AppFileController;
 use App\Http\Controllers\AppNotificationController;
+use App\Http\Controllers\AppRecordOptionsController;
 use App\Http\Controllers\AppRuntimeAgentController;
 use App\Http\Controllers\AppRuntimeController;
 use App\Http\Controllers\AppWorkflowController;
@@ -221,6 +222,14 @@ Route::middleware([
         ->name('apps.runtime.notifications.read');
 
     // Download an object's records. Same access context as the page, so an
+    // The records a relation field can point at. Same access gate as the table
+    // that shows them; authenticated runtime only (see the controller on why a
+    // public portal does not get an enumeration endpoint).
+    Route::get('/r/{app_slug}/fields/{field_id}/options', AppRecordOptionsController::class)
+        ->where('field_id', 'fld_[a-z0-9]+')
+        ->middleware('throttle:120,1')
+        ->name('apps.runtime.options');
+
     // export can never return more than the table showed.
     Route::get('/r/{app_slug}/objects/{object_slug}/export', [AppExportController::class, '__invoke'])
         ->where('app_slug', '[a-z][a-z0-9_]*')

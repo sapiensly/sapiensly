@@ -3,13 +3,6 @@ import SettingsCard from '@/components/admin/SettingsCard.vue';
 import PageHeader from '@/components/app-v2/PageHeader.vue';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import {
-    Select,
-    SelectContent,
-    SelectItem,
-    SelectTrigger,
-    SelectValue,
-} from '@/components/ui/select';
 import AppLayoutV2 from '@/layouts/AppLayoutV2.vue';
 import { Head, Link, useForm } from '@inertiajs/vue3';
 import { Bot, Key, MessageCircle } from '@lucide/vue';

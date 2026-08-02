@@ -1,7 +1,16 @@
 <script setup lang="ts">
 import { Input } from '@/components/ui/input';
 import { Link } from '@inertiajs/vue3';
-import { ArrowLeft, Check, Cloud, CloudOff, Loader2, Power, PowerOff, Save } from '@lucide/vue';
+import {
+    ArrowLeft,
+    Check,
+    Cloud,
+    CloudOff,
+    Loader2,
+    Power,
+    PowerOff,
+    Save,
+} from '@lucide/vue';
 import { computed } from 'vue';
 import { useI18n } from 'vue-i18n';
 
@@ -42,7 +51,9 @@ const statusTint = computed(() => {
 </script>
 
 <template>
-    <div class="sp-glass flex shrink-0 flex-wrap items-center gap-x-3 gap-y-2 border-b border-soft px-3 py-2 sm:h-14 sm:flex-nowrap sm:px-4 sm:py-0">
+    <div
+        class="sp-glass flex shrink-0 flex-wrap items-center gap-x-3 gap-y-2 border-b border-soft px-3 py-2 sm:h-14 sm:flex-nowrap sm:px-4 sm:py-0"
+    >
         <Link
             :href="props.backUrl"
             class="flex size-8 items-center justify-center rounded-xs text-ink-muted transition-colors hover:bg-surface hover:text-ink"

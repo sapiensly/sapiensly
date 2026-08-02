@@ -1,17 +1,10 @@
 <script setup lang="ts">
 import * as ChatbotController from '@/actions/App/Http/Controllers/ChatbotController';
-import PageHeader from '@/components/app-v2/PageHeader.vue';
 import SettingsCard from '@/components/admin/SettingsCard.vue';
+import PageHeader from '@/components/app-v2/PageHeader.vue';
 import InputError from '@/components/InputError.vue';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import {
-    Select,
-    SelectContent,
-    SelectItem,
-    SelectTrigger,
-    SelectValue,
-} from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import AppLayoutV2 from '@/layouts/AppLayoutV2.vue';
 import type { ChatbotConfig, VisibilityOption } from '@/types/chatbot';
@@ -79,7 +72,9 @@ const submit = () => {
                         <Textarea
                             id="description"
                             v-model="form.description"
-                            :placeholder="t('chatbots.create.description_placeholder')"
+                            :placeholder="
+                                t('chatbots.create.description_placeholder')
+                            "
                             rows="3"
                             class="border-medium bg-surface text-sm text-ink placeholder:text-ink-subtle"
                         />
@@ -107,7 +102,10 @@ const submit = () => {
                     tint="var(--sp-spectrum-indigo)"
                 >
                     <div class="space-y-1.5">
-                        <Label for="widget_title" class="text-xs text-ink-muted">
+                        <Label
+                            for="widget_title"
+                            class="text-xs text-ink-muted"
+                        >
                             Widget Title
                         </Label>
                         <Input
@@ -119,7 +117,10 @@ const submit = () => {
                     </div>
 
                     <div class="space-y-1.5">
-                        <Label for="welcome_message" class="text-xs text-ink-muted">
+                        <Label
+                            for="welcome_message"
+                            class="text-xs text-ink-muted"
+                        >
                             Welcome Message
                         </Label>
                         <Textarea
@@ -133,43 +134,60 @@ const submit = () => {
 
                     <div class="grid gap-3 sm:grid-cols-3">
                         <div class="space-y-1.5">
-                            <Label for="primary_color" class="text-xs text-ink-muted">
+                            <Label
+                                for="primary_color"
+                                class="text-xs text-ink-muted"
+                            >
                                 Primary Color
                             </Label>
                             <div class="flex gap-2">
                                 <input
                                     id="primary_color"
                                     type="color"
-                                    v-model="form.config.appearance.primary_color"
+                                    v-model="
+                                        form.config.appearance.primary_color
+                                    "
                                     class="h-9 w-12 cursor-pointer rounded-xs border border-medium bg-surface"
                                 />
                                 <Input
-                                    v-model="form.config.appearance.primary_color"
+                                    v-model="
+                                        form.config.appearance.primary_color
+                                    "
                                     class="h-9 flex-1 border-medium bg-surface text-sm text-ink placeholder:text-ink-subtle"
                                 />
                             </div>
                         </div>
 
                         <div class="space-y-1.5">
-                            <Label for="background_color" class="text-xs text-ink-muted">
+                            <Label
+                                for="background_color"
+                                class="text-xs text-ink-muted"
+                            >
                                 Background
                             </Label>
                             <div class="flex gap-2">
                                 <input
                                     id="background_color"
                                     type="color"
-                                    v-model="form.config.appearance.background_color"
+                                    v-model="
+                                        form.config.appearance.background_color
+                                    "
                                     class="h-9 w-12 cursor-pointer rounded-xs border border-medium bg-surface"
                                 />
                                 <Input
-                                    v-model="form.config.appearance.background_color"
+                                    v-model="
+                                        form.config.appearance.background_color
+                                    "
                                     class="h-9 flex-1 border-medium bg-surface text-sm text-ink placeholder:text-ink-subtle"
                                 />
                             </div>
                         </div>
 
                         <div class="space-y-1.5">
-                            <Label for="text_color" class="text-xs text-ink-muted">
+                            <Label
+                                for="text_color"
+                                class="text-xs text-ink-muted"
+                            >
                                 Text Color
                             </Label>
                             <div class="flex gap-2">
@@ -194,11 +212,15 @@ const submit = () => {
                                 type="button"
                                 :class="[
                                     'inline-flex items-center rounded-pill border px-3 py-1 text-xs transition-colors',
-                                    form.config.appearance.position === 'bottom-right'
+                                    form.config.appearance.position ===
+                                    'bottom-right'
                                         ? 'border-accent-blue/40 bg-accent-blue/10 text-ink'
                                         : 'border-medium bg-surface text-ink-muted hover:text-ink',
                                 ]"
-                                @click="form.config.appearance.position = 'bottom-right'"
+                                @click="
+                                    form.config.appearance.position =
+                                        'bottom-right'
+                                "
                             >
                                 Bottom Right
                             </button>
@@ -206,11 +228,15 @@ const submit = () => {
                                 type="button"
                                 :class="[
                                     'inline-flex items-center rounded-pill border px-3 py-1 text-xs transition-colors',
-                                    form.config.appearance.position === 'bottom-left'
+                                    form.config.appearance.position ===
+                                    'bottom-left'
                                         ? 'border-accent-blue/40 bg-accent-blue/10 text-ink'
                                         : 'border-medium bg-surface text-ink-muted hover:text-ink',
                                 ]"
-                                @click="form.config.appearance.position = 'bottom-left'"
+                                @click="
+                                    form.config.appearance.position =
+                                        'bottom-left'
+                                "
                             >
                                 Bottom Left
                             </button>

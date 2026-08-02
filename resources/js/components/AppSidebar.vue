@@ -5,8 +5,8 @@ import * as AiProviderController from '@/actions/App/Http/Controllers/AiProvider
 import * as AppController from '@/actions/App/Http/Controllers/AppController';
 import * as ChatbotController from '@/actions/App/Http/Controllers/ChatbotController';
 import * as CloudProviderController from '@/actions/App/Http/Controllers/CloudProviderController';
-import * as IntegrationController from '@/actions/App/Http/Controllers/IntegrationController';
 import * as DocumentController from '@/actions/App/Http/Controllers/DocumentController';
+import * as IntegrationController from '@/actions/App/Http/Controllers/IntegrationController';
 import * as KnowledgeBaseController from '@/actions/App/Http/Controllers/KnowledgeBaseController';
 import * as ToolController from '@/actions/App/Http/Controllers/ToolController';
 import NavFooter from '@/components/NavFooter.vue';
@@ -34,13 +34,11 @@ import {
     Cloud,
     Database,
     FileText,
-    GitBranch,
     LayoutGrid,
     MessageCircle,
     MessageSquare,
     Plug,
     Shield,
-    Users,
     Wrench,
 } from '@lucide/vue';
 import { computed } from 'vue';
@@ -159,7 +157,11 @@ const footerNavItems = computed<NavItem[]>(() => [
         <SidebarFooter>
             <SidebarMenu v-if="isSysAdmin()" class="px-2">
                 <SidebarMenuItem>
-                    <SidebarMenuButton as-child tooltip="Admin Panel" class="bg-primary text-primary-foreground hover:bg-primary/90 hover:text-primary-foreground">
+                    <SidebarMenuButton
+                        as-child
+                        tooltip="Admin Panel"
+                        class="bg-primary text-primary-foreground hover:bg-primary/90 hover:text-primary-foreground"
+                    >
                         <Link :href="AdminDashboardController.index().url">
                             <Shield />
                             <span>Admin Panel</span>

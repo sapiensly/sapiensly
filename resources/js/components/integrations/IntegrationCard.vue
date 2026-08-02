@@ -6,7 +6,14 @@ import {
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Link } from '@inertiajs/vue3';
-import { CheckCircle2, Database, MoreVertical, Plug, Server, XCircle } from '@lucide/vue';
+import {
+    CheckCircle2,
+    Database,
+    MoreVertical,
+    Plug,
+    Server,
+    XCircle,
+} from '@lucide/vue';
 import { computed } from 'vue';
 import { useI18n } from 'vue-i18n';
 
@@ -31,7 +38,8 @@ const props = defineProps<{ integration: Integration }>();
 // that matches what's being connected.
 const kindIcon = computed(() => {
     if (props.integration.kind === 'database') return Database;
-    if (props.integration.kind === 'mcp' || props.integration.is_mcp) return Server;
+    if (props.integration.kind === 'mcp' || props.integration.is_mcp)
+        return Server;
     return Plug;
 });
 const isDatabase = computed(() => props.integration.kind === 'database');
@@ -78,7 +86,13 @@ const { t } = useI18n();
                     <span
                         class="inline-flex items-center rounded-pill border border-medium bg-surface px-2 py-0.5 text-[10px] font-semibold tracking-wider text-ink-muted uppercase"
                     >
-                        {{ isDatabase ? t('system.integrations.starter.database_label') : integration.auth_type }}
+                        {{
+                            isDatabase
+                                ? t(
+                                      'system.integrations.starter.database_label',
+                                  )
+                                : integration.auth_type
+                        }}
                     </span>
                     <span
                         v-if="integration.visibility !== 'private'"
@@ -90,7 +104,11 @@ const { t } = useI18n();
                         v-if="!isDatabase"
                         class="inline-flex items-center rounded-pill border border-soft bg-surface px-2 py-0.5 text-[10px] font-semibold tracking-wider text-ink-muted uppercase"
                     >
-                        {{ t('system.integrations.requests_count', { count: integration.request_count }) }}
+                        {{
+                            t('system.integrations.requests_count', {
+                                count: integration.request_count,
+                            })
+                        }}
                     </span>
                 </div>
             </div>

@@ -53,7 +53,7 @@ function openPalette() {
         <ImpersonationBanner />
 
         <div
-            class="sp-admin-shell flex flex-1 min-h-0"
+            class="sp-admin-shell flex min-h-0 flex-1"
             :class="{ 'is-impersonating': impersonating }"
             :data-bg="bg"
         >
@@ -77,7 +77,10 @@ function openPalette() {
                   topbar's `backdrop-filter: blur(...)` to actually show
                   frosted glass.
                 -->
-                <main class="flex-1 overflow-y-auto" @scroll.passive="onMainScroll">
+                <main
+                    class="flex-1 overflow-y-auto"
+                    @scroll.passive="onMainScroll"
+                >
                     <Topbar
                         :title="title"
                         :sidebar-collapsed="sidebarCollapsed"
@@ -86,9 +89,7 @@ function openPalette() {
                         @open-palette="openPalette"
                     />
 
-                    <div
-                        class="mx-auto w-full max-w-[1440px] px-7 py-[22px]"
-                    >
+                    <div class="mx-auto w-full max-w-[1440px] px-7 py-[22px]">
                         <slot />
                     </div>
                 </main>

@@ -25,7 +25,7 @@ function submit(): void {
         <Head :title="t('auth.confirm_password.title')" />
 
         <header class="space-y-1">
-            <h1 class="text-[22px] font-semibold leading-tight text-ink">
+            <h1 class="text-[22px] leading-tight font-semibold text-ink">
                 {{ t('auth.confirm_password.title') }}
             </h1>
             <p class="text-xs text-ink-muted">
@@ -45,7 +45,9 @@ function submit(): void {
                     required
                     autofocus
                     autocomplete="current-password"
-                    :placeholder="t('auth.confirm_password.password_placeholder')"
+                    :placeholder="
+                        t('auth.confirm_password.password_placeholder')
+                    "
                 />
                 <InputError :message="form.errors.password" />
             </div>

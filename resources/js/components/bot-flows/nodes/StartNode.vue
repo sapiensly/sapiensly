@@ -16,7 +16,11 @@ defineProps<{
         class="flex h-16 w-16 items-center justify-center rounded-full border-2 shadow-sp-float"
         style="
             border-color: var(--sp-success);
-            background: color-mix(in oklab, var(--sp-success) 15%, var(--sp-bg-secondary));
+            background: color-mix(
+                in oklab,
+                var(--sp-success) 15%,
+                var(--sp-bg-secondary)
+            );
         "
     >
         <span class="text-xs font-semibold text-sp-success">

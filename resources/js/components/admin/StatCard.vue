@@ -81,7 +81,9 @@ const deltaSign = computed(() =>
             </span>
         </header>
 
-        <div class="relative mt-4 font-mono text-[28px] leading-tight font-semibold text-ink">
+        <div
+            class="relative mt-4 font-mono text-[28px] leading-tight font-semibold text-ink"
+        >
             {{ value }}
         </div>
 

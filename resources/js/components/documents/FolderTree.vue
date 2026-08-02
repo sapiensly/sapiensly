@@ -49,7 +49,9 @@ const hasChildren = (folder: Folder) =>
             :href="DocumentController.index().url"
             :class="[
                 'flex items-center gap-2 rounded-xs px-2 py-1.5 text-sm transition-colors hover:bg-surface hover:text-ink',
-                !currentFolderId ? 'bg-accent-blue/10 text-ink' : 'text-ink-muted',
+                !currentFolderId
+                    ? 'bg-accent-blue/10 text-ink'
+                    : 'text-ink-muted',
             ]"
         >
             <Home class="h-4 w-4 text-ink-subtle" />

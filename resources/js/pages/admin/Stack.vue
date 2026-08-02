@@ -16,7 +16,7 @@ const { t } = useI18n();
     <AdminLayout :title="t('admin.nav.stack')">
         <div class="space-y-6">
             <header class="space-y-1">
-                <h1 class="text-[22px] font-semibold leading-tight text-ink">
+                <h1 class="text-[22px] leading-tight font-semibold text-ink">
                     {{ t('admin.stack.heading') }}
                 </h1>
                 <p class="text-xs text-ink-muted">

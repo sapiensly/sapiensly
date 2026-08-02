@@ -23,7 +23,7 @@ const icons = LucideIcons as unknown as Record<string, unknown>;
 
 <template>
     <aside class="flex w-52 shrink-0 flex-col gap-1 border-r border-soft p-3">
-        <h3 class="px-1 pb-1 text-xs uppercase tracking-wider text-ink-subtle">
+        <h3 class="px-1 pb-1 text-xs tracking-wider text-ink-subtle uppercase">
             {{ t('apps.builder.workflows.palette_heading') }}
         </h3>
         <button

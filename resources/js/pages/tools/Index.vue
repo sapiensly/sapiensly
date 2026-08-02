@@ -4,7 +4,16 @@ import PageHeader from '@/components/app-v2/PageHeader.vue';
 import AppLayoutV2 from '@/layouts/AppLayoutV2.vue';
 import type { PaginatedTools, ToolType, ToolTypeOption } from '@/types/tools';
 import { Head, Link, router } from '@inertiajs/vue3';
-import { Braces, Code, Database, Globe, Layers, Plus, Server, Wrench } from '@lucide/vue';
+import {
+    Braces,
+    Code,
+    Database,
+    Globe,
+    Layers,
+    Plus,
+    Server,
+    Wrench,
+} from '@lucide/vue';
 import type { Component } from 'vue';
 import { computed } from 'vue';
 import { useI18n } from 'vue-i18n';
@@ -130,13 +139,18 @@ const totalTools = computed(() =>
                 >
                     <component :is="toolIcon(type.value)" class="size-3" />
                     {{ type.label }}
-                    <span class="text-ink-subtle">({{ toolsByType[type.value] ?? 0 }})</span>
+                    <span class="text-ink-subtle"
+                        >({{ toolsByType[type.value] ?? 0 }})</span
+                    >
                 </button>
             </div>
 
             <!-- Empty: a guided starter grid of types, mirroring the
                  Integrations index so both modules onboard the same way. -->
-            <div v-if="tools.data.length === 0 && !currentType" class="space-y-5">
+            <div
+                v-if="tools.data.length === 0 && !currentType"
+                class="space-y-5"
+            >
                 <div class="space-y-1">
                     <h3 class="text-sm font-semibold text-ink">
                         {{ t('tools.index.starter_title') }}
@@ -159,10 +173,17 @@ const totalTools = computed(() =>
                                 color: toolTint(type.value),
                             }"
                         >
-                            <component :is="toolIcon(type.value)" class="size-4" />
+                            <component
+                                :is="toolIcon(type.value)"
+                                class="size-4"
+                            />
                         </div>
-                        <h3 class="text-sm font-semibold text-ink">{{ type.label }}</h3>
-                        <p class="text-xs text-ink-muted">{{ type.description }}</p>
+                        <h3 class="text-sm font-semibold text-ink">
+                            {{ type.label }}
+                        </h3>
+                        <p class="text-xs text-ink-muted">
+                            {{ type.description }}
+                        </p>
                     </Link>
                 </div>
             </div>
@@ -213,10 +234,15 @@ const totalTools = computed(() =>
                                     color: toolTint(tool.type),
                                 }"
                             >
-                                <component :is="toolIcon(tool.type)" class="size-4" />
+                                <component
+                                    :is="toolIcon(tool.type)"
+                                    class="size-4"
+                                />
                             </div>
                             <div class="min-w-0">
-                                <h3 class="truncate text-sm font-semibold text-ink">
+                                <h3
+                                    class="truncate text-sm font-semibold text-ink"
+                                >
                                     {{ tool.name }}
                                 </h3>
                                 <p

@@ -15,7 +15,11 @@
 export interface DocBlock {
     type: string;
     text?: string;
-    items?: (string | { k: string; v: string } | { depth: number; text: string; meta?: string })[];
+    items?: (
+        | string
+        | { k: string; v: string }
+        | { depth: number; text: string; meta?: string }
+    )[];
     head?: string[];
     rows?: string[][];
 }
@@ -123,9 +127,7 @@ function isTreeItem(
                             <dt class="min-w-40 text-xs text-ink-muted">
                                 {{ isKv(item) ? item.k : '' }}
                             </dt>
-                            <dd
-                                class="font-mono text-xs break-all text-ink"
-                            >
+                            <dd class="font-mono text-xs break-all text-ink">
                                 {{ isKv(item) ? item.v : '' }}
                             </dd>
                         </div>
@@ -176,7 +178,7 @@ function isTreeItem(
 
                     <div
                         v-else-if="block.type === 'tree'"
-                        class="overflow-x-auto rounded-md border border-soft bg-elevated/40 px-3 py-2"
+                        class="bg-elevated/40 overflow-x-auto rounded-md border border-soft px-3 py-2"
                     >
                         <div
                             v-for="(item, j) in block.items"

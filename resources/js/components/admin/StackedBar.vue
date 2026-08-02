@@ -19,7 +19,10 @@ interface Props {
 const props = withDefaults(defineProps<Props>(), { height: 8 });
 
 const total = computed(() =>
-    Math.max(1, props.segments.reduce((acc, s) => acc + s.value, 0)),
+    Math.max(
+        1,
+        props.segments.reduce((acc, s) => acc + s.value, 0),
+    ),
 );
 
 function widthPct(value: number): string {
@@ -33,7 +36,9 @@ function widthPct(value: number): string {
             class="flex w-full overflow-hidden rounded-pill bg-surface"
             :style="{ height: `${height}px` }"
             role="img"
-            :aria-label="segments.map((s) => `${s.label} ${s.value}`).join(', ')"
+            :aria-label="
+                segments.map((s) => `${s.label} ${s.value}`).join(', ')
+            "
         >
             <div
                 v-for="s in segments"
@@ -52,7 +57,9 @@ function widthPct(value: number): string {
                     :style="{ backgroundColor: s.tint }"
                 />
                 <span>{{ s.label }}</span>
-                <span class="font-mono text-ink-subtle">{{ s.value.toLocaleString() }}</span>
+                <span class="font-mono text-ink-subtle">{{
+                    s.value.toLocaleString()
+                }}</span>
             </li>
         </ul>
     </div>

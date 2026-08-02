@@ -42,7 +42,20 @@ const object = computed<ObjectDef | undefined>(() =>
 
 // Field types whose value can be edited with a simple inline input. Computed
 // fields (formula/lookup/rollup), relations and files stay read-only.
-const EDITABLE_TYPES = ['string', 'email', 'url', 'phone', 'long_text', 'number', 'currency', 'slider', 'single_select', 'boolean', 'date', 'datetime'];
+const EDITABLE_TYPES = [
+    'string',
+    'email',
+    'url',
+    'phone',
+    'long_text',
+    'number',
+    'currency',
+    'slider',
+    'single_select',
+    'boolean',
+    'date',
+    'datetime',
+];
 
 const columns = computed(() =>
     props.block.columns.map((c) => {
@@ -51,7 +64,10 @@ const columns = computed(() =>
             key: c.field_id,
             field,
             label: c.label_override ?? field?.name ?? c.field_id,
-            editable: c.editable !== false && !!field && EDITABLE_TYPES.includes(field.type),
+            editable:
+                c.editable !== false &&
+                !!field &&
+                EDITABLE_TYPES.includes(field.type),
         };
     }),
 );
@@ -62,7 +78,10 @@ const rows = ref<RowData[]>([]);
 watch(
     () => props.data?.rows,
     (next) => {
-        rows.value = (next ?? []).map((r) => ({ id: r.id, data: { ...r.data } }));
+        rows.value = (next ?? []).map((r) => ({
+            id: r.id,
+            data: { ...r.data },
+        }));
     },
     { immediate: true },
 );
@@ -126,13 +145,18 @@ function display(field: FieldDef | undefined, value: unknown): string {
         return new Intl.NumberFormat(props.locale).format(value);
     }
     if (field.type === 'single_select') {
-        return field.options?.find((o) => o.value === value)?.label ?? String(value);
+        return (
+            field.options?.find((o) => o.value === value)?.label ??
+            String(value)
+        );
     }
     if (field.type === 'boolean') return value ? '✓' : '—';
     if (field.type === 'date' || field.type === 'datetime') {
         try {
             const d = new Date(String(value));
-            return field.type === 'date' ? d.toLocaleDateString(props.locale) : d.toLocaleString(props.locale);
+            return field.type === 'date'
+                ? d.toLocaleDateString(props.locale)
+                : d.toLocaleString(props.locale);
         } catch {
             return String(value);
         }
@@ -146,28 +170,52 @@ function dateValue(value: unknown): string {
     return value.slice(0, 10);
 }
 
-const inputClass = 'w-full rounded-xs border border-medium bg-surface px-2 py-1 text-sm focus:border-accent-blue focus:outline-none';
+const inputClass =
+    'w-full rounded-xs border border-medium bg-surface px-2 py-1 text-sm focus:border-accent-blue focus:outline-none';
 </script>
 
 <template>
     <div :class="['overflow-x-auto rounded-sp-sm border', t.surface]">
-        <p v-if="block.label" :class="['border-b border-soft px-3 py-2 text-[11px] uppercase tracking-wider', t.textSubtle]">
+        <p
+            v-if="block.label"
+            :class="[
+                'border-b border-soft px-3 py-2 text-[11px] tracking-wider uppercase',
+                t.textSubtle,
+            ]"
+        >
             {{ block.label }}
         </p>
 
-        <p v-if="rows.length === 0" :class="['px-3 py-6 text-center text-xs', t.textMuted]">No records.</p>
+        <p
+            v-if="rows.length === 0"
+            :class="['px-3 py-6 text-center text-xs', t.textMuted]"
+        >
+            No records.
+        </p>
 
         <table v-else class="w-full text-left text-sm">
             <thead>
                 <tr :class="['border-b border-soft', t.textMuted]">
-                    <th v-for="col in columns" :key="col.key" class="px-3 py-2 text-[11px] font-medium uppercase tracking-wider">
+                    <th
+                        v-for="col in columns"
+                        :key="col.key"
+                        class="px-3 py-2 text-[11px] font-medium tracking-wider uppercase"
+                    >
                         {{ col.label }}
                     </th>
                 </tr>
             </thead>
             <tbody>
-                <tr v-for="(row, i) in rows" :key="row.id" class="border-b border-soft/60 last:border-0">
-                    <td v-for="col in columns" :key="col.key" :class="['px-2 py-1', t.text]">
+                <tr
+                    v-for="(row, i) in rows"
+                    :key="row.id"
+                    class="border-b border-soft/60 last:border-0"
+                >
+                    <td
+                        v-for="col in columns"
+                        :key="col.key"
+                        :class="['px-2 py-1', t.text]"
+                    >
                         <template v-if="col.editable && col.field">
                             <input
                                 v-if="col.field.type === 'boolean'"
@@ -179,21 +227,36 @@ const inputClass = 'w-full rounded-xs border border-medium bg-surface px-2 py-1 
                             <select
                                 v-else-if="col.field.type === 'single_select'"
                                 :class="inputClass"
-                                :value="(row.data[col.field.slug] as string) ?? ''"
+                                :value="
+                                    (row.data[col.field.slug] as string) ?? ''
+                                "
                                 @change="onSelectChange(i, col.field, $event)"
                             >
                                 <option value="">—</option>
-                                <option v-for="o in col.field.options ?? []" :key="o.value" :value="o.value">{{ o.label }}</option>
+                                <option
+                                    v-for="o in col.field.options ?? []"
+                                    :key="o.value"
+                                    :value="o.value"
+                                >
+                                    {{ o.label }}
+                                </option>
                             </select>
                             <input
-                                v-else-if="col.field.type === 'number' || col.field.type === 'currency' || col.field.type === 'slider'"
+                                v-else-if="
+                                    col.field.type === 'number' ||
+                                    col.field.type === 'currency' ||
+                                    col.field.type === 'slider'
+                                "
                                 type="number"
                                 :class="inputClass"
                                 :value="row.data[col.field.slug] as number"
                                 @change="onInputChange(i, col.field, $event)"
                             />
                             <input
-                                v-else-if="col.field.type === 'date' || col.field.type === 'datetime'"
+                                v-else-if="
+                                    col.field.type === 'date' ||
+                                    col.field.type === 'datetime'
+                                "
                                 type="date"
                                 :class="inputClass"
                                 :value="dateValue(row.data[col.field.slug])"
@@ -203,11 +266,15 @@ const inputClass = 'w-full rounded-xs border border-medium bg-surface px-2 py-1 
                                 v-else
                                 type="text"
                                 :class="inputClass"
-                                :value="(row.data[col.field.slug] as string) ?? ''"
+                                :value="
+                                    (row.data[col.field.slug] as string) ?? ''
+                                "
                                 @change="onInputChange(i, col.field, $event)"
                             />
                         </template>
-                        <span v-else class="px-1">{{ display(col.field, row.data[col.field?.slug ?? '']) }}</span>
+                        <span v-else class="px-1">{{
+                            display(col.field, row.data[col.field?.slug ?? ''])
+                        }}</span>
                     </td>
                 </tr>
             </tbody>

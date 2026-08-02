@@ -29,7 +29,11 @@ const glowId = computed(() => `spark-glow-${uid}`);
 const geometry = computed(() => {
     const points = props.series;
     if (points.length === 0) {
-        return { path: '', area: '', end: null as { x: number; y: number } | null };
+        return {
+            path: '',
+            area: '',
+            end: null as { x: number; y: number } | null,
+        };
     }
     const min = Math.min(...points);
     const max = Math.max(...points);
@@ -49,7 +53,8 @@ const geometry = computed(() => {
     // with a tension of 0.5 so the curve tracks the data without overshoot.
     const smooth = (pts: { x: number; y: number }[]) => {
         if (pts.length < 2) return '';
-        if (pts.length === 2) return `M ${pts[0].x} ${pts[0].y} L ${pts[1].x} ${pts[1].y}`;
+        if (pts.length === 2)
+            return `M ${pts[0].x} ${pts[0].y} L ${pts[1].x} ${pts[1].y}`;
 
         const d: string[] = [`M ${pts[0].x.toFixed(2)} ${pts[0].y.toFixed(2)}`];
         for (let i = 0; i < pts.length - 1; i++) {

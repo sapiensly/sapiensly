@@ -16,7 +16,9 @@ export function urlIsActive(
     const [targetPath] = target.split('?');
     const [currentPath] = currentUrl.split('?');
 
-    return currentPath === targetPath || currentPath.startsWith(`${targetPath}/`);
+    return (
+        currentPath === targetPath || currentPath.startsWith(`${targetPath}/`)
+    );
 }
 
 export function toUrl(href: NonNullable<InertiaLinkProps['href']>) {

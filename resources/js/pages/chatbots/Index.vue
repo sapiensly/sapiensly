@@ -63,7 +63,10 @@ function tintFor(status: string) {
                 <p class="mt-1 text-xs text-ink-muted">
                     {{ t('chatbots.index.no_chatbots_description') }}
                 </p>
-                <Link :href="ChatbotController.create().url" class="mt-4 inline-block">
+                <Link
+                    :href="ChatbotController.create().url"
+                    class="mt-4 inline-block"
+                >
                     <button
                         type="button"
                         class="inline-flex items-center gap-1.5 rounded-pill bg-accent-blue px-3.5 py-1.5 text-xs font-medium text-white shadow-btn-primary transition-colors hover:bg-accent-blue-hover"
@@ -74,17 +77,16 @@ function tintFor(status: string) {
                 </Link>
             </div>
 
-            <div
-                v-else
-                class="grid gap-4 md:grid-cols-2 lg:grid-cols-3"
-            >
+            <div v-else class="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
                 <div
                     v-for="chatbot in chatbots.data"
                     :key="chatbot.id"
                     class="flex min-w-0 flex-col rounded-sp-sm border border-soft bg-navy p-5 transition-colors hover:border-accent-blue/30"
                 >
                     <Link
-                        :href="ChatbotController.show({ chatbot: chatbot.id }).url"
+                        :href="
+                            ChatbotController.show({ chatbot: chatbot.id }).url
+                        "
                         class="flex-1"
                     >
                         <div class="flex items-start justify-between gap-3">
@@ -95,7 +97,9 @@ function tintFor(status: string) {
                                     <MessageSquare class="size-4" />
                                 </div>
                                 <div class="min-w-0">
-                                    <h3 class="truncate text-sm font-semibold text-ink">
+                                    <h3
+                                        class="truncate text-sm font-semibold text-ink"
+                                    >
                                         {{ chatbot.name }}
                                     </h3>
                                     <p
@@ -140,7 +144,10 @@ function tintFor(status: string) {
                             </span>
                         </div>
                         <Link
-                            :href="ChatbotController.embed({ chatbot: chatbot.id }).url"
+                            :href="
+                                ChatbotController.embed({ chatbot: chatbot.id })
+                                    .url
+                            "
                             class="inline-flex items-center gap-1 rounded-xs px-2 py-1 text-xs text-ink-muted transition-colors hover:bg-surface hover:text-ink"
                         >
                             <Code class="size-3" />

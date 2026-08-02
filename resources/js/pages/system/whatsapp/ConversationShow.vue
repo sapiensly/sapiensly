@@ -10,7 +10,13 @@ const props = defineProps<{
         id: string;
         status: string;
         contact: { profile_name?: string | null; phone_e164?: string | null };
-        messages: Array<{ id: string; role: string; direction: string; content: string; created_at: string }>;
+        messages: Array<{
+            id: string;
+            role: string;
+            direction: string;
+            content: string;
+            created_at: string;
+        }>;
     };
     templates: Array<{ id: string; name: string; language: string }>;
     within_session_window: boolean;
@@ -37,7 +43,12 @@ function submitReply() {
     <AppLayoutV2 :title="t('app_v2.nav.whatsapp')">
         <div class="mx-auto max-w-3xl">
             <div class="mb-4 flex items-center justify-between">
-                <h1 class="text-xl font-semibold">{{ props.conversation.contact.profile_name ?? props.conversation.contact.phone_e164 }}</h1>
+                <h1 class="text-xl font-semibold">
+                    {{
+                        props.conversation.contact.profile_name ??
+                        props.conversation.contact.phone_e164
+                    }}
+                </h1>
                 <div class="flex gap-2">
                     <button
                         v-if="props.conversation.status !== 'escalated'"
@@ -46,7 +57,11 @@ function submitReply() {
                     >
                         {{ $t('whatsapp.inbox.takeover') }}
                     </button>
-                    <button v-else class="rounded bg-secondary px-3 py-1 text-sm" @click="release">
+                    <button
+                        v-else
+                        class="rounded bg-secondary px-3 py-1 text-sm"
+                        @click="release"
+                    >
                         {{ $t('whatsapp.inbox.release') }}
                     </button>
                 </div>
@@ -56,7 +71,11 @@ function submitReply() {
                 <div
                     v-for="m in props.conversation.messages"
                     :key="m.id"
-                    :class="m.direction === 'outbound' ? 'ml-auto bg-primary text-primary-foreground' : 'bg-muted'"
+                    :class="
+                        m.direction === 'outbound'
+                            ? 'ml-auto bg-primary text-primary-foreground'
+                            : 'bg-muted'
+                    "
                     class="max-w-[80%] rounded p-2 text-sm"
                 >
                     {{ m.content }}
@@ -64,7 +83,10 @@ function submitReply() {
             </div>
 
             <form class="space-y-2" @submit.prevent="submitReply">
-                <div v-if="!props.within_session_window" class="rounded bg-amber-50 p-2 text-xs text-amber-900">
+                <div
+                    v-if="!props.within_session_window"
+                    class="rounded bg-amber-50 p-2 text-xs text-amber-900"
+                >
                     {{ $t('whatsapp.inbox.out_of_window') }}
                 </div>
                 <textarea

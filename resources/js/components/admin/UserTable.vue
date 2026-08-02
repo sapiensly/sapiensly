@@ -57,7 +57,9 @@ function nextSortFor(field: 'name' | 'lastSeen' | 'createdAt'): SortKey {
     return field === 'name' ? 'name' : (`-${field}` as SortKey);
 }
 
-function sortDirection(field: 'name' | 'lastSeen' | 'createdAt'): 'asc' | 'desc' | null {
+function sortDirection(
+    field: 'name' | 'lastSeen' | 'createdAt',
+): 'asc' | 'desc' | null {
     if (props.sort === field) return 'asc';
     if (props.sort === `-${field}`) return 'desc';
     return null;
@@ -236,7 +238,9 @@ function relativeTime(iso: string | null): string {
                                 {{ initials(user.name) }}
                             </span>
                             <div class="min-w-0 leading-tight">
-                                <p class="truncate text-sm font-medium text-ink">
+                                <p
+                                    class="truncate text-sm font-medium text-ink"
+                                >
                                     {{ user.name }}
                                 </p>
                                 <p class="truncate text-xs text-ink-muted">

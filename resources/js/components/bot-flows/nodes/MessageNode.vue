@@ -48,8 +48,14 @@ function onKeydown(event: KeyboardEvent) {
 </script>
 
 <template>
-    <div class="min-w-[220px] max-w-[280px] rounded-sp-sm border border-soft bg-navy p-3 shadow-sp-float">
-        <Handle type="target" :position="Position.Top" class="!bg-accent-blue" />
+    <div
+        class="max-w-[280px] min-w-[220px] rounded-sp-sm border border-soft bg-navy p-3 shadow-sp-float"
+    >
+        <Handle
+            type="target"
+            :position="Position.Top"
+            class="!bg-accent-blue"
+        />
 
         <div class="mb-1 text-xs font-medium text-ink-muted">
             {{ t('botFlows.nodes.message') }}
@@ -59,7 +65,7 @@ function onKeydown(event: KeyboardEvent) {
             v-if="isEditing"
             ref="textarea"
             v-model="draft"
-            class="nodrag w-full resize-none rounded-xs border border-medium bg-surface p-2 text-sm text-ink placeholder:text-ink-subtle focus:border-accent-blue focus:outline-none focus:ring-1 focus:ring-accent-blue"
+            class="nodrag w-full resize-none rounded-xs border border-medium bg-surface p-2 text-sm text-ink placeholder:text-ink-subtle focus:border-accent-blue focus:ring-1 focus:ring-accent-blue focus:outline-none"
             rows="3"
             :placeholder="t('botFlows.nodes.no_message')"
             @blur="commit"
@@ -68,13 +74,17 @@ function onKeydown(event: KeyboardEvent) {
         />
         <div
             v-else
-            class="cursor-text whitespace-pre-wrap rounded-xs px-1 py-0.5 text-sm text-ink hover:bg-surface"
-            :class="{ 'italic text-ink-subtle': !data.message }"
+            class="cursor-text rounded-xs px-1 py-0.5 text-sm whitespace-pre-wrap text-ink hover:bg-surface"
+            :class="{ 'text-ink-subtle italic': !data.message }"
             @dblclick="startEdit"
         >
             {{ data.message || t('botFlows.nodes.no_message') }}
         </div>
 
-        <Handle type="source" :position="Position.Bottom" class="!bg-accent-blue" />
+        <Handle
+            type="source"
+            :position="Position.Bottom"
+            class="!bg-accent-blue"
+        />
     </div>
 </template>

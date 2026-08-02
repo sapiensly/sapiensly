@@ -50,7 +50,8 @@ const authType = computed({
             auth_type: value as McpConfig['auth_type'],
             auth_config: {},
             // The integration link only applies to the oauth2 scheme.
-            integration_id: value === 'oauth2' ? props.config.integration_id : undefined,
+            integration_id:
+                value === 'oauth2' ? props.config.integration_id : undefined,
         });
     },
 });
@@ -136,7 +137,9 @@ const selectedIntegration = computed<OAuth2IntegrationOption | undefined>(() =>
                 <Select v-model="integrationId">
                     <SelectTrigger id="oauth-integration">
                         <SelectValue
-                            :placeholder="t('tools.config.mcp.select_integration')"
+                            :placeholder="
+                                t('tools.config.mcp.select_integration')
+                            "
                         />
                     </SelectTrigger>
                     <SelectContent>

@@ -16,7 +16,8 @@ const form = useForm({
         access_token: '',
         app_id: '',
         app_secret: '',
-        graph_api_version: (props.connection as any).masked_auth?.graph_api_version ?? 'v20.0',
+        graph_api_version:
+            (props.connection as any).masked_auth?.graph_api_version ?? 'v20.0',
     },
 });
 
@@ -28,15 +29,27 @@ function submit() {
 <template>
     <AppLayoutV2 :title="t('app_v2.nav.whatsapp')">
         <div class="mx-auto max-w-2xl">
-            <h1 class="mb-6 text-2xl font-semibold">{{ $t('whatsapp.connections.edit') }}</h1>
+            <h1 class="mb-6 text-2xl font-semibold">
+                {{ $t('whatsapp.connections.edit') }}
+            </h1>
             <form class="space-y-4" @submit.prevent="submit">
                 <label class="block">
-                    <span class="text-sm font-medium">{{ $t('whatsapp.connections.name') }}</span>
-                    <input v-model="form.name" class="mt-1 w-full rounded border px-3 py-2" />
+                    <span class="text-sm font-medium">{{
+                        $t('whatsapp.connections.name')
+                    }}</span>
+                    <input
+                        v-model="form.name"
+                        class="mt-1 w-full rounded border px-3 py-2"
+                    />
                 </label>
                 <label class="block">
-                    <span class="text-sm font-medium">{{ $t('whatsapp.connections.status') }}</span>
-                    <select v-model="form.status" class="mt-1 w-full rounded border px-3 py-2">
+                    <span class="text-sm font-medium">{{
+                        $t('whatsapp.connections.status')
+                    }}</span>
+                    <select
+                        v-model="form.status"
+                        class="mt-1 w-full rounded border px-3 py-2"
+                    >
                         <option value="draft">Draft</option>
                         <option value="active">Active</option>
                         <option value="paused">Paused</option>
@@ -47,13 +60,27 @@ function submit() {
                 </p>
                 <label class="block">
                     <span class="text-sm font-medium">Access Token</span>
-                    <input v-model="form.auth.access_token" placeholder="••••" type="password" class="mt-1 w-full rounded border px-3 py-2" />
+                    <input
+                        v-model="form.auth.access_token"
+                        placeholder="••••"
+                        type="password"
+                        class="mt-1 w-full rounded border px-3 py-2"
+                    />
                 </label>
                 <label class="block">
                     <span class="text-sm font-medium">App Secret</span>
-                    <input v-model="form.auth.app_secret" placeholder="••••" type="password" class="mt-1 w-full rounded border px-3 py-2" />
+                    <input
+                        v-model="form.auth.app_secret"
+                        placeholder="••••"
+                        type="password"
+                        class="mt-1 w-full rounded border px-3 py-2"
+                    />
                 </label>
-                <button type="submit" :disabled="form.processing" class="rounded bg-primary px-4 py-2 text-primary-foreground">
+                <button
+                    type="submit"
+                    :disabled="form.processing"
+                    class="rounded bg-primary px-4 py-2 text-primary-foreground"
+                >
                     {{ $t('whatsapp.connections.save') }}
                 </button>
             </form>

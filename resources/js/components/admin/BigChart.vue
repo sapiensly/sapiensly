@@ -56,22 +56,29 @@ function niceStep(value: number): number {
     if (!(value > 0)) return 1;
     const magnitude = Math.pow(10, Math.floor(Math.log10(value)));
     const normalised = value / magnitude;
-    const step = [1, 1.5, 2, 2.5, 3, 4, 5, 6, 8, 10].find((s) => normalised <= s) ?? 10;
+    const step =
+        [1, 1.5, 2, 2.5, 3, 4, 5, 6, 8, 10].find((s) => normalised <= s) ?? 10;
     return step * magnitude;
 }
 
-const peak = computed(() => Math.max(0, ...props.series.flatMap((s) => s.points)));
+const peak = computed(() =>
+    Math.max(0, ...props.series.flatMap((s) => s.points)),
+);
 
 /**
  * The top of the scale, rounded so every tick is a round number. Deliberately
  * not floored at 1: a window whose entire spend is $0.40 was being drawn
  * against a $1 scale, which is why small periods all read as flat.
  */
-const scaleMax = computed(() => (peak.value > 0 ? niceStep(peak.value / props.ticks) * props.ticks : 1));
+const scaleMax = computed(() =>
+    peak.value > 0 ? niceStep(peak.value / props.ticks) * props.ticks : 1,
+);
 
 /** Where a value sits vertically inside the viewBox. */
 function yFor(value: number): number {
-    return props.height - (value / scaleMax.value) * (props.height - PAD * 2) - PAD;
+    return (
+        props.height - (value / scaleMax.value) * (props.height - PAD * 2) - PAD
+    );
 }
 
 const yTicks = computed(() =>
@@ -89,11 +96,16 @@ const yTicks = computed(() =>
 const xTicks = computed(() => {
     const labels = props.labels ?? [];
     if (labels.length === 0) return [];
-    if (labels.length === 1) return [{ index: 0, label: labels[0], style: { left: '0%' } }];
+    if (labels.length === 1)
+        return [{ index: 0, label: labels[0], style: { left: '0%' } }];
 
     const count = Math.min(props.maxXTicks, labels.length);
     const indexes = [
-        ...new Set(Array.from({ length: count }, (_, i) => Math.round((i * (labels.length - 1)) / (count - 1)))),
+        ...new Set(
+            Array.from({ length: count }, (_, i) =>
+                Math.round((i * (labels.length - 1)) / (count - 1)),
+            ),
+        ),
     ];
 
     return indexes.map((index) => {
@@ -105,7 +117,10 @@ const xTicks = computed(() => {
                 ? { left: '0%' }
                 : index === labels.length - 1
                   ? { right: '0%' }
-                  : { left: `${fraction * 100}%`, transform: 'translateX(-50%)' };
+                  : {
+                        left: `${fraction * 100}%`,
+                        transform: 'translateX(-50%)',
+                    };
         return { index, label: labels[index], style };
     });
 });
@@ -115,7 +130,9 @@ const xTicks = computed(() => {
  * tooltip are HTML positioned by fraction rather than SVG coordinates — the
  * same reason the axis labels live outside it.
  */
-const pointCount = computed(() => Math.max(...props.series.map((s) => s.points.length), 0));
+const pointCount = computed(() =>
+    Math.max(...props.series.map((s) => s.points.length), 0),
+);
 const hovered = ref<number | null>(null);
 
 function trackPointer(event: PointerEvent): void {
@@ -129,7 +146,10 @@ function trackPointer(event: PointerEvent): void {
     }
     // Nearest point, not the one to the left: hovering just past a peak should
     // read the peak.
-    const fraction = Math.min(1, Math.max(0, (event.clientX - box.left) / box.width));
+    const fraction = Math.min(
+        1,
+        Math.max(0, (event.clientX - box.left) / box.width),
+    );
     hovered.value = total === 1 ? 0 : Math.round(fraction * (total - 1));
 }
 
@@ -139,23 +159,38 @@ const readout = computed(() => {
 
     return {
         index,
-        leftPct: pointCount.value > 1 ? (index / (pointCount.value - 1)) * 100 : 0,
+        leftPct:
+            pointCount.value > 1 ? (index / (pointCount.value - 1)) * 100 : 0,
         // Past the midpoint the tooltip flips to the other side of the guide,
         // or it would hang off the right edge of the card.
         flip: pointCount.value > 1 && index / (pointCount.value - 1) > 0.5,
         label: props.tooltipLabels?.[index] ?? props.labels?.[index] ?? null,
         rows: props.series.map((s) => {
             const value = s.points[index] ?? 0;
-            return { label: s.label, tint: s.tint, value, topPct: (yFor(value) / props.height) * 100 };
+            return {
+                label: s.label,
+                tint: s.tint,
+                value,
+                topPct: (yFor(value) / props.height) * 100,
+            };
         }),
     };
 });
 
-function toPath(points: number[]): { path: string; area: string; end: { x: number; y: number } | null } {
+function toPath(points: number[]): {
+    path: string;
+    area: string;
+    end: { x: number; y: number } | null;
+} {
     if (points.length === 0) return { path: '', area: '', end: null };
     const stepX = points.length > 1 ? props.width / (points.length - 1) : 0;
     const coords = points.map((v, i) => ({ x: i * stepX, y: yFor(v) }));
-    const path = coords.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x.toFixed(2)} ${p.y.toFixed(2)}`).join(' ');
+    const path = coords
+        .map(
+            (p, i) =>
+                `${i === 0 ? 'M' : 'L'} ${p.x.toFixed(2)} ${p.y.toFixed(2)}`,
+        )
+        .join(' ');
     // Closed on the zero line, not the viewBox floor: otherwise the fill sits
     // a padding's worth below the gridline it is meant to rest on.
     const base = yFor(0).toFixed(2);
@@ -172,7 +207,7 @@ function toPath(points: number[]): { path: string; area: string; end: { x: numbe
                 <span
                     v-for="t in yTicks"
                     :key="`y-${t.value}`"
-                    class="absolute right-0 -translate-y-1/2 text-[10px] tabular-nums text-ink-subtle"
+                    class="absolute right-0 -translate-y-1/2 text-[10px] text-ink-subtle tabular-nums"
                     :style="{ top: `${t.topPct}%` }"
                 >
                     {{ formatValue(t.value) }}
@@ -192,10 +227,21 @@ function toPath(points: number[]): { path: string; area: string; end: { x: numbe
                     aria-hidden="true"
                 >
                     <g stroke="var(--sp-border-soft)" stroke-dasharray="2 4">
-                        <line v-for="t in yTicks" :key="`grid-${t.value}`" x1="0" :y1="t.y" :x2="width" :y2="t.y" />
+                        <line
+                            v-for="t in yTicks"
+                            :key="`grid-${t.value}`"
+                            x1="0"
+                            :y1="t.y"
+                            :x2="width"
+                            :y2="t.y"
+                        />
                     </g>
                     <template v-for="s in series" :key="s.label">
-                        <path :d="toPath(s.points).area" :fill="s.tint" fill-opacity="0.12" />
+                        <path
+                            :d="toPath(s.points).area"
+                            :fill="s.tint"
+                            fill-opacity="0.12"
+                        />
                         <path
                             :d="toPath(s.points).path"
                             :stroke="s.tint"
@@ -225,27 +271,43 @@ function toPath(points: number[]): { path: string; area: string; end: { x: numbe
                         v-for="r in readout.rows"
                         :key="`hover-${r.label}`"
                         class="pointer-events-none absolute size-2 -translate-x-1/2 -translate-y-1/2 rounded-pill ring-2 ring-navy"
-                        :style="{ left: `${readout.leftPct}%`, top: `${r.topPct}%`, backgroundColor: r.tint }"
+                        :style="{
+                            left: `${readout.leftPct}%`,
+                            top: `${r.topPct}%`,
+                            backgroundColor: r.tint,
+                        }"
                     />
                     <div
                         class="pointer-events-none absolute top-2 z-10 min-w-32 rounded-sp-sm border border-medium bg-navy/95 px-2.5 py-1.5 text-[11px] shadow-lg"
                         :style="
                             readout.flip
-                                ? { right: `calc(100% - ${readout.leftPct}% + 8px)` }
+                                ? {
+                                      right: `calc(100% - ${readout.leftPct}% + 8px)`,
+                                  }
                                 : { left: `calc(${readout.leftPct}% + 8px)` }
                         "
                     >
-                        <p v-if="readout.label" class="mb-1 font-medium text-ink">{{ readout.label }}</p>
+                        <p
+                            v-if="readout.label"
+                            class="mb-1 font-medium text-ink"
+                        >
+                            {{ readout.label }}
+                        </p>
                         <p
                             v-for="r in readout.rows"
                             :key="`tip-${r.label}`"
                             class="flex items-center justify-between gap-3 text-ink-muted"
                         >
                             <span class="flex items-center gap-1.5">
-                                <span class="inline-block size-1.5 rounded-pill" :style="{ backgroundColor: r.tint }" />
+                                <span
+                                    class="inline-block size-1.5 rounded-pill"
+                                    :style="{ backgroundColor: r.tint }"
+                                />
                                 {{ r.label }}
                             </span>
-                            <span class="tabular-nums text-ink">{{ formatValue(r.value) }}</span>
+                            <span class="text-ink tabular-nums">{{
+                                formatValue(r.value)
+                            }}</span>
                         </p>
                     </div>
                 </template>
@@ -253,11 +315,11 @@ function toPath(points: number[]): { path: string; area: string; end: { x: numbe
         </div>
 
         <!-- x axis, offset past the y-label column (w-12 + gap-2) -->
-        <div v-if="xTicks.length" class="relative ml-14 mt-1.5 h-3">
+        <div v-if="xTicks.length" class="relative mt-1.5 ml-14 h-3">
             <span
                 v-for="t in xTicks"
                 :key="`x-${t.index}`"
-                class="absolute whitespace-nowrap text-[10px] tabular-nums text-ink-subtle"
+                class="absolute text-[10px] whitespace-nowrap text-ink-subtle tabular-nums"
                 :style="t.style"
             >
                 {{ t.label }}
@@ -265,8 +327,15 @@ function toPath(points: number[]): { path: string; area: string; end: { x: numbe
         </div>
 
         <ul class="mt-3 flex flex-wrap gap-4 text-xs text-ink-muted">
-            <li v-for="s in series" :key="`legend-${s.label}`" class="flex items-center gap-1.5">
-                <span class="inline-block size-2 rounded-pill" :style="{ backgroundColor: s.tint }" />
+            <li
+                v-for="s in series"
+                :key="`legend-${s.label}`"
+                class="flex items-center gap-1.5"
+            >
+                <span
+                    class="inline-block size-2 rounded-pill"
+                    :style="{ backgroundColor: s.tint }"
+                />
                 {{ s.label }}
             </li>
         </ul>

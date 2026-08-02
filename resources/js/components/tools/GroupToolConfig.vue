@@ -79,7 +79,9 @@ const toolIcon = (type: string) => {
                     :model-value="isSelected(tool.id)"
                     @update:model-value="toggleTool(tool.id, $event as boolean)"
                 />
-                <div class="flex size-7 shrink-0 items-center justify-center rounded-xs bg-accent-blue/10 text-accent-blue">
+                <div
+                    class="flex size-7 shrink-0 items-center justify-center rounded-xs bg-accent-blue/10 text-accent-blue"
+                >
                     <component :is="toolIcon(tool.type)" class="size-3.5" />
                 </div>
                 <Label :for="`tool-${tool.id}`" class="flex-1 cursor-pointer">

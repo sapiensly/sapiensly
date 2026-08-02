@@ -777,40 +777,22 @@
                 {
                     "object_id": "obj_01kytgcyx8nx5cp8q0kv1s2ccv",
                     "role_id": "rol_01kytgcyx8nx5cp8q0kv1s2ccc",
-                    "actions": [
-                        "create",
-                        "read",
-                        "update",
-                        "delete"
-                    ]
+                    "actions": ["create", "read", "update", "delete"]
                 },
                 {
                     "object_id": "obj_01kytgcyx8nx5cp8q0kv1s2ccv",
                     "role_id": "rol_01kytgcyx8nx5cp8q0kv1s2ccd",
-                    "actions": [
-                        "create",
-                        "read",
-                        "update"
-                    ]
+                    "actions": ["create", "read", "update"]
                 },
                 {
                     "object_id": "obj_01kytgcyx8nx5cp8q0kv1s2ccy",
                     "role_id": "rol_01kytgcyx8nx5cp8q0kv1s2ccc",
-                    "actions": [
-                        "create",
-                        "read",
-                        "update",
-                        "delete"
-                    ]
+                    "actions": ["create", "read", "update", "delete"]
                 },
                 {
                     "object_id": "obj_01kytgcyx8nx5cp8q0kv1s2ccy",
                     "role_id": "rol_01kytgcyx8nx5cp8q0kv1s2ccd",
-                    "actions": [
-                        "create",
-                        "read",
-                        "update"
-                    ]
+                    "actions": ["create", "read", "update"]
                 }
             ]
         },

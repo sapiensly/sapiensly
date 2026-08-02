@@ -67,7 +67,9 @@ const markers = computed<Marker[]>(() => {
             if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
             let color = '#3B82F6';
             if (colorField.value?.type === 'single_select' && colorSlug) {
-                const opt = colorField.value.options?.find((o) => o.value === r.data[colorSlug]);
+                const opt = colorField.value.options?.find(
+                    (o) => o.value === r.data[colorSlug],
+                );
                 if (opt?.color) color = opt.color;
             }
             return {
@@ -97,9 +99,14 @@ function syncMarkers() {
     mapMarkers = markers.value.map((m) => {
         const el = document.createElement('div');
         el.style.cssText = `width:14px;height:14px;border-radius:50%;background:${m.color};border:2px solid rgba(255,255,255,0.85);box-shadow:0 0 0 1px rgba(0,0,0,0.25)`;
-        const marker = new maplibregl.Marker({ element: el }).setLngLat([m.lng, m.lat]);
+        const marker = new maplibregl.Marker({ element: el }).setLngLat([
+            m.lng,
+            m.lat,
+        ]);
         if (m.popup) {
-            marker.setPopup(new maplibregl.Popup({ offset: 12 }).setText(m.popup));
+            marker.setPopup(
+                new maplibregl.Popup({ offset: 12 }).setText(m.popup),
+            );
         }
         marker.addTo(map!);
         return marker;
@@ -121,7 +128,10 @@ onMounted(() => {
         zoom: 4,
         attributionControl: { compact: true },
     });
-    map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-right');
+    map.addControl(
+        new maplibregl.NavigationControl({ showCompass: false }),
+        'top-right',
+    );
     map.on('load', syncMarkers);
 });
 
@@ -138,7 +148,9 @@ onBeforeUnmount(() => {
 <template>
     <div :class="['overflow-hidden rounded-sp-sm border', t.surface]">
         <header v-if="block.label" class="border-b border-soft px-4 py-2">
-            <p :class="['text-[11px] uppercase tracking-wider', t.textSubtle]">{{ block.label }}</p>
+            <p :class="['text-[11px] tracking-wider uppercase', t.textSubtle]">
+                {{ block.label }}
+            </p>
         </header>
         <div
             ref="container"

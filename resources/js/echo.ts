@@ -7,7 +7,8 @@ window.Pusher = Pusher;
 // Default off the scheme (443 for https, 80 for http) — `Number(undefined)`
 // is NaN, so `||` (not `??`) is what falls through to the default.
 const scheme = import.meta.env.VITE_REVERB_SCHEME ?? 'https';
-const port = Number(import.meta.env.VITE_REVERB_PORT) || (scheme === 'https' ? 443 : 80);
+const port =
+    Number(import.meta.env.VITE_REVERB_PORT) || (scheme === 'https' ? 443 : 80);
 
 const echo = new Echo({
     broadcaster: 'reverb',

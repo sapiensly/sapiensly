@@ -10,8 +10,13 @@ export function useScrollReveal(container: Ref<HTMLElement | null>): void {
     let observer: IntersectionObserver | null = null;
 
     onMounted(() => {
-        if (typeof window === 'undefined' || !('IntersectionObserver' in window)) return;
-        if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return;
+        if (
+            typeof window === 'undefined' ||
+            !('IntersectionObserver' in window)
+        )
+            return;
+        if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches)
+            return;
 
         const root = container.value;
         if (!root) return;

@@ -15,10 +15,19 @@ defineOptions({ inheritAttrs: false });
 
 const props = defineProps<{ block: ImageBlock }>();
 
-const fitClass = computed(() =>
-    ({ contain: 'object-contain', cover: 'object-cover', fill: 'object-fill' }[props.block.fit ?? 'contain']),
+const fitClass = computed(
+    () =>
+        ({
+            contain: 'object-contain',
+            cover: 'object-cover',
+            fill: 'object-fill',
+        })[props.block.fit ?? 'contain'],
 );
-const style = computed(() => (props.block.max_height ? `max-height: ${props.block.max_height}px` : 'max-height: 400px'));
+const style = computed(() =>
+    props.block.max_height
+        ? `max-height: ${props.block.max_height}px`
+        : 'max-height: 400px',
+);
 </script>
 
 <template>

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { ConnectorNodeConfig } from '@/types/botFlows';
-import { Handle, Position } from '@vue-flow/core';
 import { CornerDownLeft } from '@lucide/vue';
+import { Handle, Position } from '@vue-flow/core';
 import { computed } from 'vue';
 import { useI18n } from 'vue-i18n';
 
@@ -24,11 +24,23 @@ const label = computed(() => {
     <div
         class="min-w-[180px] rounded-sp-sm border border-dashed p-3 shadow-sp-float"
         style="
-            border-color: color-mix(in oklab, var(--sp-spectrum-indigo) 45%, transparent);
-            background: color-mix(in oklab, var(--sp-spectrum-indigo) 12%, var(--sp-bg-secondary));
+            border-color: color-mix(
+                in oklab,
+                var(--sp-spectrum-indigo) 45%,
+                transparent
+            );
+            background: color-mix(
+                in oklab,
+                var(--sp-spectrum-indigo) 12%,
+                var(--sp-bg-secondary)
+            );
         "
     >
-        <Handle type="target" :position="Position.Top" class="!bg-spectrum-indigo" />
+        <Handle
+            type="target"
+            :position="Position.Top"
+            class="!bg-spectrum-indigo"
+        />
 
         <div class="mb-1 text-xs font-medium text-ink-muted">
             {{ t('botFlows.nodes.connector') }}

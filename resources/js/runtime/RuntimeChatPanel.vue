@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import echo from '@/echo';
+import type { RuntimeTheme } from '@/runtime/types/manifest';
 import axios from 'axios';
 import DOMPurify from 'dompurify';
 import { marked } from 'marked';
 import { computed, nextTick, onUnmounted, ref, watch } from 'vue';
-import type { RuntimeTheme } from '@/runtime/types/manifest';
 
 /**
  * Builder power #3, read slice (1c): the floating chat panel an end-user of a
@@ -50,7 +50,9 @@ const name = computed(() => props.agentName || 'Assistant');
 
 // The assistant is "thinking" while a placeholder exists with no content yet.
 const awaitingFirstToken = computed(() =>
-    messages.value.some((m) => m.role === 'assistant' && m.status === 'streaming' && !m.content),
+    messages.value.some(
+        (m) => m.role === 'assistant' && m.status === 'streaming' && !m.content,
+    ),
 );
 
 let channel: ReturnType<typeof echo.private> | null = null;
@@ -59,23 +61,38 @@ function subscribe(id: string): void {
     unsubscribe();
     channel = echo.private(`runtime.agent.conversation.${id}`);
 
-    channel.listen('.RuntimeAgentStreamChunk', (data: { message_id: string; delta: string }) => {
-        messages.value = messages.value.map((m) =>
-            m.id === data.message_id ? { ...m, content: (m.content ?? '') + data.delta } : m,
-        );
-        scrollToBottom();
-    });
+    channel.listen(
+        '.RuntimeAgentStreamChunk',
+        (data: { message_id: string; delta: string }) => {
+            messages.value = messages.value.map((m) =>
+                m.id === data.message_id
+                    ? { ...m, content: (m.content ?? '') + data.delta }
+                    : m,
+            );
+            scrollToBottom();
+        },
+    );
 
-    channel.listen('.RuntimeAgentStreamComplete', (payload: { message: ChatMessage }) => {
-        messages.value = messages.value.map((m) => (m.id === payload.message.id ? payload.message : m));
-        scrollToBottom();
-    });
+    channel.listen(
+        '.RuntimeAgentStreamComplete',
+        (payload: { message: ChatMessage }) => {
+            messages.value = messages.value.map((m) =>
+                m.id === payload.message.id ? payload.message : m,
+            );
+            scrollToBottom();
+        },
+    );
 
-    channel.listen('.RuntimeAgentStreamError', (data: { message_id: string; error: string }) => {
-        messages.value = messages.value.map((m) =>
-            m.id === data.message_id ? { ...m, content: data.error, status: 'error' } : m,
-        );
-    });
+    channel.listen(
+        '.RuntimeAgentStreamError',
+        (data: { message_id: string; error: string }) => {
+            messages.value = messages.value.map((m) =>
+                m.id === data.message_id
+                    ? { ...m, content: data.error, status: 'error' }
+                    : m,
+            );
+        },
+    );
 }
 
 function unsubscribe(): void {
@@ -95,7 +112,11 @@ async function ensureConversation(): Promise<void> {
     starting.value = true;
     errorText.value = '';
     try {
-        const { data } = await axios.post(`/r/${props.appSlug}/agent/conversations`, {}, { timeout: 15_000 });
+        const { data } = await axios.post(
+            `/r/${props.appSlug}/agent/conversations`,
+            {},
+            { timeout: 15_000 },
+        );
         conversationId.value = data.conversation_id;
         subscribe(data.conversation_id);
     } catch {
@@ -136,7 +157,8 @@ async function send(): Promise<void> {
         scrollToBottom();
     } catch (e: unknown) {
         const err = e as { response?: { data?: { message?: string } } };
-        errorText.value = err.response?.data?.message ?? 'Could not send your message.';
+        errorText.value =
+            err.response?.data?.message ?? 'Could not send your message.';
     } finally {
         sending.value = false;
     }
@@ -145,10 +167,15 @@ async function send(): Promise<void> {
 const actingId = ref<string | null>(null);
 
 function replaceMessage(updated: ChatMessage): void {
-    messages.value = messages.value.map((m) => (m.id === updated.id ? updated : m));
+    messages.value = messages.value.map((m) =>
+        m.id === updated.id ? updated : m,
+    );
 }
 
-async function resolveProposal(message: ChatMessage, verb: 'approve' | 'dismiss'): Promise<void> {
+async function resolveProposal(
+    message: ChatMessage,
+    verb: 'approve' | 'dismiss',
+): Promise<void> {
     if (actingId.value) {
         return;
     }
@@ -163,14 +190,18 @@ async function resolveProposal(message: ChatMessage, verb: 'approve' | 'dismiss'
         replaceMessage(data.message);
     } catch (e: unknown) {
         const err = e as { response?: { data?: { message?: string } } };
-        errorText.value = err.response?.data?.message ?? `Could not ${verb} the change.`;
+        errorText.value =
+            err.response?.data?.message ?? `Could not ${verb} the change.`;
     } finally {
         actingId.value = null;
     }
 }
 
 function isPendingProposal(m: ChatMessage): boolean {
-    return m.message_type === 'action_proposal' && m.action_payload?.status === 'pending';
+    return (
+        m.message_type === 'action_proposal' &&
+        m.action_payload?.status === 'pending'
+    );
 }
 
 function onComposerKeydown(event: KeyboardEvent): void {
@@ -192,7 +223,11 @@ function renderMarkdown(content: string | null): string {
     if (!content) {
         return '';
     }
-    const raw = marked.parse(content, { async: false, breaks: true, gfm: true }) as string;
+    const raw = marked.parse(content, {
+        async: false,
+        breaks: true,
+        gfm: true,
+    }) as string;
     return DOMPurify.sanitize(raw);
 }
 
@@ -211,19 +246,52 @@ onUnmounted(unsubscribe);
             :aria-label="open ? 'Close assistant' : 'Open assistant'"
             @click="toggle"
         >
-            <svg v-if="!open" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="ra-icon">
-                <path d="M21 11.5a8.38 8.38 0 0 1-8.5 8.5 8.5 8.5 0 0 1-3.8-.9L3 21l1.9-5.7A8.38 8.38 0 0 1 4 11.5 8.5 8.5 0 0 1 12.5 3 8.38 8.38 0 0 1 21 11.5z" stroke-linecap="round" stroke-linejoin="round" />
+            <svg
+                v-if="!open"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                class="ra-icon"
+            >
+                <path
+                    d="M21 11.5a8.38 8.38 0 0 1-8.5 8.5 8.5 8.5 0 0 1-3.8-.9L3 21l1.9-5.7A8.38 8.38 0 0 1 4 11.5 8.5 8.5 0 0 1 12.5 3 8.38 8.38 0 0 1 21 11.5z"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                />
             </svg>
-            <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="ra-icon">
-                <path d="M18 6 6 18M6 6l12 12" stroke-linecap="round" stroke-linejoin="round" />
+            <svg
+                v-else
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                class="ra-icon"
+            >
+                <path
+                    d="M18 6 6 18M6 6l12 12"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                />
             </svg>
         </button>
 
         <!-- Panel -->
-        <div v-if="open" class="ra-panel" :class="dark ? 'ra-panel--dark' : 'ra-panel--light'">
+        <div
+            v-if="open"
+            class="ra-panel"
+            :class="dark ? 'ra-panel--dark' : 'ra-panel--light'"
+        >
             <header class="ra-header">
                 <div class="ra-title">{{ name }}</div>
-                <button type="button" class="ra-close" aria-label="Close" @click="toggle">✕</button>
+                <button
+                    type="button"
+                    class="ra-close"
+                    aria-label="Close"
+                    @click="toggle"
+                >
+                    ✕
+                </button>
             </header>
 
             <div ref="listEl" class="ra-messages">
@@ -235,43 +303,81 @@ onUnmounted(unsubscribe);
                     v-for="m in messages"
                     :key="m.id"
                     class="ra-msg"
-                    :class="m.role === 'user' ? 'ra-msg--user' : 'ra-msg--assistant'"
+                    :class="
+                        m.role === 'user' ? 'ra-msg--user' : 'ra-msg--assistant'
+                    "
                 >
                     <div v-if="m.role === 'assistant'" class="ra-assistant">
                         <div
                             v-if="m.content"
                             class="ra-bubble ra-md"
-                            :class="{ 'ra-bubble--error': m.status === 'error' }"
+                            :class="{
+                                'ra-bubble--error': m.status === 'error',
+                            }"
                             v-html="renderMarkdown(m.content)"
                         />
 
                         <!-- Action card: what applied automatically (autonomy engine)
                              and/or what's awaiting the user's approval (the gate). -->
                         <div
-                            v-if="m.message_type === 'action_proposal' || m.message_type === 'action_result'"
+                            v-if="
+                                m.message_type === 'action_proposal' ||
+                                m.message_type === 'action_result'
+                            "
                             class="ra-card"
                         >
-                            <template v-if="(m.action_payload?.auto_previews?.length ?? 0) > 0">
-                                <div class="ra-card-title">✓ Done automatically</div>
+                            <template
+                                v-if="
+                                    (m.action_payload?.auto_previews?.length ??
+                                        0) > 0
+                                "
+                            >
+                                <div class="ra-card-title">
+                                    ✓ Done automatically
+                                </div>
                                 <ul class="ra-card-previews">
-                                    <li v-for="(p, i) in m.action_payload?.auto_previews ?? []" :key="'a' + i">{{ p }}</li>
+                                    <li
+                                        v-for="(p, i) in m.action_payload
+                                            ?.auto_previews ?? []"
+                                        :key="'a' + i"
+                                    >
+                                        {{ p }}
+                                    </li>
                                 </ul>
                             </template>
 
-                            <template v-if="(m.action_payload?.previews?.length ?? 0) > 0">
+                            <template
+                                v-if="
+                                    (m.action_payload?.previews?.length ?? 0) >
+                                    0
+                                "
+                            >
                                 <div class="ra-card-title">Proposed change</div>
                                 <ul class="ra-card-previews">
-                                    <li v-for="(p, i) in m.action_payload?.previews ?? []" :key="i">{{ p }}</li>
+                                    <li
+                                        v-for="(p, i) in m.action_payload
+                                            ?.previews ?? []"
+                                        :key="i"
+                                    >
+                                        {{ p }}
+                                    </li>
                                 </ul>
 
-                                <div v-if="isPendingProposal(m)" class="ra-card-actions">
+                                <div
+                                    v-if="isPendingProposal(m)"
+                                    class="ra-card-actions"
+                                >
                                     <button
                                         type="button"
                                         class="ra-approve"
                                         :disabled="actingId === m.id"
                                         @click="resolveProposal(m, 'approve')"
                                     >
-                                        {{ actingId === m.id ? 'Applying…' : 'Approve' }}
+                                        {{
+                                            actingId === m.id
+                                                ? 'Applying…'
+                                                : 'Approve'
+                                        }}
                                     </button>
                                     <button
                                         type="button"
@@ -283,15 +389,23 @@ onUnmounted(unsubscribe);
                                     </button>
                                 </div>
                                 <div v-else class="ra-card-status">
-                                    {{ m.action_payload?.status === 'executed' ? '✓ Applied' : 'Dismissed' }}
+                                    {{
+                                        m.action_payload?.status === 'executed'
+                                            ? '✓ Applied'
+                                            : 'Dismissed'
+                                    }}
                                 </div>
                             </template>
                         </div>
                     </div>
-                    <div v-else class="ra-bubble ra-bubble--user">{{ m.content }}</div>
+                    <div v-else class="ra-bubble ra-bubble--user">
+                        {{ m.content }}
+                    </div>
                 </div>
 
-                <p v-if="awaitingFirstToken" class="ra-thinking">{{ name }} is thinking…</p>
+                <p v-if="awaitingFirstToken" class="ra-thinking">
+                    {{ name }} is thinking…
+                </p>
             </div>
 
             <p v-if="errorText" class="ra-error">{{ errorText }}</p>
@@ -305,7 +419,12 @@ onUnmounted(unsubscribe);
                     :disabled="sending"
                     @keydown="onComposerKeydown"
                 />
-                <button type="button" class="ra-send" :disabled="sending || input.trim() === ''" @click="send">
+                <button
+                    type="button"
+                    class="ra-send"
+                    :disabled="sending || input.trim() === ''"
+                    @click="send"
+                >
                     Send
                 </button>
             </div>

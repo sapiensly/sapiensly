@@ -1,5 +1,5 @@
-import { usePage } from '@inertiajs/vue3';
 import type { AppPageProps } from '@/types';
+import { usePage } from '@inertiajs/vue3';
 
 export function usePermissions() {
     const page = usePage<AppPageProps>();

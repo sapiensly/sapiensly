@@ -11,7 +11,9 @@ import { computed } from 'vue';
 
 useLocaleSync();
 
-const impersonating = computed(() => usePage<AppPageProps>().props.impersonating);
+const impersonating = computed(
+    () => usePage<AppPageProps>().props.impersonating,
+);
 
 interface Props {
     breadcrumbs?: BreadcrumbItemType[];

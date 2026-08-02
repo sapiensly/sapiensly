@@ -32,6 +32,11 @@ const WORDS: Record<string, Dict> = {
         step_of: 'Step {n} of {total}',
         load_failed: 'This section could not be loaded',
         retry: 'Try again',
+        picker_search: 'Search a record…',
+        picker_none: 'No record matches',
+        picker_more: 'Keep typing to narrow it down',
+        picker_clear: 'Clear',
+        picker_unavailable: 'Not available here',
     },
     es: {
         columns: 'Columnas',
@@ -46,6 +51,11 @@ const WORDS: Record<string, Dict> = {
         step_of: 'Paso {n} de {total}',
         load_failed: 'No se pudo cargar esta sección',
         retry: 'Reintentar',
+        picker_search: 'Busca un registro…',
+        picker_none: 'Ningún registro coincide',
+        picker_more: 'Sigue escribiendo para acotar',
+        picker_clear: 'Quitar',
+        picker_unavailable: 'No disponible aquí',
     },
     pt: {
         columns: 'Colunas',
@@ -60,6 +70,11 @@ const WORDS: Record<string, Dict> = {
         step_of: 'Passo {n} de {total}',
         load_failed: 'Não foi possível carregar esta seção',
         retry: 'Tentar de novo',
+        picker_search: 'Busque um registro…',
+        picker_none: 'Nenhum registro corresponde',
+        picker_more: 'Continue digitando para restringir',
+        picker_clear: 'Remover',
+        picker_unavailable: 'Não disponível aqui',
     },
     fr: {
         columns: 'Colonnes',
@@ -74,6 +89,11 @@ const WORDS: Record<string, Dict> = {
         step_of: 'Étape {n} sur {total}',
         load_failed: 'Cette section n’a pas pu être chargée',
         retry: 'Réessayer',
+        picker_search: 'Cherchez un enregistrement…',
+        picker_none: 'Aucun enregistrement ne correspond',
+        picker_more: 'Continuez à taper pour affiner',
+        picker_clear: 'Retirer',
+        picker_unavailable: 'Indisponible ici',
     },
 };
 

@@ -1,6 +1,13 @@
 <script setup lang="ts">
 import type { Artifact } from '@/lib/artifacts';
-import { Code2, FileText, Image, Loader2, PanelRightOpen, Globe } from '@lucide/vue';
+import {
+    Code2,
+    FileText,
+    Globe,
+    Image,
+    Loader2,
+    PanelRightOpen,
+} from '@lucide/vue';
 import { computed } from 'vue';
 import { useI18n } from 'vue-i18n';
 
@@ -34,16 +41,22 @@ const subtitle = computed(() => {
         type="button"
         :class="[
             'my-3 flex w-full items-center gap-3 rounded-xl border p-3 text-left transition-colors',
-            active ? 'border-accent-blue bg-accent-blue/5' : 'border-medium bg-surface hover:border-strong hover:bg-surface-hover',
+            active
+                ? 'border-accent-blue bg-accent-blue/5'
+                : 'border-medium bg-surface hover:border-strong hover:bg-surface-hover',
         ]"
         @click="emit('open', artifact)"
     >
-        <div class="flex size-9 shrink-0 items-center justify-center rounded-lg bg-accent-blue/12 text-accent-blue">
+        <div
+            class="flex size-9 shrink-0 items-center justify-center rounded-lg bg-accent-blue/12 text-accent-blue"
+        >
             <Loader2 v-if="!artifact.closed" class="size-4 animate-spin" />
             <component :is="icon" v-else class="size-4" />
         </div>
         <div class="min-w-0 flex-1">
-            <p class="truncate text-sm font-medium text-ink">{{ artifact.title }}</p>
+            <p class="truncate text-sm font-medium text-ink">
+                {{ artifact.title }}
+            </p>
             <p class="truncate text-xs text-ink-subtle">{{ subtitle }}</p>
         </div>
         <PanelRightOpen class="size-4 shrink-0 text-ink-subtle" />

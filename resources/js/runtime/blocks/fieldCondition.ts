@@ -26,7 +26,12 @@ export interface FieldCondition {
 }
 
 function isBlank(v: unknown): boolean {
-    return v === null || v === undefined || v === '' || (Array.isArray(v) && v.length === 0);
+    return (
+        v === null ||
+        v === undefined ||
+        v === '' ||
+        (Array.isArray(v) && v.length === 0)
+    );
 }
 
 /** Loose equality matching the server's `==`: numeric when both sides parse as numbers, else string compare. */
@@ -77,9 +82,15 @@ export function evaluateFieldCondition(
         case 'lte':
             return num(actual) <= num(expected);
         case 'in':
-            return Array.isArray(expected) && expected.some((v) => looseEq(actual, v));
+            return (
+                Array.isArray(expected) &&
+                expected.some((v) => looseEq(actual, v))
+            );
         case 'not_in':
-            return !(Array.isArray(expected) && expected.some((v) => looseEq(actual, v)));
+            return !(
+                Array.isArray(expected) &&
+                expected.some((v) => looseEq(actual, v))
+            );
         case 'contains':
             if (Array.isArray(actual)) {
                 return actual.some((v) => looseEq(v, expected));

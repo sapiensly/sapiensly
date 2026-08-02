@@ -169,9 +169,7 @@ const cells = computed(() => {
         class="relative w-full"
         :class="fitHeight ? 'h-full' : ''"
         :style="
-            fitHeight
-                ? undefined
-                : { aspectRatio: '2 / 1', minHeight: '260px' }
+            fitHeight ? undefined : { aspectRatio: '2 / 1', minHeight: '260px' }
         "
     >
         <div

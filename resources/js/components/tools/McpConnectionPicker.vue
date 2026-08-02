@@ -17,7 +17,9 @@ const emit = defineEmits<{
 }>();
 
 const connected = computed(() => props.connections.filter((c) => c.connected));
-const notConnected = computed(() => props.connections.filter((c) => !c.connected));
+const notConnected = computed(() =>
+    props.connections.filter((c) => !c.connected),
+);
 </script>
 
 <template>
@@ -45,7 +47,9 @@ const notConnected = computed(() => props.connections.filter((c) => !c.connected
         <template v-else>
             <!-- Connected. -->
             <div v-if="connected.length > 0" class="space-y-2">
-                <p class="text-[11px] font-semibold uppercase tracking-wider text-sp-success">
+                <p
+                    class="text-[11px] font-semibold tracking-wider text-sp-success uppercase"
+                >
                     {{ t('tools.config.mcp.group_connected') }}
                 </p>
                 <button
@@ -60,12 +64,20 @@ const notConnected = computed(() => props.connections.filter((c) => !c.connected
                     ]"
                     @click="emit('select', c)"
                 >
-                    <div class="flex size-8 shrink-0 items-center justify-center rounded-xs bg-sp-success/15 text-sp-success">
+                    <div
+                        class="flex size-8 shrink-0 items-center justify-center rounded-xs bg-sp-success/15 text-sp-success"
+                    >
                         <Plug class="size-4" />
                     </div>
                     <div class="min-w-0 flex-1">
-                        <p class="truncate text-sm font-medium text-ink">{{ c.name }}</p>
-                        <p class="truncate font-mono text-[11px] text-ink-subtle">{{ c.base_url }}</p>
+                        <p class="truncate text-sm font-medium text-ink">
+                            {{ c.name }}
+                        </p>
+                        <p
+                            class="truncate font-mono text-[11px] text-ink-subtle"
+                        >
+                            {{ c.base_url }}
+                        </p>
                     </div>
                     <CheckCircle2 class="size-4 shrink-0 text-sp-success" />
                 </button>
@@ -73,7 +85,9 @@ const notConnected = computed(() => props.connections.filter((c) => !c.connected
 
             <!-- Not connected. -->
             <div v-if="notConnected.length > 0" class="space-y-2">
-                <p class="text-[11px] font-semibold uppercase tracking-wider text-sp-warning">
+                <p
+                    class="text-[11px] font-semibold tracking-wider text-sp-warning uppercase"
+                >
                     {{ t('tools.config.mcp.group_not_connected') }}
                 </p>
                 <button
@@ -88,12 +102,20 @@ const notConnected = computed(() => props.connections.filter((c) => !c.connected
                     ]"
                     @click="emit('select', c)"
                 >
-                    <div class="flex size-8 shrink-0 items-center justify-center rounded-xs bg-sp-warning/15 text-sp-warning">
+                    <div
+                        class="flex size-8 shrink-0 items-center justify-center rounded-xs bg-sp-warning/15 text-sp-warning"
+                    >
                         <Plug class="size-4" />
                     </div>
                     <div class="min-w-0 flex-1">
-                        <p class="truncate text-sm font-medium text-ink">{{ c.name }}</p>
-                        <p class="truncate font-mono text-[11px] text-ink-subtle">{{ c.base_url }}</p>
+                        <p class="truncate text-sm font-medium text-ink">
+                            {{ c.name }}
+                        </p>
+                        <p
+                            class="truncate font-mono text-[11px] text-ink-subtle"
+                        >
+                            {{ c.base_url }}
+                        </p>
                     </div>
                     <span class="shrink-0 text-[11px] text-sp-warning">
                         {{ t('tools.config.mcp.authorize_after_create') }}

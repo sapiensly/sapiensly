@@ -83,14 +83,22 @@ function tintFor(status: string) {
                                 <MessageCircle class="size-4" />
                             </div>
                             <div class="min-w-0">
-                                <h3 class="truncate text-sm font-semibold text-ink">
+                                <h3
+                                    class="truncate text-sm font-semibold text-ink"
+                                >
                                     {{ channel.name }}
                                 </h3>
                                 <p
-                                    v-if="channel.whats_app_connection?.display_phone_number"
+                                    v-if="
+                                        channel.whats_app_connection
+                                            ?.display_phone_number
+                                    "
                                     class="mt-0.5 truncate text-xs text-ink-muted"
                                 >
-                                    {{ channel.whats_app_connection.display_phone_number }}
+                                    {{
+                                        channel.whats_app_connection
+                                            .display_phone_number
+                                    }}
                                 </p>
                             </div>
                         </div>

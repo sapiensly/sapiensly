@@ -74,9 +74,14 @@ export interface ParsedSlashInput {
 export function parseSlashInput(input: string): ParsedSlashInput | null {
     if (!input.startsWith('/')) return null;
     const body = input.slice(1);
-    const sorted = [...SLASH_COMMANDS].sort((a, b) => b.name.length - a.name.length);
+    const sorted = [...SLASH_COMMANDS].sort(
+        (a, b) => b.name.length - a.name.length,
+    );
     for (const cmd of sorted) {
-        if (body === cmd.name || body.toLowerCase().startsWith(cmd.name + ' ')) {
+        if (
+            body === cmd.name ||
+            body.toLowerCase().startsWith(cmd.name + ' ')
+        ) {
             const rawArgs = body.slice(cmd.name.length).trim();
             return { command: cmd, rawArgs };
         }

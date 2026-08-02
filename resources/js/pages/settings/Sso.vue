@@ -67,7 +67,8 @@ function verify(): void {
                 verified.value = true;
             },
             onError: (errors) => {
-                verifyError.value = errors.issuer ?? t('settings.sso.verify_failed');
+                verifyError.value =
+                    errors.issuer ?? t('settings.sso.verify_failed');
             },
             onFinish: () => {
                 verifying.value = false;
@@ -85,10 +86,7 @@ function copySsoUrl(): void {
     <Head :title="t('settings.sso.breadcrumb')" />
 
     <SettingsLayout>
-        <form
-            class="space-y-4"
-            @submit.prevent="submit"
-        >
+        <form class="space-y-4" @submit.prevent="submit">
             <!-- Enablement. -->
             <SettingsCard
                 :icon="Lock"
@@ -109,11 +107,7 @@ function copySsoUrl(): void {
                 <div class="space-y-1.5">
                     <Label>{{ t('settings.sso.login_url') }}</Label>
                     <div class="flex gap-2">
-                        <Input
-                            :model-value="ssoUrl"
-                            class="h-9"
-                            readonly
-                        />
+                        <Input :model-value="ssoUrl" class="h-9" readonly />
                         <button
                             type="button"
                             class="h-9 shrink-0 rounded-xs border border-soft px-3 text-xs text-ink-muted transition-colors hover:bg-surface hover:text-ink"
@@ -154,7 +148,11 @@ function copySsoUrl(): void {
                             {{ t('settings.sso.verify') }}
                         </button>
                     </div>
-                    <InputError :message="form.errors.issuer || verifyError || undefined" />
+                    <InputError
+                        :message="
+                            form.errors.issuer || verifyError || undefined
+                        "
+                    />
                     <p
                         v-if="verified"
                         class="flex items-center gap-1.5 text-[11px] text-sp-success"
@@ -165,7 +163,9 @@ function copySsoUrl(): void {
                 </div>
 
                 <div class="space-y-1.5">
-                    <Label for="client_id">{{ t('settings.sso.client_id') }}</Label>
+                    <Label for="client_id">{{
+                        t('settings.sso.client_id')
+                    }}</Label>
                     <Input
                         id="client_id"
                         v-model="form.client_id"
@@ -176,14 +176,18 @@ function copySsoUrl(): void {
                 </div>
 
                 <div class="space-y-1.5">
-                    <Label for="client_secret">{{ t('settings.sso.client_secret') }}</Label>
+                    <Label for="client_secret">{{
+                        t('settings.sso.client_secret')
+                    }}</Label>
                     <Input
                         id="client_secret"
                         v-model="form.client_secret"
                         type="password"
                         class="h-9"
                         autocomplete="off"
-                        :placeholder="connection.has_secret ? '••••••••••••' : ''"
+                        :placeholder="
+                            connection.has_secret ? '••••••••••••' : ''
+                        "
                     />
                     <InputError :message="form.errors.client_secret" />
                     <p
@@ -207,7 +211,9 @@ function copySsoUrl(): void {
                     <ChipsInput
                         v-model="form.allowed_domains"
                         lowercase
-                        :placeholder="t('settings.sso.allowed_domains_placeholder')"
+                        :placeholder="
+                            t('settings.sso.allowed_domains_placeholder')
+                        "
                     />
                     <p class="text-xs text-ink-muted">
                         {{ t('settings.sso.allowed_domains_hint') }}
@@ -221,9 +227,15 @@ function copySsoUrl(): void {
                     <p class="font-medium text-ink">
                         {{ t('settings.sso.resolved_endpoints') }}
                     </p>
-                    <p class="truncate">authorize: {{ connection.endpoints.authorize_url }}</p>
-                    <p class="truncate">token: {{ connection.endpoints.token_url }}</p>
-                    <p class="truncate">userinfo: {{ connection.endpoints.userinfo_url }}</p>
+                    <p class="truncate">
+                        authorize: {{ connection.endpoints.authorize_url }}
+                    </p>
+                    <p class="truncate">
+                        token: {{ connection.endpoints.token_url }}
+                    </p>
+                    <p class="truncate">
+                        userinfo: {{ connection.endpoints.userinfo_url }}
+                    </p>
                 </div>
             </SettingsCard>
 

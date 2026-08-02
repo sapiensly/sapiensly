@@ -1,6 +1,8 @@
 <script setup lang="ts">
-import HeaderEditor, { type HeaderRow } from '@/components/integrations/HeaderEditor.vue';
 import InputError from '@/components/InputError.vue';
+import HeaderEditor, {
+    type HeaderRow,
+} from '@/components/integrations/HeaderEditor.vue';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -40,7 +42,10 @@ function update(key: string, value: unknown): void {
 }
 
 const customHeaders = computed<HeaderRow[]>(() => {
-    const raw = (props.modelValue.headers ?? []) as Array<{ name: string; value: string }>;
+    const raw = (props.modelValue.headers ?? []) as Array<{
+        name: string;
+        value: string;
+    }>;
 
     return raw.map((h) => ({ key: h.name, value: h.value, enabled: true }));
 });
@@ -55,7 +60,8 @@ function updateCustomHeaders(rows: HeaderRow[]): void {
 function placeholderFor(field: string): string {
     if (props.maskedValues && typeof props.maskedValues[field] === 'string') {
         const masked = props.maskedValues[field] as string;
-        if (masked && masked !== '') return t('system.integrations.auth.kept_secret');
+        if (masked && masked !== '')
+            return t('system.integrations.auth.kept_secret');
     }
     return '';
 }
@@ -79,7 +85,8 @@ const explainerKey = computed<string | null>(() => {
 // The redirect URI is this app's own callback — the user registers it in their
 // provider, they don't invent it. Show it read-only with a one-tap copy.
 const redirectUri = computed(
-    () => ((props.modelValue.redirect_uri as string) || props.callbackUrl) ?? '',
+    () =>
+        ((props.modelValue.redirect_uri as string) || props.callbackUrl) ?? '',
 );
 const copied = ref(false);
 async function copyRedirect(): Promise<void> {
@@ -124,7 +131,9 @@ onMounted(() => {
 
         <div v-else-if="authType === 'api_key'" class="space-y-3">
             <div class="grid gap-2">
-                <Label>{{ t('system.integrations.auth.api_key.location') }}</Label>
+                <Label>{{
+                    t('system.integrations.auth.api_key.location')
+                }}</Label>
                 <Select
                     :model-value="(modelValue.location as string) ?? 'header'"
                     @update:model-value="update('location', $event)"
@@ -134,10 +143,18 @@ onMounted(() => {
                     </SelectTrigger>
                     <SelectContent>
                         <SelectItem value="header">
-                            {{ t('system.integrations.auth.api_key.location_header') }}
+                            {{
+                                t(
+                                    'system.integrations.auth.api_key.location_header',
+                                )
+                            }}
                         </SelectItem>
                         <SelectItem value="query">
-                            {{ t('system.integrations.auth.api_key.location_query') }}
+                            {{
+                                t(
+                                    'system.integrations.auth.api_key.location_query',
+                                )
+                            }}
                         </SelectItem>
                     </SelectContent>
                 </Select>
@@ -175,14 +192,18 @@ onMounted(() => {
 
         <div v-else-if="authType === 'basic'" class="space-y-3">
             <div class="grid gap-2">
-                <Label>{{ t('system.integrations.auth.basic.username') }}</Label>
+                <Label>{{
+                    t('system.integrations.auth.basic.username')
+                }}</Label>
                 <Input
                     :model-value="(modelValue.username as string) ?? ''"
                     @update:model-value="update('username', $event)"
                 />
             </div>
             <div class="grid gap-2">
-                <Label>{{ t('system.integrations.auth.basic.password') }}</Label>
+                <Label>{{
+                    t('system.integrations.auth.basic.password')
+                }}</Label>
                 <Input
                     type="password"
                     :model-value="(modelValue.password as string) ?? ''"
@@ -193,16 +214,23 @@ onMounted(() => {
         </div>
 
         <div v-else-if="authType === 'custom_headers'" class="space-y-3">
-            <Label>{{ t('system.integrations.auth.custom.header_name') }}</Label>
+            <Label>{{
+                t('system.integrations.auth.custom.header_name')
+            }}</Label>
             <HeaderEditor
                 :model-value="customHeaders"
                 @update:model-value="updateCustomHeaders"
             />
         </div>
 
-        <div v-else-if="authType === 'oauth2_client_credentials'" class="space-y-3">
+        <div
+            v-else-if="authType === 'oauth2_client_credentials'"
+            class="space-y-3"
+        >
             <div class="grid gap-2">
-                <Label>{{ t('system.integrations.auth.oauth2.token_url') }}</Label>
+                <Label>{{
+                    t('system.integrations.auth.oauth2.token_url')
+                }}</Label>
                 <Input
                     :model-value="(modelValue.token_url as string) ?? ''"
                     @update:model-value="update('token_url', $event)"
@@ -210,7 +238,9 @@ onMounted(() => {
                 <InputError :message="errorFor('token_url')" />
             </div>
             <div class="grid gap-2">
-                <Label>{{ t('system.integrations.auth.oauth2.client_id') }}</Label>
+                <Label>{{
+                    t('system.integrations.auth.oauth2.client_id')
+                }}</Label>
                 <Input
                     :model-value="(modelValue.client_id as string) ?? ''"
                     @update:model-value="update('client_id', $event)"
@@ -218,7 +248,9 @@ onMounted(() => {
                 <InputError :message="errorFor('client_id')" />
             </div>
             <div class="grid gap-2">
-                <Label>{{ t('system.integrations.auth.oauth2.client_secret') }}</Label>
+                <Label>{{
+                    t('system.integrations.auth.oauth2.client_secret')
+                }}</Label>
                 <Input
                     type="password"
                     :model-value="(modelValue.client_secret as string) ?? ''"
@@ -235,7 +267,9 @@ onMounted(() => {
                 />
             </div>
             <div class="grid gap-2">
-                <Label>{{ t('system.integrations.auth.oauth2.audience') }}</Label>
+                <Label>{{
+                    t('system.integrations.auth.oauth2.audience')
+                }}</Label>
                 <Input
                     :model-value="(modelValue.audience as string) ?? ''"
                     @update:model-value="update('audience', $event)"
@@ -245,7 +279,9 @@ onMounted(() => {
 
         <div v-else-if="authType === 'oauth2_auth_code'" class="space-y-3">
             <div class="grid gap-2">
-                <Label>{{ t('system.integrations.auth.oauth2.authorize_url') }}</Label>
+                <Label>{{
+                    t('system.integrations.auth.oauth2.authorize_url')
+                }}</Label>
                 <Input
                     :model-value="(modelValue.authorize_url as string) ?? ''"
                     @update:model-value="update('authorize_url', $event)"
@@ -253,7 +289,9 @@ onMounted(() => {
                 <InputError :message="errorFor('authorize_url')" />
             </div>
             <div class="grid gap-2">
-                <Label>{{ t('system.integrations.auth.oauth2.token_url') }}</Label>
+                <Label>{{
+                    t('system.integrations.auth.oauth2.token_url')
+                }}</Label>
                 <Input
                     :model-value="(modelValue.token_url as string) ?? ''"
                     @update:model-value="update('token_url', $event)"
@@ -261,7 +299,9 @@ onMounted(() => {
                 <InputError :message="errorFor('token_url')" />
             </div>
             <div class="grid gap-2">
-                <Label>{{ t('system.integrations.auth.oauth2.client_id') }}</Label>
+                <Label>{{
+                    t('system.integrations.auth.oauth2.client_id')
+                }}</Label>
                 <Input
                     :model-value="(modelValue.client_id as string) ?? ''"
                     @update:model-value="update('client_id', $event)"
@@ -269,7 +309,9 @@ onMounted(() => {
                 <InputError :message="errorFor('client_id')" />
             </div>
             <div class="grid gap-2">
-                <Label>{{ t('system.integrations.auth.oauth2.client_secret') }}</Label>
+                <Label>{{
+                    t('system.integrations.auth.oauth2.client_secret')
+                }}</Label>
                 <Input
                     type="password"
                     :model-value="(modelValue.client_secret as string) ?? ''"
@@ -281,7 +323,9 @@ onMounted(() => {
             <!-- Redirect URI: this app's own callback. Read-only + copy — the
                  user pastes it into their provider, never edits it. -->
             <div class="grid gap-2">
-                <Label>{{ t('system.integrations.auth.oauth2.redirect_uri') }}</Label>
+                <Label>{{
+                    t('system.integrations.auth.oauth2.redirect_uri')
+                }}</Label>
                 <div class="flex items-center gap-2">
                     <Input
                         :model-value="redirectUri"

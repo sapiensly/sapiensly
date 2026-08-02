@@ -16,6 +16,8 @@ const RichTextEditor = defineAsyncComponent(
     () => import('./RichTextEditor.vue'),
 );
 
+import RelationPicker from './RelationPicker.vue';
+
 interface UploadedFile {
     file_id: string;
     original_name: string;
@@ -31,8 +33,10 @@ const props = defineProps<{
     inputId: string;
     /** Current value (parent owns the form state). */
     modelValue: unknown;
-    /** Slug used by the App's upload endpoint (only needed for `file` type). */
+    /** Slug used by the App's upload and options endpoints. */
     appSlug: string;
+    /** The app's locale, for the words the inputs say on their own behalf. */
+    locale?: string;
 }>();
 
 const emit = defineEmits<{
@@ -552,6 +556,20 @@ function isInMulti(value: string): boolean {
             :model-value="(modelValue as string) ?? ''"
             @update:model-value="update"
             :input-id="inputId"
+        />
+    </template>
+
+    <!-- A relation is an id, and an id is not something anybody types. This
+         used to fall through to the text box below, which is how an app that
+         modelled its links could not be used to make one. -->
+    <template v-else-if="field.type === 'relation'">
+        <RelationPicker
+            :field="field"
+            :input-id="inputId"
+            :model-value="modelValue"
+            :app-slug="appSlug"
+            :locale="locale"
+            @update:model-value="update"
         />
     </template>
 

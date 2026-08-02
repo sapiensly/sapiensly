@@ -26,12 +26,10 @@ import {
     Cloud,
     Database,
     FileText,
-    GitBranch,
     LayoutGrid,
     MessageCircle,
     MessageSquare,
     Plug,
-    Users,
     Wrench,
 } from '@lucide/vue';
 import type { Component } from 'vue';
@@ -58,9 +56,7 @@ function registerCommand(cmd: PaletteCommand) {
         cmd,
     ];
     return () => {
-        pageCommands.value = pageCommands.value.filter(
-            (c) => c.id !== cmd.id,
-        );
+        pageCommands.value = pageCommands.value.filter((c) => c.id !== cmd.id);
     };
 }
 

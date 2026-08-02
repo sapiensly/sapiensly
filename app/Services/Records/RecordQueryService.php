@@ -554,6 +554,47 @@ class RecordQueryService
     }
 
     /**
+     * Several records of one object by id, in one query, access-scoped.
+     *
+     * `find()` in a loop would do — and for one chip it is the same thing — but
+     * a multi-select opens holding every id it stored, and a form that fires
+     * twenty round trips to fill twenty chips is a form that visibly assembles
+     * itself. Ids the role may not see are simply absent from the result, the
+     * same way `find()` returns null for them.
+     *
+     * @param  list<string>  $recordIds
+     * @param  array<string, mixed>  $manifest
+     * @param  array<string, mixed>  $context
+     * @return Collection<int, Record>
+     */
+    public function findMany(App $app, string $objectId, array $recordIds, array $manifest, array $context = []): Collection
+    {
+        if ($recordIds === []) {
+            return new Collection;
+        }
+
+        $object = $this->findObject($manifest, $objectId);
+
+        if ($this->isConnected($object)) {
+            $wanted = array_flip($recordIds);
+            $rows = array_values(array_filter(
+                $this->connectedRows($app, $object, [], $context),
+                fn (array $r): bool => isset($wanted[(string) ($r['id'] ?? '')]),
+            ));
+
+            return $this->toTransientRecords($app, $object, $rows);
+        }
+
+        $builder = $this->scopeForObject($app, $objectId)->whereIn('id', $recordIds);
+        $this->applyAccessFilter($builder, $object, $objectId, $app, $manifest, $context);
+
+        $records = $builder->get();
+        $this->derived->enrich($app, $object, $records, $manifest);
+
+        return $records;
+    }
+
+    /**
      * Count the records matching a query (filter + access scope) without
      * materialising any rows. Shares the exact scope/filter/access path with
      * query() and aggregate(), so the total honours RLS and the role row_filter.

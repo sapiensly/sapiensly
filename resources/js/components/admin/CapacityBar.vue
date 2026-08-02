@@ -49,11 +49,7 @@ function bytes(value: number | null): string {
                 {{ bytes(used) }}
                 <span class="text-ink-subtle">/ {{ bytes(total) }}</span>
             </span>
-            <span
-                v-if="pct !== null"
-                class="font-mono"
-                :style="{ color }"
-            >
+            <span v-if="pct !== null" class="font-mono" :style="{ color }">
                 {{ pct.toFixed(1) }}%
             </span>
             <span v-else class="text-ink-subtle">—</span>

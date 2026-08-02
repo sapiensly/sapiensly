@@ -98,14 +98,16 @@ function handleDelete(id: string): void {
                 v-if="integrations.length > 0"
                 class="flex flex-wrap items-center gap-3"
             >
-                <div class="relative flex-1 min-w-[220px]">
+                <div class="relative min-w-[220px] flex-1">
                     <Search
                         class="absolute top-1/2 left-4 size-3.5 -translate-y-1/2 text-ink-subtle"
                     />
                     <Input
                         v-model="search"
                         type="search"
-                        :placeholder="t('system.integrations.search_placeholder')"
+                        :placeholder="
+                            t('system.integrations.search_placeholder')
+                        "
                         class="h-10 rounded-pill border-medium bg-surface pl-10 text-sm text-ink placeholder:text-ink-subtle"
                     />
                 </div>

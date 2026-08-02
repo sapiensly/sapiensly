@@ -12,8 +12,14 @@ defineProps<{
 </script>
 
 <template>
-    <div class="min-w-[200px] rounded-sp-sm border border-soft bg-navy p-3 shadow-sp-float">
-        <Handle type="target" :position="Position.Top" class="!bg-accent-blue" />
+    <div
+        class="min-w-[200px] rounded-sp-sm border border-soft bg-navy p-3 shadow-sp-float"
+    >
+        <Handle
+            type="target"
+            :position="Position.Top"
+            class="!bg-accent-blue"
+        />
 
         <div class="mb-1 text-xs font-medium text-ink-muted">
             {{ t('botFlows.nodes.menu') }}

@@ -15,7 +15,8 @@ export function computeTrend(
     compare: number | null | undefined,
     deltaGood: 'up' | 'down' = 'up',
 ): Trend | null {
-    if (compare === null || compare === undefined || typeof value !== 'number') return null;
+    if (compare === null || compare === undefined || typeof value !== 'number')
+        return null;
 
     if (compare === 0) {
         if (value === 0) return { dir: 'flat', good: true, label: '0%' };

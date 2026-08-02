@@ -2,8 +2,8 @@
 import CopyButton from '@/components/chat/CopyButton.vue';
 import ToolCallIndicator from '@/components/chat/ToolCallIndicator.vue';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import type { KnowledgeBaseRef, Message, ToolCall } from '@/types/chat';
 import { normalizeChatMarkdown } from '@/lib/markdown';
+import type { KnowledgeBaseRef, Message, ToolCall } from '@/types/chat';
 import { Bot, User } from '@lucide/vue';
 import { marked } from 'marked';
 import { computed } from 'vue';
@@ -138,7 +138,10 @@ const renderedContent = computed(() => {
                     class="mt-1 flex items-center gap-1 text-xs opacity-70"
                     :class="isUser ? 'justify-end' : ''"
                 >
-                    <CopyButton v-if="message.content" :text="message.content" />
+                    <CopyButton
+                        v-if="message.content"
+                        :text="message.content"
+                    />
                     <span v-if="formattedTime">{{ formattedTime }}</span>
                 </div>
             </div>

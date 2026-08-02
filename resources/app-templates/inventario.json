@@ -1359,59 +1359,32 @@
                 {
                     "object_id": "obj_01kytgcz1ck4197hqe4ky7k5n4",
                     "role_id": "rol_01kytgcz1ck4197hqe4ky7k5my",
-                    "actions": [
-                        "create",
-                        "read",
-                        "update",
-                        "delete"
-                    ]
+                    "actions": ["create", "read", "update", "delete"]
                 },
                 {
                     "object_id": "obj_01kytgcz1ck4197hqe4ky7k5n4",
                     "role_id": "rol_01kytgcz1ck4197hqe4ky7k5mz",
-                    "actions": [
-                        "create",
-                        "read",
-                        "update"
-                    ]
+                    "actions": ["create", "read", "update"]
                 },
                 {
                     "object_id": "obj_01kytgcz1ck4197hqe4ky7k5nc",
                     "role_id": "rol_01kytgcz1ck4197hqe4ky7k5my",
-                    "actions": [
-                        "create",
-                        "read",
-                        "update",
-                        "delete"
-                    ]
+                    "actions": ["create", "read", "update", "delete"]
                 },
                 {
                     "object_id": "obj_01kytgcz1ck4197hqe4ky7k5nc",
                     "role_id": "rol_01kytgcz1ck4197hqe4ky7k5mz",
-                    "actions": [
-                        "create",
-                        "read",
-                        "update"
-                    ]
+                    "actions": ["create", "read", "update"]
                 },
                 {
                     "object_id": "obj_01kytgcz1ck4197hqe4ky7k5ne",
                     "role_id": "rol_01kytgcz1ck4197hqe4ky7k5my",
-                    "actions": [
-                        "create",
-                        "read",
-                        "update",
-                        "delete"
-                    ]
+                    "actions": ["create", "read", "update", "delete"]
                 },
                 {
                     "object_id": "obj_01kytgcz1ck4197hqe4ky7k5ne",
                     "role_id": "rol_01kytgcz1ck4197hqe4ky7k5mz",
-                    "actions": [
-                        "create",
-                        "read",
-                        "update"
-                    ]
+                    "actions": ["create", "read", "update"]
                 }
             ]
         },

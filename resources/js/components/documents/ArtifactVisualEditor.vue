@@ -73,7 +73,10 @@ function loadIntoIframe() {
         if (!doc.body) return;
         const bodyHtml = doc.body.innerHTML;
         lastEmittedBody = bodyHtml;
-        emit('update:modelValue', replaceBodyContents(props.modelValue, bodyHtml));
+        emit(
+            'update:modelValue',
+            replaceBodyContents(props.modelValue, bodyHtml),
+        );
     };
     doc.body.addEventListener('input', handler);
     inputHandler = handler;
@@ -235,7 +238,9 @@ watch(
             </button>
         </div>
 
-        <div class="min-h-0 flex-1 overflow-hidden rounded-xs border border-medium bg-white">
+        <div
+            class="min-h-0 flex-1 overflow-hidden rounded-xs border border-medium bg-white"
+        >
             <iframe
                 ref="iframe"
                 class="h-full w-full border-0"

@@ -69,7 +69,9 @@ const { t } = useI18n();
                             {{ t('settings.delete_account.confirm_title') }}
                         </DialogTitle>
                         <DialogDescription>
-                            {{ t('settings.delete_account.confirm_description') }}
+                            {{
+                                t('settings.delete_account.confirm_description')
+                            }}
                         </DialogDescription>
                     </DialogHeader>
 
@@ -83,7 +85,9 @@ const { t } = useI18n();
                             name="password"
                             required
                             autocomplete="current-password"
-                            :placeholder="t('auth.confirm_password.password_placeholder')"
+                            :placeholder="
+                                t('auth.confirm_password.password_placeholder')
+                            "
                             class="h-9"
                         />
                         <InputError :message="errors.password" />

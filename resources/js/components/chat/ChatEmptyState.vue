@@ -16,13 +16,22 @@ const suggestions = computed<string[]>(() => {
 
 <template>
     <div class="flex flex-1 flex-col items-center justify-center px-4">
-        <div class="mb-6 flex size-14 items-center justify-center rounded-2xl bg-accent-blue/15 text-accent-blue">
+        <div
+            class="mb-6 flex size-14 items-center justify-center rounded-2xl bg-accent-blue/15 text-accent-blue"
+        >
             <Sparkles class="size-7" />
         </div>
-        <h1 class="text-center text-2xl font-semibold text-ink">{{ t('chat.empty.greeting') }}</h1>
-        <p class="mt-2 text-center text-sm text-ink-muted">{{ t('chat.empty.subtitle') }}</p>
+        <h1 class="text-center text-2xl font-semibold text-ink">
+            {{ t('chat.empty.greeting') }}
+        </h1>
+        <p class="mt-2 text-center text-sm text-ink-muted">
+            {{ t('chat.empty.subtitle') }}
+        </p>
 
-        <div v-if="suggestions.length" class="mt-7 flex max-w-xl flex-wrap justify-center gap-2">
+        <div
+            v-if="suggestions.length"
+            class="mt-7 flex max-w-xl flex-wrap justify-center gap-2"
+        >
             <button
                 v-for="(s, i) in suggestions"
                 :key="i"

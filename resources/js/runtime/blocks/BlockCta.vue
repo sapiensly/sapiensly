@@ -22,7 +22,11 @@ function deriveSlugFromUrl(): string {
     return m?.[1] ?? '';
 }
 
-const alignClass = computed(() => (props.block.align === 'left' ? 'items-start text-left' : 'items-center text-center'));
+const alignClass = computed(() =>
+    props.block.align === 'left'
+        ? 'items-start text-left'
+        : 'items-center text-center',
+);
 
 async function click() {
     if (props.block.button) {
@@ -34,7 +38,11 @@ async function click() {
 <template>
     <div :class="['flex flex-col gap-4', alignClass]">
         <h2 class="text-2xl font-bold sm:text-3xl">{{ block.title }}</h2>
-        <p v-if="block.subtitle" class="max-w-2xl text-base" :style="{ opacity: 0.8 }">
+        <p
+            v-if="block.subtitle"
+            class="max-w-2xl text-base"
+            :style="{ opacity: 0.8 }"
+        >
             {{ block.subtitle }}
         </p>
         <div v-if="block.button">

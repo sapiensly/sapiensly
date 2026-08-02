@@ -136,7 +136,9 @@ const isSelected = (id: string) => props.knowledgeBaseIds.includes(id);
         <!-- Similarity threshold slider. -->
         <div class="space-y-2">
             <div class="flex items-center justify-between">
-                <Label class="text-xs text-ink-muted">Similarity Threshold</Label>
+                <Label class="text-xs text-ink-muted"
+                    >Similarity Threshold</Label
+                >
                 <span class="font-mono text-xs text-ink">
                     {{ similarityThreshold[0].toFixed(2) }}
                 </span>
@@ -152,7 +154,9 @@ const isSelected = (id: string) => props.knowledgeBaseIds.includes(id);
                 Minimum similarity score for retrieved chunks. Higher values
                 return more relevant results.
             </p>
-            <InputError :message="errors['config.rag_params.similarity_threshold']" />
+            <InputError
+                :message="errors['config.rag_params.similarity_threshold']"
+            />
         </div>
     </div>
 </template>

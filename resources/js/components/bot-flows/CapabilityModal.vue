@@ -8,8 +8,8 @@ import {
     DialogHeader,
     DialogTitle,
 } from '@/components/ui/dialog';
-import axios from 'axios';
 import { ExternalLink, Loader2 } from '@lucide/vue';
+import axios from 'axios';
 import { type Component, ref, watch } from 'vue';
 
 interface Props {
@@ -19,7 +19,11 @@ interface Props {
     fetchUrl: string;
     createUrl: string;
     icon: Component;
-    columns: { key: string; label: string; type?: 'badge' | 'text' | 'date' | 'size' }[];
+    columns: {
+        key: string;
+        label: string;
+        type?: 'badge' | 'text' | 'date' | 'size';
+    }[];
 }
 
 const props = defineProps<Props>();
@@ -71,7 +75,9 @@ function formatValue(value: unknown, type?: string): string {
     return String(value);
 }
 
-function badgeVariant(value: string): 'default' | 'secondary' | 'outline' | 'destructive' {
+function badgeVariant(
+    value: string,
+): 'default' | 'secondary' | 'outline' | 'destructive' {
     switch (value) {
         case 'active':
         case 'ready':
@@ -91,7 +97,7 @@ function badgeVariant(value: string): 'default' | 'secondary' | 'outline' | 'des
 
 <template>
     <Dialog :open="open" @update:open="emit('update:open', $event)">
-        <DialogContent class="max-h-[80vh] max-w-3xl flex flex-col">
+        <DialogContent class="flex max-h-[80vh] max-w-3xl flex-col">
             <DialogHeader>
                 <DialogTitle class="flex items-center gap-2">
                     <component :is="icon" class="h-5 w-5" />
@@ -102,18 +108,32 @@ function badgeVariant(value: string): 'default' | 'secondary' | 'outline' | 'des
 
             <div class="flex-1 overflow-y-auto">
                 <!-- Loading -->
-                <div v-if="loading" class="flex items-center justify-center py-12">
-                    <Loader2 class="h-6 w-6 animate-spin text-muted-foreground" />
+                <div
+                    v-if="loading"
+                    class="flex items-center justify-center py-12"
+                >
+                    <Loader2
+                        class="h-6 w-6 animate-spin text-muted-foreground"
+                    />
                 </div>
 
                 <!-- Error -->
-                <div v-else-if="error" class="py-8 text-center text-sm text-destructive">
+                <div
+                    v-else-if="error"
+                    class="py-8 text-center text-sm text-destructive"
+                >
                     {{ error }}
                 </div>
 
                 <!-- Empty -->
-                <div v-else-if="items.length === 0" class="flex flex-col items-center justify-center py-12">
-                    <component :is="icon" class="mb-3 h-10 w-10 text-muted-foreground" />
+                <div
+                    v-else-if="items.length === 0"
+                    class="flex flex-col items-center justify-center py-12"
+                >
+                    <component
+                        :is="icon"
+                        class="mb-3 h-10 w-10 text-muted-foreground"
+                    />
                     <p class="text-sm text-muted-foreground">No items yet.</p>
                 </div>
 
@@ -143,11 +163,22 @@ function badgeVariant(value: string): 'default' | 'secondary' | 'outline' | 'des
                             >
                                 <Badge
                                     v-if="col.type === 'badge'"
-                                    :variant="badgeVariant(String(item[col.key] ?? ''))"
+                                    :variant="
+                                        badgeVariant(
+                                            String(item[col.key] ?? ''),
+                                        )
+                                    "
                                 >
                                     {{ item[col.key] }}
                                 </Badge>
-                                <span v-else :class="col.key === 'name' ? 'font-medium' : 'text-muted-foreground'">
+                                <span
+                                    v-else
+                                    :class="
+                                        col.key === 'name'
+                                            ? 'font-medium'
+                                            : 'text-muted-foreground'
+                                    "
+                                >
                                     {{ formatValue(item[col.key], col.type) }}
                                 </span>
                             </td>

@@ -62,10 +62,8 @@ const typeLabels: Record<string, string> = {
 };
 
 const defaultPrompts: Record<string, string> = {
-    triage:
-        'You are a triage agent. Classify the user\'s intent, urgency and sentiment, then route to the right specialist.',
-    knowledge:
-        `You are an expert assistant that answers questions based on the provided documentation.
+    triage: "You are a triage agent. Classify the user's intent, urgency and sentiment, then route to the right specialist.",
+    knowledge: `You are an expert assistant that answers questions based on the provided documentation.
 
 ## Instructions
 
@@ -85,8 +83,7 @@ If the question cannot be answered with the available context:
 - Indicate that you couldn't find that information in the documentation
 - If you have relevant general knowledge, you may share it while clarifying it doesn't come from the documentation
 - Suggest what type of document might contain that information`,
-    action:
-        'You are an action agent. Execute the requested operations using the available tools. Confirm with the user before taking irreversible actions.',
+    action: 'You are an action agent. Execute the requested operations using the available tools. Confirm with the user before taking irreversible actions.',
 };
 
 const defaultConfigs: Record<string, Record<string, unknown>> = {
@@ -130,17 +127,20 @@ async function submit() {
     errors.value = {};
 
     try {
-        const response = await axios.post(BotFlowController.createAgentForLayer().url, {
-            type: props.type,
-            name: name.value,
-            description: description.value,
-            model: model.value,
-            prompt_template: promptTemplate.value,
-            keywords: keywords.value,
-            config: config.value,
-            knowledge_base_ids: knowledgeBaseIds.value,
-            tool_ids: toolIds.value,
-        });
+        const response = await axios.post(
+            BotFlowController.createAgentForLayer().url,
+            {
+                type: props.type,
+                name: name.value,
+                description: description.value,
+                model: model.value,
+                prompt_template: promptTemplate.value,
+                keywords: keywords.value,
+                config: config.value,
+                knowledge_base_ids: knowledgeBaseIds.value,
+                tool_ids: toolIds.value,
+            },
+        );
 
         const agentId = response.data?.agent?.id ?? null;
         const agentName = response.data?.agent?.name ?? name.value;
@@ -149,17 +149,27 @@ async function submit() {
         emit('update:open', false);
     } catch (e: unknown) {
         const axiosError = e as {
-            response?: { status?: number; data?: { errors?: Record<string, string[]>; message?: string } };
+            response?: {
+                status?: number;
+                data?: { errors?: Record<string, string[]>; message?: string };
+            };
         };
 
-        if (axiosError.response?.status === 422 && axiosError.response.data?.errors) {
+        if (
+            axiosError.response?.status === 422 &&
+            axiosError.response.data?.errors
+        ) {
             const flat: Record<string, string> = {};
-            Object.entries(axiosError.response.data.errors).forEach(([key, val]) => {
-                flat[key] = Array.isArray(val) ? val[0] : (val as string);
-            });
+            Object.entries(axiosError.response.data.errors).forEach(
+                ([key, val]) => {
+                    flat[key] = Array.isArray(val) ? val[0] : (val as string);
+                },
+            );
             errors.value = flat;
         } else {
-            toast.error(axiosError.response?.data?.message ?? 'Failed to create agent.');
+            toast.error(
+                axiosError.response?.data?.message ?? 'Failed to create agent.',
+            );
         }
     } finally {
         processing.value = false;
@@ -171,7 +181,9 @@ async function submit() {
     <Dialog :open="open" @update:open="emit('update:open', $event)">
         <DialogContent class="max-h-[90vh] max-w-3xl overflow-y-auto">
             <DialogHeader>
-                <DialogTitle>{{ t('botFlows.modal.create_title', { type: typeLabels[type] }) }}</DialogTitle>
+                <DialogTitle>{{
+                    t('botFlows.modal.create_title', { type: typeLabels[type] })
+                }}</DialogTitle>
                 <DialogDescription>
                     {{ t('botFlows.modal.create_description') }}
                 </DialogDescription>
@@ -187,28 +199,38 @@ async function submit() {
 
                     <div class="grid gap-4">
                         <div class="grid gap-2">
-                            <Label for="agent-name">{{ t('agents.create.agent_name') }}</Label>
+                            <Label for="agent-name">{{
+                                t('agents.create.agent_name')
+                            }}</Label>
                             <Input
                                 id="agent-name"
                                 v-model="name"
                                 required
-                                :placeholder="t('agents.create.agent_name_placeholder')"
+                                :placeholder="
+                                    t('agents.create.agent_name_placeholder')
+                                "
                             />
                             <InputError :message="errors.name" />
                         </div>
 
                         <div class="grid gap-2">
-                            <Label for="agent-description">{{ t('agents.create.description_label') }}</Label>
+                            <Label for="agent-description">{{
+                                t('agents.create.description_label')
+                            }}</Label>
                             <Input
                                 id="agent-description"
                                 v-model="description"
-                                :placeholder="t('agents.create.description_placeholder')"
+                                :placeholder="
+                                    t('agents.create.description_placeholder')
+                                "
                             />
                             <InputError :message="errors.description" />
                         </div>
 
                         <div class="grid gap-2">
-                            <Label for="agent-keywords">{{ t('agents.create.keywords_label') }}</Label>
+                            <Label for="agent-keywords">{{
+                                t('agents.create.keywords_label')
+                            }}</Label>
                             <KeywordsInput v-model="keywords" />
                             <p class="text-xs text-muted-foreground">
                                 {{ t('agents.create.keywords_description') }}
@@ -217,10 +239,16 @@ async function submit() {
                         </div>
 
                         <div class="grid gap-2">
-                            <Label for="agent-model">{{ t('agents.create.model') }}</Label>
+                            <Label for="agent-model">{{
+                                t('agents.create.model')
+                            }}</Label>
                             <Select v-model="model">
                                 <SelectTrigger id="agent-model">
-                                    <SelectValue :placeholder="t('agents.create.select_model')" />
+                                    <SelectValue
+                                        :placeholder="
+                                            t('agents.create.select_model')
+                                        "
+                                    />
                                 </SelectTrigger>
                                 <SelectContent>
                                     <SelectItem
@@ -236,11 +264,15 @@ async function submit() {
                         </div>
 
                         <div class="grid gap-2">
-                            <Label for="agent-prompt">{{ t('agents.create.prompt_template') }}</Label>
+                            <Label for="agent-prompt">{{
+                                t('agents.create.prompt_template')
+                            }}</Label>
                             <Textarea
                                 id="agent-prompt"
                                 v-model="promptTemplate"
-                                :placeholder="t('agents.create.prompt_placeholder')"
+                                :placeholder="
+                                    t('agents.create.prompt_placeholder')
+                                "
                                 rows="6"
                             />
                             <InputError :message="errors.prompt_template" />
@@ -286,8 +318,15 @@ async function submit() {
                     >
                         {{ t('common.cancel') }}
                     </Button>
-                    <Button type="submit" :disabled="processing || !name || !model">
-                        {{ processing ? t('botFlows.modal.creating') : t('botFlows.modal.create_agent') }}
+                    <Button
+                        type="submit"
+                        :disabled="processing || !name || !model"
+                    >
+                        {{
+                            processing
+                                ? t('botFlows.modal.creating')
+                                : t('botFlows.modal.create_agent')
+                        }}
                     </Button>
                 </DialogFooter>
             </form>

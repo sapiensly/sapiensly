@@ -30,8 +30,12 @@ const breadcrumbs = computed<BreadcrumbItem[]>(() => [
                 </div>
 
                 <Card>
-                    <CardContent class="flex flex-col items-center justify-center gap-4 py-16 text-center">
-                        <div class="flex h-16 w-16 items-center justify-center rounded-full bg-muted">
+                    <CardContent
+                        class="flex flex-col items-center justify-center gap-4 py-16 text-center"
+                    >
+                        <div
+                            class="flex h-16 w-16 items-center justify-center rounded-full bg-muted"
+                        >
                             <Plug class="h-8 w-8 text-muted-foreground" />
                         </div>
                         <div class="space-y-1">
@@ -39,7 +43,11 @@ const breadcrumbs = computed<BreadcrumbItem[]>(() => [
                                 {{ t('system.integrations.coming_soon') }}
                             </h3>
                             <p class="text-sm text-muted-foreground">
-                                {{ t('system.integrations.coming_soon_description') }}
+                                {{
+                                    t(
+                                        'system.integrations.coming_soon_description',
+                                    )
+                                }}
                             </p>
                         </div>
                     </CardContent>

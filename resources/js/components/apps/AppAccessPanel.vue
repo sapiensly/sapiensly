@@ -139,7 +139,11 @@ onMounted(load);
                             "
                             @click="onModeChange(mode)"
                         >
-                            {{ mode === 'allowlist' ? t('apps.access.mode_allowlist_label') : t('apps.access.mode_open_label') }}
+                            {{
+                                mode === 'allowlist'
+                                    ? t('apps.access.mode_allowlist_label')
+                                    : t('apps.access.mode_open_label')
+                            }}
                         </button>
                     </div>
                     <p class="mt-2 text-xs text-ink-muted">

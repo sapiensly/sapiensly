@@ -29,7 +29,7 @@ function submit(): void {
         <Head :title="t('auth.forgot_password.title')" />
 
         <header class="space-y-1">
-            <h1 class="text-[22px] font-semibold leading-tight text-ink">
+            <h1 class="text-[22px] leading-tight font-semibold text-ink">
                 {{ t('auth.forgot_password.title') }}
             </h1>
             <p class="text-xs text-ink-muted">

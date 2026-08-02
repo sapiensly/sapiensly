@@ -32,7 +32,7 @@ function submit(): void {
         <Head :title="t('auth.register.title')" />
 
         <header class="space-y-1">
-            <h1 class="text-[22px] font-semibold leading-tight text-ink">
+            <h1 class="text-[22px] leading-tight font-semibold text-ink">
                 {{ t('auth.register.title') }}
             </h1>
             <p class="text-xs text-ink-muted">
@@ -111,12 +111,9 @@ function submit(): void {
             </button>
         </form>
 
-        <div
-            v-if="canLoginWithGoogle"
-            class="mt-6 flex items-center gap-3"
-        >
+        <div v-if="canLoginWithGoogle" class="mt-6 flex items-center gap-3">
             <span class="h-px flex-1 bg-soft" />
-            <span class="text-[11px] uppercase tracking-wide text-ink-muted">
+            <span class="text-[11px] tracking-wide text-ink-muted uppercase">
                 {{ t('auth.login.or') }}
             </span>
             <span class="h-px flex-1 bg-soft" />
@@ -127,11 +124,7 @@ function submit(): void {
             href="/auth/google/redirect"
             class="mt-5 flex h-10 w-full items-center justify-center gap-2.5 rounded-pill border border-soft bg-surface text-sm font-medium text-ink transition-colors hover:bg-navy"
         >
-            <svg
-                class="size-4"
-                viewBox="0 0 24 24"
-                aria-hidden="true"
-            >
+            <svg class="size-4" viewBox="0 0 24 24" aria-hidden="true">
                 <path
                     fill="#EA4335"
                     d="M12 10.2v3.9h5.5c-.24 1.4-.96 2.6-2.05 3.4v2.8h3.3c1.94-1.8 3.05-4.4 3.05-7.5 0-.7-.06-1.4-.18-2z"

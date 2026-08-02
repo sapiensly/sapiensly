@@ -26,7 +26,12 @@ function stopImpersonating() {
     >
         <Eye class="size-3.5 shrink-0" />
         <span class="truncate">
-            {{ t('impersonation.banner', { name: user.name, email: user.email }) }}
+            {{
+                t('impersonation.banner', {
+                    name: user.name,
+                    email: user.email,
+                })
+            }}
         </span>
         <button
             type="button"

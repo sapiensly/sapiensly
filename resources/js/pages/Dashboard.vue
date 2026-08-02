@@ -28,9 +28,7 @@ const { t } = useI18n();
                 <h2 class="text-base font-semibold text-ink">
                     {{ t('app_v2.dashboard.welcome_title') }}
                 </h2>
-                <p
-                    class="mx-auto mt-2 max-w-[520px] text-sm text-ink-muted"
-                >
+                <p class="mx-auto mt-2 max-w-[520px] text-sm text-ink-muted">
                     {{ t('app_v2.dashboard.welcome_body') }}
                 </p>
             </section>

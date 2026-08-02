@@ -29,7 +29,7 @@ withDefaults(defineProps<Props>(), { bg: 'blueprint' });
             >
                 <AppLogoIcon class="size-11" />
                 <span
-                    class="text-[24px] font-bold italic tracking-[-0.02em] text-ink"
+                    class="text-[24px] font-bold tracking-[-0.02em] text-ink italic"
                     style="font-family: Montserrat, sans-serif"
                 >
                     SAPIENSLY

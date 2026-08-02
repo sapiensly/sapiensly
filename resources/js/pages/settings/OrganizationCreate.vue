@@ -37,7 +37,9 @@ const submit = () => {
                         id="org-name"
                         v-model="form.name"
                         type="text"
-                        :placeholder="t('settings.organization_create.name_placeholder')"
+                        :placeholder="
+                            t('settings.organization_create.name_placeholder')
+                        "
                         required
                         class="h-9"
                     />

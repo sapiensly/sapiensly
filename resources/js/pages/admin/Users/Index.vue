@@ -12,9 +12,9 @@ import {
 } from '@/components/ui/select';
 import AdminLayout from '@/layouts/AdminLayout.vue';
 import type { AdminUser, UsersIndexProps } from '@/lib/admin/types';
-import { Head, Link, router } from '@inertiajs/vue3';
-import { useDebounceFn } from '@vueuse/core';
+import { Head, router } from '@inertiajs/vue3';
 import { Download, Plus, Search } from '@lucide/vue';
+import { useDebounceFn } from '@vueuse/core';
 import { computed, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 
@@ -110,13 +110,16 @@ const rangeLabel = computed(() =>
             <!-- Header -->
             <header class="flex items-start justify-between gap-4">
                 <div class="space-y-1">
-                    <h1 class="text-[22px] font-semibold leading-tight text-ink">
+                    <h1
+                        class="text-[22px] leading-tight font-semibold text-ink"
+                    >
                         {{ t('admin.users.heading') }}
                     </h1>
                     <p class="text-xs text-ink-muted">
                         {{
                             t('admin.users.description_count', {
-                                accounts: summary.accountsTotal.toLocaleString(),
+                                accounts:
+                                    summary.accountsTotal.toLocaleString(),
                                 orgs: summary.organizationsTotal.toLocaleString(),
                             })
                         }}
@@ -214,9 +217,7 @@ const rangeLabel = computed(() =>
                 class="flex items-center justify-between rounded-sp-sm border border-accent-blue/30 bg-accent-blue/5 px-4 py-2 text-sm"
             >
                 <span class="text-ink-muted">
-                    {{
-                        t('admin.users.selection', { count: selectionCount })
-                    }}
+                    {{ t('admin.users.selection', { count: selectionCount }) }}
                 </span>
                 <button
                     type="button"
@@ -274,7 +275,9 @@ const rangeLabel = computed(() =>
                     <button
                         type="button"
                         class="text-ink-muted transition-colors hover:text-ink disabled:opacity-40 disabled:hover:text-ink-muted"
-                        :disabled="users.meta.currentPage >= users.meta.lastPage"
+                        :disabled="
+                            users.meta.currentPage >= users.meta.lastPage
+                        "
                         @click="
                             router.get(
                                 '/admin/users',

@@ -80,7 +80,11 @@ const contentFilters = computed({
                         {{ t('agents.config.triage.content_filters') }}
                     </p>
                     <p class="text-[11px] text-ink-subtle">
-                        {{ t('agents.config.triage.content_filters_description') }}
+                        {{
+                            t(
+                                'agents.config.triage.content_filters_description',
+                            )
+                        }}
                     </p>
                 </div>
                 <Switch v-model="contentFilters" />

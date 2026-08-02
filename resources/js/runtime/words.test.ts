@@ -39,9 +39,7 @@ describe('a phrase the runtime says on its own behalf', () => {
     it('says every phrase in every language it claims to speak', () => {
         // A half-translated dictionary is how one card ends up English inside
         // an otherwise Spanish page.
-        const keys = Object.keys(
-            JSON.parse(JSON.stringify({ ...enKeys() })),
-        );
+        const keys = Object.keys(JSON.parse(JSON.stringify({ ...enKeys() })));
 
         for (const lang of ['es', 'pt', 'fr']) {
             for (const key of keys) {
@@ -68,5 +66,10 @@ function enKeys(): Record<string, string> {
         step_of: '',
         load_failed: '',
         retry: '',
+        picker_search: '',
+        picker_none: '',
+        picker_more: '',
+        picker_clear: '',
+        picker_unavailable: '',
     };
 }

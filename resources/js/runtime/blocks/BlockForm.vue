@@ -341,6 +341,7 @@ async function cancel() {
                         :input-id="`form_${block.id}_${rf.slug}`"
                         v-model="formData[rf.slug]"
                         :app-slug="appSlug"
+                        :locale="locale"
                     />
                 </div>
 

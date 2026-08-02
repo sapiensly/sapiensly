@@ -23,7 +23,10 @@ const dot = computed(() => {
         case 'ok':
             return { color: 'var(--sp-success)', title: 'Running' };
         case 'outdated':
-            return { color: 'var(--sp-warning)', title: 'Degraded / not reachable' };
+            return {
+                color: 'var(--sp-warning)',
+                title: 'Degraded / not reachable',
+            };
         case 'missing':
             return { color: 'var(--sp-danger)', title: 'Missing' };
     }
