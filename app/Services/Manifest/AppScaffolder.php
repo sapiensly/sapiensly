@@ -1702,6 +1702,101 @@ class AppScaffolder
     }
 
     /**
+     * What you can DO to the record whose page you are on.
+     *
+     * A generated detail page showed the record and offered nothing: opening an
+     * order to change its status meant going back to the list and finding the
+     * row again, and no generated app could delete a record at all — a typo
+     * lived for ever. Both halves of that are here.
+     *
+     * Delete lives on this page rather than as a row action in the list, and
+     * that is the point of it being here: you are looking at the record you are
+     * about to destroy instead of at the twelfth row of a table. It is also the
+     * only place the schema lets us gate the control by role — an action column
+     * carries no `visibility`, a button does — and the scaffold grants delete to
+     * `admin` alone, so anyone else never sees it. The executor re-checks the
+     * policy server-side regardless; this is about not offering what will be
+     * refused.
+     *
+     * @param  array<string, mixed>  $parentDef
+     * @param  array<int, array<string, mixed>>  $parentPageFields
+     * @return list<array<string, mixed>>
+     */
+    private function detailRecordActions(array $parentDef, array $parentPageFields, string $singular, string $lang): array
+    {
+        $objectId = $parentDef['id'];
+
+        // The same fields the list's edit form offers: everything enterable,
+        // minus what the app works out for itself.
+        $formIndex = array_values(array_filter(
+            $parentPageFields,
+            fn (array $f): bool => ! in_array($f['type'] ?? 'string', self::DERIVED_TYPES, true),
+        ));
+
+        if ($formIndex === []) {
+            return [];
+        }
+
+        $values = [];
+        foreach ($formIndex as $field) {
+            $values[$field['slug']] = '{{form.'.$field['slug'].'}}';
+        }
+
+        $lex = SemanticLexicon::for($lang);
+        $modalId = $this->id('blk');
+
+        $blocks = [[
+            'id' => $modalId,
+            'type' => 'modal',
+            'title' => $this->labelEditTitle($lang, $singular),
+            'blocks' => [[
+                'id' => $this->id('blk'),
+                'type' => 'form',
+                'object_id' => $objectId,
+                'mode' => 'edit',
+                // The page's own id — this form edits the record being shown,
+                // so there is no row to carry one in.
+                'record_id_expression' => '{{params.id}}',
+                'fields' => array_map(fn (array $f): array => ['field_id' => $f['id']], $formIndex),
+                'submit_label' => $this->labelSave($lang),
+                'on_submit' => [
+                    ['type' => 'update_record', 'object_id' => $objectId, 'record_id_expression' => '{{params.id}}', 'values' => $values],
+                    ['type' => 'close_modal'],
+                    ['type' => 'show_toast', 'level' => 'success', 'message' => $lex->label('saved', singular: $singular)],
+                    ['type' => 'refresh'],
+                ],
+            ]],
+        ], [
+            'id' => $this->id('blk'),
+            'type' => 'button',
+            'label' => $this->labelEdit($lang),
+            'icon' => 'pencil',
+            'variant' => 'secondary',
+            'on_click' => [['type' => 'open_modal', 'modal_block_id' => $modalId]],
+        ], [
+            'id' => $this->id('blk'),
+            'type' => 'button',
+            'label' => $lex->label('delete'),
+            'icon' => 'trash-2',
+            'variant' => 'danger',
+            'visibility' => ['roles' => ['admin']],
+            'confirm' => [
+                'title' => $lex->label('delete_title', singular: $singular),
+                'message' => $lex->label('delete_message'),
+            ],
+            'on_click' => [
+                ['type' => 'delete_record', 'object_id' => $objectId, 'record_id_expression' => '{{params.id}}'],
+                ['type' => 'show_toast', 'level' => 'success', 'message' => $lex->label('deleted', singular: $singular)],
+                // Back to the list: staying would leave the page asking the
+                // server for a record that is no longer there.
+                ['type' => 'navigate', 'to' => '/'.$parentDef['slug']],
+            ],
+        ]];
+
+        return $blocks;
+    }
+
+    /**
      * AND a set of conditions into a block's data source, keeping whatever
      * filter it already carried.
      *
@@ -3452,6 +3547,10 @@ class AppScaffolder
                 'fields' => array_map(fn (array $f): array => ['field_id' => $f['id']], $parentPageFields),
             ],
         ];
+
+        foreach ($this->detailRecordActions($parentDef, $parentPageFields, $singular, $lang) as $block) {
+            $blocks[] = $block;
+        }
 
         foreach ($children as $child) {
             $childDef = $child['def'];

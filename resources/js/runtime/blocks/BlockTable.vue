@@ -11,6 +11,7 @@ import {
 import DOMPurify from 'dompurify';
 import { computed, inject, ref, watch } from 'vue';
 import RuntimeIcon from '../RuntimeIcon.vue';
+import { confirmAction } from '../confirm';
 import type {
     BlockTable,
     FieldDef,
@@ -779,11 +780,14 @@ async function runRowAction(
     col: ActionColumn,
     row: { id: string; data: Record<string, unknown> },
 ) {
-    if (
-        col.confirm &&
-        !window.confirm(`${col.confirm.title}\n\n${col.confirm.message}`)
-    ) {
-        return;
+    if (col.confirm) {
+        const ok = await confirmAction({
+            title: col.confirm.title,
+            message: col.confirm.message,
+            locale: props.locale,
+            danger: col.variant === 'danger',
+        });
+        if (!ok) return;
     }
     await execute(col.on_click, { appSlug, row });
 }

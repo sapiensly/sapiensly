@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, inject } from 'vue';
+import { confirmAction } from '../confirm';
 import RuntimeIcon from '../RuntimeIcon.vue';
 import { useActionExecutor, type RuntimeAction } from '../useActionExecutor';
 
@@ -18,6 +19,10 @@ const props = defineProps<{ block: ButtonBlock }>();
 const { execute } = useActionExecutor();
 
 const appSlug = inject<string>('appSlug', deriveSlugFromUrl());
+// Injected like the slug rather than threaded as a prop: a button is nested
+// inside containers, modals and tabs, and every one of them would have to pass
+// it down for the confirm dialog to speak the app's language.
+const locale = inject<string>('runtimeLocale', 'en');
 function deriveSlugFromUrl(): string {
     const m = window.location.pathname.match(/^\/[ra]\/([a-z0-9][a-z0-9_-]*)/);
     return m?.[1] ?? '';
@@ -48,8 +53,16 @@ const sizeClass = computed(() => {
 });
 
 async function click() {
+    // The browser's confirm carried the origin, ignored the theme and threw the
+    // title away — this block's `confirm.title` was authored and never shown.
     if (props.block.confirm?.message) {
-        if (!window.confirm(props.block.confirm.message)) return;
+        const ok = await confirmAction({
+            title: props.block.confirm.title,
+            message: props.block.confirm.message,
+            locale,
+            danger: props.block.variant === 'danger',
+        });
+        if (!ok) return;
     }
     await execute(props.block.on_click ?? [], { appSlug });
 }

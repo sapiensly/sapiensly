@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import AppRenderer from '@/runtime/AppRenderer.vue';
 import BlockBreadcrumb from '@/runtime/blocks/BlockBreadcrumb.vue';
+import ConfirmDialog from '@/runtime/ConfirmDialog.vue';
 import { manifestFontHrefs } from '@/runtime/fonts';
 import LandingChatbotBubble from '@/runtime/LandingChatbotBubble.vue';
 import RolePreviewBar from '@/runtime/RolePreviewBar.vue';
@@ -222,6 +223,7 @@ const hrefFor = (slug: string) => `${mount.value}/${slug}`;
 // Provide the slug the app is addressed by so BlockForm/BlockButton can POST to
 // <mount>/actions — the public slug on a portal, the app slug in the runtime.
 provide('appSlug', mount.value.split('/')[2] ?? props.app.slug);
+provide('runtimeLocale', locale.value);
 // Public-surface flags for the lead_form block: live submits happen only on
 // the published /l page; the preview/authenticated runtime render it disabled.
 provide('publicSurface', props.publicSurface ?? false);
@@ -459,5 +461,10 @@ onMounted(() => {
             :agent-name="manifest.agent.name"
             :theme="theme"
         />
+
+        <!-- One dialog for every 'are you sure' the runtime asks. It teleports
+             to the body, so its place in the tree is only about staying inside
+             the page's single root. -->
+        <ConfirmDialog />
     </div>
 </template>

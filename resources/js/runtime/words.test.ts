@@ -79,5 +79,8 @@ function enKeys(): Record<string, string> {
         range_1y: '',
         range_all: '',
         range_all_label: '',
+        cancel: '',
+        confirm: '',
+        delete: '',
     };
 }

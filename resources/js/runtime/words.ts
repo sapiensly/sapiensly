@@ -45,6 +45,9 @@ const WORDS: Record<string, Dict> = {
         range_1y: 'Year',
         range_all: 'All time',
         range_all_label: 'the whole history',
+        cancel: 'Cancel',
+        confirm: 'Confirm',
+        delete: 'Delete',
     },
     es: {
         columns: 'Columnas',
@@ -72,6 +75,9 @@ const WORDS: Record<string, Dict> = {
         range_1y: 'Año',
         range_all: 'Todo',
         range_all_label: 'todo el histórico',
+        cancel: 'Cancelar',
+        confirm: 'Confirmar',
+        delete: 'Eliminar',
     },
     pt: {
         columns: 'Colunas',
@@ -99,6 +105,9 @@ const WORDS: Record<string, Dict> = {
         range_1y: 'Ano',
         range_all: 'Tudo',
         range_all_label: 'todo o histórico',
+        cancel: 'Cancelar',
+        confirm: 'Confirmar',
+        delete: 'Excluir',
     },
     fr: {
         columns: 'Colonnes',
@@ -126,6 +135,9 @@ const WORDS: Record<string, Dict> = {
         range_1y: 'Année',
         range_all: 'Tout',
         range_all_label: 'tout l’historique',
+        cancel: 'Annuler',
+        confirm: 'Confirmer',
+        delete: 'Supprimer',
     },
 };
 

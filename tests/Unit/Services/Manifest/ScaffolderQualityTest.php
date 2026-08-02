@@ -549,9 +549,14 @@ it('builds a master-detail page for a parent with children', function () {
     expect($relatedList['parent_id_expression'])->toBe('{{params.id}}');
 
     // The add-child form presets the relation back to this parent from the page id.
+    // Found by the object it writes, not by position: the page also carries an
+    // edit modal for the parent record now, and "the first modal" moved.
     $relField = collect($renglones['fields'])->firstWhere('type', 'relation');
-    $form = blockByType($detail, 'modal')['blocks'][0];
-    expect($form['object_id'])->toBe($renglones['id']);
+    $form = collect($detail['blocks'])
+        ->where('type', 'modal')
+        ->pluck('blocks.0')
+        ->firstWhere('object_id', $renglones['id']);
+    expect($form)->not->toBeNull();
     $createValues = collect($form['on_submit'])->firstWhere('type', 'create_record')['values'];
     expect($createValues[$relField['slug']])->toBe('{{params.id}}');
     // …and it does NOT ask the user to pick the parent again.

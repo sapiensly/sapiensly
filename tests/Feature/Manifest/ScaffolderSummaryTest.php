@@ -239,3 +239,55 @@ it('never puts the same figure on the dashboard twice', function () {
     expect($signatures->duplicates())->toBeEmpty()
         ->and(collect($grid['items'])->pluck('label')->duplicates())->toBeEmpty();
 });
+
+it('lets somebody act on the record whose page they are looking at', function () {
+    // A detail page showed the record and offered nothing: changing an order's
+    // status meant going back to the list to find the row, and no generated app
+    // could delete a record at all — a typo lived for ever.
+    Ai::fakeAgent(ChatAgent::class, [json_encode([
+        'summary' => 'Clientes y sus vehículos.',
+        'objects' => [
+            ['name' => 'Clientes', 'slug' => 'clientes', 'fields' => [
+                ['name' => 'Nombre', 'slug' => 'nombre', 'type' => 'string'],
+                ['name' => 'Teléfono', 'slug' => 'telefono', 'type' => 'phone'],
+            ]],
+            ['name' => 'Vehículos', 'slug' => 'vehiculos', 'fields' => [
+                ['name' => 'Placas', 'slug' => 'placas', 'type' => 'string'],
+            ]],
+        ],
+        'links' => [['from' => 'vehiculos', 'to' => 'clientes', 'name' => 'cliente']],
+    ], JSON_THROW_ON_ERROR)]);
+
+    $base = summaryBase();
+    $base['settings']['default_locale'] = 'es-MX';
+    $manifest = summaryScaffolder()->scaffold($base, 'Taller.', User::factory()->create());
+
+    $detail = collect($manifest['pages'])->first(
+        fn (array $p): bool => str_contains((string) $p['path'], 'clientes_detail'),
+    );
+    expect($detail)->not->toBeNull();
+
+    $buttons = collect($detail['blocks'])->where('type', 'button');
+    $edit = $buttons->firstWhere('label', 'Editar');
+    $delete = $buttons->firstWhere('label', 'Eliminar');
+
+    // The edit form edits the record being SHOWN, so it takes the id from the
+    // page rather than from a row that is not there.
+    $modal = collect($detail['blocks'])->firstWhere('type', 'modal');
+    expect($edit)->not->toBeNull()
+        ->and($modal['blocks'][0]['record_id_expression'])->toBe('{{params.id}}');
+
+    expect($delete)->not->toBeNull()
+        ->and($delete['variant'])->toBe('danger')
+        // Gated on the roles the scaffold actually grants delete to. An action
+        // COLUMN carries no visibility, which is the other reason delete lives
+        // on this page and not as a row action in the list.
+        ->and($delete['visibility']['roles'])->toBe(['admin'])
+        ->and($delete['confirm']['title'])->toBe('¿Eliminar Cliente?');
+
+    $kinds = collect($delete['on_click'])->pluck('type')->all();
+    expect($kinds)->toBe(['delete_record', 'show_toast', 'navigate'])
+        // Staying would leave the page asking the server for a record that is
+        // no longer there.
+        ->and(collect($delete['on_click'])->firstWhere('type', 'navigate')['to'])->toBe('/clientes');
+});

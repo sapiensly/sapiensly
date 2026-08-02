@@ -81,6 +81,28 @@ class BlockDataBus {
 export const blockDataBus = new BlockDataBus();
 
 /** The current page slug from the runtime URL (/r/{app}/{page}), or undefined. */
+/**
+ * The page's own params, read off the URL.
+ *
+ * `{{params.x}}` MEANS a URL query param, and only the blocks that were handed
+ * one passed any: a table row action carries `row`, a modal carries what opened
+ * it, and a plain button passed nothing at all. So a button whose action said
+ * `{{params.id}}` — the natural way to write "the record this page is showing"
+ * — resolved it to empty and the action ran against no record. A Delete button
+ * on a record's own page deleted nothing and said nothing.
+ *
+ * Read here rather than threaded from each block: every call site would have to
+ * pass it, and this is the one place that knows what a param is.
+ */
+function paramsFromUrl(): Record<string, unknown> {
+    const params: Record<string, unknown> = {};
+    for (const [key, value] of new URLSearchParams(window.location.search)) {
+        params[key] = value;
+    }
+
+    return params;
+}
+
 function currentPageSlug(): string | undefined {
     const m = window.location.pathname.match(
         /^\/[ra]\/[a-z0-9][a-z0-9_-]*\/([a-z][a-z0-9_]*)/,
@@ -182,11 +204,18 @@ function interpolateTemplate(raw: unknown, ctx: ExecutionContext): unknown {
 export function useActionExecutor() {
     async function execute(
         actions: RuntimeAction[],
-        ctx: ExecutionContext,
+        context: ExecutionContext,
     ): Promise<ExecutionResult> {
         if (actions.length === 0) {
             return { ok: true };
         }
+
+        // Normalised once, so the client-side resolver and the server request
+        // agree on what `{{params.x}}` means. A caller that named its own wins.
+        const ctx: ExecutionContext = {
+            ...context,
+            params: { ...paramsFromUrl(), ...(context.params ?? {}) },
+        };
 
         // Fast path: every action is purely client-side — skip the round trip.
         const isClientSide = (t: string) =>

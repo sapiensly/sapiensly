@@ -2851,6 +2851,11 @@ function useOrgBrand() {
 // Provide the App slug for BlockForm/BlockButton inside the preview so any
 // action they fire goes to /r/{slug}/actions just like in the real runtime.
 provide('appSlug', props.app.slug);
+provide(
+    'runtimeLocale',
+    (manifest?.settings as { default_locale?: string } | undefined)
+        ?.default_locale ?? 'en',
+);
 // Live palette-mode switches change the CSS vars on the preview surface; chart
 // components that cache resolved hex re-read on this signal.
 provide(
