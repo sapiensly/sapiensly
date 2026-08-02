@@ -160,3 +160,21 @@ it('searches what the cell shows, accents and all, and says so when nothing matc
         ->assertSee('Ninguna fila coincide con')
         ->assertDontSee('No records yet.');
 });
+
+it('keeps a row to one line and lines its numbers up', function () {
+    $this->seed(RolesAndPermissionsSeeder::class);
+    $app = wideTableApp(extraRows: 4);
+
+    // A row used to wrap every long cell to three lines, so a list of six
+    // records filled the screen and stopped being scannable. Text truncates
+    // now, and the quantities share an alignment so a column of money reads
+    // as a column.
+    visit("/r/{$app->slug}/contratos")->on()->macbookAir()
+        ->assertNoJavaScriptErrors()
+        ->assertScript(
+            "getComputedStyle(document.querySelector('tbody td:last-child')).textAlign === 'right'"
+        )
+        ->assertScript(
+            "getComputedStyle(document.querySelector('tbody td:first-child')).textOverflow === 'ellipsis'"
+        );
+})->group('browser');

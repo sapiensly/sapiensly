@@ -466,6 +466,42 @@ interface TableRow {
 
 const rows = computed<TableRow[]>(() => props.data?.rows ?? []);
 
+/**
+ * Types that are quantities. They share an alignment and tabular figures, so a
+ * column of money reads as a column: twelve digits line up under one, and the
+ * eye compares magnitudes down the edge instead of hunting for the decimal.
+ */
+const NUMERIC_TYPES = [
+    'number',
+    'currency',
+    'rating',
+    'slider',
+    'formula',
+    'rollup',
+    'lookup',
+];
+
+function isNumericColumn(col: Column): boolean {
+    return col.kind === 'data' && NUMERIC_TYPES.includes(col.field.type);
+}
+
+/**
+ * How a cell behaves when its content is longer than its share of the width.
+ *
+ * Nothing here depends on a text fitting. A long value truncates with an
+ * ellipsis and keeps its full text in the title, and the table scrolls
+ * sideways rather than wrapping every cell to three lines — which is what a
+ * seventeen-column object used to do, turning a row into a paragraph.
+ */
+function cellClass(col: Column): string {
+    if (col.kind === 'action') return 'px-3 py-2 whitespace-nowrap';
+    if (isNumericColumn(col)) {
+        return 'px-3 py-2 text-right tabular-nums whitespace-nowrap';
+    }
+
+    return 'max-w-[32ch] truncate px-3 py-2';
+}
+
 /** Which page of the result the reader is on. Reset by anything that changes
  * what the result contains — page 4 of a search that now returns two rows is
  * an empty screen the reader has to work out how to escape. */
@@ -932,159 +968,182 @@ function richTextCell(value: unknown): string {
                 {{ exportLabel }}
             </a>
         </div>
-        <table class="w-full border-collapse text-sm">
-            <thead>
-                <tr :class="['border-b', t.divider, t.headerRow]">
-                    <th
-                        v-for="col in columns"
-                        :key="col.id"
-                        class="px-3 py-2 text-left text-[11px] font-medium tracking-wider uppercase transition-colors"
-                        :class="[
-                            dragOverId === col.id
-                                ? 'bg-accent-blue/15'
-                                : draggingId === col.id
-                                  ? 'opacity-40'
-                                  : '',
-                        ]"
-                        :style="col.width ? `width:${col.width}px` : undefined"
-                        :aria-sort="
-                            sort?.id === col.id
-                                ? sort.dir === 'asc'
-                                    ? 'ascending'
-                                    : 'descending'
-                                : undefined
-                        "
-                        draggable="true"
-                        @dragstart="onDragStart(col, $event)"
-                        @dragover.prevent="onDragOver(col)"
-                        @drop.prevent="onDrop(col)"
-                        @dragend="onDragEnd"
-                    >
-                        <button
-                            v-if="isSortable(col)"
-                            type="button"
-                            class="inline-flex items-center gap-1 uppercase transition-opacity hover:opacity-70"
-                            :data-sp-sort="col.id"
-                            @click="toggleSort(col)"
-                        >
-                            {{ col.label }}
-                            <ArrowUp
-                                v-if="sort?.id === col.id && sort.dir === 'asc'"
-                                class="size-3"
-                            />
-                            <ArrowDown
-                                v-else-if="sort?.id === col.id"
-                                class="size-3"
-                            />
-                        </button>
-                        <template v-else>{{ col.label }}</template>
-                    </th>
-                </tr>
-            </thead>
-            <tbody :class="['divide-y', t.rowBorder]">
-                <tr
-                    v-for="row in pagedRows"
-                    :key="row.id"
-                    class="transition-colors hover:bg-surface-hover"
-                >
-                    <td
-                        v-for="col in columns"
-                        :key="col.id"
-                        :class="['px-3 py-2', t.text]"
-                        :style="col.width ? `width:${col.width}px` : undefined"
-                    >
-                        <button
-                            v-if="col.kind === 'action'"
-                            type="button"
-                            @click="runRowAction(col, row)"
+        <div class="overflow-x-auto">
+            <table class="w-full border-collapse text-sm">
+                <thead>
+                    <tr :class="['border-b', t.divider, t.headerRow]">
+                        <th
+                            v-for="col in columns"
+                            :key="col.id"
+                            class="px-3 py-2 text-[11px] font-medium tracking-wider whitespace-nowrap uppercase transition-colors"
                             :class="[
-                                'inline-flex items-center gap-1 rounded-pill px-2.5 py-1 text-[11px] transition-colors',
-                                variantClass[col.variant],
+                                isNumericColumn(col)
+                                    ? 'text-right'
+                                    : 'text-left',
+                                dragOverId === col.id
+                                    ? 'bg-accent-blue/15'
+                                    : draggingId === col.id
+                                      ? 'opacity-40'
+                                      : '',
                             ]"
-                            :title="col.label"
-                        >
-                            <RuntimeIcon
-                                v-if="col.icon"
-                                :name="col.icon"
-                                :size="12"
-                                aria-hidden
-                            />
-                            {{ col.label }}
-                        </button>
-                        <div
-                            v-else-if="col.field.type === 'rich_text'"
-                            class="prose prose-sm max-w-none [&_a]:text-accent-blue [&_a]:underline"
-                            v-html="richTextCell(row.data[col.field.slug])"
-                        />
-                        <span
-                            v-else-if="
-                                col.field.type === 'color' &&
-                                row.data[col.field.slug]
+                            :style="
+                                col.width ? `width:${col.width}px` : undefined
                             "
-                            class="inline-flex items-center gap-1.5"
+                            :aria-sort="
+                                sort?.id === col.id
+                                    ? sort.dir === 'asc'
+                                        ? 'ascending'
+                                        : 'descending'
+                                    : undefined
+                            "
+                            draggable="true"
+                            @dragstart="onDragStart(col, $event)"
+                            @dragover.prevent="onDragOver(col)"
+                            @drop.prevent="onDrop(col)"
+                            @dragend="onDragEnd"
                         >
-                            <span
-                                class="size-3.5 shrink-0 rounded-full border border-black/10"
-                                :style="{
-                                    background: String(
-                                        row.data[col.field.slug],
-                                    ),
-                                }"
+                            <button
+                                v-if="isSortable(col)"
+                                type="button"
+                                class="inline-flex items-center gap-1 uppercase transition-opacity hover:opacity-70"
+                                :data-sp-sort="col.id"
+                                @click="toggleSort(col)"
+                            >
+                                {{ col.label }}
+                                <ArrowUp
+                                    v-if="
+                                        sort?.id === col.id &&
+                                        sort.dir === 'asc'
+                                    "
+                                    class="size-3"
+                                />
+                                <ArrowDown
+                                    v-else-if="sort?.id === col.id"
+                                    class="size-3"
+                                />
+                            </button>
+                            <template v-else>{{ col.label }}</template>
+                        </th>
+                    </tr>
+                </thead>
+                <tbody :class="['divide-y', t.rowBorder]">
+                    <tr
+                        v-for="row in pagedRows"
+                        :key="row.id"
+                        class="transition-colors hover:bg-surface-hover"
+                    >
+                        <td
+                            v-for="col in columns"
+                            :key="col.id"
+                            :class="[cellClass(col), t.text]"
+                            :style="
+                                col.width ? `width:${col.width}px` : undefined
+                            "
+                            :title="
+                                col.kind === 'data'
+                                    ? String(row.data[col.field.slug] ?? '')
+                                    : undefined
+                            "
+                        >
+                            <button
+                                v-if="col.kind === 'action'"
+                                type="button"
+                                @click="runRowAction(col, row)"
+                                :class="[
+                                    'inline-flex items-center gap-1 rounded-pill px-2.5 py-1 text-[11px] transition-colors',
+                                    variantClass[col.variant],
+                                ]"
+                                :title="col.label"
+                            >
+                                <RuntimeIcon
+                                    v-if="col.icon"
+                                    :name="col.icon"
+                                    :size="12"
+                                    aria-hidden
+                                />
+                                {{ col.label }}
+                            </button>
+                            <div
+                                v-else-if="col.field.type === 'rich_text'"
+                                class="prose prose-sm max-w-none [&_a]:text-accent-blue [&_a]:underline"
+                                v-html="richTextCell(row.data[col.field.slug])"
                             />
-                            {{ row.data[col.field.slug] }}
-                        </span>
-                        <!--
+                            <span
+                                v-else-if="
+                                    col.field.type === 'color' &&
+                                    row.data[col.field.slug]
+                                "
+                                class="inline-flex items-center gap-1.5"
+                            >
+                                <span
+                                    class="size-3.5 shrink-0 rounded-full border border-black/10"
+                                    :style="{
+                                        background: String(
+                                            row.data[col.field.slug],
+                                        ),
+                                    }"
+                                />
+                                {{ row.data[col.field.slug] }}
+                            </span>
+                            <!--
                             A description is usually the longest field an object
                             has; unbounded it eats the width the other columns
                             need, so it gets a ceiling and an ellipsis, with the
                             whole text one hover away.
                         -->
-                        <span
-                            v-else-if="col.field.type === 'long_text'"
-                            class="block max-w-sm truncate"
-                            :title="String(row.data[col.field.slug] ?? '')"
+                            <span
+                                v-else-if="col.field.type === 'long_text'"
+                                class="block max-w-sm truncate"
+                                :title="String(row.data[col.field.slug] ?? '')"
+                            >
+                                {{ row.data[col.field.slug] ?? '—' }}
+                            </span>
+                            <FieldValue
+                                v-else
+                                :field="col.field"
+                                :value="row.data[col.field.slug]"
+                                :context="contextFor(row)"
+                                size="sm"
+                            />
+                        </td>
+                    </tr>
+                    <tr v-if="sortedRows.length === 0">
+                        <td
+                            :colspan="columns.length"
+                            :class="[
+                                'px-3 py-6 text-center text-xs',
+                                t.textMuted,
+                            ]"
                         >
-                            {{ row.data[col.field.slug] ?? '—' }}
-                        </span>
-                        <FieldValue
-                            v-else
-                            :field="col.field"
-                            :value="row.data[col.field.slug]"
-                            :context="contextFor(row)"
-                            size="sm"
-                        />
-                    </td>
-                </tr>
-                <tr v-if="sortedRows.length === 0">
-                    <td
-                        :colspan="columns.length"
-                        :class="['px-3 py-6 text-center text-xs', t.textMuted]"
-                    >
-                        <!--
+                            <!--
                             An empty object and a search that found nothing are
                             different facts. Saying "No records yet" to someone
                             who just typed reads as "this object is empty",
                             which sends them looking for a bug in their data.
                         -->
-                        <template v-if="rows.length > 0">
-                            {{ word('noMatches') }} “{{ query }}”<template
-                                v-if="truncated"
-                            >
+                            <template v-if="rows.length > 0">
+                                {{ word('noMatches') }} “{{ query }}”<template
+                                    v-if="truncated"
+                                >
+                                    {{
+                                        word('ofLoaded', {
+                                            n: rows.length,
+                                            total: totalRows,
+                                        })
+                                    }}</template
+                                >.
+                            </template>
+                            <template v-else>
                                 {{
-                                    word('ofLoaded', {
-                                        n: rows.length,
-                                        total: totalRows,
-                                    })
-                                }}</template
-                            >.
-                        </template>
-                        <template v-else>
-                            {{ block.empty_state_message ?? 'No records yet.' }}
-                        </template>
-                    </td>
-                </tr>
-            </tbody>
-        </table>
+                                    block.empty_state_message ??
+                                    'No records yet.'
+                                }}
+                            </template>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
 
         <!-- Pager (only when pagination is enabled and there's more than one page). -->
         <div
