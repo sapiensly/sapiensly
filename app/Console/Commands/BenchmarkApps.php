@@ -4,6 +4,7 @@ namespace App\Console\Commands;
 
 use App\Models\AiUsageEvent;
 use App\Models\App;
+use App\Models\Record;
 use App\Models\User;
 use App\Services\Manifest\AppManifestService;
 use App\Services\Manifest\AppScaffolder;
@@ -376,6 +377,95 @@ class BenchmarkApps extends Command
             }
         }
 
+        // Changing one thing must not erase the others. The scaffolded edit
+        // form names EVERY field in its values map, so a save that carries only
+        // what the person touched would arrive with the rest present-and-blank
+        // — the failure that matters most here, because it destroys data the
+        // user can see on screen while reporting success.
+        foreach ($created as $objectId => $recordId) {
+            $edit = $this->editPathFor($manifest, $objectId);
+            if ($edit === null) {
+                continue;
+            }
+
+            [$page, $form, $action] = $edit;
+            $before = $this->recordData($app, $recordId);
+            $touched = $this->firstEditableSlug($manifest, $form);
+            if ($touched === null || $before === []) {
+                continue;
+            }
+
+            try {
+                $after = $executor->execute($app, $manifest, $action, [
+                    'form' => [$touched => 'Editado por el banco'],
+                    'params' => ['record_id' => $recordId, 'id' => $recordId],
+                ], $user)['data'] ?? [];
+            } catch (\Throwable $e) {
+                $add('edit_failed', sprintf(
+                    '%s from /%s: %s',
+                    $this->objectName($manifest, $objectId), $page['slug'], Str::limit($e->getMessage(), 100),
+                ));
+
+                continue;
+            }
+
+            foreach ($before as $slug => $value) {
+                if ($slug === $touched || $value === null || $value === '') {
+                    continue;
+                }
+                $checksRun++;
+                if (($after[$slug] ?? null) === null) {
+                    $add('edit_erased_value', sprintf(
+                        '%s.%s was emptied by an edit that only changed %s',
+                        $this->objectName($manifest, $objectId), $slug, $touched,
+                    ));
+                }
+            }
+
+            $checksRun++;
+            if (($after[$touched] ?? null) !== 'Editado por el banco') {
+                $add('edit_not_saved', sprintf(
+                    '%s.%s kept its old value after being edited',
+                    $this->objectName($manifest, $objectId), $touched,
+                ));
+            }
+        }
+
+        // The buttons on the rows. Whatever the scaffolder wired here is a
+        // thing a person will click, and a delete that does not delete is as
+        // bad as one that deletes the wrong record.
+        foreach ($this->rowActionsIn($manifest) as [$objectId, $action]) {
+            $recordId = $created[$objectId] ?? null;
+            if ($recordId === null) {
+                continue;
+            }
+            $row = ['id' => $recordId, 'data' => $this->recordData($app, $recordId)];
+
+            try {
+                $executor->execute($app, $manifest, $action, ['row' => $row, 'params' => []], $user);
+            } catch (\Throwable $e) {
+                $add('row_action_failed', sprintf(
+                    '%s on %s: %s',
+                    $action['type'], $this->objectName($manifest, $objectId), Str::limit($e->getMessage(), 100),
+                ));
+
+                continue;
+            }
+
+            $checksRun++;
+            $gone = $this->recordData($app, $recordId) === [];
+            if (($action['type'] === 'delete_record') !== $gone) {
+                $add('row_action_wrong_effect', sprintf(
+                    '%s on %s %s the record',
+                    $action['type'], $this->objectName($manifest, $objectId),
+                    $gone ? 'removed' : 'left',
+                ));
+            }
+            if ($gone) {
+                unset($created[$objectId]);
+            }
+        }
+
         // Now read it all back the way the runtime does.
         $resolver = app(BlockDataResolver::class);
         foreach ($manifest['pages'] ?? [] as $page) {
@@ -484,6 +574,97 @@ class BenchmarkApps extends Command
         }
 
         return $paths;
+    }
+
+    /**
+     * The form the app offers for changing one of these, and the update it
+     * submits.
+     *
+     * @param  array<string, mixed>  $manifest
+     * @return array{0: array<string, mixed>, 1: array<string, mixed>, 2: array<string, mixed>}|null
+     */
+    private function editPathFor(array $manifest, string $objectId): ?array
+    {
+        foreach ($manifest['pages'] ?? [] as $page) {
+            foreach ($this->formBlocksIn($page['blocks'] ?? []) as $form) {
+                if (($form['object_id'] ?? null) !== $objectId || ($form['mode'] ?? null) !== 'edit') {
+                    continue;
+                }
+                foreach ($form['on_submit'] ?? [] as $action) {
+                    if (($action['type'] ?? null) === 'update_record' && ($action['object_id'] ?? null) === $objectId) {
+                        return [$page, $form, $action];
+                    }
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * A field on this form that a person could actually retype. Computed ones
+     * are read-only, and a select would need one of its own option values.
+     *
+     * @param  array<string, mixed>  $manifest
+     * @param  array<string, mixed>  $form
+     */
+    private function firstEditableSlug(array $manifest, array $form): ?string
+    {
+        $object = collect($manifest['objects'])->firstWhere('id', $form['object_id']);
+        $byId = collect($object['fields'] ?? [])->keyBy('id');
+
+        foreach ($form['fields'] ?? [] as $formField) {
+            $field = $byId[$formField['field_id']] ?? null;
+            if ($field !== null && in_array($field['type'] ?? null, ['string', 'long_text'], true)) {
+                return (string) $field['slug'];
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Every server-side action wired to a button on a table row, with the
+     * object whose record it acts on.
+     *
+     * @param  array<string, mixed>  $manifest
+     * @return list<array{0: string, 1: array<string, mixed>}>
+     */
+    private function rowActionsIn(array $manifest): array
+    {
+        $found = [];
+        foreach ($manifest['pages'] ?? [] as $page) {
+            foreach ($this->flatten($page['blocks'] ?? []) as $block) {
+                if (($block['type'] ?? null) !== 'table') {
+                    continue;
+                }
+                foreach ($block['columns'] ?? [] as $column) {
+                    foreach ($column['on_click'] ?? [] as $action) {
+                        if (! in_array($action['type'] ?? null, ['update_record', 'delete_record'], true)) {
+                            continue;
+                        }
+                        // Only the ones addressing the clicked row: anything
+                        // else is not this table's record to act on.
+                        if (! str_contains((string) ($action['record_id_expression'] ?? ''), '{{row.id}}')) {
+                            continue;
+                        }
+                        $found[] = [(string) $action['object_id'], $action];
+                    }
+                }
+            }
+        }
+
+        return $found;
+    }
+
+    /** The record's stored values, or [] when it is gone. */
+    private function recordData(App $app, string $recordId): array
+    {
+        $record = Record::query()
+            ->where('app_id', $app->id)
+            ->find($recordId);
+
+        return is_array($record?->data) ? $record->data : [];
     }
 
     /**
