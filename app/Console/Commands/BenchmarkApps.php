@@ -266,6 +266,55 @@ class BenchmarkApps extends Command
             }
         }
 
+        // The same figure twice on one board.
+        //
+        // A count does not read its field, so two count measures on one object
+        // that named different fields came out as two tiles with the same label
+        // and the same number. A live workshop dashboard opened with "Órdenes
+        // de servicio 14" side by side with itself and this suite scored it
+        // clean — the seventy-three checks could not see the front page.
+        foreach ($this->metricGridsIn($manifest) as $grid) {
+            $signatures = [];
+            foreach ($grid['items'] ?? [] as $item) {
+                $signature = ($item['query']['object_id'] ?? '')
+                    .'|'.($item['aggregation'] ?? '')
+                    .'|'.(($item['aggregation'] ?? '') === 'count' ? '' : ($item['field_id'] ?? ''));
+
+                if (isset($signatures[$signature])) {
+                    $add('duplicate_kpi', "\"{$item['label']}\" is on the dashboard twice");
+                }
+                $signatures[$signature] = true;
+            }
+        }
+
+        // A total somebody types, beside the same total the app works out.
+        //
+        // An order read "Total $104.80" next to "Total costo unitario
+        // $16,695.12" — its own parts, added up — both on the same card,
+        // disagreeing. Whichever is right, an app that shows two answers to one
+        // question has already lost the argument.
+        foreach ($manifest['objects'] as $object) {
+            $rollups = collect($object['fields'] ?? [])
+                ->filter(fn (array $f): bool => ($f['type'] ?? null) === 'rollup'
+                    && ($f['aggregator'] ?? null) === 'sum');
+
+            if ($rollups->isEmpty()) {
+                continue;
+            }
+
+            foreach ($object['fields'] ?? [] as $field) {
+                if (($field['type'] ?? null) !== 'currency' || ($field['readonly'] ?? false) === true) {
+                    continue;
+                }
+                if (! $this->readsAsATotal((string) ($field['name'] ?? ''))) {
+                    continue;
+                }
+
+                $add('typed_total_competes_with_rollup', "\"{$object['name']}\" has a hand-typed \"{$field['name']}\" beside "
+                    .$rollups->count().' rollup(s) that add its children up');
+            }
+        }
+
         // A Spanish brief that comes back with an object called "Leases" has
         // drifted, and the slug is in the URL the user reads.
         foreach ($manifest['objects'] as $object) {
@@ -865,6 +914,44 @@ class BenchmarkApps extends Command
         }
 
         return $ids;
+    }
+
+    /**
+     * Every metric_grid on any page, however deeply nested.
+     *
+     * @param  array<string, mixed>  $manifest
+     * @return list<array<string, mixed>>
+     */
+    private function metricGridsIn(array $manifest): array
+    {
+        $grids = [];
+        $walk = function (array $blocks) use (&$walk, &$grids): void {
+            foreach ($blocks as $block) {
+                if (($block['type'] ?? null) === 'metric_grid') {
+                    $grids[] = $block;
+                }
+                foreach (['blocks', 'left', 'right'] as $key) {
+                    if (is_array($block[$key] ?? null)) {
+                        $walk($block[$key]);
+                    }
+                }
+                foreach ($block['tabs'] ?? [] as $tab) {
+                    $walk($tab['blocks'] ?? []);
+                }
+            }
+        };
+
+        foreach ($manifest['pages'] ?? [] as $page) {
+            $walk($page['blocks'] ?? []);
+        }
+
+        return $grids;
+    }
+
+    /** Whether a field's name claims to hold the sum of something. */
+    private function readsAsATotal(string $name): bool
+    {
+        return preg_match('/\b(total|totale?s|importe total|gran total|monto total|subtotal)\b/iu', $name) === 1;
     }
 
     /**

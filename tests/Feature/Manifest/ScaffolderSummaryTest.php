@@ -197,3 +197,45 @@ it('leaves out a filter the object cannot answer', function () {
 
     expect(collect($page['blocks'])->firstWhere('type', 'filter_bar'))->toBeNull();
 });
+
+it('never puts the same figure on the dashboard twice', function () {
+    // A count does not read its field — it counts rows — so two count measures
+    // on one object differing only in which field they named came out as two
+    // tiles with the same label and the same number. A live workshop dashboard
+    // opened with "Órdenes de servicio 14" twice, side by side.
+    Ai::fakeAgent(ChatAgent::class, [json_encode([
+        'summary' => 'Órdenes de un taller.',
+        'objects' => [[
+            'name' => 'Órdenes',
+            'slug' => 'ordenes',
+            'fields' => [
+                ['name' => 'Folio', 'slug' => 'folio', 'type' => 'string'],
+                ['name' => 'Total', 'slug' => 'total', 'type' => 'currency'],
+                ['name' => 'Estado', 'slug' => 'estado', 'type' => 'single_select', 'options' => [
+                    ['value' => 'abierta', 'label' => 'Abierta'],
+                ]],
+            ],
+        ]],
+        'links' => [],
+        'focus' => [
+            'objects' => ['ordenes'],
+            'measures' => [
+                ['object' => 'ordenes', 'field' => 'folio', 'aggregation' => 'count'],
+                ['object' => 'ordenes', 'field' => 'total', 'aggregation' => 'sum'],
+                ['object' => 'ordenes', 'field' => 'estado', 'aggregation' => 'count'],
+            ],
+        ],
+    ], JSON_THROW_ON_ERROR)]);
+
+    $manifest = summaryScaffolder()->scaffold(summaryBase(), 'Taller.', User::factory()->create());
+
+    $dashboard = collect($manifest['pages'])->firstWhere('path', '/');
+    $grid = collect($dashboard['blocks'])->firstWhere('type', 'metric_grid');
+
+    $signatures = collect($grid['items'])->map(fn (array $i): string => ($i['query']['object_id'] ?? '')
+        .'|'.($i['aggregation'] ?? '')
+        .'|'.($i['field_id'] ?? ''));
+
+    expect($signatures->duplicates())->toBeEmpty()
+        ->and(collect($grid['items'])->pluck('label')->duplicates())->toBeEmpty();
+});

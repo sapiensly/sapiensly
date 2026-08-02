@@ -2075,6 +2075,8 @@ class AppScaffolder
     private function focusMeasureItems(array $objects, array $measures, string $lang): array
     {
         $items = [];
+        $seen = [];
+
         foreach ($measures as $measure) {
             $object = collect($objects)->firstWhere('slug', $measure['object']);
             if ($object === null) {
@@ -2084,6 +2086,22 @@ class AppScaffolder
             if ($field === null) {
                 continue;
             }
+
+            // The same figure asked for twice is one figure.
+            //
+            // A COUNT does not read its field — it counts rows — so two count
+            // measures on one object differing only in which field they named
+            // produce two tiles with the same label and the same number. A live
+            // workshop dashboard opened with "Órdenes de servicio 14" twice,
+            // side by side, and the benchmark scored it clean.
+            $key = $measure['aggregation'] === 'count'
+                ? $object['id'].'|count'
+                : $object['id'].'|'.$measure['aggregation'].'|'.$field['id'];
+
+            if (isset($seen[$key])) {
+                continue;
+            }
+            $seen[$key] = true;
 
             $isMoney = ($field['type'] ?? null) === 'currency';
             $measureName = $this->moneyMeasureName(
