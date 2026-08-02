@@ -23,6 +23,12 @@ class AppManifestService
 {
     private const CACHE_TTL_SECONDS = 3600;
 
+    /**
+     * Past this, an app's description is not a description — it is the build
+     * brief it was made from. Mirrors AppScaffolder::MAX_SUMMARY_LENGTH.
+     */
+    private const MAX_SUMMARY_LENGTH = 180;
+
     /** Mirrors the manifest schema's maxLength on `description`. */
     private const MAX_DESCRIPTION_LENGTH = 500;
 
@@ -219,11 +225,31 @@ class AppManifestService
             // `chatbot_id` is denormalized from settings.chatbot in the same
             // write, so the column can never drift from the manifest that is now
             // live — it is only ever a read index over it.
-            $locked->update([
+            $changes = [
                 'current_version_id' => $version->id,
                 'kind' => AppKind::classify($manifest)->value,
                 'chatbot_id' => self::chatbotIdOf($manifest),
-            ]);
+            ];
+
+            // The row is created holding the BRIEF — the paragraphs someone
+            // typed to have the app built, which is what scaffolding needs and
+            // is not a description of anything. The scaffolder replaces it on
+            // the manifest with the line that says what the app is FOR; this
+            // brings the row along.
+            //
+            // Only while the row is still too long to be a description, so it
+            // fires once per app and never touches one a person wrote by hand.
+            // Here rather than at the call site because three paths scaffold —
+            // the MCP tool, the in-app builder, the benchmark harness — and
+            // only one of them remembered.
+            $description = trim((string) ($manifest['description'] ?? ''));
+            if ($description !== ''
+                && mb_strlen(trim((string) $locked->description)) > self::MAX_SUMMARY_LENGTH
+                && mb_strlen($description) <= self::MAX_SUMMARY_LENGTH) {
+                $changes['description'] = $description;
+            }
+
+            $locked->update($changes);
 
             return $version->refresh();
         });
