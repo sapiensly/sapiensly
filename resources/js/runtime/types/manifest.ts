@@ -283,6 +283,14 @@ export interface TableBlockData {
      * offered to somebody the server will refuse.
      */
     can?: { update: boolean; delete: boolean };
+    /** True when these rows ARE the trash rather than the live list. */
+    trashed?: boolean;
+    /**
+     * How many of this table's records are in the trash. Zero for anyone who
+     * could not delete them in the first place, and on a public portal, where
+     * what the business deleted is none of a visitor's business.
+     */
+    trash_count?: number;
 }
 
 export interface StatBlockData {

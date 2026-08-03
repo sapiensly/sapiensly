@@ -137,6 +137,13 @@ class BlockDataResolver
     private function resolveDataBlock(App $app, array $block, array $manifest, array $context): ?array
     {
         if ($block['type'] === 'table') {
+            // Is THIS table the one showing the trash? Addressed by block id
+            // rather than a page-wide flag: a dashboard with a list beside four
+            // KPI cards must not have the cards start counting deleted rows
+            // because somebody opened the trash on the list.
+            $trashed = $this->trashRequestedFor($block, $context);
+            $context['__trashed'] = $trashed;
+
             $source = $this->applyTableView($block, $manifest, $context);
             // Whether the server answered this table's own question. Sticky, so
             // a search that happens to return three rows does not hand control
@@ -166,6 +173,12 @@ class BlockDataResolver
                 // control that answers "no" is one that should not have been
                 // there, which is the rule the action columns already follow.
                 'can' => $this->bulkAbilities($block, $context),
+                'trashed' => $trashed,
+                // How much is in the trash, so the way in is only drawn when
+                // it leads somewhere. Asked only of somebody who could delete:
+                // for everyone else the answer is not theirs and the count is
+                // a query nobody needed.
+                'trash_count' => $this->trashCount($app, $block, $manifest, $context),
             ];
         }
 
@@ -1145,6 +1158,70 @@ class BlockDataResolver
             'update' => $access->can($objectId, 'update'),
             'delete' => $access->can($objectId, 'delete'),
         ];
+    }
+
+    /**
+     * Whether this block was asked to show its trash.
+     *
+     * Carried in the page's own query string (`?trash=<block id>`), which is
+     * what an Inertia partial reload preserves — so the toggle survives paging,
+     * sorting and searching without a second transport for one boolean.
+     *
+     * @param  array<string, mixed>  $block
+     * @param  array<string, mixed>  $context
+     */
+    private function trashRequestedFor(array $block, array $context): bool
+    {
+        if (! $this->onAuthenticatedRuntime()) {
+            return false;
+        }
+
+        return ($context['params']['trash'] ?? null) === $block['id'];
+    }
+
+    /**
+     * The trash belongs to the authenticated runtime only.
+     *
+     * A public portal grants strangers a read, and sometimes a write; it must
+     * never hand them a list of what the business deleted. This mirrors the
+     * relation options endpoint, which is withheld from portals for the same
+     * reason — a portal's grants are about the visitor's own row, not the
+     * object's history.
+     */
+    private function onAuthenticatedRuntime(): bool
+    {
+        return request()->is('r/*');
+    }
+
+    /**
+     * How many of this table's records are in the trash.
+     *
+     * Counted through the same scoped read as the rows themselves, so it
+     * honours the environment and the role's row_filter: a count that included
+     * rows the reader could never restore would send them looking for
+     * something that is not there.
+     *
+     * @param  array<string, mixed>  $block
+     * @param  array<string, mixed>  $manifest
+     * @param  array<string, mixed>  $context
+     */
+    private function trashCount(App $app, array $block, array $manifest, array $context): int
+    {
+        if (! $this->onAuthenticatedRuntime() || ! $this->bulkAbilities($block, $context)['delete']) {
+            return 0;
+        }
+
+        try {
+            return $this->records->count(
+                $app,
+                ['object_id' => $block['data_source']['object_id'] ?? null],
+                $manifest,
+                ['__trashed' => true] + $context,
+            );
+        } catch (Throwable) {
+            // A count is furniture. It must never be the reason a page 500s.
+            return 0;
+        }
     }
 
     /**

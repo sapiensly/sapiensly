@@ -796,6 +796,8 @@
     "apps.activity.empty": "Todavía no hay actividad.",
     "apps.activity.event_created": "Se creó un registro",
     "apps.activity.event_deleted": "Se eliminó un registro",
+    "apps.activity.event_restored": "Se restauró un registro",
+    "apps.activity.event_purged": "Se eliminó un registro para siempre",
     "apps.activity.event_updated": "Se cambió un registro",
     "apps.activity.kind_access": "acceso",
     "apps.activity.kind_automation": "automatización",

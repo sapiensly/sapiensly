@@ -29,7 +29,7 @@ interface Change {
 
 interface TrailEvent {
     id: string;
-    kind: 'created' | 'updated' | 'deleted' | 'comment';
+    kind: 'created' | 'updated' | 'deleted' | 'restored' | 'purged' | 'comment';
     actor: string | null;
     body: string | null;
     changes: Change[] | null;

@@ -122,6 +122,38 @@ class RecordWriteService
         }
     }
 
+    /**
+     * Take a record back out of the trash.
+     *
+     * Deliberately NOT a `record.created` trigger. The row is coming back, not
+     * arriving: firing creation automations on a restore would re-send the
+     * welcome email, re-charge the invoice and re-notify the channel for
+     * something that already happened once.
+     */
+    public function restore(Record $record, ?App $app = null, ?User $user = null): void
+    {
+        $record->restore();
+
+        if ($app !== null) {
+            $this->trail()->restored($app, $record->fresh() ?? $record, $user);
+        }
+    }
+
+    /**
+     * Empty a record out of the trash: gone, with no way back.
+     *
+     * The trail entry is written first and is the only thing that outlives the
+     * row — after this there is nothing else to say the record ever existed.
+     */
+    public function purge(Record $record, ?App $app = null, ?User $user = null): void
+    {
+        if ($app !== null) {
+            $this->trail()->purged($app, $record, $user);
+        }
+
+        $record->forceDelete();
+    }
+
     private function trail(): RecordTrail
     {
         return app(RecordTrail::class);

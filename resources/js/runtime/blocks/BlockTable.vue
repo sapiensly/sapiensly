@@ -7,6 +7,7 @@ import {
     Columns3,
     Download,
     Search,
+    Trash2,
 } from '@lucide/vue';
 import axios from 'axios';
 import DOMPurify from 'dompurify';
@@ -47,6 +48,16 @@ function deriveSlugFromUrl(): string {
 const object = computed<ObjectDef | undefined>(() =>
     props.objects.find((o) => o.id === props.block.data_source.object_id),
 );
+
+/**
+ * Whether these rows ARE the trash.
+ *
+ * The server decides — it is the one that read them — rather than the browser
+ * inferring it from the URL. A link pasted to somebody without the delete
+ * permission then opens the ordinary list instead of a view that is empty for
+ * reasons they cannot see.
+ */
+const isTrash = computed(() => props.data?.trashed === true);
 
 /**
  * Download what this table shows.
@@ -294,7 +305,12 @@ const orderedColumns = computed<Column[]>(() => {
 
 const columns = computed<Column[]>(() =>
     orderedColumns.value.filter(
-        (c) => c.kind === 'action' || !hidden.value.has(c.id),
+        (c) =>
+            // A deleted row's actions lead nowhere: "edit" opens a form for a
+            // record the query will not find, and "delete" is already done.
+            // The bulk bar carries the two that DO apply in there.
+            (c.kind === 'action' && !isTrash.value) ||
+            (c.kind === 'data' && !hidden.value.has(c.id)),
     ),
 );
 
@@ -862,6 +878,28 @@ const pagedRows = computed(() => {
  * the reader can no longer see, which is how somebody deletes twelve records
  * they never looked at.
  */
+/**
+ * In and out of the trash.
+ *
+ * Through the URL rather than a local flag, so the state is shareable, survives
+ * a reload, and is what a partial reload preserves when the table pages or
+ * sorts. Keyed by BLOCK id: a page with two lists opens one trash, not both.
+ */
+function openTrash(open: boolean): void {
+    const url = new URL(window.location.href);
+
+    if (open) {
+        url.searchParams.set('trash', props.block.id);
+    } else {
+        url.searchParams.delete('trash');
+    }
+
+    // Paging is about a result set that is about to be replaced.
+    url.searchParams.delete('page');
+
+    router.visit(url.pathname + url.search, { preserveScroll: true });
+}
+
 /** Only where the role may actually act — see the `can` payload. */
 const canSelect = computed(
     () => props.data?.can?.delete === true || props.data?.can?.update === true,
@@ -938,8 +976,36 @@ async function confirmBulkDelete(): Promise<void> {
     if (ok) await runBulk('delete');
 }
 
+/**
+ * Emptying rows out of the trash.
+ *
+ * Asked with its own words, not the ordinary delete's. "This cannot be undone"
+ * was already said once and turned out to be survivable; saying it again in the
+ * same sentence teaches the reader to read past it.
+ */
+async function confirmBulkPurge(): Promise<void> {
+    const ok = await confirmAction({
+        title: runtimeWord(props.locale, 'trash_purge_title', {
+            n: selected.value.size,
+        }),
+        message: runtimeWord(props.locale, 'trash_purge_message'),
+        locale: props.locale,
+        danger: true,
+    });
+
+    if (ok) await runBulk('purge');
+}
+
+/** What each action calls the outcome. A restore is not a change. */
+const BULK_RESULT_WORD: Record<string, string> = {
+    delete: 'bulk_removed',
+    restore: 'trash_restored',
+    purge: 'trash_purged',
+    set: 'bulk_done',
+};
+
 async function runBulk(
-    action: 'delete' | 'set',
+    action: 'delete' | 'set' | 'restore' | 'purge',
     fieldId?: string,
     value?: unknown,
 ): Promise<void> {
@@ -955,12 +1021,12 @@ async function runBulk(
             ...(fieldId ? { field_id: fieldId, value } : {}),
         });
         // Both numbers: "12 changed" while 3 were silently skipped is the kind
-        // of report somebody acts on.
-        // A delete is not a change: reporting "3 changed" for rows that are
-        // gone reads as an edit somebody can go and inspect.
+        // of report somebody acts on. And each action names its own outcome —
+        // reporting "3 changed" for rows that are gone reads as an edit
+        // somebody can go and inspect.
         bulkResult.value = runtimeWord(
             props.locale,
-            action === 'delete' ? 'bulk_removed' : 'bulk_done',
+            BULK_RESULT_WORD[action] ?? 'bulk_done',
             {
                 n: data.changed ?? 0,
                 skipped: data.skipped ?? 0,
@@ -1120,6 +1186,49 @@ function richTextCell(value: unknown): string {
                 <Download class="size-3" />
                 {{ exportLabel }}
             </a>
+            <!-- Only when there is something in it: "Papelera (0)" is a door
+                 into an empty room, and the reader has to try it to find out. -->
+            <button
+                v-if="!isTrash && (data?.trash_count ?? 0) > 0"
+                type="button"
+                data-sp-trash-open
+                :class="[
+                    'inline-flex items-center gap-1.5 rounded-pill px-2.5 py-1 text-[11px] transition-colors hover:bg-surface-hover',
+                    t.textMuted,
+                ]"
+                @click="openTrash(true)"
+            >
+                <Trash2 class="size-3" />
+                {{
+                    runtimeWord(locale, 'trash_open', {
+                        n: data?.trash_count ?? 0,
+                    })
+                }}
+            </button>
+        </div>
+
+        <!-- Standing notice. Somebody who lands here from a link, or comes back
+             to the tab an hour later, must not read a short list as their data
+             having vanished. -->
+        <div
+            v-if="isTrash"
+            data-sp-trash-banner
+            :class="[
+                'mb-2 flex flex-wrap items-center gap-2 rounded-md border px-3 py-2 text-xs',
+                t.surfaceMuted,
+                t.text,
+            ]"
+        >
+            <Trash2 class="size-3.5 shrink-0" />
+            <span>{{ runtimeWord(locale, 'trash_viewing') }}</span>
+            <button
+                type="button"
+                data-sp-trash-back
+                class="ml-auto rounded-pill px-2.5 py-1 text-accent-blue transition-colors hover:bg-surface-hover"
+                @click="openTrash(false)"
+            >
+                {{ runtimeWord(locale, 'trash_back') }}
+            </button>
         </div>
         <!--
             The table scrolls inside its own card rather than growing the page.
@@ -1134,7 +1243,11 @@ function richTextCell(value: unknown): string {
                         :class="['border-b', t.divider, t.headerRow]"
                         :style="{ background: 'var(--sp-surface-2)' }"
                     >
-                        <th v-if="canSelect" data-sp-select-cell class="sp-cell w-8">
+                        <th
+                            v-if="canSelect"
+                            data-sp-select-cell
+                            class="sp-cell w-8"
+                        >
                             <input
                                 type="checkbox"
                                 data-sp-select-all
@@ -1203,7 +1316,11 @@ function richTextCell(value: unknown): string {
                         :key="row.id"
                         class="transition-colors hover:bg-surface-hover"
                     >
-                        <td v-if="canSelect" data-sp-select-cell class="sp-cell w-8">
+                        <td
+                            v-if="canSelect"
+                            data-sp-select-cell
+                            class="sp-cell w-8"
+                        >
                             <input
                                 type="checkbox"
                                 :data-sp-select-row="row.id"
@@ -1228,6 +1345,7 @@ function richTextCell(value: unknown): string {
                             <button
                                 v-if="col.kind === 'action'"
                                 type="button"
+                                data-sp-row-action
                                 @click="runRowAction(col, row)"
                                 :class="[
                                     'inline-flex items-center gap-1 rounded-pill px-2.5 py-1 text-[11px] transition-colors',
@@ -1313,6 +1431,9 @@ function richTextCell(value: unknown): string {
                                     }}</template
                                 >.
                             </template>
+                            <template v-else-if="isTrash">
+                                {{ runtimeWord(locale, 'trash_empty') }}
+                            </template>
                             <template v-else>
                                 {{
                                     block.empty_state_message ??
@@ -1357,7 +1478,34 @@ function richTextCell(value: unknown): string {
                 {{ runtimeWord(locale, 'bulk_selected', { n: selectedCount }) }}
             </span>
 
-            <template v-for="col in settableColumns" :key="col.id">
+            <!-- In the trash the only two things worth offering are the way
+                 back and the way out. Editing a value on a deleted row writes
+                 to something nobody can see. -->
+            <template v-if="isTrash">
+                <button
+                    type="button"
+                    data-sp-bulk-restore
+                    :disabled="bulkBusy"
+                    class="rounded-pill px-2.5 py-1 text-accent-blue transition-colors hover:bg-surface-hover disabled:opacity-50"
+                    @click="runBulk('restore')"
+                >
+                    {{ runtimeWord(locale, 'trash_restore') }}
+                </button>
+                <button
+                    type="button"
+                    data-sp-bulk-purge
+                    :disabled="bulkBusy"
+                    class="ml-auto rounded-pill px-2.5 py-1 text-red-400 transition-colors hover:bg-red-500/10 disabled:opacity-50"
+                    @click="confirmBulkPurge"
+                >
+                    {{ runtimeWord(locale, 'trash_purge') }}
+                </button>
+            </template>
+
+            <template
+                v-for="col in isTrash ? [] : settableColumns"
+                :key="col.id"
+            >
                 <select
                     v-if="data?.can?.update"
                     :data-sp-bulk-set="col.field.id"
@@ -1386,7 +1534,7 @@ function richTextCell(value: unknown): string {
             </template>
 
             <button
-                v-if="data?.can?.delete"
+                v-if="data?.can?.delete && !isTrash"
                 type="button"
                 data-sp-bulk-delete
                 :disabled="bulkBusy"

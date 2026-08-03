@@ -30,9 +30,10 @@ class AppBulkActionController extends Controller
     /**
      * Rows one call may touch.
      *
-     * Not a performance number — it is how much somebody can undo. There is no
-     * undo for records, so the ceiling is "a mistake you could still fix by
-     * hand in an afternoon".
+     * Not a performance number. It was once the only thing standing between a
+     * misclick and permanent loss; now that a delete goes to the trash and
+     * comes back, it is just a bound on how much work one request does — kept
+     * because the loop is a loop, and because `purge` still means it.
      */
     private const MAX_ROWS = 200;
 
@@ -59,7 +60,7 @@ class AppBulkActionController extends Controller
 
         $data = $request->validate([
             'object_id' => ['required', 'string'],
-            'action' => ['required', Rule::in(['delete', 'set'])],
+            'action' => ['required', Rule::in(['delete', 'set', 'restore', 'purge'])],
             'record_ids' => ['required', 'array', 'min:1', 'max:'.self::MAX_ROWS],
             'record_ids.*' => ['string', 'regex:/^rec_[a-z0-9]+$/'],
             'field_id' => ['required_if:action,set', 'string'],
@@ -74,7 +75,10 @@ class AppBulkActionController extends Controller
         $previewRole = (string) $request->query('as_role', '');
         $access = $this->accessResolver->resolve($app, $manifest, $user, $previewRole !== '' ? $previewRole : null);
 
-        $needs = $data['action'] === 'delete' ? 'delete' : 'update';
+        // Restoring and emptying are both the delete permission: whoever may
+        // send a record to the trash is who may take it back out or finish the
+        // job. Splitting them would invent a role that can destroy but not undo.
+        $needs = $data['action'] === 'set' ? 'update' : 'delete';
         abort_unless($access->hasAccess && $access->can($object['id'], $needs), 403);
 
         // A `set` may only touch a field that is really on the object, and
@@ -87,10 +91,17 @@ class AppBulkActionController extends Controller
             }
         }
 
+        // Restoring and emptying READ from the trash; the other two read the
+        // live rows. Either way the lookup goes through the same scoped find,
+        // so the environment and the role's row filter still decide what is
+        // reachable — a trash view is not a way around them.
+        $readsTrash = in_array($data['action'], ['restore', 'purge'], true);
+
         $context = [
             'current_user' => $user !== null ? ['id' => $user->id, 'email' => $user->email] : null,
             '__access' => $access,
             '__actor' => $user,
+            '__trashed' => $readsTrash,
         ];
 
         $done = 0;
@@ -108,11 +119,12 @@ class AppBulkActionController extends Controller
                 continue;
             }
 
-            if ($data['action'] === 'delete') {
-                $this->writes->delete($record, $app, $manifest, $user);
-            } else {
-                $this->writes->update($app, $manifest, $record, [$field['slug'] => $data['value']], $user);
-            }
+            match ($data['action']) {
+                'delete' => $this->writes->delete($record, $app, $manifest, $user),
+                'restore' => $this->writes->restore($record, $app, $user),
+                'purge' => $this->writes->purge($record, $app, $user),
+                default => $this->writes->update($app, $manifest, $record, [$field['slug'] => $data['value']], $user),
+            };
 
             $done++;
         }

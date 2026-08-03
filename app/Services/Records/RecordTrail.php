@@ -55,6 +55,23 @@ class RecordTrail
         $this->write($app, $record, RecordEvent::KIND_DELETED, $user);
     }
 
+    public function restored(App $app, Record $record, ?User $user): void
+    {
+        $this->write($app, $record, RecordEvent::KIND_RESTORED, $user);
+    }
+
+    /**
+     * Emptied from the trash.
+     *
+     * Written BEFORE the row goes, like a delete — and it is the one entry that
+     * has to survive it, because after this there is nothing else left to say
+     * the record ever existed.
+     */
+    public function purged(App $app, Record $record, ?User $user): void
+    {
+        $this->write($app, $record, RecordEvent::KIND_PURGED, $user);
+    }
+
     public function comment(App $app, Record $record, string $body, ?User $user): ?RecordEvent
     {
         $body = trim($body);

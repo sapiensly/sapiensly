@@ -30,6 +30,12 @@ class RecordEvent extends Model
 
     public const KIND_DELETED = 'deleted';
 
+    /** Taken out of the trash. The delete stays in the history above it. */
+    public const KIND_RESTORED = 'restored';
+
+    /** Emptied from the trash: gone for good, and the last thing recorded. */
+    public const KIND_PURGED = 'purged';
+
     public const KIND_COMMENT = 'comment';
 
     protected $fillable = [

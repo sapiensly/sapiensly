@@ -48,6 +48,14 @@ Schedule::command('activity:prune')
     ->withoutOverlapping()
     ->runInBackground();
 
+// Empty the trash of records that have been in it past the recovery window.
+// Ten minutes after the trail prune rather than alongside it: both are batched
+// deletes on the tenant schema, and there is no reason for them to contend.
+Schedule::command('records:prune-trash')
+    ->dailyAt('03:30')
+    ->withoutOverlapping()
+    ->runInBackground();
+
 // Fire record.date_reached workflows whose date-field offset is due.
 Schedule::command('flows:dispatch-date-reached')
     ->everyMinute()

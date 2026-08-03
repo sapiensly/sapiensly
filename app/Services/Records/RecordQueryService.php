@@ -95,7 +95,7 @@ class RecordQueryService
             );
         }
 
-        $builder = $this->scopeForObject($app, $objectId);
+        $builder = $this->scopeForObject($app, $objectId, $this->readsTrash($context));
 
         $this->applyConstraints($builder, $query, $object, $objectId, $app, $manifest, $context);
 
@@ -541,7 +541,7 @@ class RecordQueryService
             return $match === null ? null : $this->toTransientRecords($app, $object, [$match])->first();
         }
 
-        $builder = $this->scopeForObject($app, $objectId)->whereKey($recordId);
+        $builder = $this->scopeForObject($app, $objectId, $this->readsTrash($context))->whereKey($recordId);
         $this->applyAccessFilter($builder, $object, $objectId, $app, $manifest, $context);
 
         $record = $builder->first();
@@ -586,7 +586,7 @@ class RecordQueryService
             return $this->toTransientRecords($app, $object, $rows);
         }
 
-        $builder = $this->scopeForObject($app, $objectId)->whereIn('id', $recordIds);
+        $builder = $this->scopeForObject($app, $objectId, $this->readsTrash($context))->whereIn('id', $recordIds);
         $this->applyAccessFilter($builder, $object, $objectId, $app, $manifest, $context);
 
         $records = $builder->get();
@@ -617,7 +617,7 @@ class RecordQueryService
             return count($this->connectedRows($app, $object, $query, $context));
         }
 
-        $builder = $this->scopeForObject($app, $objectId);
+        $builder = $this->scopeForObject($app, $objectId, $this->readsTrash($context));
 
         $this->applyConstraints($builder, $query, $object, $objectId, $app, $manifest, $context);
 
@@ -903,9 +903,18 @@ class RecordQueryService
         return "date_trunc('{$bucket}', (data->>'{$slug}')::timestamptz)";
     }
 
-    private function scopeForObject(App $app, string $objectId): Builder
+    /**
+     * @param  bool  $trashed  Read the TRASH instead of the live rows. Off by
+     *                         default and passed explicitly, so only the calls
+     *                         that are answering "what did I delete?" can turn
+     *                         it on — a relation hop or a rollup asked from
+     *                         inside the trash view still resolves against live
+     *                         records, because a deleted order's customer is
+     *                         not a deleted customer.
+     */
+    private function scopeForObject(App $app, string $objectId, bool $trashed = false): Builder
     {
-        return Record::query()
+        $builder = Record::query()
             ->where('app_id', $app->id)
             ->where('object_definition_id', $objectId)
             // Here and nowhere else. Every read of an app's records comes
@@ -914,6 +923,24 @@ class RecordQueryService
             // invoice, or a real order shown to somebody who believes they are
             // in a sandbox and deletes it.
             ->where('environment', app(EnvironmentContext::class)->current());
+
+        // The trash is the same rows seen from the other side, so it inherits
+        // every scope above rather than being a query of its own.
+        return $trashed ? $builder->onlyTrashed() : $builder;
+    }
+
+    /**
+     * Whether this call is asking about deleted rows.
+     *
+     * Read from the call context rather than held on the service: the resolver
+     * is shared, and a flag left set on it would send one block's trash view to
+     * every block that queried afterwards.
+     *
+     * @param  array<string, mixed>  $context
+     */
+    private function readsTrash(array $context): bool
+    {
+        return ($context['__trashed'] ?? false) === true;
     }
 
     /** How deep `related` filters may nest before bailing (cycle/cost guard). */
