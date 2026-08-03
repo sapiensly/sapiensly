@@ -21,6 +21,7 @@ class App extends Model
     use UsesPlatformConnection;
 
     protected $fillable = [
+        'activity_retention_months',
         'user_id',
         'organization_id',
         'slug',

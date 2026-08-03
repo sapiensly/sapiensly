@@ -406,6 +406,7 @@ onMounted(() => {
                         v-if="props.environment"
                         :current="props.environment.current"
                         :can-switch="props.environment.can_switch"
+                        :app-slug="props.app.slug"
                         :locale="locale"
                     />
                     <AppRenderer
@@ -431,6 +432,7 @@ onMounted(() => {
                     v-if="props.environment"
                     :current="props.environment.current"
                     :can-switch="props.environment.can_switch"
+                    :app-slug="props.app.slug"
                     :locale="locale"
                 />
                 <RolePreviewBar

@@ -64,6 +64,8 @@ const WORDS: Record<string, Dict> = {
         demo_explains: 'Nothing here is real data.',
         demo_leave: 'Back to production',
         demo_enter: 'Open the demo',
+        demo_reset: 'Empty it',
+        demo_reset_sure: 'Delete every demo record?',
     },
     es: {
         columns: 'Columnas',
@@ -111,6 +113,8 @@ const WORDS: Record<string, Dict> = {
         demo_explains: 'Nada de esto son datos reales.',
         demo_leave: 'Volver a producción',
         demo_enter: 'Abrir la demo',
+        demo_reset: 'Vaciarla',
+        demo_reset_sure: '¿Borrar todos los registros de demo?',
     },
     pt: {
         columns: 'Colunas',
@@ -158,6 +162,8 @@ const WORDS: Record<string, Dict> = {
         demo_explains: 'Nada aqui são dados reais.',
         demo_leave: 'Voltar à produção',
         demo_enter: 'Abrir a demonstração',
+        demo_reset: 'Esvaziar',
+        demo_reset_sure: 'Excluir todos os registros de demonstração?',
     },
     fr: {
         columns: 'Colonnes',
@@ -204,6 +210,8 @@ const WORDS: Record<string, Dict> = {
         demo_explains: 'Rien ici n’est une donnée réelle.',
         demo_leave: 'Retour à la production',
         demo_enter: 'Ouvrir la démo',
+        demo_reset: 'La vider',
+        demo_reset_sure: 'Supprimer tous les enregistrements de démo ?',
     },
 };
 

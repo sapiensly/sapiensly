@@ -40,6 +40,14 @@ Schedule::command('flows:dispatch-scheduled')
     ->withoutOverlapping()
     ->runInBackground();
 
+// Drop activity older than each app was told to keep. Nightly and off-peak:
+// it is maintenance, and the default of one month means most tenants have very
+// little to remove on any given night.
+Schedule::command('activity:prune')
+    ->dailyAt('03:20')
+    ->withoutOverlapping()
+    ->runInBackground();
+
 // Fire record.date_reached workflows whose date-field offset is due.
 Schedule::command('flows:dispatch-date-reached')
     ->everyMinute()

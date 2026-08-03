@@ -17,6 +17,7 @@ class Organization extends Model
     use UsesPlatformConnection;
 
     protected $fillable = [
+        'activity_retention_months',
         'name',
         'slug',
         'metadata',

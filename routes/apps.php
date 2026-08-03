@@ -5,6 +5,7 @@ use App\Http\Controllers\AppActionController;
 use App\Http\Controllers\AppBuilderController;
 use App\Http\Controllers\AppController;
 use App\Http\Controllers\AppDocsController;
+use App\Http\Controllers\AppEnvironmentController;
 use App\Http\Controllers\AppExportController;
 use App\Http\Controllers\AppFileController;
 use App\Http\Controllers\AppNotificationController;
@@ -236,6 +237,11 @@ Route::middleware([
         ->name('apps.runtime.notifications.read');
 
     // Download an object's records. Same access context as the page, so an
+    // Emptying the sandbox. Refused unless the session says you are in it.
+    Route::post('/r/{app_slug}/environment/reset', [AppEnvironmentController::class, 'reset'])
+        ->middleware(['throttle:10,1', BindAppEnvironment::class])
+        ->name('apps.runtime.environment.reset');
+
     // A record's history — what changed, and what people said about it.
     Route::get('/r/{app_slug}/records/{record_id}/trail', [AppRecordTrailController::class, 'index'])
         ->where('record_id', 'rec_[a-z0-9]+')

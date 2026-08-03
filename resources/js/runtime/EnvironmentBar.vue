@@ -15,7 +15,9 @@
  * Switching is a full page load: the environment is a server-side decision
  * remembered per app, so the server has to make it again.
  */
-import { FlaskConical } from '@lucide/vue';
+import { router } from '@inertiajs/vue3';
+import { FlaskConical, RotateCcw } from '@lucide/vue';
+import { ref } from 'vue';
 import { themeTokens, useRuntimeTheme } from './useRuntimeTheme';
 import { runtimeWord } from './words';
 
@@ -23,7 +25,35 @@ const props = defineProps<{
     current: string;
     canSwitch: boolean;
     locale?: string;
+    /** Needed only to empty the sandbox. */
+    appSlug?: string;
 }>();
+
+/**
+ * Emptying the sandbox takes two clicks, on the bar itself.
+ *
+ * Not in a menu somewhere: a reset that can be reached while looking at
+ * production is one wrong click from a business's records. The server refuses
+ * it unless the session says demo, so this is the second lock, not the only
+ * one.
+ */
+const confirming = ref(false);
+const resetting = ref(false);
+
+function reset(appSlug: string): void {
+    if (!confirming.value) {
+        confirming.value = true;
+        return;
+    }
+
+    confirming.value = false;
+    resetting.value = true;
+    router.post(
+        `/r/${appSlug}/environment/reset`,
+        {},
+        { onFinish: () => (resetting.value = false) },
+    );
+}
 
 function switchTo(environment: string): void {
     const url = new URL(window.location.href);
@@ -48,10 +78,22 @@ const t = themeTokens(useRuntimeTheme());
         <span class="font-medium">{{ word('demo_banner') }}</span>
         <span class="opacity-80">{{ word('demo_explains') }}</span>
         <button
+            v-if="canSwitch && appSlug"
+            type="button"
+            data-sp-environment-reset
+            :disabled="resetting"
+            class="ml-auto rounded-pill border border-amber-500/40 px-2.5 py-0.5 transition-colors hover:bg-amber-500/20 disabled:opacity-50"
+            @click="reset(appSlug)"
+        >
+            <RotateCcw class="mr-1 inline size-3" />
+            {{ confirming ? word('demo_reset_sure') : word('demo_reset') }}
+        </button>
+        <button
             v-if="canSwitch"
             type="button"
             data-sp-environment-switch="production"
-            class="ml-auto rounded-pill border border-amber-500/40 px-2.5 py-0.5 transition-colors hover:bg-amber-500/20"
+            class="rounded-pill border border-amber-500/40 px-2.5 py-0.5 transition-colors hover:bg-amber-500/20"
+            :class="!appSlug && 'ml-auto'"
             @click="switchTo('production')"
         >
             {{ word('demo_leave') }}
