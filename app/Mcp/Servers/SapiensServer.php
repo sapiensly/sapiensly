@@ -126,7 +126,10 @@ connection is bound to, and every write is recorded in the platform audit log:
   - Organizations: list_organizations, inspect_organization (members, what they
     built, spend, budget, tokens), create_organization, manage_organization
     (rename / suspend / restore — suspend is a reversible soft-delete, NOT a
-    purge), set_organization_budget (their limits and your platform cap).
+    purge), purge_organization (the irreversible one: destroys every row, file
+    and cached value belonging to a SUSPENDED tenant — this, not suspend, is how
+    a deletion request is honoured; run it with dry_run=true first),
+    set_organization_budget (their limits and your platform cap).
   - Accounts: list_platform_users, inspect_platform_user (read this BEFORE
     deleting anyone — it says what they own and which organizations they are the
     sole owner of), invite_platform_user, manage_platform_user (block / unblock /
@@ -318,6 +321,7 @@ class SapiensServer extends Server
         Tools\Platform\InspectOrganizationTool::class,
         Tools\Platform\CreateOrganizationTool::class,
         Tools\Platform\ManageOrganizationTool::class,
+        Tools\Platform\PurgeOrganizationTool::class,
         Tools\Platform\SetOrganizationBudgetTool::class,
         // Accounts & membership.
         Tools\Platform\ListPlatformUsersTool::class,

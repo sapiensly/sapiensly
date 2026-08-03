@@ -48,6 +48,9 @@ Organizations:
   - list_organizations, inspect_organization (members, what they built, spend,
     budget, tokens), create_organization, manage_organization (rename / suspend /
     restore — suspend is a REVERSIBLE soft-delete, never a purge),
+    purge_organization (the irreversible one: destroys every row, file and
+    cached value of a SUSPENDED tenant, and is how a deletion request is
+    honoured — run dry_run=true first, then confirm with the slug),
     set_organization_budget (their limits, and the platform cap they cannot raise).
 
 Accounts:
@@ -110,6 +113,7 @@ class SysadminServer extends Server
         Tools\Platform\InspectOrganizationTool::class,
         Tools\Platform\CreateOrganizationTool::class,
         Tools\Platform\ManageOrganizationTool::class,
+        Tools\Platform\PurgeOrganizationTool::class,
         Tools\Platform\SetOrganizationBudgetTool::class,
         // Accounts & membership.
         Tools\Platform\ListPlatformUsersTool::class,
