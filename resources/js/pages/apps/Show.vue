@@ -232,8 +232,24 @@ function formatDate(value: string | null): string {
 
     <AppLayoutV2 :title="t('app_v2.nav.apps')">
         <div class="mx-auto max-w-5xl space-y-6">
-            <header class="flex items-start justify-between gap-4">
-                <div class="flex min-w-0 items-start gap-3">
+            <!--
+                The same shape PageHeader lays out, because this screen carries
+                a heading PageHeader cannot express: an icon, a visibility pill,
+                an inline rename form. Hand-rolled, it had the bug PageHeader's
+                own comment says three screens shipped — actions that refuse to
+                shrink and never wrap.
+
+                On a phone that left about ninety pixels for the title beside
+                two buttons, so "CRM de ventas" came down one word per line with
+                the buttons reading as though they sat on top of it, and the
+                description broke into a column of single words.
+
+                Below `sm` it stacks. From `sm` up it is the original row.
+            -->
+            <header
+                class="flex flex-col items-start justify-between gap-3 sm:flex-row sm:gap-4"
+            >
+                <div class="flex w-full min-w-0 items-start gap-3 sm:w-auto">
                     <div
                         class="flex size-10 shrink-0 items-center justify-center rounded-xs"
                         :style="{
@@ -331,7 +347,12 @@ function formatDate(value: string | null): string {
                     </div>
                 </div>
 
-                <div class="flex shrink-0 items-center gap-2">
+                <!-- `shrink-0` only from `sm`: while stacked the row is the
+                     full width and wraps on its own; unconditionally it is what
+                     squeezed the title. -->
+                <div
+                    class="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:shrink-0 sm:flex-nowrap"
+                >
                     <Link :href="AppBuilderController.show(app.id).url">
                         <button
                             type="button"
