@@ -481,3 +481,25 @@ it('gives a childless object a page of its own, so it can be removed too', funct
     expect(collect($table['columns'])->where('type', 'action')->pluck('label'))
         ->toContain('Abrir');
 });
+
+it('puts an activity trail on every record page', function () {
+    // Every app needs this and none would ask for it: "the status changed on
+    // Tuesday, and Ana wrote that the customer never called back" answers most
+    // questions asked of a record. Without it a record is a set of current
+    // values with no memory.
+    Ai::fakeAgent(ChatAgent::class, [summarySpec('Contratos y pagos.')]);
+
+    $manifest = summaryScaffolder()->scaffold(summaryBase(), 'Rentas.', User::factory()->create());
+
+    $details = collect($manifest['pages'])
+        ->filter(fn (array $p): bool => str_contains((string) $p['path'], '_detail'));
+
+    expect($details)->not->toBeEmpty();
+
+    foreach ($details as $page) {
+        $trail = collect($page['blocks'])->firstWhere('type', 'record_activity');
+
+        expect($trail)->not->toBeNull()
+            ->and($trail['record_id_expression'])->toBe('{{params.id}}');
+    }
+});

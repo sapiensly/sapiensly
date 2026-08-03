@@ -9,6 +9,7 @@ use App\Http\Controllers\AppExportController;
 use App\Http\Controllers\AppFileController;
 use App\Http\Controllers\AppNotificationController;
 use App\Http\Controllers\AppRecordOptionsController;
+use App\Http\Controllers\AppRecordTrailController;
 use App\Http\Controllers\AppRuntimeAgentController;
 use App\Http\Controllers\AppRuntimeController;
 use App\Http\Controllers\AppVersionsController;
@@ -231,6 +232,16 @@ Route::middleware([
         ->name('apps.runtime.notifications.read');
 
     // Download an object's records. Same access context as the page, so an
+    // A record's history — what changed, and what people said about it.
+    Route::get('/r/{app_slug}/records/{record_id}/trail', [AppRecordTrailController::class, 'index'])
+        ->where('record_id', 'rec_[a-z0-9]+')
+        ->middleware('throttle:120,1')
+        ->name('apps.runtime.trail');
+    Route::post('/r/{app_slug}/records/{record_id}/trail', [AppRecordTrailController::class, 'store'])
+        ->where('record_id', 'rec_[a-z0-9]+')
+        ->middleware('throttle:30,1')
+        ->name('apps.runtime.trail.store');
+
     // The records a relation field can point at. Same access gate as the table
     // that shows them; authenticated runtime only (see the controller on why a
     // public portal does not get an enumeration endpoint).

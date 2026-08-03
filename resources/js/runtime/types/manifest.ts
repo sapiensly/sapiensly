@@ -219,6 +219,7 @@ export interface BlockOther extends BlockBase {
         | 'progress'
         | 'record_detail'
         | 'related_list'
+        | 'record_activity'
         | 'sparkline'
         | 'split_view'
         | 'stat_band'

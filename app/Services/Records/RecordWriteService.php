@@ -54,6 +54,8 @@ class RecordWriteService
             'updated_by_user_id' => $user?->id,
         ]);
 
+        $this->trail()->created($app, $manifest, $record, $user);
+
         $this->triggers()->dispatch($app, $manifest, 'record.created', [
             'record' => $this->recordPayload($record),
         ], $user);
@@ -83,6 +85,8 @@ class RecordWriteService
         ]);
         $updated = $record->refresh();
 
+        $this->trail()->updated($app, $manifest, $updated, $before, $clean, $user);
+
         $this->triggers()->dispatch($app, $manifest, 'record.updated', [
             'record' => $this->recordPayload($updated),
             'before' => $before,
@@ -95,6 +99,15 @@ class RecordWriteService
     public function delete(Record $record, ?App $app = null, ?array $manifest = null, ?User $user = null): void
     {
         $snapshot = $this->recordPayload($record);
+
+        // Written BEFORE the delete: the trail row points at a record id, and
+        // nothing stops a later cascade from taking the row with it — but the
+        // entry has to exist by then or the deletion is the one event the
+        // history never shows.
+        if ($app !== null) {
+            $this->trail()->deleted($app, $record, $user);
+        }
+
         $record->delete();
 
         if ($app !== null && $manifest !== null) {
@@ -102,6 +115,11 @@ class RecordWriteService
                 'record' => $snapshot,
             ], $user);
         }
+    }
+
+    private function trail(): RecordTrail
+    {
+        return app(RecordTrail::class);
     }
 
     /**

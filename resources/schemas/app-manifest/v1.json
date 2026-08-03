@@ -2681,6 +2681,40 @@
                 }
             ]
         },
+        "block_record_activity": {
+            "description": "A record's history: the changes it went through and the comments people left on it, newest first, with a box for adding one. Requires record_id_expression (resolves to the record — e.g. {{params.id}}). Pair it with record_detail on a detail page. Reading needs the role's `read` on the object; commenting needs `update`.",
+            "allOf": [
+                {
+                    "$ref": "#/$defs/block_base"
+                },
+                {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                        "id": true,
+                        "visibility": true,
+                        "style": true,
+                        "type": {
+                            "const": "record_activity"
+                        },
+                        "label": {
+                            "type": "string",
+                            "maxLength": 120
+                        },
+                        "record_id_expression": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 500
+                        },
+                        "allow_comments": {
+                            "type": "boolean",
+                            "default": true
+                        }
+                    },
+                    "required": ["type", "record_id_expression"]
+                }
+            ]
+        },
         "block_related_list": {
             "description": "A record's children: lists the records of another object that point back to THIS record via a relation. Requires object_id (the CHILD object to list), via_relation_field_id (a relation field ON the child object that points to the parent) and parent_id_expression (resolves to the parent id — e.g. {{params.id}} or {{row.id}}) plus columns[] ({field_id, label_override?}). Pair it with record_detail on a detail page (e.g. an Order's line items beneath the order).",
             "allOf": [
@@ -4865,6 +4899,9 @@
                 },
                 {
                     "$ref": "#/$defs/block_related_list"
+                },
+                {
+                    "$ref": "#/$defs/block_record_activity"
                 },
                 {
                     "$ref": "#/$defs/block_data_grid"

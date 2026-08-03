@@ -3668,6 +3668,18 @@ class AppScaffolder
             $blocks[] = $block;
         }
 
+        // What has happened to this record, and where somebody says why.
+        //
+        // Every app needs this and none of them would ask for it: "the status
+        // changed on Tuesday, and Ana wrote that the customer never called
+        // back" is the answer to most questions asked of a record, and without
+        // it a record is a set of current values with no memory.
+        $blocks[] = [
+            'id' => $this->id('blk'),
+            'type' => 'record_activity',
+            'record_id_expression' => '{{params.id}}',
+        ];
+
         foreach ($children as $child) {
             $childDef = $child['def'];
             $childFieldId = $child['childFieldId'];

@@ -40,6 +40,7 @@ final class Schemas
         'deck_versions',
         'app_files',
         'app_notifications',
+        'record_events',
         'app_imports',
         'app_exports',
         'app_templates',

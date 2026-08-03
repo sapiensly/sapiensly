@@ -32,6 +32,9 @@ const BlockRecordDetail = defineAsyncComponent(
 const BlockRelatedList = defineAsyncComponent(
     () => import('./blocks/BlockRelatedList.vue'),
 );
+const BlockRecordActivity = defineAsyncComponent(
+    () => import('./blocks/BlockRecordActivity.vue'),
+);
 const BlockFilterBar = defineAsyncComponent(
     () => import('./blocks/BlockFilterBar.vue'),
 );
@@ -159,6 +162,7 @@ const componentForType = {
     data_grid: BlockDataGrid,
     record_detail: BlockRecordDetail,
     related_list: BlockRelatedList,
+    record_activity: BlockRecordActivity,
     filter_bar: BlockFilterBar,
     stat: BlockStat,
     form: BlockForm,
