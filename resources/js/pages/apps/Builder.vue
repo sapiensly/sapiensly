@@ -2851,9 +2851,16 @@ function useOrgBrand() {
 // Provide the App slug for BlockForm/BlockButton inside the preview so any
 // action they fire goes to /r/{slug}/actions just like in the real runtime.
 provide('appSlug', props.app.slug);
+// The app's language, for the words the preview's own controls say — the
+// relation picker's placeholder, a confirm dialog's buttons.
+//
+// `props.manifest`, not a bare `manifest`: inside <script setup> a prop is only
+// reachable through `props`, and the bare name threw a ReferenceError during
+// setup — which blanks the whole page, because setup runs before anything
+// renders. The same slip cost a blank SiteHeader earlier in this codebase.
 provide(
     'runtimeLocale',
-    (manifest?.settings as { default_locale?: string } | undefined)
+    (props.manifest?.settings as { default_locale?: string } | undefined)
         ?.default_locale ?? 'en',
 );
 // Live palette-mode switches change the CSS vars on the preview surface; chart

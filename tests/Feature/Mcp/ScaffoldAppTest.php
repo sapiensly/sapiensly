@@ -97,9 +97,12 @@ it('scaffold_app creates a populated app with a CRUD page per object', function 
 
     $manifest = $app->versions()->first()->manifest;
     expect($manifest['objects'])->toHaveCount(2);
-    // A dashboard landing page plus one CRUD page per object.
-    expect($manifest['pages'])->toHaveCount(3);
-    expect(collect($manifest['pages'])->pluck('path'))->toContain('/', '/ideas', '/drafts');
+    // A dashboard landing page, a CRUD page per object, and the page of the
+    // record itself — every listed object has one now, which is where its Edit
+    // and Delete live.
+    expect($manifest['pages'])->toHaveCount(5);
+    expect(collect($manifest['pages'])->pluck('path'))
+        ->toContain('/', '/ideas', '/drafts', '/ideas_detail', '/drafts_detail');
 
     // The dashboard shows a KPI per object and a status distribution chart.
     $dashboard = collect($manifest['pages'])->firstWhere('path', '/');

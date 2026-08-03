@@ -423,3 +423,61 @@ it('leaves the bar off a dashboard nothing would listen to', function () {
     expect(collect($dashboard['blocks'])->contains(fn (array $b): bool => $b['type'] === 'filter_bar'))
         ->toBe($wired);
 });
+
+it('gives a childless object a page of its own, so it can be removed too', function () {
+    // Detail pages used to be built for parents only, and that quietly decided
+    // who could be deleted: Delete is a button on that page — the only control
+    // the schema lets us gate by role — so an object with nothing hanging off
+    // it could be created and then never removed by any route in its own app.
+    Ai::fakeAgent(ChatAgent::class, [json_encode([
+        'summary' => 'Órdenes, sus refacciones, y los mecánicos.',
+        'objects' => [
+            ['name' => 'Órdenes', 'slug' => 'ordenes', 'fields' => [
+                ['name' => 'Folio', 'slug' => 'folio', 'type' => 'string'],
+            ]],
+            // A real line item: quantity + unit price, hanging off an order.
+            ['name' => 'Refacciones', 'slug' => 'refacciones', 'fields' => [
+                ['name' => 'Pieza', 'slug' => 'pieza', 'type' => 'string'],
+                ['name' => 'Cantidad', 'slug' => 'cantidad', 'type' => 'number'],
+                ['name' => 'Precio unitario', 'slug' => 'precio_unitario', 'type' => 'currency'],
+            ]],
+            // Nothing points at it and it points at nothing.
+            ['name' => 'Mecánicos', 'slug' => 'mecanicos', 'fields' => [
+                ['name' => 'Nombre', 'slug' => 'nombre', 'type' => 'string'],
+                ['name' => 'Especialidad', 'slug' => 'especialidad', 'type' => 'string'],
+            ]],
+        ],
+        'links' => [['from' => 'refacciones', 'to' => 'ordenes', 'name' => 'orden']],
+    ], JSON_THROW_ON_ERROR)]);
+
+    $base = summaryBase();
+    $base['settings']['default_locale'] = 'es-MX';
+    $manifest = summaryScaffolder()->scaffold($base, 'Taller.', User::factory()->create());
+
+    $paths = collect($manifest['pages'])->pluck('path');
+
+    // The lone object gets the same page the parent does.
+    expect($paths)->toContain('/mecanicos_detail')
+        ->and($paths)->toContain('/ordenes_detail')
+        // A line item still does not: it has no list either, and it is edited
+        // and removed from the related list on the order it belongs to.
+        ->and($paths)->not->toContain('/refacciones_detail');
+
+    $lone = collect($manifest['pages'])->firstWhere('path', '/mecanicos_detail');
+    $delete = collect($lone['blocks'])->where('type', 'button')->firstWhere('label', 'Eliminar');
+
+    expect($delete)->not->toBeNull()
+        ->and($delete['visibility']['roles'])->toBe(['admin'])
+        ->and(collect($delete['on_click'])->first()['record_id_expression'])->toBe('{{params.id}}');
+
+    // And the list can reach it.
+    $list = collect($manifest['pages'])->firstWhere('path', '/mecanicos');
+    $table = collect($list['blocks'])
+        ->flatMap(fn (array $b): array => $b['type'] === 'tabs'
+            ? collect($b['tabs'])->flatMap(fn (array $t): array => $t['blocks'])->all()
+            : [$b])
+        ->firstWhere('type', 'table');
+
+    expect(collect($table['columns'])->where('type', 'action')->pluck('label'))
+        ->toContain('Abrir');
+});

@@ -945,13 +945,24 @@ class AppScaffolder
             $objectPages[$i] = $this->buildPage(['name' => $entry['def']['name'], 'slug' => $entry['def']['slug']], $entry['def']['id'], $entry['pageFields'], $lang);
         }
 
-        // Pass 4: a master-detail page for every parent that has children — the
-        // parent record (record_detail) plus, per child relationship, an inline
-        // "add child" form and a related_list of its children. The parent's list
-        // table gets an "open" row action that navigates to it.
+        // Pass 4: a page for the record itself — every object that has a list
+        // of its own gets one, whether or not anything hangs off it. A parent
+        // also gets, per child relationship, an inline "add child" form and a
+        // related_list. Either way the list table gains an "open" row action.
+        //
+        // It used to be parents only, and that quietly decided who could be
+        // deleted: Delete is a button on this page (the only control the schema
+        // lets us gate by role), so an object with no children — a Mecánicos, a
+        // Categorías — could be created and then never removed by any route in
+        // its own app.
+        //
+        // Line items are still excluded, for the opposite reason rather than by
+        // oversight: they have no list page either, and they are edited and
+        // removed from the related list on the parent they belong to.
         $detailPages = [];
         $usedSlugs = array_column($objectPages, 'slug');
-        foreach ($childrenByParent as $parentIndex => $rels) {
+        foreach (array_keys($objectPages) as $parentIndex) {
+            $rels = $childrenByParent[$parentIndex] ?? [];
             $parent = $built[$parentIndex];
             $detailSlug = $this->uniqueSlug($parent['def']['slug'].'_detail', $usedSlugs, 'detail');
             $usedSlugs[] = $detailSlug;

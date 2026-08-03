@@ -116,8 +116,10 @@ it('add_object adds a new object with its own CRUD page', function () {
     $manifest = currentManifest($this->appModel);
 
     expect($manifest['objects'])->toHaveCount(2);
-    // Seeded dashboard + ideas page, plus the new drafts page.
-    expect($manifest['pages'])->toHaveCount(3);
+    // Seeded dashboard + ideas page, plus the new drafts page and the page of
+    // a draft itself — every listed object gets one, which is where its Edit
+    // and Delete live.
+    expect($manifest['pages'])->toHaveCount(4);
     expect(collect($manifest['objects'])->pluck('slug'))->toContain('drafts');
     expect(collect($manifest['pages'])->pluck('path'))->toContain('/drafts');
     expect(app(ManifestValidator::class)->validate($manifest)->valid)->toBeTrue();
