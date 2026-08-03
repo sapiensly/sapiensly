@@ -175,7 +175,7 @@ it('keeps a row to one line and lines its numbers up', function () {
             "getComputedStyle(document.querySelector('tbody td:last-child')).textAlign === 'right'"
         )
         ->assertScript(
-            "getComputedStyle(document.querySelector('tbody td:first-child')).textOverflow === 'ellipsis'"
+            "getComputedStyle(document.querySelector('tbody td:not([data-sp-select-cell])')).textOverflow === 'ellipsis'"
         );
 })->group('browser');
 

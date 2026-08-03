@@ -8,6 +8,7 @@ import {
     Download,
     Search,
 } from '@lucide/vue';
+import axios from 'axios';
 import DOMPurify from 'dompurify';
 import { computed, inject, ref, watch } from 'vue';
 import RuntimeIcon from '../RuntimeIcon.vue';
@@ -21,6 +22,7 @@ import type {
 import { resolveField } from '../types/manifest';
 import { useActionExecutor, type RuntimeAction } from '../useActionExecutor';
 import { themeTokens, useRuntimeTheme } from '../useRuntimeTheme';
+import { runtimeWord } from '../words';
 import FieldValue from './FieldValue.vue';
 import { formatFieldValue, type DisplayContext } from './fieldDisplay';
 
@@ -848,6 +850,132 @@ const pagedRows = computed(() => {
     const start = (Math.min(page.value, pageCount.value) - 1) * pageSize.value;
     return sortedRows.value.slice(start, start + pageSize.value);
 });
+/**
+ * The rows somebody picked, to do one thing to all of them.
+ *
+ * Derived from what is already on screen rather than authored in the manifest:
+ * every table over a deletable object wants this, and a bulk edit offered only
+ * where an author remembered to declare it is a feature most apps never get.
+ *
+ * Selection is cleared by anything that changes what the rows ARE — a search,
+ * a filter, a page. Keeping ids across a change of result means acting on rows
+ * the reader can no longer see, which is how somebody deletes twelve records
+ * they never looked at.
+ */
+/** Only where the role may actually act — see the `can` payload. */
+const canSelect = computed(
+    () => props.data?.can?.delete === true || props.data?.can?.update === true,
+);
+
+const selected = ref<Set<string>>(new Set());
+const bulkBusy = ref(false);
+const bulkResult = ref<string | null>(null);
+
+// The row IDENTITIES, not the array's reference. `props.data.rows` is a fresh
+// array on every patch of the block data, so watching the reference cleared
+// the selection on the tick after every click — the box stayed ticked in the
+// DOM and the bar never appeared, because Vue's state had already forgotten.
+/**
+ * Set while the rows we are about to receive are the ones a bulk action just
+ * changed. Without it the reload that PROVES the edit worked also wipes the
+ * sentence reporting it, and the reader sees nothing happen.
+ */
+let awaitingOwnReload = false;
+
+watch([() => rows.value.map((r) => r.id).join(','), query, page], () => {
+    selected.value = new Set();
+
+    if (awaitingOwnReload) {
+        awaitingOwnReload = false;
+
+        return;
+    }
+
+    bulkResult.value = null;
+});
+
+const selectedCount = computed(() => selected.value.size);
+const allOnPageSelected = computed(
+    () =>
+        pagedRows.value.length > 0 &&
+        pagedRows.value.every((r) => selected.value.has(r.id)),
+);
+
+function toggleRow(id: string): void {
+    const next = new Set(selected.value);
+    if (next.has(id)) {
+        next.delete(id);
+    } else {
+        next.add(id);
+    }
+    selected.value = next;
+}
+
+function togglePage(): void {
+    selected.value = allOnPageSelected.value
+        ? new Set()
+        : new Set(pagedRows.value.map((r) => r.id));
+}
+
+/** Columns bound to a select field — the ones a bulk edit can set. */
+const settableColumns = computed(() =>
+    columns.value.filter(
+        (c): c is DataColumn =>
+            c.kind === 'data' && c.field?.type === 'single_select',
+    ),
+);
+
+async function confirmBulkDelete(): Promise<void> {
+    const ok = await confirmAction({
+        title: runtimeWord(props.locale, 'bulk_delete_title', {
+            n: selected.value.size,
+        }),
+        message: runtimeWord(props.locale, 'bulk_delete_message'),
+        locale: props.locale,
+        danger: true,
+    });
+
+    if (ok) await runBulk('delete');
+}
+
+async function runBulk(
+    action: 'delete' | 'set',
+    fieldId?: string,
+    value?: unknown,
+): Promise<void> {
+    if (bulkBusy.value || selected.value.size === 0 || !object.value) return;
+
+    bulkBusy.value = true;
+    bulkResult.value = null;
+    try {
+        const { data } = await axios.post(`/r/${appSlug}/bulk`, {
+            object_id: object.value.id,
+            action,
+            record_ids: [...selected.value],
+            ...(fieldId ? { field_id: fieldId, value } : {}),
+        });
+        // Both numbers: "12 changed" while 3 were silently skipped is the kind
+        // of report somebody acts on.
+        // A delete is not a change: reporting "3 changed" for rows that are
+        // gone reads as an edit somebody can go and inspect.
+        bulkResult.value = runtimeWord(
+            props.locale,
+            action === 'delete' ? 'bulk_removed' : 'bulk_done',
+            {
+                n: data.changed ?? 0,
+                skipped: data.skipped ?? 0,
+            },
+        );
+        selected.value = new Set();
+        awaitingOwnReload = true;
+        router.reload({ only: ['blockData'] });
+    } catch {
+        bulkResult.value = runtimeWord(props.locale, 'bulk_failed');
+    } finally {
+        bulkBusy.value = false;
+    }
+}
+
 function goToPage(p: number) {
     const target = Math.min(Math.max(1, p), pageCount.value);
     if (serverMode.value) {
@@ -1006,6 +1134,15 @@ function richTextCell(value: unknown): string {
                         :class="['border-b', t.divider, t.headerRow]"
                         :style="{ background: 'var(--sp-surface-2)' }"
                     >
+                        <th v-if="canSelect" data-sp-select-cell class="sp-cell w-8">
+                            <input
+                                type="checkbox"
+                                data-sp-select-all
+                                class="size-3.5 cursor-pointer align-middle"
+                                :checked="allOnPageSelected"
+                                @change="togglePage"
+                            />
+                        </th>
                         <th
                             v-for="col in columns"
                             :key="col.id"
@@ -1066,6 +1203,15 @@ function richTextCell(value: unknown): string {
                         :key="row.id"
                         class="transition-colors hover:bg-surface-hover"
                     >
+                        <td v-if="canSelect" data-sp-select-cell class="sp-cell w-8">
+                            <input
+                                type="checkbox"
+                                :data-sp-select-row="row.id"
+                                class="size-3.5 cursor-pointer align-middle"
+                                :checked="selected.has(row.id)"
+                                @change="toggleRow(row.id)"
+                            />
+                        </td>
                         <td
                             v-for="col in columns"
                             :key="col.id"
@@ -1194,6 +1340,74 @@ function richTextCell(value: unknown): string {
                 </tfoot>
             </table>
         </div>
+
+        <!-- What to do with the rows somebody picked. Appears only when there
+             are any: a permanently visible toolbar over an idle table is
+             furniture, and it competes with the controls that always apply. -->
+        <div
+            v-if="canSelect && selectedCount > 0"
+            data-sp-bulk-bar
+            :class="[
+                'mt-2 flex flex-wrap items-center gap-2 rounded-md border px-3 py-2 text-xs',
+                t.surfaceMuted,
+                t.text,
+            ]"
+        >
+            <span class="font-medium">
+                {{ runtimeWord(locale, 'bulk_selected', { n: selectedCount }) }}
+            </span>
+
+            <template v-for="col in settableColumns" :key="col.id">
+                <select
+                    v-if="data?.can?.update"
+                    :data-sp-bulk-set="col.field.id"
+                    :disabled="bulkBusy"
+                    class="h-7 rounded-md border bg-transparent px-2 text-xs"
+                    @change="
+                        runBulk(
+                            'set',
+                            col.field.id,
+                            ($event.target as HTMLSelectElement).value,
+                        );
+                        ($event.target as HTMLSelectElement).value = '';
+                    "
+                >
+                    <option value="">
+                        {{ runtimeWord(locale, 'bulk_set', { f: col.label }) }}
+                    </option>
+                    <option
+                        v-for="opt in col.field.options ?? []"
+                        :key="opt.value"
+                        :value="opt.value"
+                    >
+                        {{ opt.label }}
+                    </option>
+                </select>
+            </template>
+
+            <button
+                v-if="data?.can?.delete"
+                type="button"
+                data-sp-bulk-delete
+                :disabled="bulkBusy"
+                class="ml-auto rounded-pill px-2.5 py-1 text-red-400 transition-colors hover:bg-red-500/10 disabled:opacity-50"
+                @click="confirmBulkDelete"
+            >
+                {{ runtimeWord(locale, 'bulk_delete') }}
+            </button>
+        </div>
+
+        <!-- The report of what happened OUTLIVES the selection that caused it.
+             Applying an edit clears the picked rows, which hides the bar — so a
+             result rendered inside it flashed and vanished, and "3 changed, 2
+             skipped" is exactly the sentence somebody needs to read. -->
+        <p
+            v-if="bulkResult"
+            data-sp-bulk-result
+            :class="['mt-2 px-3 text-xs', t.textMuted]"
+        >
+            {{ bulkResult }}
+        </p>
 
         <!-- Pager (only when pagination is enabled and there's more than one page). -->
         <div

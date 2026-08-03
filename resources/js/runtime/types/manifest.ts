@@ -278,6 +278,11 @@ export interface TableBlockData {
      * different question than the footer appears to be answering.
      */
     totals?: Record<string, number>;
+    /**
+     * What this role may do to these rows in bulk. Sent so the bar is never
+     * offered to somebody the server will refuse.
+     */
+    can?: { update: boolean; delete: boolean };
 }
 
 export interface StatBlockData {

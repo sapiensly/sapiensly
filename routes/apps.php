@@ -3,6 +3,7 @@
 use App\Http\Controllers\AppAccessController;
 use App\Http\Controllers\AppActionController;
 use App\Http\Controllers\AppBuilderController;
+use App\Http\Controllers\AppBulkActionController;
 use App\Http\Controllers\AppController;
 use App\Http\Controllers\AppDocsController;
 use App\Http\Controllers\AppEnvironmentController;
@@ -238,6 +239,13 @@ Route::middleware([
         ->name('apps.runtime.notifications.read');
 
     // Download an object's records. Same access context as the page, so an
+    // The same edit applied to the rows somebody picked. Bound to the
+    // environment like every other write, or a bulk delete fired from the
+    // sandbox would take real records with it.
+    Route::post('/r/{app_slug}/bulk', AppBulkActionController::class)
+        ->middleware(['throttle:30,1', BindAppEnvironment::class])
+        ->name('apps.runtime.bulk');
+
     // Emptying the sandbox. Refused unless the session says you are in it.
     Route::post('/r/{app_slug}/environment/reset', [AppEnvironmentController::class, 'reset'])
         ->middleware(['throttle:10,1', BindAppEnvironment::class])

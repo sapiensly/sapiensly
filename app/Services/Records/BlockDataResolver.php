@@ -161,6 +161,11 @@ class BlockDataResolver
                 'truncated' => $total > count($rows),
                 'paged' => $paged,
                 'totals' => $this->moneyTotals($app, $block, $manifest, $context),
+                // What this role may do to these rows in bulk. Sent so the bar
+                // is never offered to somebody the server will refuse — a
+                // control that answers "no" is one that should not have been
+                // there, which is the rule the action columns already follow.
+                'can' => $this->bulkAbilities($block, $context),
             ];
         }
 
@@ -1118,6 +1123,28 @@ class BlockDataResolver
         $source['offset'] = ($page - 1) * $pageSize;
 
         return $source;
+    }
+
+    /**
+     * Whether this role may change or remove the rows of a table's object.
+     *
+     * @param  array<string, mixed>  $block
+     * @param  array<string, mixed>  $context
+     * @return array{update: bool, delete: bool}
+     */
+    private function bulkAbilities(array $block, array $context): array
+    {
+        $access = $context['__access'] ?? null;
+        $objectId = $block['data_source']['object_id'] ?? null;
+
+        if (! $access instanceof AppAccessContext || ! is_string($objectId)) {
+            return ['update' => false, 'delete' => false];
+        }
+
+        return [
+            'update' => $access->can($objectId, 'update'),
+            'delete' => $access->can($objectId, 'delete'),
+        ];
     }
 
     /**

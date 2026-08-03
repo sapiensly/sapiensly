@@ -62,7 +62,7 @@ it('draws a missing value as absence rather than as content', function () {
         // …and it recedes: a lighter ink than the value beside it.
         ->assertScript(<<<'JS'
         (() => {
-            const cells = document.querySelectorAll('tbody tr:first-child td');
+            const cells = document.querySelectorAll('tbody tr:first-child td:not([data-sp-select-cell])');
             const value = getComputedStyle(cells[0]).color;
             const dash = getComputedStyle(cells[1].querySelector('span'), null).color;
             return dash !== value;
