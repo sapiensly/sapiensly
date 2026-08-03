@@ -2452,6 +2452,11 @@ class AppScaffolder
             }
         }
 
+        // Applied to the FLAT list, before the charts are paired into rows:
+        // afterwards they are nested and the walk would have to know about the
+        // containers to find them.
+        $blocks = $this->applyDashboardWindow($blocks, $objects, $lang);
+
         return [
             'id' => $this->id('pag'),
             'slug' => $slug,
@@ -2459,6 +2464,106 @@ class AppScaffolder
             'path' => '/',
             'blocks' => $this->pairUpVisualisations($blocks),
         ];
+    }
+
+    /**
+     * A window over the whole board, and every figure on it answering.
+     *
+     * A generated dashboard could only ever say one thing. "Órdenes de servicio
+     * 14" meant since the beginning of time, with no way to ask what this month
+     * looked like — and the brief it was built from said, in as many words,
+     * that the manager wants to know how much is being billed. A board with no
+     * way to change the window is a board you read once.
+     *
+     * Every block is scoped by ITS OWN object's date: a dashboard aggregates
+     * across several objects and each keeps time differently. The date it looks
+     * FORWARD to when it has one, otherwise the row's own created-at — which
+     * every record has, so no figure is left out of the window silently.
+     *
+     * Opens on 'all', so the board reads exactly as it did before anybody
+     * touches the control. A default of 30 days would silently turn 14 into 3
+     * with nothing on screen to say why.
+     *
+     * @param  list<array<string, mixed>>  $blocks
+     * @param  array<int, array<string, mixed>>  $objects
+     * @return list<array<string, mixed>>
+     */
+    private function applyDashboardWindow(array $blocks, array $objects, string $lang): array
+    {
+        $dateByObject = [];
+        foreach ($objects as $object) {
+            $dateByObject[$object['id']] = $this->windowDateFor($object, $lang);
+        }
+
+        if ($dateByObject === []) {
+            return $blocks;
+        }
+
+        $condition = fn (string $objectId): ?array => isset($dateByObject[$objectId])
+            ? [
+                'op' => 'gte',
+                'field_id' => $dateByObject[$objectId],
+                'value_expression' => "{{range_start(default(params.range, 'all'))}}",
+            ]
+            : null;
+
+        $wired = false;
+        foreach ($blocks as $i => $block) {
+            if (($block['type'] ?? null) === 'metric_grid') {
+                foreach ($block['items'] as $j => $item) {
+                    $where = $condition((string) ($item['query']['object_id'] ?? ''));
+                    if ($where !== null) {
+                        $blocks[$i]['items'][$j]['query']['filter'] = $where;
+                        $wired = true;
+                    }
+                }
+
+                continue;
+            }
+
+            if (in_array($block['type'] ?? null, ['chart', 'sparkline'], true)) {
+                $where = $condition((string) ($block['data_source']['object_id'] ?? ''));
+                if ($where !== null) {
+                    $blocks[$i]['data_source']['filter'] = $where;
+                    $wired = true;
+                }
+            }
+        }
+
+        // Same rule the list page's bar follows: never a control nothing
+        // listens to.
+        if (! $wired) {
+            return $blocks;
+        }
+
+        $bar = [
+            'id' => $this->id('blk'),
+            'type' => 'filter_bar',
+            'controls' => [['param' => 'range', 'type' => 'date_range', 'default' => 'all']],
+        ];
+
+        // Under the title, above the figures it governs.
+        array_splice($blocks, 1, 0, [$bar]);
+
+        return $blocks;
+    }
+
+    /**
+     * The date a dashboard block should be windowed by: the one this object
+     * looks forward to, or the row's own created-at.
+     *
+     * @param  array<string, mixed>  $object
+     */
+    private function windowDateFor(array $object, string $lang): string
+    {
+        foreach ($object['fieldIndex'] ?? [] as $field) {
+            if (in_array($field['type'] ?? '', ['date', 'datetime'], true)
+                && $this->isScheduleDate($field, $lang)) {
+                return (string) $field['id'];
+            }
+        }
+
+        return 'sys_created_at';
     }
 
     /**

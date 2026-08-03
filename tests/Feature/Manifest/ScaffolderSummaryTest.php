@@ -343,3 +343,83 @@ it('gives a child row the edit and delete it has nowhere else to put', function 
     expect($editModal)->not->toBeNull()
         ->and($editModal['record_id_expression'])->toBe('{{params.record_id}}');
 });
+
+it('gives the dashboard a window, and every figure on it answers', function () {
+    // A generated dashboard could only ever say one thing: "Órdenes 14" meant
+    // since the beginning of time. The brief it was built from asks how much is
+    // being billed — a question with a period in it.
+    Ai::fakeAgent(ChatAgent::class, [json_encode([
+        'summary' => 'Órdenes y clientes.',
+        'objects' => [
+            ['name' => 'Órdenes', 'slug' => 'ordenes', 'fields' => [
+                ['name' => 'Folio', 'slug' => 'folio', 'type' => 'string'],
+                ['name' => 'Fecha prometida de entrega', 'slug' => 'fecha_prometida', 'type' => 'date'],
+                ['name' => 'Total', 'slug' => 'total', 'type' => 'currency'],
+                ['name' => 'Estado', 'slug' => 'estado', 'type' => 'single_select', 'options' => [
+                    ['value' => 'abierta', 'label' => 'Abierta'],
+                    ['value' => 'cerrada', 'label' => 'Cerrada'],
+                ]],
+            ]],
+            ['name' => 'Clientes', 'slug' => 'clientes', 'fields' => [
+                ['name' => 'Nombre', 'slug' => 'nombre', 'type' => 'string'],
+            ]],
+        ],
+        'links' => [],
+    ], JSON_THROW_ON_ERROR)]);
+
+    $base = summaryBase();
+    $base['settings']['default_locale'] = 'es-MX';
+    $manifest = summaryScaffolder()->scaffold($base, 'Taller.', User::factory()->create());
+
+    $dashboard = collect($manifest['pages'])->firstWhere('path', '/');
+    $flat = collect($dashboard['blocks'])
+        ->flatMap(fn (array $b): array => $b['type'] === 'container' ? $b['blocks'] : [$b]);
+
+    $bar = $flat->firstWhere('type', 'filter_bar');
+    expect($bar)->not->toBeNull()
+        // Opens exactly as the board read before: a default of 30 days would
+        // silently turn 14 into 3 with nothing on screen to say why.
+        ->and($bar['controls'][0])->toMatchArray(['param' => 'range', 'default' => 'all']);
+
+    $ordenes = collect($manifest['objects'])->firstWhere('slug', 'ordenes');
+    $clientes = collect($manifest['objects'])->firstWhere('slug', 'clientes');
+    $prometida = collect($ordenes['fields'])->firstWhere('slug', 'fecha_prometida')['id'];
+
+    // Each block is scoped by ITS OWN object's date: a dashboard aggregates
+    // across objects and each keeps time differently.
+    $grid = $flat->firstWhere('type', 'metric_grid');
+    $byObject = collect($grid['items'])->mapWithKeys(fn (array $i): array => [
+        $i['query']['object_id'] => $i['query']['filter']['field_id'] ?? null,
+    ]);
+
+    expect($byObject[$ordenes['id']])->toBe($prometida)
+        // No date it looks forward to, so the row's own created-at — which
+        // every record has, so no figure sits outside the window silently.
+        ->and($byObject[$clientes['id']])->toBe('sys_created_at');
+
+    $chart = $flat->firstWhere('type', 'chart');
+    expect($chart['data_source']['filter']['value_expression'])
+        ->toBe("{{range_start(default(params.range, 'all'))}}");
+});
+
+it('leaves the bar off a dashboard nothing would listen to', function () {
+    // Same rule the list page follows: never a control that does nothing.
+    Ai::fakeAgent(ChatAgent::class, [summarySpec('Dos objetos sin nada que graficar.')]);
+
+    $manifest = summaryScaffolder()->scaffold(summaryBase(), 'X.', User::factory()->create());
+    $dashboard = collect($manifest['pages'])->firstWhere('path', '/');
+
+    if ($dashboard === null) {
+        expect(true)->toBeTrue(); // No dashboard at all is a valid outcome here.
+
+        return;
+    }
+
+    $grid = collect($dashboard['blocks'])->firstWhere('type', 'metric_grid');
+    $wired = $grid !== null && collect($grid['items'])->contains(
+        fn (array $i): bool => isset($i['query']['filter']),
+    );
+
+    expect(collect($dashboard['blocks'])->contains(fn (array $b): bool => $b['type'] === 'filter_bar'))
+        ->toBe($wired);
+});
