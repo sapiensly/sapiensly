@@ -813,11 +813,11 @@ class RecordQueryService
                 ->limit($limit)
                 ->get();
 
-            return $rows->map(fn ($r) => [
+            return $this->labelRelationGroups($app, $rows->map(fn ($r) => [
                 'group' => $r->grp,
                 'group2' => $r->grp2,
                 'value' => $castValue($r->val),
-            ])->all();
+            ])->all(), $groupField, $group2Field, $manifest, $context);
         }
 
         $rows = $builder->toBase()
@@ -827,10 +827,85 @@ class RecordQueryService
             ->limit($limit)
             ->get();
 
-        return $rows->map(fn ($r) => [
+        return $this->labelRelationGroups($app, $rows->map(fn ($r) => [
             'group' => $r->grp,
             'value' => $castValue($r->val),
-        ])->all();
+        ])->all(), $groupField, null, $manifest, $context);
+    }
+
+    /**
+     * The NAME of each group, when a group is a record.
+     *
+     * Grouping by a relation groups by the stored id, so a chart of "average
+     * score per question" came out with `rec_01kz4pne…` along its axis — a
+     * correct answer to a question nobody can read. The id stays in `group`
+     * (charts drill through on it); the name arrives beside it.
+     *
+     * Two batched reads at most, and only when a group field is a relation.
+     * They go through the same scope and access filter as any other read, so a
+     * name cannot arrive for a record the reader could not open.
+     *
+     * @param  list<array<string, mixed>>  $rows
+     * @param  array<string, mixed>|null  $groupField
+     * @param  array<string, mixed>|null  $group2Field
+     * @param  array<string, mixed>  $manifest
+     * @param  array<string, mixed>  $context
+     * @return list<array<string, mixed>>
+     */
+    private function labelRelationGroups(App $app, array $rows, ?array $groupField, ?array $group2Field, array $manifest, array $context): array
+    {
+        foreach ([['group', $groupField], ['group2', $group2Field]] as [$key, $field]) {
+            if (($field['type'] ?? null) !== 'relation' || ($field['target_object_id'] ?? null) === null) {
+                continue;
+            }
+
+            $labels = $this->labelsForRecords(
+                $app,
+                (string) $field['target_object_id'],
+                array_values(array_unique(array_filter(array_map(
+                    fn (array $r): ?string => is_scalar($r[$key] ?? null) ? (string) $r[$key] : null,
+                    $rows,
+                )))),
+                $manifest,
+                $context,
+            );
+
+            foreach ($rows as $i => $row) {
+                $id = is_scalar($row[$key] ?? null) ? (string) $row[$key] : null;
+                if ($id !== null && isset($labels[$id])) {
+                    $rows[$i][$key.'_label'] = $labels[$id];
+                }
+            }
+        }
+
+        return $rows;
+    }
+
+    /**
+     * @param  list<string>  $ids
+     * @param  array<string, mixed>  $manifest
+     * @param  array<string, mixed>  $context
+     * @return array<string, string>
+     */
+    private function labelsForRecords(App $app, string $objectId, array $ids, array $manifest, array $context): array
+    {
+        if ($ids === []) {
+            return [];
+        }
+
+        $object = $this->findObject($manifest, $objectId);
+        $builder = $this->scopeForObject($app, $objectId)->whereIn('id', $ids);
+        $this->applyAccessFilter($builder, $object, $objectId, $app, $manifest, $context);
+
+        $labels = [];
+
+        foreach ($builder->get() as $record) {
+            // The same label the table and the relation picker show, so a
+            // chart's axis and the list beside it name the record identically.
+            $labels[$record->id] = RecordLabel::of($object, $record->data ?? [], $record->id);
+        }
+
+        return $labels;
     }
 
     /**

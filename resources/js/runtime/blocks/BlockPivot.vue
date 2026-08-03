@@ -40,7 +40,14 @@ const props = defineProps<{
     block: PivotBlock;
     data:
         | {
-              groups?: { group: unknown; group2?: unknown; value: number }[];
+              groups?: {
+                  group: unknown;
+                  group2?: unknown;
+                  value: number;
+                  // Present when the group IS a record — see BlockChart.
+                  group_label?: string;
+                  group2_label?: string;
+              }[];
               error?: string;
           }
         | undefined;
@@ -123,7 +130,11 @@ function label(
     raw: unknown,
     field: FieldDef | undefined,
     bucket?: Bucket,
+    resolved?: string,
 ): string {
+    // A name the server resolved wins: only it knows what a record id points
+    // at, and a row header of `rec_01k…` is a correct answer nobody can read.
+    if (typeof resolved === 'string' && resolved !== '') return resolved;
     const s = String(raw ?? '');
     if (s === '') return '—';
     if (!isTemporal(field)) return s;
@@ -176,6 +187,16 @@ const matrix = computed(() => {
     const colBucket = props.block.column_bucket ?? 'month';
 
     // Rows in reading order: a date reads chronologically, a category by name.
+    // id → name, for the axes that group by a relation. Empty otherwise, and
+    // then `label()` falls through to what it always did.
+    const rowNames = new Map<string, string>();
+    const colNames = new Map<string, string>();
+    for (const g of groups) {
+        if (g.group_label) rowNames.set(String(g.group ?? ''), g.group_label);
+        if (g.group2_label)
+            colNames.set(String(g.group2 ?? ''), g.group2_label);
+    }
+
     const rowKeys = [...new Set(groups.map((g) => String(g.group ?? '')))];
     rowKeys.sort((a, b) => {
         if (isTemporal(rowField.value)) {
@@ -205,7 +226,7 @@ const matrix = computed(() => {
 
         const max = Math.max(1, ...groups.map((g) => Number(g.value) || 0));
         const rows = rowKeys.map((rk) => ({
-            label: label(rk, rowField.value, rowBucket),
+            label: label(rk, rowField.value, rowBucket, rowNames.get(rk)),
             total: null as number | null,
             cells: colKeys.map((ck): Cell => {
                 const v = cellOf.get(cellKey(rk, ck)) ?? null;
@@ -218,7 +239,9 @@ const matrix = computed(() => {
         }));
 
         return {
-            columns: colKeys.map((ck) => label(ck, colField.value, colBucket)),
+            columns: colKeys.map((ck) =>
+                label(ck, colField.value, colBucket, colNames.get(ck)),
+            ),
             rows,
             cohort: false,
         };

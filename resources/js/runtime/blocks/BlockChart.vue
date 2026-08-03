@@ -67,7 +67,17 @@ const props = defineProps<{
     data:
         | {
               rows?: RowData[];
-              groups?: { group: unknown; group2?: unknown; value: number }[];
+              groups?: {
+                  group: unknown;
+                  group2?: unknown;
+                  value: number;
+                  // Present when the group IS a record: grouping by a relation
+                  // groups by the stored id, and an axis of `rec_01k…` is a
+                  // correct answer nobody can read. The server sends the name
+                  // beside the id rather than instead of it.
+                  group_label?: string;
+                  group2_label?: string;
+              }[];
               combo?: {
                   groups: { group: unknown; value: number }[];
               }[];
@@ -187,7 +197,7 @@ const series = computed<{ label: string; value: number }[]>(() => {
     const groupSlug = groupField.value?.slug;
     const out = props.data?.groups
         ? props.data.groups.map((g) => ({
-              label: formatGroupKey(g.group, groupField.value),
+              label: formatGroupKey(g.group, groupField.value, g.group_label),
               value: Number(g.value) || 0,
           }))
         : foldRows();
@@ -260,8 +270,10 @@ function pivotGrid(
     const data: number[][] = [];
 
     for (const g of groups) {
-        const ck = formatGroupKey(g.group, catField);
-        const sk = serField ? formatGroupKey(g.group2, serField) : '__single__';
+        const ck = formatGroupKey(g.group, catField, g.group_label);
+        const sk = serField
+            ? formatGroupKey(g.group2, serField, g.group2_label)
+            : '__single__';
         let ci = catIndex.get(ck);
         if (ci === undefined) {
             ci = cats.length;
@@ -351,7 +363,14 @@ function bucketDate(value: unknown, bucket: ChartBlock['bucket']): string {
     }
 }
 
-function formatGroupKey(value: unknown, field: FieldDef | undefined): string {
+function formatGroupKey(
+    value: unknown,
+    field: FieldDef | undefined,
+    label?: string,
+): string {
+    // A name the server resolved wins over anything derivable here: only it
+    // knows what a record id points at.
+    if (typeof label === 'string' && label !== '') return label;
     if (value === null || value === undefined || value === '') return '—';
     if (field?.type === 'single_select') {
         const opt = field.options?.find((o) => o.value === value);
