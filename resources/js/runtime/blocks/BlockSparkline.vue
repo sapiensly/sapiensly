@@ -289,10 +289,15 @@ function formatNumber(value: number): string {
             moveto and no line — it drew literally nothing, leaving an empty
             band where a chart should be. Say what there is: one reading,
             marked on its baseline.
+
+            And say it in words. The dot alone is a card that looks like a
+            chart which failed to load: a reader cannot tell a young app from a
+            broken one, and every generated app opens on this because its
+            records were all made on the same day.
         -->
         <div
             v-else-if="series.length === 1"
-            class="flex h-16 items-center justify-center"
+            class="flex h-16 flex-col justify-center gap-2"
         >
             <div class="relative flex w-full items-center">
                 <span class="h-px w-full bg-soft" />
@@ -301,6 +306,9 @@ function formatNumber(value: number): string {
                     :style="{ backgroundColor: color }"
                 />
             </div>
+            <p :class="['text-center text-[11px]', t.textMuted]">
+                {{ runtimeWord(locale, 'thin_series') }}
+            </p>
         </div>
         <p v-else :class="['py-3 text-center text-xs', t.textMuted]">
             {{ runtimeWord(locale, 'no_data') }}

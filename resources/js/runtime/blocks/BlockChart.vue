@@ -1329,6 +1329,32 @@ const emptyState = computed(() => {
     return isCombo.value ? combo.value === null : series.value.length === 0;
 });
 
+/**
+ * A trend drawn from a single point.
+ *
+ * `emptyState` only catches having NOTHING, so one bucket rendered a lone dot
+ * floating in an empty box — on the front page of every generated app, because
+ * a fresh app's records were all made on the same day. That reads as a broken
+ * chart, and it is worse than saying nothing: the reader cannot tell whether
+ * the app is young or the chart is.
+ *
+ * Only for the shapes that plot a progression. One bar or one slice is a
+ * perfectly good answer to "how many, by status"; one point is not an answer
+ * to "over time".
+ */
+const thinSeries = computed(() => {
+    if (emptyState.value) return false;
+    if (!['line', 'area'].includes(props.block.chart_type ?? '')) return false;
+
+    // A combo's x positions are its categories; a plain line's are its series
+    // points.
+    const points = isCombo.value
+        ? (combo.value?.xs.length ?? 0)
+        : series.value.length;
+
+    return points < 2;
+});
+
 // Scatter: plot raw (x_field, y_field) points from each row.
 const scatter = computed(() => {
     const rows = props.data?.rows ?? [];
@@ -1745,10 +1771,12 @@ const boxPlot = computed(() => {
              min-h-0 lets an explicit card height SHRINK the plot area too. -->
         <div class="flex min-h-0 flex-1 flex-col justify-center">
             <p
-                v-if="emptyState"
+                v-if="emptyState || thinSeries"
                 :class="['py-8 text-center text-xs', t.textMuted]"
             >
-                {{ runtimeWord(locale, 'no_data') }}
+                {{
+                    runtimeWord(locale, thinSeries ? 'thin_series' : 'no_data')
+                }}
             </p>
 
             <!-- Pareto: dedicated reusable component (vital few, threshold, badge) -->

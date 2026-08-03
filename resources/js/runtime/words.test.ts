@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { runtimeWord } from './words';
+import { missingWordKeys, runtimeWord, wordLanguages } from './words';
 
 /**
  * The runtime's own words, in the app's language.
@@ -39,48 +39,14 @@ describe('a phrase the runtime says on its own behalf', () => {
     it('says every phrase in every language it claims to speak', () => {
         // A half-translated dictionary is how one card ends up English inside
         // an otherwise Spanish page.
-        const keys = Object.keys(JSON.parse(JSON.stringify({ ...enKeys() })));
-
-        for (const lang of ['es', 'pt', 'fr']) {
-            for (const key of keys) {
-                expect(
-                    runtimeWord(lang, key),
-                    `${lang} is missing "${key}"`,
-                ).not.toBe(runtimeWord('en', key));
-            }
+        //
+        // Asked as "which keys are absent" rather than "which values differ
+        // from English": an abbreviation is often the same string in several
+        // languages ("30 d"), and comparing values reports those as
+        // untranslated while quietly accepting a key that really did fall
+        // back. Mirrors DocWords::missingKeys on the PHP side.
+        for (const lang of wordLanguages().filter((l) => l !== 'en')) {
+            expect(missingWordKeys(lang), `${lang} is incomplete`).toEqual([]);
         }
     });
 });
-
-/** The English set, as the list every other language has to match. */
-function enKeys(): Record<string, string> {
-    return {
-        columns: '',
-        search: '',
-        no_matches: '',
-        of_loaded: '',
-        showing_of: '',
-        no_records: '',
-        no_related: '',
-        no_data: '',
-        step_of: '',
-        load_failed: '',
-        retry: '',
-        picker_search: '',
-        picker_none: '',
-        picker_more: '',
-        picker_clear: '',
-        picker_unavailable: '',
-        filter_all: '',
-        range_today: '',
-        range_7d: '',
-        range_30d: '',
-        range_90d: '',
-        range_1y: '',
-        range_all: '',
-        range_all_label: '',
-        cancel: '',
-        confirm: '',
-        delete: '',
-    };
-}

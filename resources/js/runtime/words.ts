@@ -39,15 +39,16 @@ const WORDS: Record<string, Dict> = {
         picker_unavailable: 'Not available here',
         filter_all: 'All',
         range_today: 'Today',
-        range_7d: '7 days',
-        range_30d: '30 days',
-        range_90d: '90 days',
+        range_7d: '7 d',
+        range_30d: '30 d',
+        range_90d: '90 d',
         range_1y: 'Year',
         range_all: 'All time',
         range_all_label: 'the whole history',
         cancel: 'Cancel',
         confirm: 'Confirm',
         delete: 'Delete',
+        thin_series: 'Not enough history yet to show a trend.',
     },
     es: {
         columns: 'Columnas',
@@ -69,15 +70,17 @@ const WORDS: Record<string, Dict> = {
         picker_unavailable: 'No disponible aquí',
         filter_all: 'Todos',
         range_today: 'Hoy',
-        range_7d: '7 días',
-        range_30d: '30 días',
-        range_90d: '90 días',
+        range_7d: '7 d',
+        range_30d: '30 d',
+        range_90d: '90 d',
         range_1y: 'Año',
         range_all: 'Todo',
         range_all_label: 'todo el histórico',
         cancel: 'Cancelar',
         confirm: 'Confirmar',
         delete: 'Eliminar',
+        thin_series:
+            'Todavía no hay suficiente historia para ver una tendencia.',
     },
     pt: {
         columns: 'Colunas',
@@ -99,15 +102,17 @@ const WORDS: Record<string, Dict> = {
         picker_unavailable: 'Não disponível aqui',
         filter_all: 'Todos',
         range_today: 'Hoje',
-        range_7d: '7 dias',
-        range_30d: '30 dias',
-        range_90d: '90 dias',
+        range_7d: '7 d',
+        range_30d: '30 d',
+        range_90d: '90 d',
         range_1y: 'Ano',
         range_all: 'Tudo',
         range_all_label: 'todo o histórico',
         cancel: 'Cancelar',
         confirm: 'Confirmar',
         delete: 'Excluir',
+        thin_series:
+            'Ainda não há histórico suficiente para ver uma tendência.',
     },
     fr: {
         columns: 'Colonnes',
@@ -129,17 +134,37 @@ const WORDS: Record<string, Dict> = {
         picker_unavailable: 'Indisponible ici',
         filter_all: 'Tous',
         range_today: 'Aujourd’hui',
-        range_7d: '7 jours',
-        range_30d: '30 jours',
-        range_90d: '90 jours',
+        range_7d: '7 j',
+        range_30d: '30 j',
+        range_90d: '90 j',
         range_1y: 'Année',
         range_all: 'Tout',
         range_all_label: 'tout l’historique',
         cancel: 'Annuler',
         confirm: 'Confirmer',
         delete: 'Supprimer',
+        thin_series: 'Pas encore assez d’historique pour voir une tendance.',
     },
 };
+
+/**
+ * The keys a language is missing against the English table.
+ *
+ * Asked this way rather than by comparing VALUES: an abbreviation is often the
+ * same string in several languages ("30 d"), and a value-difference check
+ * reports those as untranslated while quietly accepting a key that fell back.
+ * Mirrors DocWords::missingKeys on the PHP side.
+ */
+export function missingWordKeys(lang: string): string[] {
+    const table = WORDS[lang] ?? {};
+
+    return Object.keys(WORDS.en).filter((key) => !(key in table));
+}
+
+/** Every language the runtime claims to speak. */
+export function wordLanguages(): string[] {
+    return Object.keys(WORDS);
+}
 
 /**
  * One phrase, in the app's language, with its placeholders filled.
