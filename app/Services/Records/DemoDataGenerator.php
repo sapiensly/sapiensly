@@ -5,6 +5,7 @@ namespace App\Services\Records;
 use App\Models\App;
 use App\Models\Record;
 use App\Models\User;
+use App\Support\Apps\EnvironmentContext;
 use Throwable;
 
 /**
@@ -32,6 +33,22 @@ class DemoDataGenerator
      * @return array<string, int> created count keyed by object slug
      */
     public function generate(App $app, array $manifest, int $perObject, ?array $onlySlugs = null, ?User $user = null): array
+    {
+        // Sample data belongs in the sandbox. It used to land in production —
+        // which was the only place there was — and an app whose real books are
+        // half invented is an app nobody can trust a figure from.
+        return app(EnvironmentContext::class)->runIn(
+            EnvironmentContext::DEMO,
+            fn (): array => $this->generateHere($app, $manifest, $perObject, $onlySlugs, $user),
+        );
+    }
+
+    /**
+     * @param  array<string, mixed>  $manifest
+     * @param  list<string>|null  $onlySlugs
+     * @return array<string, int>
+     */
+    private function generateHere(App $app, array $manifest, int $perObject, ?array $onlySlugs, ?User $user): array
     {
         $objects = $this->orderByDependency($manifest['objects'] ?? []);
 

@@ -2,6 +2,7 @@
 import AppRenderer from '@/runtime/AppRenderer.vue';
 import BlockBreadcrumb from '@/runtime/blocks/BlockBreadcrumb.vue';
 import ConfirmDialog from '@/runtime/ConfirmDialog.vue';
+import EnvironmentBar from '@/runtime/EnvironmentBar.vue';
 import { manifestFontHrefs } from '@/runtime/fonts';
 import LandingChatbotBubble from '@/runtime/LandingChatbotBubble.vue';
 import RolePreviewBar from '@/runtime/RolePreviewBar.vue';
@@ -398,6 +399,15 @@ onMounted(() => {
                     class="relative flex-1 space-y-4 px-6 py-6"
                     :class="contentWidthClass"
                 >
+                    <!-- The sidebar layout has no header bar to hang this on,
+                         and an app in the sandbox with no sign of it is the
+                         accident this whole feature exists to prevent. -->
+                    <EnvironmentBar
+                        v-if="props.environment"
+                        :current="props.environment.current"
+                        :can-switch="props.environment.can_switch"
+                        :locale="locale"
+                    />
                     <AppRenderer
                         :blocks="contentBlocks"
                         :block-data="liveBlockData"
@@ -417,6 +427,12 @@ onMounted(() => {
         <!-- Top-header layout (default). -->
         <div v-else class="flex min-h-screen flex-col bg-navy-deep">
             <div class="px-5">
+                <EnvironmentBar
+                    v-if="props.environment"
+                    :current="props.environment.current"
+                    :can-switch="props.environment.can_switch"
+                    :locale="locale"
+                />
                 <RolePreviewBar
                     v-if="props.rolePreview"
                     :current="props.rolePreview.current"

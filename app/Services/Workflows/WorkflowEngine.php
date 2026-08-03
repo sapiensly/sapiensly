@@ -26,6 +26,7 @@ use App\Services\Records\RecordWriteService;
 use App\Services\Records\SafeExpressionEvaluator;
 use App\Services\Security\Ssrf\SafeHttpClient;
 use App\Services\ToolExecutionService;
+use App\Support\Apps\EnvironmentContext;
 use Illuminate\Support\Facades\Log;
 use Laravel\Ai\AnonymousAgent;
 use Laravel\Ai\Enums\Lab;
@@ -257,8 +258,37 @@ class WorkflowEngine
      * @param  array<string, mixed>  $context
      * @param  array<string, mixed>  $manifest
      */
+    /**
+     * Steps that reach outside this app: an email lands in somebody's inbox, a
+     * request hits a real endpoint, a connector writes to a real system.
+     *
+     * They do not run in the sandbox. This is the difference between the two
+     * environments that actually matters and the one easiest to forget —
+     * without it, "let me try this workflow in demo first" sends real invoices
+     * to real customers, and the test that was meant to be safe is the incident.
+     */
+    private const REACHES_THE_WORLD = [
+        'notify.send',
+        'http.request',
+        'connector.call',
+        'agent.invoke',
+        'ai.complete',
+    ];
+
     private function dispatch(array $step, array &$context, App $app, array $manifest, ?User $user, WorkflowRun $run): mixed
     {
+        if (app(EnvironmentContext::class)->isDemo()
+            && in_array($step['type'], self::REACHES_THE_WORLD, true)) {
+            // Reported, not silently skipped: a run log that showed a step as
+            // "done" when nothing happened would teach somebody their workflow
+            // works, and they would find out otherwise in production.
+            return [
+                'skipped' => true,
+                'reason' => 'demo',
+                'message' => "Not run in the demo environment: `{$step['type']}` reaches outside the app.",
+            ];
+        }
+
         return match ($step['type']) {
             'log' => $this->handleLog($step, $context),
             'set_variable' => $this->handleSetVariable($step, $context),

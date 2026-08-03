@@ -60,6 +60,10 @@ const WORDS: Record<string, Dict> = {
         event_comment: 'wrote',
         bool_yes: 'Yes',
         bool_no: 'No',
+        demo_banner: 'Demo environment',
+        demo_explains: 'Nothing here is real data.',
+        demo_leave: 'Back to production',
+        demo_enter: 'Open the demo',
     },
     es: {
         columns: 'Columnas',
@@ -103,6 +107,10 @@ const WORDS: Record<string, Dict> = {
         event_comment: 'escribió',
         bool_yes: 'Sí',
         bool_no: 'No',
+        demo_banner: 'Entorno de demo',
+        demo_explains: 'Nada de esto son datos reales.',
+        demo_leave: 'Volver a producción',
+        demo_enter: 'Abrir la demo',
     },
     pt: {
         columns: 'Colunas',
@@ -146,6 +154,10 @@ const WORDS: Record<string, Dict> = {
         event_comment: 'escreveu',
         bool_yes: 'Sim',
         bool_no: 'Não',
+        demo_banner: 'Ambiente de demonstração',
+        demo_explains: 'Nada aqui são dados reais.',
+        demo_leave: 'Voltar à produção',
+        demo_enter: 'Abrir a demonstração',
     },
     fr: {
         columns: 'Colonnes',
@@ -188,6 +200,10 @@ const WORDS: Record<string, Dict> = {
         event_comment: 'a écrit',
         bool_yes: 'Oui',
         bool_no: 'Non',
+        demo_banner: 'Environnement de démo',
+        demo_explains: 'Rien ici n’est une donnée réelle.',
+        demo_leave: 'Retour à la production',
+        demo_enter: 'Ouvrir la démo',
     },
 };
 

@@ -13,6 +13,7 @@ use App\Services\Security\Ssrf\SystemDnsResolver;
 use App\Services\Tools\SshTunnel;
 use App\Support\Ai\AiUsageSubject;
 use App\Support\Ai\PublicTurnContext;
+use App\Support\Apps\EnvironmentContext;
 use App\Support\Tenancy\TenantCache;
 use App\Support\Tenancy\TenantContext;
 use Illuminate\Cache\RateLimiting\Limit;
@@ -45,6 +46,10 @@ class AppServiceProvider extends ServiceProvider
         // One tenant scope per request/worker, shared by the HTTP middleware,
         // queue middleware and account switching.
         $this->app->singleton(TenantContext::class);
+        // One per request, or `runIn` would swap the environment on an instance
+        // nobody else is holding — every write would land in production while
+        // the caller believed it was in the sandbox.
+        $this->app->singleton(EnvironmentContext::class);
         // One trust boundary per request, consulted by every LLMService instance
         // the turn happens to build. See PublicTurnContext.
         $this->app->singleton(PublicTurnContext::class);

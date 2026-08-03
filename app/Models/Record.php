@@ -28,6 +28,7 @@ class Record extends Model
     public array $expanded = [];
 
     protected $fillable = [
+        'environment',
         'organization_id',
         'user_id',
         'app_id',

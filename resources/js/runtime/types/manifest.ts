@@ -343,6 +343,15 @@ export interface RuntimePageProps {
         roles: Array<{ slug: string; name: string }>;
     } | null;
     /**
+     * Which set of records this is — what the business runs on, or the sandbox
+     * — and whether this viewer may switch. Sent in production too, so the bar
+     * can offer the way IN and not only the way out.
+     */
+    environment?: {
+        current: 'production' | 'demo';
+        can_switch: boolean;
+    } | null;
+    /**
      * Portal sign-in state. Present only on a public portal: whether it has
      * identity at all, and who is signed in right now.
      */

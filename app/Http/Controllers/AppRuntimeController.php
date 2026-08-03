@@ -9,6 +9,7 @@ use App\Services\Apps\AppAccessResolver;
 use App\Services\Apps\BlockVisibilityFilter;
 use App\Services\Manifest\AppManifestService;
 use App\Services\Records\BlockDataResolver;
+use App\Support\Apps\EnvironmentContext;
 use App\Support\Branding\ColorPalette;
 use App\Support\Branding\OrganizationBrand;
 use App\Support\Css\ScopedAppCss;
@@ -77,6 +78,18 @@ class AppRuntimeController extends Controller
         $canPreviewRoles = $previewRole === ''
             ? $access->bypass
             : $this->accessResolver->resolve($app, $manifest, $user)->bypass;
+
+        // The sandbox is offered to whoever administers this app — the same
+        // people the role preview is for. Not a security line (the role
+        // policies apply on both sides), a clarity one: a narrow role dropped
+        // into a dataset its rules were never written against sees an app that
+        // looks broken.
+        $environment = app(EnvironmentContext::class)->current();
+        $canSwitchEnvironment = $canPreviewRoles;
+        if (! $canSwitchEnvironment && $environment !== EnvironmentContext::PRODUCTION) {
+            app(EnvironmentContext::class)->set(EnvironmentContext::PRODUCTION);
+            $environment = EnvironmentContext::PRODUCTION;
+        }
         if (! $access->hasAccess) {
             abort(403, 'You do not have access to this app.');
         }
@@ -215,6 +228,13 @@ class AppRuntimeController extends Controller
                     )),
                 ]
                 : null,
+            // Which set of records this is, and whether the viewer may switch.
+            // Sent even in production so the bar can offer the way IN, not just
+            // the way out.
+            'environment' => [
+                'current' => $environment,
+                'can_switch' => $canSwitchEnvironment,
+            ],
             // Deferred: the shell (nav, layout, filter bar, skeletons) paints
             // immediately; Inertia fetches the data in an automatic follow-up
             // request while the pooled connected reads resolve.

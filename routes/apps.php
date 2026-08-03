@@ -14,6 +14,7 @@ use App\Http\Controllers\AppRuntimeAgentController;
 use App\Http\Controllers\AppRuntimeController;
 use App\Http\Controllers\AppVersionsController;
 use App\Http\Controllers\AppWorkflowController;
+use App\Http\Middleware\BindAppEnvironment;
 use Illuminate\Support\Facades\Route;
 
 Route::middleware([
@@ -180,11 +181,14 @@ Route::middleware([
     Route::get('/r/{app_slug}/{page_slug?}', AppRuntimeController::class)
         ->where('app_slug', '[a-z][a-z0-9_]*')
         ->where('page_slug', '[a-z][a-z0-9_]*')
+        ->middleware(BindAppEnvironment::class)
         ->name('apps.runtime');
 
+    // The environment binds here too, or a form submitted from the sandbox
+    // would write its record into production.
     Route::post('/r/{app_slug}/actions', AppActionController::class)
         ->where('app_slug', '[a-z][a-z0-9_]*')
-        ->middleware('throttle:runtime-actions')
+        ->middleware(['throttle:runtime-actions', BindAppEnvironment::class])
         ->name('apps.runtime.actions');
 
     // Runtime agent (power #3): end-users converse with the app's embedded
@@ -235,11 +239,11 @@ Route::middleware([
     // A record's history — what changed, and what people said about it.
     Route::get('/r/{app_slug}/records/{record_id}/trail', [AppRecordTrailController::class, 'index'])
         ->where('record_id', 'rec_[a-z0-9]+')
-        ->middleware('throttle:120,1')
+        ->middleware(['throttle:120,1', BindAppEnvironment::class])
         ->name('apps.runtime.trail');
     Route::post('/r/{app_slug}/records/{record_id}/trail', [AppRecordTrailController::class, 'store'])
         ->where('record_id', 'rec_[a-z0-9]+')
-        ->middleware('throttle:30,1')
+        ->middleware(['throttle:30,1', BindAppEnvironment::class])
         ->name('apps.runtime.trail.store');
 
     // The records a relation field can point at. Same access gate as the table
@@ -247,14 +251,14 @@ Route::middleware([
     // public portal does not get an enumeration endpoint).
     Route::get('/r/{app_slug}/fields/{field_id}/options', AppRecordOptionsController::class)
         ->where('field_id', 'fld_[a-z0-9]+')
-        ->middleware('throttle:120,1')
+        ->middleware(['throttle:120,1', BindAppEnvironment::class])
         ->name('apps.runtime.options');
 
     // export can never return more than the table showed.
     Route::get('/r/{app_slug}/objects/{object_slug}/export', [AppExportController::class, '__invoke'])
         ->where('app_slug', '[a-z][a-z0-9_]*')
         ->where('object_slug', '[a-z][a-z0-9_]*')
-        ->middleware('throttle:20,1')
+        ->middleware(BindAppEnvironment::class)->middleware('throttle:20,1')
         ->name('apps.runtime.export');
 
     // Prepared exports: for volumes where the request timeout, not memory, is

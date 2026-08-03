@@ -7,6 +7,7 @@ use App\Models\AppFile;
 use App\Models\Record;
 use App\Models\User;
 use App\Services\Workflows\WorkflowTriggerDispatcher;
+use App\Support\Apps\EnvironmentContext;
 use DateTimeImmutable;
 use DateTimeZone;
 use Exception;
@@ -49,6 +50,10 @@ class RecordWriteService
             'organization_id' => $app->organization_id,
             'app_id' => $app->id,
             'object_definition_id' => $objectId,
+            // Born where the writer is standing. Reads filter on this too, so a
+            // record created in the sandbox is invisible from production and
+            // the other way round.
+            'environment' => app(EnvironmentContext::class)->current(),
             'data' => $clean,
             'created_by_user_id' => $user?->id,
             'updated_by_user_id' => $user?->id,

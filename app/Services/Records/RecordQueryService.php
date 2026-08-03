@@ -8,6 +8,7 @@ use App\Models\User;
 use App\Services\Apps\AppAccessContext;
 use App\Services\Connected\ConnectedIntegrationResolver;
 use App\Services\Connected\ConnectedObjectReader;
+use App\Support\Apps\EnvironmentContext;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 use InvalidArgumentException;
@@ -906,7 +907,13 @@ class RecordQueryService
     {
         return Record::query()
             ->where('app_id', $app->id)
-            ->where('object_definition_id', $objectId);
+            ->where('object_definition_id', $objectId)
+            // Here and nowhere else. Every read of an app's records comes
+            // through this method, so the environment cannot be forgotten by a
+            // caller — and forgetting it is silent: a demo order in a real
+            // invoice, or a real order shown to somebody who believes they are
+            // in a sandbox and deletes it.
+            ->where('environment', app(EnvironmentContext::class)->current());
     }
 
     /** How deep `related` filters may nest before bailing (cycle/cost guard). */
