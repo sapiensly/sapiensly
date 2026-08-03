@@ -6,6 +6,7 @@ use App\Models\App;
 use App\Models\Record;
 use App\Services\Apps\AppAccessResolver;
 use App\Services\Manifest\AppManifestService;
+use App\Services\Records\DemoDataGenerator;
 use App\Support\Apps\EnvironmentContext;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -39,6 +40,51 @@ class AppEnvironmentController extends Controller
 
     public function reset(Request $request, string $appSlug): RedirectResponse
     {
+        [$app] = $this->resolveForWrite($request, $appSlug);
+        $this->emptyDemo($app);
+
+        return back();
+    }
+
+    /**
+     * Fills the sandbox with believable sample records.
+     *
+     * The way IN needs one. An empty demo is not a demo — somebody who opens
+     * it to try the app finds a set of blank screens and learns nothing, and
+     * the tool that seeds it lives over MCP where nobody using the app will
+     * ever find it.
+     */
+    public function seed(Request $request, string $appSlug): RedirectResponse
+    {
+        [$app, $manifest] = $this->resolveForWrite($request, $appSlug);
+
+        // Everything the generator writes goes to the sandbox by its own
+        // doing; the guard here is about the BUTTON, so it can never be
+        // pressed from a page showing real records.
+        app(DemoDataGenerator::class)->generate($app, $manifest, 8, null, $request->user());
+
+        return back();
+    }
+
+    private function emptyDemo(App $app): void
+    {
+        do {
+            $deleted = DB::connection((new Record)->getConnectionName())
+                ->table((new Record)->getTable())
+                ->where('app_id', $app->id)
+                ->where('environment', EnvironmentContext::DEMO)
+                ->limit(self::BATCH)
+                ->delete();
+        } while ($deleted === self::BATCH);
+    }
+
+    /**
+     * The app, its manifest, and the two checks every write here shares.
+     *
+     * @return array{0: App, 1: array<string, mixed>}
+     */
+    private function resolveForWrite(Request $request, string $appSlug): array
+    {
         $user = $request->user();
 
         $app = App::query()->forAccountContext($user)->where('slug', $appSlug)->first();
@@ -51,23 +97,13 @@ class AppEnvironmentController extends Controller
             throw new NotFoundHttpException("App '{$appSlug}' has no published manifest.");
         }
 
-        // Whoever administers the app — the same people offered the switch.
         abort_unless($this->accessResolver->resolve($app, $manifest, $user)->bypass, 403);
 
-        // And only while standing in it. This is the guard that matters: the
-        // environment is a mode, so "am I about to wipe the real records?" is a
-        // question the server answers rather than the person clicking.
-        abort_unless($this->environment->isDemo(), 403, 'Only the demo environment can be reset.');
+        // And only while standing in it. The environment is a mode, so "am I
+        // about to touch the real records?" is a question the server answers
+        // rather than the person clicking.
+        abort_unless($this->environment->isDemo(), 403, 'Only the demo environment can be changed here.');
 
-        do {
-            $deleted = DB::connection((new Record)->getConnectionName())
-                ->table((new Record)->getTable())
-                ->where('app_id', $app->id)
-                ->where('environment', EnvironmentContext::DEMO)
-                ->limit(self::BATCH)
-                ->delete();
-        } while ($deleted === self::BATCH);
-
-        return back();
+        return [$app, $manifest];
     }
 }

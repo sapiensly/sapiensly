@@ -16,7 +16,7 @@
  * remembered per app, so the server has to make it again.
  */
 import { router } from '@inertiajs/vue3';
-import { FlaskConical, RotateCcw } from '@lucide/vue';
+import { FlaskConical, RotateCcw, Sparkles } from '@lucide/vue';
 import { ref } from 'vue';
 import { themeTokens, useRuntimeTheme } from './useRuntimeTheme';
 import { runtimeWord } from './words';
@@ -39,6 +39,22 @@ const props = defineProps<{
  */
 const confirming = ref(false);
 const resetting = ref(false);
+
+const seeding = ref(false);
+
+/**
+ * An empty sandbox is not a sandbox: somebody who opens it to try the app
+ * finds blank screens and learns nothing. The tool that fills it has lived
+ * over MCP, where nobody using the app would ever find it.
+ */
+function seed(appSlug: string): void {
+    seeding.value = true;
+    router.post(
+        `/r/${appSlug}/environment/seed`,
+        {},
+        { onFinish: () => (seeding.value = false) },
+    );
+}
 
 function reset(appSlug: string): void {
     if (!confirming.value) {
@@ -80,9 +96,20 @@ const t = themeTokens(useRuntimeTheme());
         <button
             v-if="canSwitch && appSlug"
             type="button"
-            data-sp-environment-reset
-            :disabled="resetting"
+            data-sp-environment-seed
+            :disabled="seeding || resetting"
             class="ml-auto rounded-pill border border-amber-500/40 px-2.5 py-0.5 transition-colors hover:bg-amber-500/20 disabled:opacity-50"
+            @click="seed(appSlug)"
+        >
+            <Sparkles class="mr-1 inline size-3" />
+            {{ word('demo_seed') }}
+        </button>
+        <button
+            v-if="canSwitch && appSlug"
+            type="button"
+            data-sp-environment-reset
+            :disabled="resetting || seeding"
+            class="rounded-pill border border-amber-500/40 px-2.5 py-0.5 transition-colors hover:bg-amber-500/20 disabled:opacity-50"
             @click="reset(appSlug)"
         >
             <RotateCcw class="mr-1 inline size-3" />

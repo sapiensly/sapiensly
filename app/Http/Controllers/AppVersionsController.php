@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\App;
 use App\Models\AppVersion;
+use App\Services\Apps\AppActivityFeed;
 use App\Services\Manifest\AppManifestService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -54,6 +55,17 @@ class AppVersionsController extends Controller
                 'pages' => count($v->manifest['pages'] ?? []),
             ])->all(),
         ]);
+    }
+
+    /**
+     * Everything that has happened to this app, from every source that already
+     * records it — see {@see AppActivityFeed} for why nothing is copied.
+     */
+    public function activity(Request $request, App $app): JsonResponse
+    {
+        $this->assertCanEdit($request, $app);
+
+        return response()->json(['entries' => app(AppActivityFeed::class)->for($app)]);
     }
 
     public function restore(Request $request, App $app, string $version): JsonResponse

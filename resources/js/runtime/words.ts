@@ -66,6 +66,7 @@ const WORDS: Record<string, Dict> = {
         demo_enter: 'Open the demo',
         demo_reset: 'Empty it',
         demo_reset_sure: 'Delete every demo record?',
+        demo_seed: 'Fill it with samples',
     },
     es: {
         columns: 'Columnas',
@@ -115,6 +116,7 @@ const WORDS: Record<string, Dict> = {
         demo_enter: 'Abrir la demo',
         demo_reset: 'Vaciarla',
         demo_reset_sure: '¿Borrar todos los registros de demo?',
+        demo_seed: 'Llenarla con ejemplos',
     },
     pt: {
         columns: 'Colunas',
@@ -164,6 +166,7 @@ const WORDS: Record<string, Dict> = {
         demo_enter: 'Abrir a demonstração',
         demo_reset: 'Esvaziar',
         demo_reset_sure: 'Excluir todos os registros de demonstração?',
+        demo_seed: 'Preencher com exemplos',
     },
     fr: {
         columns: 'Colonnes',
@@ -212,6 +215,7 @@ const WORDS: Record<string, Dict> = {
         demo_enter: 'Ouvrir la démo',
         demo_reset: 'La vider',
         demo_reset_sure: 'Supprimer tous les enregistrements de démo ?',
+        demo_seed: 'La remplir d’exemples',
     },
 };
 

@@ -48,6 +48,7 @@ Route::middleware([
     // possible over MCP and unreachable from the builder — a history nobody
     // can reach is a backup nobody has.
     Route::get('/apps/{app}/versions', [AppVersionsController::class, 'index'])->name('apps.versions');
+    Route::get('/apps/{app}/activity', [AppVersionsController::class, 'activity'])->name('apps.activity');
     Route::post('/apps/{app}/versions/{version}/restore', [AppVersionsController::class, 'restore'])
         ->where('version', 'apv_[a-z0-9]+')
         ->name('apps.versions.restore');
@@ -241,6 +242,9 @@ Route::middleware([
     Route::post('/r/{app_slug}/environment/reset', [AppEnvironmentController::class, 'reset'])
         ->middleware(['throttle:10,1', BindAppEnvironment::class])
         ->name('apps.runtime.environment.reset');
+    Route::post('/r/{app_slug}/environment/seed', [AppEnvironmentController::class, 'seed'])
+        ->middleware(['throttle:10,1', BindAppEnvironment::class])
+        ->name('apps.runtime.environment.seed');
 
     // A record's history — what changed, and what people said about it.
     Route::get('/r/{app_slug}/records/{record_id}/trail', [AppRecordTrailController::class, 'index'])

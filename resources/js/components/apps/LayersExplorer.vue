@@ -50,6 +50,35 @@ const props = defineProps<{
 const emit = defineEmits<{ (e: 'restored'): void }>();
 
 const restoringId = ref<string | null>(null);
+
+/**
+ * Everything that has happened to this app, merged at read time from the
+ * sources that already record it. Fetched when the section is first opened —
+ * four queries nobody asked for is not what an explorer should cost to render.
+ */
+interface ActivityEntry {
+    at: string | null;
+    kind: string;
+    /** The verb, worded here: a sentence built server-side would be English. */
+    event?: string;
+    actor: string | null;
+    summary: string;
+    detail: string | null;
+}
+
+const activity = ref<ActivityEntry[]>([]);
+const activityLoaded = ref(false);
+
+async function loadActivity(): Promise<void> {
+    if (activityLoaded.value || !props.appId) return;
+    activityLoaded.value = true;
+    try {
+        const { data } = await axios.get(`/apps/${props.appId}/activity`);
+        activity.value = data.entries ?? [];
+    } catch {
+        activity.value = [];
+    }
+}
 /**
  * Which row is asking to be confirmed. Restoring is one click away from undoing
  * somebody's afternoon, so it takes two — on the row itself, rather than in a
@@ -269,6 +298,41 @@ function agentCapabilitySummary(): string {
             <div v-if="openSections.has('agent')" class="px-3 pb-2 text-xs text-ink-muted">
                 <div>{{ str(agent.name, t('apps.builder.layers.agent_default_name')) }}</div>
                 <div class="mt-0.5 text-ink-subtle">{{ agentCapabilitySummary() }} · {{ t('apps.builder.layers.autonomy_label') }} {{ str(agent.autonomy, 'propose') }}</div>
+            </div>
+        </section>
+
+        <!-- VERSIONS -->
+        <section>
+            <button
+                type="button"
+                class="lx-section"
+                @click="
+                    toggleSection('activity');
+                    loadActivity();
+                "
+            >
+                <component :is="openSections.has('activity') ? ChevronDown : ChevronRight" class="size-3.5 text-ink-subtle" />
+                <Clock class="size-4 text-accent-blue" />
+                <span class="font-medium text-ink">{{ t('apps.activity.title') }}</span>
+            </button>
+            <div v-if="openSections.has('activity')" class="pb-2">
+                <p v-if="!activity.length" class="lx-empty">{{ t('apps.activity.empty') }}</p>
+                <div v-for="(entry, i) in activity" :key="i" class="px-3 py-1.5">
+                    <div class="flex items-baseline gap-2">
+                        <span
+                            class="shrink-0 rounded-pill border border-medium px-1.5 text-[9px] tracking-wide text-ink-subtle uppercase"
+                            >{{ t(`apps.activity.kind_${entry.kind}`) }}</span
+                        >
+                        <span class="min-w-0 flex-1 truncate text-xs text-ink">{{
+                            entry.summary ||
+                            (entry.event ? t(`apps.activity.event_${entry.event}`) : '')
+                        }}</span>
+                        <span class="shrink-0 text-[10px] text-ink-subtle">{{ fmtDate(entry.at) }}</span>
+                    </div>
+                    <p v-if="entry.detail || entry.actor" class="mt-0.5 truncate text-[11px] text-ink-muted">
+                        {{ [entry.actor, entry.detail].filter(Boolean).join(' · ') }}
+                    </p>
+                </div>
             </div>
         </section>
 
