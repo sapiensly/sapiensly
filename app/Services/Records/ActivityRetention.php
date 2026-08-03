@@ -14,17 +14,25 @@ use App\Models\Organization;
  * invites 45 or 400, numbers nobody chose on purpose and every reader has to
  * interpret.
  *
- * The default is the CHEAPEST one, deliberately. A log of everything with no
- * ceiling is the most expensive table in the system by year three, and almost
- * nobody changes a default; if the generous option were the default, the cost
- * of this feature would be set by inattention rather than by anybody's needs.
+ * The default is OFF. Partly cost — a log of everything with no ceiling is the
+ * most expensive table in the system by year three, and almost nobody changes a
+ * default — but mostly because an activity trail records who did what, and
+ * deciding to keep that is a business's call about its own people, its policy
+ * and its auditors. It is not something a platform should start doing to them
+ * because nobody said no.
  */
 class ActivityRetention
 {
-    /** Months => the label's key. Ordered as they are offered. */
-    public const PERIODS = [1, 6, 12, 36, 120];
+    /**
+     * Months a trail is kept, in the order they are offered. Zero is "do not
+     * keep one", which is a period like any other rather than a separate flag:
+     * "how long do we keep it" already has room for "we don't", and one column
+     * with one meaning beats two that can disagree about whether a trail is on
+     * but kept for no time.
+     */
+    public const PERIODS = [0, 1, 6, 12, 36, 120];
 
-    public const DEFAULT_MONTHS = 1;
+    public const DEFAULT_MONTHS = 0;
 
     /**
      * Beyond this, deleting rows one by one stops being maintenance and starts
@@ -33,6 +41,12 @@ class ActivityRetention
      * pruner says so rather than quietly trying.
      */
     public const BATCHED_DELETE_CEILING = 500_000;
+
+    /** Whether this app records a trail at all. */
+    public function isEnabled(App $app): bool
+    {
+        return $this->monthsFor($app) > 0;
+    }
 
     public function monthsFor(App $app): int
     {

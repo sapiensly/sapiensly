@@ -75,6 +75,13 @@ const draft = ref('');
 const sending = ref(false);
 /** Set when the endpoint refuses — a read-only role, or a portal. */
 const cannotComment = ref(false);
+/**
+ * Whether this app records a trail at all. Off by default — keeping a record of
+ * who did what is a business's decision, not something a platform starts doing
+ * because nobody said no. When it is off the panel does not render: a box that
+ * accepts a note and drops it is worse than no box.
+ */
+const enabled = ref(true);
 
 const canComment = computed(
     () => props.block.allow_comments !== false && !cannotComment.value,
@@ -102,6 +109,7 @@ async function load(): Promise<void> {
         const { data } = await axios.get(
             `${mount()}/records/${recordId.value}/trail`,
         );
+        enabled.value = data.enabled !== false;
         events.value = data.events ?? [];
     } catch {
         events.value = [];
@@ -194,7 +202,10 @@ function word(key: string): string {
 </script>
 
 <template>
-    <div :class="['overflow-hidden rounded-sp-sm border', t.surface]">
+    <div
+        v-if="enabled"
+        :class="['overflow-hidden rounded-sp-sm border', t.surface]"
+    >
         <p
             :class="[
                 'border-b border-soft px-3 py-2 text-[11px] tracking-wider uppercase',

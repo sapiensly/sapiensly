@@ -24,6 +24,10 @@ function trailApp(User $owner, array $policies = []): array
         'organization_id' => $owner->organization_id,
         'slug' => 'trail_'.strtolower(Str::random(6)),
         'name' => 'Órdenes',
+        // Turned on deliberately, because the default is off: keeping a record
+        // of who did what is a business's decision. Set on the APP rather than
+        // the organisation so the fixture does not need one.
+        'activity_retention_months' => 12,
         // Shared with the organisation: a private app is invisible to anyone
         // but its owner, and the role tests need a second reader.
         'visibility' => Visibility::Organization,

@@ -2,9 +2,11 @@
 
 use App\Models\App;
 use App\Models\Organization;
+use App\Models\Record;
 use App\Models\RecordEvent;
 use App\Models\User;
 use App\Services\Records\ActivityRetention;
+use App\Services\Records\RecordTrail;
 use Database\Seeders\RolesAndPermissionsSeeder;
 use Illuminate\Support\Str;
 
@@ -57,11 +59,32 @@ function agedEvent(App $app, string $when): RecordEvent
     return $event->refresh();
 }
 
-it('keeps one month unless somebody says otherwise', function () {
-    // The cheapest period is the default on purpose: almost nobody changes a
-    // default, so if the generous one were it, the cost of this feature would
-    // be set by inattention rather than by anybody's needs.
-    expect(app(ActivityRetention::class)->monthsFor(retentionApp()))->toBe(1);
+it('is off until somebody turns it on', function () {
+    // Off is the default for cost — almost nobody changes a default — but
+    // mostly because a trail records who did what, and deciding to keep that
+    // is a business's call about its own people. Not something a platform
+    // starts doing to them because nobody said no.
+    $app = retentionApp();
+
+    expect(app(ActivityRetention::class)->monthsFor($app))->toBe(0)
+        ->and(app(ActivityRetention::class)->isEnabled($app))->toBeFalse();
+});
+
+it('writes nothing at all while it is off', function () {
+    // The saving is in not writing, not in writing and pruning later.
+    $app = retentionApp();
+    agedEvent($app, 'now'); // straight to the model, to prove the table works
+
+    $record = Record::create([
+        'app_id' => $app->id,
+        'object_definition_id' => 'obj_x00000001',
+        'organization_id' => $app->organization_id,
+        'data' => ['x' => 1],
+    ]);
+
+    app(RecordTrail::class)->created($app, ['objects' => []], $record, null);
+
+    expect(RecordEvent::where('record_id', $record->id)->count())->toBe(0);
 });
 
 it('lets the organisation set it once for everything it runs', function () {
@@ -76,7 +99,7 @@ it('lets one app keep longer than the rest', function () {
 it('reads a number nobody offers as the default, not as "for ever"', function () {
     // Set before a period was retired, or by hand. Falling back to the default
     // is recoverable; reading it as unlimited is a bill.
-    expect(app(ActivityRetention::class)->monthsFor(retentionApp(appMonths: 47)))->toBe(1);
+    expect(app(ActivityRetention::class)->monthsFor(retentionApp(appMonths: 47)))->toBe(0);
 });
 
 it('deletes what is past its keeping and nothing else', function () {

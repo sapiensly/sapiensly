@@ -7,6 +7,7 @@ use App\Models\Record;
 use App\Models\RecordEvent;
 use App\Services\Apps\AppAccessResolver;
 use App\Services\Manifest\AppManifestService;
+use App\Services\Records\ActivityRetention;
 use App\Services\Records\RecordQueryService;
 use App\Services\Records\RecordTrail;
 use Illuminate\Http\JsonResponse;
@@ -32,6 +33,7 @@ class AppRecordTrailController extends Controller
         private readonly AppAccessResolver $accessResolver,
         private readonly RecordQueryService $records,
         private readonly RecordTrail $trail,
+        private readonly ActivityRetention $retention,
     ) {}
 
     public function index(Request $request, string $appSlug, string $recordId): JsonResponse
@@ -47,6 +49,11 @@ class AppRecordTrailController extends Controller
             ->get();
 
         return response()->json([
+            // Said out loud rather than answered with an empty list: a panel
+            // that renders "nothing has happened here yet" over an app that is
+            // not recording is a panel that lies quietly, and somebody will
+            // trust it in an argument about who changed what.
+            'enabled' => $this->retention->isEnabled($app),
             'events' => $events->map(fn (RecordEvent $e): array => [
                 'id' => $e->id,
                 'kind' => $e->kind,
@@ -65,6 +72,10 @@ class AppRecordTrailController extends Controller
         $data = $request->validate([
             'body' => ['required', 'string', 'max:2000'],
         ]);
+
+        // Refused before it is typed, not after: the panel hides its box when
+        // the trail is off, and this is the server saying the same thing.
+        abort_unless($this->retention->isEnabled($app), 409, 'The activity log is off for this app.');
 
         $event = $this->trail->comment($app, $record, $data['body'], $request->user());
 

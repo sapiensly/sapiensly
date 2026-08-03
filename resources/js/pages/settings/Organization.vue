@@ -54,13 +54,17 @@ const props = defineProps<Props>();
  * A fixed set rather than a number field: "how long do you keep audit records"
  * has a small set of real answers, and a free box invites 45 or 400 — numbers
  * nobody chose on purpose and every later reader has to interpret.
+ *
+ * Zero is "off", which is where an organisation starts. Keeping a record of who
+ * did what is their decision about their own people, not something the platform
+ * begins doing because nobody said no.
  */
-const RETENTION_PERIODS = [1, 6, 12, 36, 120] as const;
+const RETENTION_PERIODS = [0, 1, 6, 12, 36, 120] as const;
 
 const retentionForm = useForm({ activity_retention_months: 1 });
 
 const currentRetention = computed(
-    () => props.organization.activity_retention_months ?? 1,
+    () => props.organization.activity_retention_months ?? 0,
 );
 
 function setRetention(months: number): void {

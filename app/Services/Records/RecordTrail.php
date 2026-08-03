@@ -23,6 +23,8 @@ use App\Models\User;
  */
 class RecordTrail
 {
+    public function __construct(private readonly ActivityRetention $retention) {}
+
     /** Fields nobody wants in a trail: the app works them out for itself. */
     private const DERIVED = ['rollup', 'lookup', 'formula'];
 
@@ -73,6 +75,14 @@ class RecordTrail
         ?string $body = null,
         ?array $changes = null,
     ): ?RecordEvent {
+        // Off is off: nothing is written. The saving is in not writing, not in
+        // writing and pruning later — and an organisation that never asked for
+        // a record of who did what should not have one accumulating quietly
+        // until somebody notices the table.
+        if (! $this->retention->isEnabled($app)) {
+            return null;
+        }
+
         try {
             return RecordEvent::create([
                 'organization_id' => $app->organization_id,
