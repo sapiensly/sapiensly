@@ -14,6 +14,7 @@ use App\Services\Records\RecordWriteService;
 use App\Support\Apps\EnvironmentContext;
 use Database\Seeders\RolesAndPermissionsSeeder;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
 /**
@@ -86,6 +87,40 @@ function trashOrden(App $app, string $folio, string $environment = EnvironmentCo
         'environment' => $environment,
         'data' => ['folio' => $folio],
     ]);
+}
+
+/**
+ * Two objects and a relation between them: the shape that makes a delete cost
+ * something somewhere else.
+ */
+function trashRelationApp(User $owner, array $overrides = []): App
+{
+    return trashApp($owner, array_replace_recursive([
+        'objects' => [
+            [
+                'id' => 'obj_ordenes0001',
+                'name' => 'Órdenes',
+                'slug' => 'ordenes',
+                'fields' => [
+                    ['id' => 'fld_folio00001', 'name' => 'Folio', 'slug' => 'folio', 'type' => 'string'],
+                    [
+                        'id' => 'fld_cliente0001', 'name' => 'Cliente', 'slug' => 'cliente',
+                        'type' => 'relation', 'cardinality' => 'many_to_one',
+                        'target_object_id' => 'obj_cliente00001',
+                    ],
+                ],
+            ],
+            [
+                'id' => 'obj_cliente00001',
+                'name' => 'Clientes',
+                'slug' => 'clientes',
+                'primary_display_field_id' => 'fld_nombre00001',
+                'fields' => [
+                    ['id' => 'fld_nombre00001', 'name' => 'Nombre', 'slug' => 'nombre', 'type' => 'string'],
+                ],
+            ],
+        ],
+    ], $overrides));
 }
 
 it('takes a deleted record out of every read at once', function () {
@@ -355,4 +390,154 @@ it('reports without deleting when asked to', function () {
     $this->artisan('records:prune-trash --dry-run')->assertSuccessful();
 
     expect(Record::withTrashed()->find($record->id))->not->toBeNull();
+});
+
+it('says a relation points at something deleted, instead of showing a gap', function () {
+    // Before this, an order whose customer was trashed rendered exactly like an
+    // order with no customer at all — so the reader went looking for a record
+    // that was one click away in the trash.
+    $owner = User::factory()->create();
+    $app = trashRelationApp($owner);
+    $manifest = trashManifest($app);
+
+    $cliente = Record::create([
+        'app_id' => $app->id, 'object_definition_id' => 'obj_cliente00001',
+        'organization_id' => $app->organization_id, 'data' => ['nombre' => 'Acme'],
+    ]);
+    Record::create([
+        'app_id' => $app->id, 'object_definition_id' => 'obj_ordenes0001',
+        'organization_id' => $app->organization_id,
+        'data' => ['folio' => 'A-1', 'cliente' => $cliente->id],
+    ]);
+
+    app(RecordWriteService::class)->delete($cliente, $app, $manifest, $owner);
+
+    $rows = app(RecordQueryService::class)->query($app, [
+        'object_id' => 'obj_ordenes0001',
+        'expand' => ['fld_cliente0001'],
+    ], $manifest);
+
+    $expanded = $rows->first()->expanded['fld_cliente0001'];
+
+    // Its NAME and the fact that it is gone — the reader can go and restore it.
+    expect($expanded['data']['nombre'])->toBe('Acme')
+        ->and($expanded['trashed'])->toBeTrue()
+        ->and($expanded['id'])->toBe($cliente->id);
+});
+
+it('costs nothing extra when every relation resolves', function () {
+    // The trash lookup is a SECOND query, and it must only happen when a live
+    // read left something unaccounted for.
+    $owner = User::factory()->create();
+    $app = trashRelationApp($owner);
+    $manifest = trashManifest($app);
+
+    $cliente = Record::create([
+        'app_id' => $app->id, 'object_definition_id' => 'obj_cliente00001',
+        'organization_id' => $app->organization_id, 'data' => ['nombre' => 'Acme'],
+    ]);
+    Record::create([
+        'app_id' => $app->id, 'object_definition_id' => 'obj_ordenes0001',
+        'organization_id' => $app->organization_id,
+        'data' => ['folio' => 'A-1', 'cliente' => $cliente->id],
+    ]);
+
+    DB::connection((new Record)->getConnectionName())->enableQueryLog();
+
+    app(RecordQueryService::class)->query($app, [
+        'object_id' => 'obj_ordenes0001',
+        'expand' => ['fld_cliente0001'],
+    ], $manifest);
+
+    $queries = DB::connection((new Record)->getConnectionName())->getQueryLog();
+    DB::connection((new Record)->getConnectionName())->disableQueryLog();
+
+    expect(collect($queries)->filter(fn (array $q): bool => str_contains($q['query'], 'deleted_at is not null')))
+        ->toHaveCount(0);
+});
+
+it('counts what points at a record before agreeing to delete it', function () {
+    $owner = User::factory()->create();
+    $app = trashRelationApp($owner);
+
+    $cliente = Record::create([
+        'app_id' => $app->id, 'object_definition_id' => 'obj_cliente00001',
+        'organization_id' => $app->organization_id, 'data' => ['nombre' => 'Acme'],
+    ]);
+
+    foreach (['A-1', 'A-2', 'A-3'] as $folio) {
+        Record::create([
+            'app_id' => $app->id, 'object_definition_id' => 'obj_ordenes0001',
+            'organization_id' => $app->organization_id,
+            'data' => ['folio' => $folio, 'cliente' => $cliente->id],
+        ]);
+    }
+
+    $response = $this->actingAs($owner)
+        ->postJson("/r/{$app->slug}/bulk", [
+            'object_id' => 'obj_cliente00001',
+            'action' => 'delete',
+            'record_ids' => [$cliente->id],
+            'dry_run' => true,
+        ])
+        ->assertOk();
+
+    // Per referring object: "3 in Órdenes" tells somebody where to go.
+    expect($response->json('dependents'))->toBe([['object' => 'Órdenes', 'count' => 3]])
+        // And it deleted nothing.
+        ->and(Record::find($cliente->id))->not->toBeNull();
+});
+
+it('reports no dependents when nothing points at the rows', function () {
+    $owner = User::factory()->create();
+    $app = trashRelationApp($owner);
+
+    $cliente = Record::create([
+        'app_id' => $app->id, 'object_definition_id' => 'obj_cliente00001',
+        'organization_id' => $app->organization_id, 'data' => ['nombre' => 'Solo'],
+    ]);
+
+    $this->actingAs($owner)
+        ->postJson("/r/{$app->slug}/bulk", [
+            'object_id' => 'obj_cliente00001',
+            'action' => 'delete',
+            'record_ids' => [$cliente->id],
+            'dry_run' => true,
+        ])
+        ->assertOk()
+        ->assertExactJson(['dependents' => []]);
+});
+
+it('will not let a dry run become a way to count rows a role cannot see', function () {
+    // The counts run through the query service, so the role's row filter and
+    // the environment apply — and the endpoint still needs delete permission.
+    $this->seed(RolesAndPermissionsSeeder::class);
+
+    $org = mcpOrg();
+    $owner = mcpMember($org);
+    $app = trashRelationApp($owner, ['permissions' => [
+        'roles' => [
+            ['id' => 'rol_lector0001', 'slug' => 'lector', 'name' => 'Lector', 'is_default' => true],
+        ],
+        'object_policies' => [[
+            'object_id' => 'obj_cliente00001',
+            'role_id' => 'rol_lector0001',
+            'actions' => ['read'],
+        ]],
+    ]]);
+    $app->update(['visibility' => 'organization']);
+
+    $cliente = Record::create([
+        'app_id' => $app->id, 'object_definition_id' => 'obj_cliente00001',
+        'organization_id' => $app->organization_id, 'data' => ['nombre' => 'Acme'],
+    ]);
+
+    $this->actingAs(mcpMember($org, MembershipRole::Member))
+        ->postJson("/r/{$app->slug}/bulk", [
+            'object_id' => 'obj_cliente00001',
+            'action' => 'delete',
+            'record_ids' => [$cliente->id],
+            'dry_run' => true,
+        ])
+        ->assertForbidden();
 });

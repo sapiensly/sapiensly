@@ -11,6 +11,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
+use Throwable;
 
 /**
  * The same edit, applied to the rows somebody picked.
@@ -65,6 +66,9 @@ class AppBulkActionController extends Controller
             'record_ids.*' => ['string', 'regex:/^rec_[a-z0-9]+$/'],
             'field_id' => ['required_if:action,set', 'string'],
             'value' => ['nullable'],
+            // Ask what a delete would cost without paying it. The browser needs
+            // this BEFORE it can word the confirmation honestly.
+            'dry_run' => ['sometimes', 'boolean'],
         ]);
 
         $object = collect($manifest['objects'] ?? [])->firstWhere('id', $data['object_id']);
@@ -104,6 +108,12 @@ class AppBulkActionController extends Controller
             '__trashed' => $readsTrash,
         ];
 
+        if (($data['dry_run'] ?? false) === true) {
+            return response()->json([
+                'dependents' => $this->dependents($app, $manifest, $object, array_unique($data['record_ids']), $context),
+            ]);
+        }
+
         $done = 0;
         $skipped = 0;
 
@@ -132,5 +142,68 @@ class AppBulkActionController extends Controller
         // Both numbers, always. "12 changed" when 3 were silently skipped is
         // the kind of report somebody acts on.
         return response()->json(['changed' => $done, 'skipped' => $skipped]);
+    }
+
+    /**
+     * What else points at these records.
+     *
+     * Deleting a customer does not delete the orders that name it; they keep
+     * the id and lose the name, and until now nobody was told that before
+     * agreeing to it. Twelve rows removed in one click can hollow out an object
+     * the reader was not even looking at.
+     *
+     * Counted per referring object rather than in total, because "3 in Orders"
+     * tells somebody where to go and "3" does not. Each count runs through the
+     * query service, so it respects the role's row filter and the environment —
+     * a number that included rows the reader cannot see would be a leak dressed
+     * as a warning.
+     *
+     * @param  array<string, mixed>  $manifest
+     * @param  array<string, mixed>  $object
+     * @param  list<string>  $recordIds
+     * @param  array<string, mixed>  $context
+     * @return list<array{object: string, count: int}>
+     */
+    private function dependents(App $app, array $manifest, array $object, array $recordIds, array $context): array
+    {
+        $out = [];
+
+        foreach ($manifest['objects'] ?? [] as $candidate) {
+            $count = 0;
+
+            foreach ($candidate['fields'] ?? [] as $field) {
+                if (($field['type'] ?? null) !== 'relation'
+                    || ($field['cardinality'] ?? 'many_to_one') !== 'many_to_one'
+                    || ($field['target_object_id'] ?? null) !== $object['id']) {
+                    continue;
+                }
+
+                // A relation an object has to ITSELF (a parent category, a
+                // superseding invoice) is skipped: the rows being deleted are
+                // in the search set as well as the result, so the honest count
+                // needs "pointing at these AND not one of these" — which the
+                // filter grammar cannot say about a record's own id. A wrong
+                // number in a warning is worse than no warning, and the trash
+                // is still the net underneath.
+                if ($candidate['id'] === $object['id']) {
+                    continue;
+                }
+
+                try {
+                    $count += $this->records->count($app, [
+                        'object_id' => $candidate['id'],
+                        'filter' => ['op' => 'in', 'field_id' => $field['id'], 'value' => $recordIds],
+                    ], $manifest, $context);
+                } catch (Throwable) {
+                    // A warning is not worth failing the request it precedes.
+                }
+            }
+
+            if ($count > 0) {
+                $out[] = ['object' => (string) ($candidate['name'] ?? $candidate['slug'] ?? '?'), 'count' => $count];
+            }
+        }
+
+        return $out;
     }
 }

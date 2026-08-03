@@ -47,6 +47,7 @@ const context = computed<DisplayContext>(() => ({
     locale: props.locale,
     defaultCurrency: props.defaultCurrency,
     labels: record.value?.labels,
+    labelsTrashed: record.value?.labels_trashed,
     objects: props.objects,
 }));
 

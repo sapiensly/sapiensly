@@ -113,6 +113,7 @@ function contextFor(row: RowData): DisplayContext {
         locale: props.locale,
         defaultCurrency: props.defaultCurrency,
         labels: row.labels,
+        labelsTrashed: row.labels_trashed,
         objects: props.objects,
     };
 }

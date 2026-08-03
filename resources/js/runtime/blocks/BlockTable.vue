@@ -567,6 +567,7 @@ function contextFor(row: { labels?: Record<string, unknown> }): DisplayContext {
         locale: props.locale,
         defaultCurrency: props.defaultCurrency,
         labels: row.labels,
+        labelsTrashed: row.labels_trashed,
         objects: props.objects,
     };
 }
@@ -963,12 +964,52 @@ const settableColumns = computed(() =>
     ),
 );
 
+/**
+ * What else points at the rows about to go.
+ *
+ * Asked BEFORE the question, not reported after it: deleting a customer leaves
+ * its orders holding an id and no name, and somebody agreeing to "this cannot
+ * be undone" was never told that part. Best-effort — a warning that fails is
+ * not a reason to block the delete, it just goes back to the plain wording.
+ */
+async function dependentsWarning(): Promise<string> {
+    if (!object.value) return '';
+
+    try {
+        const { data } = await axios.post(`/r/${appSlug}/bulk`, {
+            object_id: object.value.id,
+            action: 'delete',
+            record_ids: [...selected.value],
+            dry_run: true,
+        });
+
+        const found: Array<{ object: string; count: number }> =
+            data.dependents ?? [];
+        if (found.length === 0) return '';
+
+        // "3 in Orders" sends somebody somewhere; "3" does not.
+        const detail = found.map((d) => `${d.count} × ${d.object}`).join(', ');
+
+        return runtimeWord(props.locale, 'bulk_delete_dependents', { detail });
+    } catch {
+        return '';
+    }
+}
+
 async function confirmBulkDelete(): Promise<void> {
+    if (bulkBusy.value) return;
+
+    bulkBusy.value = true;
+    const warning = await dependentsWarning();
+    bulkBusy.value = false;
+
     const ok = await confirmAction({
         title: runtimeWord(props.locale, 'bulk_delete_title', {
             n: selected.value.size,
         }),
-        message: runtimeWord(props.locale, 'bulk_delete_message'),
+        message: [runtimeWord(props.locale, 'bulk_delete_message'), warning]
+            .filter(Boolean)
+            .join(' '),
         locale: props.locale,
         danger: true,
     });

@@ -1,4 +1,5 @@
 import type { FieldDef, ObjectDef } from '../types/manifest';
+import { runtimeWord } from '../words';
 
 /**
  * How a stored value is shown to a person — one implementation, shared.
@@ -19,6 +20,13 @@ export interface DisplayContext {
      * absent when the block does not show relations.
      */
     labels?: Record<string, unknown>;
+    /**
+     * Which of those labels name a record that is in the trash, keyed the same
+     * way. A relation pointing at a deleted record used to read exactly like a
+     * relation nobody had filled in, so the reader went looking for a record
+     * that was sitting one click away in the trash.
+     */
+    labelsTrashed?: Record<string, unknown>;
     /**
      * Every object in the manifest, so a derived field can be shown the way the
      * field it derives from would be. Optional: without it a rollup still
@@ -109,7 +117,13 @@ export function formatFieldValue(
     // so say "set" rather than print it.
     if (field.type === 'relation') {
         const label = ctx.labels?.[field.slug];
-        if (typeof label === 'string' && label !== '') return label;
+        if (typeof label === 'string' && label !== '') {
+            // The name, and what became of it. Said here rather than in the
+            // component so a CSV cell and a title attribute carry it too.
+            return ctx.labelsTrashed?.[field.slug]
+                ? `${label} ${runtimeWord(ctx.locale, 'relation_trashed')}`
+                : label;
+        }
         return isBlank(value) ? EMPTY : '—';
     }
 

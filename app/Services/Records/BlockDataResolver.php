@@ -1436,15 +1436,26 @@ class BlockDataResolver
             // the id stays in `data` untouched, since filters and actions
             // address the record by it.
             $labels = [];
+            $goneLabels = [];
             foreach ($labelPlan as $fieldId => $plan) {
                 $related = $r->expanded[$fieldId] ?? null;
                 $label = is_array($related) ? ($related['data'][$plan['display']] ?? null) : null;
                 if (is_scalar($label) && (string) $label !== '') {
                     $labels[$plan['slug']] = (string) $label;
+
+                    // Which of those names belong to records that are in the
+                    // trash. Sent as a flag rather than as words: the cell is
+                    // read in the app's language, not the server's.
+                    if (($related['trashed'] ?? false) === true) {
+                        $goneLabels[$plan['slug']] = true;
+                    }
                 }
             }
             if ($labels !== []) {
                 $row['labels'] = $labels;
+            }
+            if ($goneLabels !== []) {
+                $row['labels_trashed'] = $goneLabels;
             }
             // Inline-expanded belongs_to relations (RecordQueryService::query with
             // `expand`); already access- and field-hiding-safe at the engine level.

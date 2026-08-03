@@ -86,6 +86,9 @@ const WORDS: Record<string, Dict> = {
         trash_purge_message: 'This time there is no way back.',
         trash_restored: '{n} restored, {skipped} skipped.',
         trash_purged: '{n} deleted for good, {skipped} skipped.',
+        relation_trashed: '(deleted)',
+        bulk_delete_dependents:
+            '{detail} point at these and will be left without it.',
         bulk_failed: 'That could not be applied.',
     },
     es: {
@@ -157,6 +160,9 @@ const WORDS: Record<string, Dict> = {
         trash_purge_message: 'Esta vez no hay vuelta atrás.',
         trash_restored: '{n} restaurados, {skipped} omitidos.',
         trash_purged: '{n} eliminados para siempre, {skipped} omitidos.',
+        relation_trashed: '(eliminado)',
+        bulk_delete_dependents:
+            '{detail} apuntan a estos y se quedarán sin ese dato.',
         bulk_failed: 'No se pudo aplicar.',
     },
     pt: {
@@ -228,6 +234,9 @@ const WORDS: Record<string, Dict> = {
         trash_purge_message: 'Desta vez não tem volta.',
         trash_restored: '{n} restaurados, {skipped} ignorados.',
         trash_purged: '{n} excluídos de vez, {skipped} ignorados.',
+        relation_trashed: '(excluído)',
+        bulk_delete_dependents:
+            '{detail} apontam para estes e ficarão sem esse dado.',
         bulk_failed: 'Não foi possível aplicar.',
     },
     fr: {
@@ -299,6 +308,9 @@ const WORDS: Record<string, Dict> = {
         trash_purge_message: 'Cette fois, il n’y a pas de retour en arrière.',
         trash_restored: '{n} restaurés, {skipped} ignorés.',
         trash_purged: '{n} supprimés définitivement, {skipped} ignorés.',
+        relation_trashed: '(supprimé)',
+        bulk_delete_dependents:
+            '{detail} pointent vers ceux-ci et se retrouveront sans cette donnée.',
         bulk_failed: 'Impossible à appliquer.',
     },
 };

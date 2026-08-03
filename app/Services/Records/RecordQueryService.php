@@ -208,13 +208,60 @@ class RecordQueryService
         $hidden = $this->hiddenSlugsFor($context, $targetId);
         $byId = $related->keyBy('id');
 
+        // Anything a live read could not account for. An id that is set and
+        // resolves to nothing is the interesting case: the row it names may be
+        // in the trash, and saying "—" for that is the same thing this says for
+        // "nobody filled it in" — two very different facts in one cell.
+        $unresolved = array_values(array_diff($ids, $byId->keys()->all()));
+        $trashedById = $unresolved === []
+            ? collect()
+            : $this->trashedTargets($app, $targetId, $targetObject, $unresolved, $manifest, $context);
+
         foreach ($records as $r) {
             $fk = $r->data[$slug] ?? null;
-            $rel = ($fk !== null && $fk !== '') ? $byId->get((string) $fk) : null;
-            $r->expanded[$fieldId] = $rel !== null
-                ? ['id' => $rel->id, 'data' => $this->stripHidden($rel->data, $hidden)]
+            $fk = ($fk !== null && $fk !== '') ? (string) $fk : null;
+            $rel = $fk !== null ? $byId->get($fk) : null;
+
+            if ($rel !== null) {
+                $r->expanded[$fieldId] = ['id' => $rel->id, 'data' => $this->stripHidden($rel->data, $hidden)];
+
+                continue;
+            }
+
+            $gone = $fk !== null ? $trashedById->get($fk) : null;
+
+            // Its NAME, and the fact that it is gone. The reader can then go and
+            // restore it; a blank sends them looking for a record that is right
+            // there behind one click.
+            $r->expanded[$fieldId] = $gone !== null
+                ? ['id' => $gone->id, 'data' => $this->stripHidden($gone->data, $hidden), 'trashed' => true]
                 : null;
         }
+    }
+
+    /**
+     * The trashed rows behind ids a live read could not resolve.
+     *
+     * A second query, and only ever when something failed to resolve — the
+     * common case costs nothing. Runs through the same scope and the same
+     * access filter, so a role that could not see the record while it lived
+     * does not learn of it by way of its deletion.
+     *
+     * @param  list<string>  $ids
+     * @param  array<string, mixed>|null  $targetObject
+     * @param  array<string, mixed>  $manifest
+     * @param  array<string, mixed>  $context
+     * @return Collection<string, Record>
+     */
+    private function trashedTargets(App $app, string $targetId, ?array $targetObject, array $ids, array $manifest, array $context): Collection
+    {
+        $builder = $this->scopeForObject($app, $targetId, trashed: true)->whereIn('id', $ids);
+        $this->applyAccessFilter($builder, $targetObject, $targetId, $app, $manifest, $context);
+
+        $trashed = $builder->get();
+        $this->derived->enrich($app, $targetObject, $trashed, $manifest);
+
+        return $trashed->keyBy('id');
     }
 
     /**
