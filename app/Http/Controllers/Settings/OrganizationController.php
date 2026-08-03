@@ -9,6 +9,7 @@ use App\Models\Organization;
 use App\Models\OrganizationMembership;
 use App\Models\User;
 use App\Services\OrganizationService;
+use App\Services\Records\ActivityRetention;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -46,6 +47,29 @@ class OrganizationController extends Controller
             'isAdmin' => $user->hasRole('owner') || $user->isSysAdmin(),
             'isOwner' => $this->isOwner($user, $organization),
         ]);
+    }
+
+    /**
+     * How long this organisation keeps its apps' activity trails.
+     *
+     * An owner's decision, not a member's: it comes from policy, auditors and
+     * contracts, and shortening it destroys history nobody else agreed to lose.
+     */
+    public function updateRetention(Request $request): RedirectResponse
+    {
+        $user = $request->user();
+        $organization = $user->organization;
+
+        abort_if($organization === null, 404);
+        abort_unless($user->hasRole('owner') || $user->isSysAdmin(), 403);
+
+        $validated = $request->validate([
+            'activity_retention_months' => ['required', 'integer', Rule::in(ActivityRetention::PERIODS)],
+        ]);
+
+        $organization->update($validated);
+
+        return back();
     }
 
     public function create(): Response

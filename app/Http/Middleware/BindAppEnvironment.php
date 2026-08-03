@@ -40,6 +40,21 @@ class BindAppEnvironment
             }
 
             app(EnvironmentContext::class)->set($request->session()->get($key));
+
+            // A request may ask to be treated as the SANDBOX, and only that.
+            //
+            // The builder preview needs it: it reads the demo on purpose, and
+            // without this a form submitted inside the preview would write its
+            // record into production — a surface that reads one side and writes
+            // the other is worse than one that gets both wrong.
+            //
+            // Narrowing only, and that asymmetry is the whole safety of it. A
+            // caller can put itself in the sandbox, which costs nothing if it
+            // was lying; it can never take itself OUT, because leaving is the
+            // one direction where being wrong reaches real records.
+            if ($request->input('environment') === EnvironmentContext::DEMO) {
+                app(EnvironmentContext::class)->set(EnvironmentContext::DEMO);
+            }
         }
 
         return $next($request);

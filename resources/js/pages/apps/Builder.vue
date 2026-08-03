@@ -2851,6 +2851,11 @@ function useOrgBrand() {
 // Provide the App slug for BlockForm/BlockButton inside the preview so any
 // action they fire goes to /r/{slug}/actions just like in the real runtime.
 provide('appSlug', props.app.slug);
+// The preview reads the sandbox, so its actions must write there too — a
+// surface that reads one environment and writes the other is worse than one
+// that gets both wrong. Sent with every action; the server narrows on it and
+// never widens, so it cannot reach real records.
+provide('runtimeEnvironment', 'demo');
 // The app's language, for the words the preview's own controls say — the
 // relation picker's placeholder, a confirm dialog's buttons.
 //

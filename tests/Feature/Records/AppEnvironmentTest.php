@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Middleware\BindAppEnvironment;
 use App\Models\App;
 use App\Models\Record;
 use App\Models\User;
@@ -8,6 +9,8 @@ use App\Services\Records\DemoDataGenerator;
 use App\Services\Records\RecordQueryService;
 use App\Services\Records\RecordWriteService;
 use App\Support\Apps\EnvironmentContext;
+use Illuminate\Http\Request;
+use Illuminate\Http\Response;
 use Illuminate\Support\Str;
 
 /**
@@ -143,4 +146,38 @@ it('puts the environment back when the work inside it throws', function () {
     }
 
     expect($env->current())->toBe('production');
+});
+
+it('lets a request put itself in the sandbox but never take itself out', function () {
+    // The builder preview needs the first: it reads the demo on purpose, and a
+    // surface that reads one environment and writes the other is worse than one
+    // that gets both wrong. The asymmetry is the whole safety of it — putting
+    // yourself in the sandbox costs nothing if you were lying about it; taking
+    // yourself out is the direction where being wrong reaches real records.
+    $middleware = app(BindAppEnvironment::class);
+    $env = app(EnvironmentContext::class);
+
+    $run = function (array $body) use ($middleware, $env): string {
+        $request = Request::create('/r/demo_app/actions', 'POST', $body);
+        $request->setLaravelSession(app('session.store'));
+        $request->setRouteResolver(fn () => new class
+        {
+            public function parameter(string $name): string
+            {
+                return $name === 'app_slug' ? 'demo_app' : '';
+            }
+        });
+
+        $middleware->handle($request, fn () => new Response);
+
+        return $env->current();
+    };
+
+    // In: honoured.
+    expect($run(['environment' => 'demo']))->toBe('demo');
+
+    // Out: ignored. The session is what says you may be in production, and a
+    // request body is not the session.
+    app('session.store')->put(BindAppEnvironment::SESSION_PREFIX.'demo_app', 'demo');
+    expect($run(['environment' => 'production']))->toBe('demo');
 });

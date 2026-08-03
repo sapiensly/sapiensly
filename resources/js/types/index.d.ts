@@ -2,6 +2,8 @@ import { InertiaLinkProps } from '@inertiajs/vue3';
 import type { LucideIcon } from '@lucide/vue';
 
 export interface Organization {
+    /** Months an app's activity trail is kept. Null reads as the default. */
+    activity_retention_months?: number | null;
     id: string;
     name: string;
     slug: string | null;

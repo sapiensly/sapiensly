@@ -47,6 +47,7 @@ use App\Services\Records\BlockDataResolver;
 use App\Services\Records\RecordQueryService;
 use App\Services\Storage\TenantStorage;
 use App\Support\Apps\AppNaming;
+use App\Support\Apps\EnvironmentContext;
 use App\Support\Branding\ColorPalette;
 use App\Support\Branding\OrganizationBrand;
 use App\Support\Builder\FineTuneStyles;
@@ -376,7 +377,14 @@ class AppBuilderController extends Controller
 
         return [
             $preview,
-            fn (): array => $this->blockData->resolve($app, $page['blocks'] ?? [], $manifest, $context),
+            // The preview reads the SANDBOX. It is a place to try things, and
+            // trying things against the books means a builder experiment shows
+            // real customers and an action fired from the preview edits a real
+            // order. The demo is exactly what this surface is for.
+            fn (): array => app(EnvironmentContext::class)->runIn(
+                EnvironmentContext::DEMO,
+                fn (): array => $this->blockData->resolve($app, $page['blocks'] ?? [], $manifest, $context),
+            ),
         ];
     }
 

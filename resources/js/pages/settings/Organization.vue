@@ -19,7 +19,14 @@ import { useInitials } from '@/composables/useInitials';
 import SettingsLayout from '@/layouts/settings/Layout.vue';
 import type { Organization, User } from '@/types';
 import { Form, Head, useForm } from '@inertiajs/vue3';
-import { AlertTriangle, Building2, Mail, Trash2, Users } from '@lucide/vue';
+import {
+    AlertTriangle,
+    Building2,
+    History,
+    Mail,
+    Trash2,
+    Users,
+} from '@lucide/vue';
 import { computed, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 
@@ -40,6 +47,29 @@ interface Props {
 }
 
 const props = defineProps<Props>();
+
+/**
+ * The periods on offer, mirroring ActivityRetention::PERIODS.
+ *
+ * A fixed set rather than a number field: "how long do you keep audit records"
+ * has a small set of real answers, and a free box invites 45 or 400 — numbers
+ * nobody chose on purpose and every later reader has to interpret.
+ */
+const RETENTION_PERIODS = [1, 6, 12, 36, 120] as const;
+
+const retentionForm = useForm({ activity_retention_months: 1 });
+
+const currentRetention = computed(
+    () => props.organization.activity_retention_months ?? 1,
+);
+
+function setRetention(months: number): void {
+    if (months === currentRetention.value) return;
+    retentionForm.activity_retention_months = months;
+    retentionForm.patch('/settings/organization/retention', {
+        preserveScroll: true,
+    });
+}
 
 const inviteForm = useForm({
     email: '',
@@ -124,6 +154,37 @@ const submitInvite = () => {
                         </span>
                     </div>
                 </div>
+            </SettingsCard>
+
+            <!-- How long the activity trails are kept. -->
+            <SettingsCard
+                v-if="isAdmin"
+                :icon="History"
+                :title="t('settings.organization.retention_title')"
+                :description="t('settings.organization.retention_description')"
+                tint="var(--sp-accent-amber)"
+            >
+                <div class="flex flex-wrap items-center gap-2">
+                    <button
+                        v-for="months in RETENTION_PERIODS"
+                        :key="months"
+                        type="button"
+                        :data-sp-retention="months"
+                        :disabled="retentionForm.processing"
+                        class="rounded-pill border px-3.5 py-1.5 text-xs transition-colors disabled:opacity-50"
+                        :class="
+                            currentRetention === months
+                                ? 'border-accent-blue/40 bg-accent-blue/10 font-medium text-accent-blue'
+                                : 'border-medium bg-surface text-ink-muted hover:text-ink'
+                        "
+                        @click="setRetention(months)"
+                    >
+                        {{ t(`settings.organization.retention_${months}`) }}
+                    </button>
+                </div>
+                <p class="mt-2.5 text-xs leading-relaxed text-ink-subtle">
+                    {{ t('settings.organization.retention_note') }}
+                </p>
             </SettingsCard>
 
             <!-- Invite. -->

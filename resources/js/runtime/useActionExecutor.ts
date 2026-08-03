@@ -1,5 +1,6 @@
 import { router } from '@inertiajs/vue3';
 import axios from 'axios';
+import { inject } from 'vue';
 import { toast } from 'vue-sonner';
 
 export type RuntimeAction = Record<string, unknown> & { type: string };
@@ -202,6 +203,7 @@ function interpolateTemplate(raw: unknown, ctx: ExecutionContext): unknown {
  * open/close_modal).
  */
 export function useActionExecutor() {
+    const environment = inject<string | null>('runtimeEnvironment', null);
     async function execute(
         actions: RuntimeAction[],
         context: ExecutionContext,
@@ -237,6 +239,10 @@ export function useActionExecutor() {
                 {
                     actions,
                     params: ctx.params ?? {},
+                    // Only ever 'demo', and only from a surface that provides
+                    // it (the builder preview). The server narrows on this and
+                    // never widens, so saying it cannot reach real records.
+                    ...(environment ? { environment } : {}),
                     form: ctx.form ?? {},
                     row: ctx.row ?? {},
                     page: ctx.page ?? currentPageSlug(),
