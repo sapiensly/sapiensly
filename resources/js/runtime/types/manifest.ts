@@ -17,7 +17,8 @@ export type FieldType =
     | 'date_range'
     | 'file'
     | 'rich_text'
-    | 'color';
+    | 'color'
+    | 'geo';
 
 export interface FieldDef {
     id: string;

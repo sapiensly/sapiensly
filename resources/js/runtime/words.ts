@@ -91,6 +91,14 @@ const WORDS: Record<string, Dict> = {
         scan_unsupported:
             'This browser cannot read barcodes. Type the code instead.',
         scan_captured: 'Scanned',
+        geo_lat: 'Latitude',
+        geo_lng: 'Longitude',
+        geo_locate: 'Use my location',
+        geo_locating: 'Locating…',
+        geo_denied:
+            'Could not get your location. Type the coordinates instead.',
+        geo_unavailable:
+            'This device cannot locate itself. Type the coordinates instead.',
         trash_open: 'Trash ({n})',
         trash_viewing: 'Viewing the trash. These records are not in the list.',
         trash_back: 'Back to the list',
@@ -179,6 +187,13 @@ const WORDS: Record<string, Dict> = {
         scan_unsupported:
             'Este navegador no lee códigos. Escribe el código a mano.',
         scan_captured: 'Escaneado',
+        geo_lat: 'Latitud',
+        geo_lng: 'Longitud',
+        geo_locate: 'Usar mi ubicación',
+        geo_locating: 'Localizando…',
+        geo_denied: 'No se pudo obtener tu ubicación. Escribe las coordenadas.',
+        geo_unavailable:
+            'Este dispositivo no puede ubicarse. Escribe las coordenadas.',
         trash_open: 'Papelera ({n})',
         trash_viewing:
             'Estás en la papelera. Estos registros no salen en la lista.',
@@ -267,6 +282,14 @@ const WORDS: Record<string, Dict> = {
         scan_no_camera: 'Sem câmera disponível. Digite o código.',
         scan_unsupported: 'Este navegador não lê códigos. Digite o código.',
         scan_captured: 'Lido',
+        geo_lat: 'Latitude',
+        geo_lng: 'Longitude',
+        geo_locate: 'Usar minha localização',
+        geo_locating: 'Localizando…',
+        geo_denied:
+            'Não foi possível obter sua localização. Digite as coordenadas.',
+        geo_unavailable:
+            'Este aparelho não consegue se localizar. Digite as coordenadas.',
         trash_open: 'Lixeira ({n})',
         trash_viewing:
             'Você está na lixeira. Estes registros não aparecem na lista.',
@@ -356,6 +379,13 @@ const WORDS: Record<string, Dict> = {
         scan_unsupported:
             'Ce navigateur ne lit pas les codes. Saisissez le code.',
         scan_captured: 'Scanné',
+        geo_lat: 'Latitude',
+        geo_lng: 'Longitude',
+        geo_locate: 'Utiliser ma position',
+        geo_locating: 'Localisation…',
+        geo_denied: 'Position indisponible. Saisissez les coordonnées.',
+        geo_unavailable:
+            'Cet appareil ne peut pas se localiser. Saisissez les coordonnées.',
         trash_open: 'Corbeille ({n})',
         trash_viewing:
             'Vous êtes dans la corbeille. Ces enregistrements ne figurent pas dans la liste.',

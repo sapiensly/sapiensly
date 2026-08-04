@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { Camera, ScanLine } from '@lucide/vue';
-import { computed, defineAsyncComponent, ref } from 'vue';
+import { Camera, MapPin, ScanLine } from '@lucide/vue';
+import { computed, defineAsyncComponent, ref, watch } from 'vue';
 import { requestScan } from '../scanner';
 import type { FieldDef } from '../types/manifest';
 import { useFileUpload, type UploadedFile } from '../useFileUpload';
@@ -162,6 +162,115 @@ function onKeyForGun(event: KeyboardEvent): void {
     }
 
     fastKeys = gap < 30 ? fastKeys + 1 : 0;
+}
+
+/**
+ * A point on the earth: {lat, lng}, and {accuracy} when the device offered one.
+ *
+ * "Within 8 metres" and "within 3 kilometres" are very different claims about
+ * the same coordinates, and only the device knows which one it made — so the
+ * number it reports is kept rather than thrown away.
+ */
+interface GeoValue {
+    lat: number;
+    lng: number;
+    accuracy?: number;
+}
+
+const locating = ref(false);
+const geoError = ref<string | null>(null);
+
+/**
+ * The two halves live HERE, as text, not derived from the model.
+ *
+ * Filling both in the same tick read a stale `modelValue` on the second one and
+ * sent a point with a null longitude — the server refused it, correctly, and
+ * the person had typed a perfectly good coordinate. Anyone pasting both, or a
+ * script filling the form, hits it every time; someone typing slowly never
+ * does, which is exactly the kind of bug that ships.
+ *
+ * As text, too, because "19." is a real thing to have typed halfway through and
+ * a number input that rewrites it under the cursor is unusable.
+ */
+const geoText = ref<{ lat: string; lng: string }>({ lat: '', lng: '' });
+
+watch(
+    () => props.modelValue,
+    (value) => {
+        const point = value as GeoValue | null | undefined;
+        const incoming = {
+            lat: typeof point?.lat === 'number' ? String(point.lat) : '',
+            lng: typeof point?.lng === 'number' ? String(point.lng) : '',
+        };
+
+        // Only when it really differs, or every keystroke would echo back and
+        // fight the cursor.
+        if (
+            Number(incoming.lat) !== Number(geoText.value.lat) ||
+            Number(incoming.lng) !== Number(geoText.value.lng)
+        ) {
+            geoText.value = incoming;
+        }
+    },
+    { immediate: true },
+);
+
+function geoPart(part: 'lat' | 'lng'): string {
+    return geoText.value[part];
+}
+
+/**
+ * Half a coordinate is not a place, so nothing is stored until BOTH halves are
+ * numbers — and emptying either one clears the field rather than leaving a
+ * record that claims to be somewhere at longitude zero.
+ */
+function setGeoPart(part: 'lat' | 'lng', raw: string): void {
+    geoText.value = { ...geoText.value, [part]: raw };
+
+    const lat = Number(geoText.value.lat);
+    const lng = Number(geoText.value.lng);
+    const both =
+        geoText.value.lat.trim() !== '' &&
+        geoText.value.lng.trim() !== '' &&
+        Number.isFinite(lat) &&
+        Number.isFinite(lng);
+
+    update(both ? { lat, lng } : null);
+}
+
+async function locate(): Promise<void> {
+    geoError.value = null;
+
+    if (typeof navigator === 'undefined' || !navigator.geolocation) {
+        geoError.value = runtimeWord(props.locale ?? 'en', 'geo_unavailable');
+
+        return;
+    }
+
+    locating.value = true;
+
+    navigator.geolocation.getCurrentPosition(
+        (position) => {
+            locating.value = false;
+            const lat = Number(position.coords.latitude.toFixed(6));
+            const lng = Number(position.coords.longitude.toFixed(6));
+            geoText.value = { lat: String(lat), lng: String(lng) };
+            update({
+                lat,
+                lng,
+                ...(Number.isFinite(position.coords.accuracy)
+                    ? { accuracy: Math.round(position.coords.accuracy) }
+                    : {}),
+            });
+        },
+        () => {
+            // Refused, or no fix. Not a dead end: the boxes beside the button
+            // are still there and still take a typed coordinate.
+            locating.value = false;
+            geoError.value = runtimeWord(props.locale ?? 'en', 'geo_denied');
+        },
+        { enableHighAccuracy: true, timeout: 10_000 },
+    );
 }
 
 /** Drawn rather than chosen — the bytes come from a canvas, not the disk. */
@@ -655,6 +764,74 @@ function isInMulti(value: string): boolean {
 
     <!-- Fall-through text input: string and the contact trio, which get the
          matching native input type (mobile keyboards + browser validation). -->
+    <template v-else-if="field.type === 'geo'">
+        <div class="flex flex-wrap items-center gap-2">
+            <!-- Typed OR captured, always both. The button is a convenience on
+                 a phone; on a desktop, with permission refused, or when the
+                 coordinates came off a survey, the boxes are the way in. -->
+            <input
+                :id="inputId"
+                type="number"
+                step="any"
+                inputmode="decimal"
+                data-sp-geo-lat
+                :value="geoPart('lat')"
+                :placeholder="runtimeWord(locale ?? 'en', 'geo_lat')"
+                :class="[
+                    'h-9 w-32 rounded-md border px-2 text-sm',
+                    t.surfaceMuted,
+                    t.text,
+                ]"
+                @input="
+                    setGeoPart('lat', ($event.target as HTMLInputElement).value)
+                "
+            />
+            <input
+                type="number"
+                step="any"
+                inputmode="decimal"
+                data-sp-geo-lng
+                :value="geoPart('lng')"
+                :placeholder="runtimeWord(locale ?? 'en', 'geo_lng')"
+                :class="[
+                    'h-9 w-32 rounded-md border px-2 text-sm',
+                    t.surfaceMuted,
+                    t.text,
+                ]"
+                @input="
+                    setGeoPart('lng', ($event.target as HTMLInputElement).value)
+                "
+            />
+            <button
+                type="button"
+                data-sp-geo-locate
+                :disabled="locating"
+                :class="[
+                    'inline-flex h-9 shrink-0 items-center gap-1.5 rounded-md border px-2.5 text-xs transition-colors hover:bg-surface-hover disabled:opacity-50',
+                    t.surfaceMuted,
+                    t.textMuted,
+                ]"
+                @click="locate"
+            >
+                <MapPin class="size-3.5" />
+                {{
+                    runtimeWord(
+                        locale ?? 'en',
+                        locating ? 'geo_locating' : 'geo_locate',
+                    )
+                }}
+            </button>
+        </div>
+
+        <p
+            v-if="geoError"
+            data-sp-geo-error
+            class="mt-1 text-[10px] text-amber-500"
+        >
+            {{ geoError }}
+        </p>
+    </template>
+
     <template v-else>
         <div class="flex items-center gap-2">
             <input

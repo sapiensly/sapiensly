@@ -303,6 +303,7 @@ class RecordWriteService
             'rating' => $this->validateRating($field, $raw, $errors),
             'slider' => $this->validateSlider($field, $raw, $errors),
             'date_range' => $this->validateDateRange($field, $raw, $errors),
+            'geo' => $this->validateGeo($field, $raw, $errors),
             'file' => $this->validateFile($field, $raw, $errors),
             'rich_text' => $this->validateRichText($field, $raw, $errors),
             default => $raw,
@@ -462,6 +463,52 @@ class RecordWriteService
      * @param  list<string>  $errors
      * @return array{from: string, to: string}|null
      */
+    /**
+     * A point on the earth.
+     *
+     * Bounds are checked rather than assumed: a longitude of 200 is not a place,
+     * and a device that reports one has failed in a way worth catching HERE
+     * instead of on a map that silently draws nothing.
+     *
+     * @param  array<string, mixed>  $field
+     * @param  list<string>  $errors
+     * @return array<string, float>|null
+     */
+    private function validateGeo(array $field, mixed $raw, array &$errors): ?array
+    {
+        if (! is_array($raw) || ! isset($raw['lat'], $raw['lng'])) {
+            $errors[] = "{$field['name']} must be an object with `lat` and `lng`.";
+
+            return null;
+        }
+
+        if (! is_numeric($raw['lat']) || ! is_numeric($raw['lng'])) {
+            $errors[] = "{$field['name']}: `lat` and `lng` must be numbers.";
+
+            return null;
+        }
+
+        $lat = (float) $raw['lat'];
+        $lng = (float) $raw['lng'];
+
+        if ($lat < -90 || $lat > 90 || $lng < -180 || $lng > 180) {
+            $errors[] = "{$field['name']} is not a point on the earth (lat -90..90, lng -180..180).";
+
+            return null;
+        }
+
+        $point = ['lat' => $lat, 'lng' => $lng];
+
+        // Kept when the device offered it: "within 8 metres" and "within 3
+        // kilometres" are very different claims about the same coordinates,
+        // and only the device knows which one it made.
+        if (isset($raw['accuracy']) && is_numeric($raw['accuracy'])) {
+            $point['accuracy'] = (float) $raw['accuracy'];
+        }
+
+        return $point;
+    }
+
     private function validateDateRange(array $field, mixed $raw, array &$errors): ?array
     {
         if (! is_array($raw) || ! isset($raw['from'], $raw['to'])) {

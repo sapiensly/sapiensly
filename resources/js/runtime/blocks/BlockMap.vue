@@ -10,8 +10,9 @@ interface MapBlock {
     type: 'map';
     label?: string;
     data_source: { object_id: string };
-    lat_field_id: string;
-    lng_field_id: string;
+    geo_field_id?: string;
+    lat_field_id?: string;
+    lng_field_id?: string;
     popup_field_id?: string;
     color_field_id?: string;
     height_px?: number;
@@ -40,6 +41,9 @@ function fieldOf(id?: string): FieldDef | undefined {
     if (!id) return undefined;
     return object.value?.fields.find((f) => f.id === id);
 }
+// A single `geo` field is the modern way to say it; lat/lng pairs are how
+// every app written before the type existed says it.
+const geoField = computed(() => fieldOf(props.block.geo_field_id));
 const latField = computed(() => fieldOf(props.block.lat_field_id));
 const lngField = computed(() => fieldOf(props.block.lng_field_id));
 const popupField = computed(() => fieldOf(props.block.popup_field_id));
@@ -56,14 +60,25 @@ const markers = computed<Marker[]>(() => {
     const rows = props.data?.rows ?? [];
     const latSlug = latField.value?.slug;
     const lngSlug = lngField.value?.slug;
+    const geoSlug = geoField.value?.slug;
     const popupSlug = popupField.value?.slug;
     const colorSlug = colorField.value?.slug;
-    if (!latSlug || !lngSlug) return [];
+    // Either a `geo` field, which carries both halves, or the two number
+    // fields this block has always taken. Both, because the pairs are in every
+    // app authored before the type existed and must keep working.
+    if (!geoSlug && (!latSlug || !lngSlug)) return [];
 
     return rows
         .map<Marker | null>((r) => {
-            const lat = Number(r.data[latSlug]);
-            const lng = Number(r.data[lngSlug]);
+            const point = geoSlug
+                ? (r.data[geoSlug] as { lat?: unknown; lng?: unknown } | null)
+                : null;
+            const lat = Number(
+                geoSlug ? point?.lat : r.data[latSlug as string],
+            );
+            const lng = Number(
+                geoSlug ? point?.lng : r.data[lngSlug as string],
+            );
             if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
             let color = '#3B82F6';
             if (colorField.value?.type === 'single_select' && colorSlug) {

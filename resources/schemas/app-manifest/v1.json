@@ -1380,6 +1380,34 @@
                 }
             ]
         },
+        "field_geo": {
+            "description": "A point on the earth: {lat, lng} and, when the device reported one, {accuracy} in metres. Captured with a \u00abuse my location\u00bb button on the device, or typed in \u2014 both are always available, so the field works in an office as well as on a roof. Renders on the `map` block via geo_field_id. Use it for site visits, deliveries, asset locations, meter readings and inspections. NOTE: this stores where somebody CHOSE to record, not where they are; there is no automatic stamping, because tracking staff is a decision an app owner has to make deliberately and tell their people about.",
+            "allOf": [
+                {
+                    "$ref": "#/$defs/field_base"
+                },
+                {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                        "id": true,
+                        "slug": true,
+                        "name": true,
+                        "description": true,
+                        "required": true,
+                        "unique": true,
+                        "indexed": true,
+                        "readonly": true,
+                        "hidden": true,
+                        "help_text": true,
+                        "type": {
+                            "const": "geo"
+                        }
+                    },
+                    "required": ["type"]
+                }
+            ]
+        },
         "field_color": {
             "allOf": [
                 {
@@ -1412,8 +1440,11 @@
             ]
         },
         "field_definition": {
-            "description": "An object field. Its `type` must be one of the catalog types (string, email, url, phone, long_text, number, currency, boolean, date, datetime, single_select, multi_select, relation, formula, lookup, rollup, rating, slider, rich_text, file, date_range, color). If this failed, the `type` is unknown or required props for that type are missing — call list_available_field_types. Derived types (formula/lookup/rollup) require readonly:true.",
+            "description": "An object field. Its `type` must be one of the catalog types (string, email, url, phone, long_text, number, currency, boolean, date, datetime, single_select, multi_select, relation, formula, lookup, rollup, rating, slider, rich_text, file, date_range, color, geo). If this failed, the `type` is unknown or required props for that type are missing — call list_available_field_types. Derived types (formula/lookup/rollup) require readonly:true.",
             "oneOf": [
+                {
+                    "$ref": "#/$defs/field_geo"
+                },
                 {
                     "$ref": "#/$defs/field_color"
                 },
@@ -4544,6 +4575,10 @@
                         "data_source": {
                             "$ref": "#/$defs/query"
                         },
+                        "geo_field_id": {
+                            "$ref": "#/$defs/id",
+                            "description": "A `geo` field carrying both halves of the point. Use this OR the lat/lng pair, not both."
+                        },
                         "lat_field_id": {
                             "$ref": "#/$defs/id"
                         },
@@ -4563,11 +4598,14 @@
                             "default": 400
                         }
                     },
-                    "required": [
-                        "type",
-                        "data_source",
-                        "lat_field_id",
-                        "lng_field_id"
+                    "required": ["type", "data_source"],
+                    "anyOf": [
+                        {
+                            "required": ["geo_field_id"]
+                        },
+                        {
+                            "required": ["lat_field_id", "lng_field_id"]
+                        }
                     ]
                 }
             ]

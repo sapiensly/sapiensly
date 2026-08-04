@@ -127,6 +127,17 @@ export function formatFieldValue(
         return isBlank(value) ? EMPTY : '—';
     }
 
+    // A point reads as its coordinates, six decimals — about a tenth of a
+    // metre, which is finer than any phone knows and short enough for a cell.
+    if (field.type === 'geo') {
+        const point = value as { lat?: number; lng?: number } | null;
+        if (typeof point?.lat !== 'number' || typeof point?.lng !== 'number') {
+            return EMPTY;
+        }
+
+        return `${point.lat.toFixed(6)}, ${point.lng.toFixed(6)}`;
+    }
+
     if (isBlank(value)) return EMPTY;
 
     // A derived field is shown the way its source would be. A rollup that SUMS
