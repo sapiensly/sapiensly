@@ -5067,6 +5067,28 @@
                 },
                 {
                     "type": "object",
+                    "required": ["type", "field_id", "page_slug"],
+                    "additionalProperties": false,
+                    "description": "Scan a barcode with the camera, find the ONE record whose `field_id` holds that code, and open `page_slug` for it. `param` names the query parameter carrying the id (default \"id\"). Nothing happens if the sheet is closed; an unknown or ambiguous code says so and leaves the reader where they were, because navigating on a bad scan is how somebody ends up working on the wrong pallet. Signed-in runtime only. Use it for goods-in, stock checks, asset audits and picking: point the camera, get the record.",
+                    "properties": {
+                        "type": {
+                            "const": "scan_to_find"
+                        },
+                        "field_id": {
+                            "$ref": "#/$defs/id"
+                        },
+                        "page_slug": {
+                            "type": "string",
+                            "maxLength": 120
+                        },
+                        "param": {
+                            "type": "string",
+                            "maxLength": 60
+                        }
+                    }
+                },
+                {
+                    "type": "object",
                     "required": ["type", "page_slug"],
                     "additionalProperties": false,
                     "description": "Download a PDF of one of this app's pages, rendered by a real browser so it looks like the screen. `page_slug` names the page; `params` scope it — {\"id\": \"{{params.id}}\"} on a record detail prints THAT record, and a filtered list prints the rows the reader is looking at. Use it for work orders, quotes, delivery notes and certificates: the person who needs the paper is usually the customer, who does not have the app.",

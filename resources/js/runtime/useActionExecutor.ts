@@ -1,6 +1,8 @@
 import { router } from '@inertiajs/vue3';
+import axios from 'axios';
 import { inject } from 'vue';
 import { toast } from 'vue-sonner';
+import { requestScan } from './scanner';
 import { useRuntimeWrite } from './useRuntimeWrite';
 
 export type RuntimeAction = Record<string, unknown> & { type: string };
@@ -230,6 +232,11 @@ export function useActionExecutor() {
                 'close_modal',
                 'show_toast',
                 'refresh',
+                // Both do their own asking: the PDF is a download and the scan
+                // reads a code and looks it up. Neither writes a record, so
+                // sending them to /actions would be a round trip for nothing.
+                'download_pdf',
+                'scan_to_find',
             ].includes(t);
         if (actions.every((a) => isClientSide(a.type))) {
             actions.forEach((a) => runClientAction(a, ctx));
@@ -332,6 +339,50 @@ export function useActionExecutor() {
         return { ok: false, errors: body?.errors, fieldErrors };
     }
 
+    /**
+     * Scan a code, find the one record carrying it, open it.
+     *
+     * Deliberately quiet about every way it can come to nothing: a closed sheet
+     * says nothing at all, an unknown code and an ambiguous one each say so and
+     * leave the reader where they were. Navigating somewhere on a bad scan is
+     * how a picker ends up working on the wrong pallet.
+     */
+    async function scanToFind(
+        action: RuntimeAction,
+        ctx: ExecutionContext,
+    ): Promise<void> {
+        const fieldId = String(action.field_id ?? '');
+        const pageSlug = String(action.page_slug ?? '');
+        if (fieldId === '' || pageSlug === '') return;
+
+        const mount = mountFor(ctx);
+        if (!mount.startsWith('/r/')) return;
+
+        const code = await requestScan(action.locale ?? 'en');
+        if (code === null) return; // closed the sheet: not a failure
+
+        const { data } = await axios
+            .get(`${mount}/fields/${fieldId}/lookup`, {
+                params: { value: code },
+            })
+            .catch(() => ({ data: { id: null, ambiguous: false } }));
+
+        if (typeof data?.id !== 'string') {
+            toast.error(
+                data?.ambiguous === true
+                    ? `More than one record has ${code}.`
+                    : `Nothing found for ${code}.`,
+            );
+
+            return;
+        }
+
+        const param = String(action.param ?? 'id');
+        router.visit(
+            `${mount}/${pageSlug}?${param}=${encodeURIComponent(data.id)}`,
+        );
+    }
+
     function runClientAction(action: RuntimeAction, ctx: ExecutionContext) {
         switch (action.type) {
             case 'navigate': {
@@ -369,6 +420,14 @@ export function useActionExecutor() {
                 const qs = query.toString();
                 window.location.href =
                     `${mount}/${slug}/pdf` + (qs !== '' ? `?${qs}` : '');
+                break;
+            }
+            case 'scan_to_find': {
+                // Reading the code is the easy half; what somebody wants is the
+                // record it names, open. Without this the scan produces a
+                // string they then go and search for by hand, which is the job
+                // they were trying not to do.
+                void scanToFind(action, ctx);
                 break;
             }
             case 'refresh':

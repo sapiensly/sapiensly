@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import AppRenderer from '@/runtime/AppRenderer.vue';
+import BarcodeScanner from '@/runtime/blocks/BarcodeScanner.vue';
 import BlockBreadcrumb from '@/runtime/blocks/BlockBreadcrumb.vue';
 import ConfirmDialog from '@/runtime/ConfirmDialog.vue';
 import EnvironmentBar from '@/runtime/EnvironmentBar.vue';
@@ -8,6 +9,7 @@ import LandingChatbotBubble from '@/runtime/LandingChatbotBubble.vue';
 import RolePreviewBar from '@/runtime/RolePreviewBar.vue';
 import RuntimeChatPanel from '@/runtime/RuntimeChatPanel.vue';
 import { runtimeSettingsStyle } from '@/runtime/runtimeStyle';
+import { answerScan, pendingScan } from '@/runtime/scanner';
 import SiteFooter from '@/runtime/SiteFooter.vue';
 import SiteHeader from '@/runtime/SiteHeader.vue';
 import SiteSidebar from '@/runtime/SiteSidebar.vue';
@@ -535,5 +537,14 @@ onMounted(() => {
              to the body, so its place in the tree is only about staying inside
              the page's single root. -->
         <ConfirmDialog />
+
+        <!-- One scanner for the whole page: a field asking for a code and a
+             button asking for one must not each open the camera. -->
+        <BarcodeScanner
+            v-if="pendingScan"
+            :locale="pendingScan.locale"
+            @scanned="answerScan"
+            @close="answerScan(null)"
+        />
     </div>
 </template>

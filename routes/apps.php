@@ -11,6 +11,7 @@ use App\Http\Controllers\AppExportController;
 use App\Http\Controllers\AppFileController;
 use App\Http\Controllers\AppNotificationController;
 use App\Http\Controllers\AppPrintController;
+use App\Http\Controllers\AppRecordLookupController;
 use App\Http\Controllers\AppRecordOptionsController;
 use App\Http\Controllers\AppRecordTrailController;
 use App\Http\Controllers\AppRuntimeAgentController;
@@ -280,6 +281,14 @@ Route::middleware([
         ->where('field_id', 'fld_[a-z0-9]+')
         ->middleware(['throttle:120,1', BindAppEnvironment::class])
         ->name('apps.runtime.options');
+
+    // Which record carries a scanned code. Addressed by the field for the same
+    // reason as the options above, and answering with at most one id — it is a
+    // lookup, not a search.
+    Route::get('/r/{app_slug}/fields/{field_id}/lookup', AppRecordLookupController::class)
+        ->where('field_id', 'fld_[a-z0-9]+')
+        ->middleware(['throttle:120,1', BindAppEnvironment::class])
+        ->name('apps.runtime.lookup');
 
     // export can never return more than the table showed.
     Route::get('/r/{app_slug}/objects/{object_slug}/export', [AppExportController::class, '__invoke'])

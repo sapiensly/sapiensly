@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import { Camera, ScanLine } from '@lucide/vue';
 import { computed, defineAsyncComponent, ref } from 'vue';
+import { requestScan } from '../scanner';
 import type { FieldDef } from '../types/manifest';
 import { useFileUpload, type UploadedFile } from '../useFileUpload';
 import { themeTokens, useRuntimeTheme } from '../useRuntimeTheme';
 import { runtimeWord } from '../words';
-import BarcodeScanner from './BarcodeScanner.vue';
 import SignaturePad from './SignaturePad.vue';
 /**
  * Loaded only by a form that actually has a rich_text field.
@@ -121,12 +121,11 @@ const wantsCamera = computed(() => props.field.capture === 'camera');
  */
 const wantsBarcode = computed(() => props.field.capture === 'barcode');
 
-const scanning = ref(false);
 const gunScanned = ref(false);
 
-function onScanned(value: string): void {
-    scanning.value = false;
-    update(value);
+async function openScanner(): Promise<void> {
+    const value = await requestScan(props.locale ?? 'en');
+    if (value !== null) update(value);
 }
 
 /**
@@ -690,7 +689,7 @@ function isInMulti(value: string): boolean {
                     t.surfaceMuted,
                     t.textMuted,
                 ]"
-                @click="scanning = true"
+                @click="openScanner"
             >
                 <ScanLine class="size-3.5" />
                 {{ runtimeWord(locale ?? 'en', 'scan_button') }}
@@ -704,12 +703,5 @@ function isInMulti(value: string): boolean {
         >
             {{ runtimeWord(locale ?? 'en', 'scan_captured') }}
         </p>
-
-        <BarcodeScanner
-            v-if="scanning"
-            :locale="locale ?? 'en'"
-            @scanned="onScanned"
-            @close="scanning = false"
-        />
     </template>
 </template>
