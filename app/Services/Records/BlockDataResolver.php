@@ -230,7 +230,7 @@ class BlockDataResolver
             }
         }
 
-        if (in_array($block['type'], ['kanban', 'calendar', 'sparkline', 'heatmap', 'timeline', 'gantt', 'map', 'card_grid', 'word_cloud', 'data_grid'], true)) {
+        if (in_array($block['type'], ['kanban', 'calendar', 'sparkline', 'heatmap', 'timeline', 'gantt', 'map', 'card_grid', 'word_cloud', 'data_grid', 'barcode'], true)) {
             return [
                 'rows' => $this->queryRows($app, $block['data_source'], $manifest, $context),
                 // What this role may do to these rows. The blocks that let

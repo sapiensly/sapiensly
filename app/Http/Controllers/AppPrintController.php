@@ -32,6 +32,25 @@ use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
  */
 class AppPrintController extends Controller
 {
+    /**
+     * Paper, by the name it is SOLD under.
+     *
+     * A label size out by two millimetres is a wasted roll, and nobody buys
+     * "3.94 by 5.91 inches" — they buy 4×6. Named sizes also mean the manifest
+     * cannot carry a number somebody mistyped.
+     *
+     * @var array<string, array{paper: array{0: float, 1: float, 2: string}, margin: float}>
+     */
+    private const PAPER = [
+        'a4' => ['paper' => [8.27, 11.69, 'in'], 'margin' => 0.4],
+        'letter' => ['paper' => [8.5, 11.0, 'in'], 'margin' => 0.4],
+        // Labels print edge to edge: a margin on a 2-inch label is most of
+        // the label.
+        'label_4x6' => ['paper' => [4.0, 6.0, 'in'], 'margin' => 0.0],
+        'label_2x1' => ['paper' => [2.0, 1.0, 'in'], 'margin' => 0.0],
+        'label_dymo' => ['paper' => [2.44, 1.14, 'in'], 'margin' => 0.0],
+    ];
+
     public function __construct(private readonly HeadlessPdf $pdf) {}
 
     /**
@@ -61,7 +80,14 @@ class AppPrintController extends Controller
             ...$params,
         ]);
 
-        $path = $this->pdf->render($url, 'window.__spPrintReady === true');
+        $paper = self::PAPER[(string) $request->query('paper', 'a4')] ?? self::PAPER['a4'];
+
+        $path = $this->pdf->render(
+            $url,
+            'window.__spPrintReady === true',
+            $paper['paper'],
+            margin: $paper['margin'],
+        );
 
         if ($path === null) {
             // Said plainly rather than as a broken download: rendering needs a

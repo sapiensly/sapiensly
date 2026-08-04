@@ -417,6 +417,10 @@ export function useActionExecutor() {
                 const mount = mountFor(ctx);
                 if (!mount.startsWith('/r/')) break;
 
+                if (typeof action.paper === 'string' && action.paper !== '') {
+                    query.set('paper', action.paper);
+                }
+
                 const qs = query.toString();
                 window.location.href =
                     `${mount}/${slug}/pdf` + (qs !== '' ? `?${qs}` : '');

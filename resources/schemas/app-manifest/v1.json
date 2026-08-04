@@ -4610,6 +4610,58 @@
                 }
             ]
         },
+        "block_barcode": {
+            "description": "Scannable codes, drawn from records \u2014 one per row, from the same data pipeline as every other block. A page filtered to one record prints one label; the same page unfiltered prints a sheet of them, which is what label stock is. Requires data_source and field_id (the value to encode). Optional: symbology (code128 default | ean13 | qr), caption_field_id (human-readable line under the code), show_text, height_px, per_row (how many across \u2014 match it to the label sheet). Pair it with a download_pdf action carrying a label paper size.",
+            "allOf": [
+                {
+                    "$ref": "#/$defs/block_base"
+                },
+                {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                        "id": true,
+                        "visibility": true,
+                        "style": true,
+                        "type": {
+                            "const": "barcode"
+                        },
+                        "label": {
+                            "type": "string",
+                            "maxLength": 80
+                        },
+                        "data_source": {
+                            "$ref": "#/$defs/query"
+                        },
+                        "field_id": {
+                            "$ref": "#/$defs/id"
+                        },
+                        "caption_field_id": {
+                            "$ref": "#/$defs/id"
+                        },
+                        "symbology": {
+                            "enum": ["code128", "ean13", "qr"],
+                            "default": "code128"
+                        },
+                        "show_text": {
+                            "type": "boolean",
+                            "default": true
+                        },
+                        "height_px": {
+                            "type": "integer",
+                            "minimum": 20,
+                            "maximum": 400
+                        },
+                        "per_row": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 8
+                        }
+                    },
+                    "required": ["type", "data_source", "field_id"]
+                }
+            ]
+        },
         "block_alert": {
             "allOf": [
                 {
@@ -5007,6 +5059,9 @@
                     "$ref": "#/$defs/block_badge"
                 },
                 {
+                    "$ref": "#/$defs/block_barcode"
+                },
+                {
                     "$ref": "#/$defs/block_alert"
                 },
                 {
@@ -5143,6 +5198,17 @@
                             "additionalProperties": {
                                 "type": ["string", "number", "boolean", "null"]
                             }
+                        },
+                        "paper": {
+                            "enum": [
+                                "a4",
+                                "letter",
+                                "label_4x6",
+                                "label_2x1",
+                                "label_dymo"
+                            ],
+                            "default": "a4",
+                            "description": "Named rather than measured, because label stock is SOLD by these names and a paper size out by two millimetres is a wasted roll. a4/letter are documents with margins; the label_* sizes print edge to edge \u2014 4\u00d76in shipping, 2\u00d71in asset tags, 62\u00d729mm Dymo address."
                         }
                     }
                 },
