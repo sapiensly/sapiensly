@@ -112,6 +112,11 @@ const WORDS: Record<string, Dict> = {
         voice_listening: 'Listening… tap to stop',
         voice_no_mic: 'No microphone available. Fill the form by hand.',
         voice_heard: 'Heard: {text}',
+        ask_placeholder: 'Ask in your own words…',
+        ask_showing: 'Showing: {q}',
+        ask_not_understood:
+            'That question could not be turned into a filter, so this is the whole list: {q}',
+        ask_clear: 'Clear',
         trash_open: 'Trash ({n})',
         trash_viewing: 'Viewing the trash. These records are not in the list.',
         trash_back: 'Back to the list',
@@ -222,6 +227,11 @@ const WORDS: Record<string, Dict> = {
         voice_no_mic:
             'No hay micrófono disponible. Llena el formulario a mano.',
         voice_heard: 'Se escuchó: {text}',
+        ask_placeholder: 'Pregunta con tus palabras…',
+        ask_showing: 'Mostrando: {q}',
+        ask_not_understood:
+            'No se pudo convertir esa pregunta en un filtro, así que esta es la lista completa: {q}',
+        ask_clear: 'Quitar',
         trash_open: 'Papelera ({n})',
         trash_viewing:
             'Estás en la papelera. Estos registros no salen en la lista.',
@@ -331,6 +341,11 @@ const WORDS: Record<string, Dict> = {
         voice_listening: 'Ouvindo… toque para parar',
         voice_no_mic: 'Sem microfone disponível. Preencha à mão.',
         voice_heard: 'Ouvi: {text}',
+        ask_placeholder: 'Pergunte com suas palavras…',
+        ask_showing: 'Mostrando: {q}',
+        ask_not_understood:
+            'Não foi possível transformar essa pergunta em filtro, então esta é a lista inteira: {q}',
+        ask_clear: 'Remover',
         trash_open: 'Lixeira ({n})',
         trash_viewing:
             'Você está na lixeira. Estes registros não aparecem na lista.',
@@ -441,6 +456,11 @@ const WORDS: Record<string, Dict> = {
         voice_listening: 'À l’écoute… touchez pour arrêter',
         voice_no_mic: 'Aucun micro disponible. Remplissez à la main.',
         voice_heard: 'Entendu : {text}',
+        ask_placeholder: 'Demandez avec vos mots…',
+        ask_showing: 'Affichage : {q}',
+        ask_not_understood:
+            'Cette question n’a pas pu devenir un filtre : voici donc la liste complète. {q}',
+        ask_clear: 'Retirer',
         trash_open: 'Corbeille ({n})',
         trash_viewing:
             'Vous êtes dans la corbeille. Ces enregistrements ne figurent pas dans la liste.',

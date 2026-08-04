@@ -150,6 +150,8 @@ export interface BlockTable extends BlockBase {
         hidden_by_default?: boolean;
     }>;
     empty_state_message?: string;
+    /** Offers a box where the reader asks in their own words. */
+    ask?: boolean;
 }
 
 /** Optional inline trend line for a KPI card (stat / metric_grid item). */
@@ -294,6 +296,9 @@ export interface TableBlockData {
      * what the business deleted is none of a visitor's business.
      */
     trash_count?: number;
+    /** The phrase the reader asked, and whether it became a filter. */
+    ask?: string | null;
+    ask_understood?: boolean | null;
 }
 
 export interface StatBlockData {

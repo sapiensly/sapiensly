@@ -2203,6 +2203,12 @@
                             "type": "boolean",
                             "default": true
                         },
+                        "ask": {
+                            "type": "boolean",
+                            "default": false,
+                            "description": "Offers a box where the reader asks in their own words — \u00abpedidos de m\u00e1s de 5.000 este mes\u00bb — and the phrase is compiled into the SAME filter grammar an author writes by hand. Nothing new reaches the database: the model picks among operators and fields that already exist, what it returns is validated before use, and the result is ANDed with the block's own filter, so it can only narrow. When a phrase cannot be compiled the table says so instead of quietly showing everything. The question lives in the URL, so it is shareable and the translation is cached.",
+                            "$comment": "ask"
+                        },
                         "empty_state_message": {
                             "type": "string"
                         }

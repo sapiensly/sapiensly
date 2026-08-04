@@ -144,6 +144,7 @@ class BlockDataResolver
             $trashed = $this->trashRequestedFor($block, $context);
             $context['__trashed'] = $trashed;
 
+            $askedOf = trim((string) (($context['params'] ?? [])[self::tableParamKey((string) $block['id']).'_ask'] ?? ''));
             $source = $this->applyTableView($block, $manifest, $context);
             // Whether the server answered this table's own question. Sticky, so
             // a search that happens to return three rows does not hand control
@@ -174,6 +175,9 @@ class BlockDataResolver
                 // there, which is the rule the action columns already follow.
                 'can' => $this->bulkAbilities($block, $context),
                 'trashed' => $trashed,
+                // What was asked, and whether it could be turned into a filter.
+                'ask' => $askedOf,
+                'ask_understood' => $block['data_source']['__ask_understood'] ?? null,
                 // How much is in the trash, so the way in is only drawn when
                 // it leads somewhere. Asked only of somebody who could delete:
                 // for everyone else the answer is not theirs and the count is
@@ -1113,9 +1117,36 @@ class BlockDataResolver
         $search = trim((string) ($params[$key.'_q'] ?? ''));
         $sort = trim((string) ($params[$key.'_s'] ?? ''));
         $page = max(1, (int) ($params[$key.'_p'] ?? 1));
+        $ask = trim((string) ($params[$key.'_ask'] ?? ''));
 
-        if ($search === '' && $sort === '' && $page === 1) {
+        if ($search === '' && $sort === '' && $ask === '' && $page === 1) {
             return $source;
+        }
+
+        // A question in somebody's own words, compiled into the filter grammar
+        // the query layer has always executed and ANDed with whatever the block
+        // already had — so it can only ever narrow. See NaturalFilterCompiler
+        // for why nothing the model returns is trusted.
+        if ($ask !== '' && ($block['ask'] ?? false) === true) {
+            $object = $this->findObject($manifest, $source['object_id'] ?? null);
+            $compiled = $object === null
+                ? null
+                : app(NaturalFilterCompiler::class)->compile(
+                    $ask,
+                    $object,
+                    (string) ($manifest['settings']['default_locale'] ?? 'en'),
+                );
+
+            // Remembered on the source so the block can SAY whether it
+            // understood. A phrase nobody could compile must not quietly return
+            // every row, because every row looks like an answer.
+            $source['__ask_understood'] = $compiled !== null;
+
+            if ($compiled !== null) {
+                $source['filter'] = isset($source['filter'])
+                    ? ['op' => 'and', 'conditions' => [$source['filter'], $compiled]]
+                    : $compiled;
+            }
         }
 
         if ($search !== '') {

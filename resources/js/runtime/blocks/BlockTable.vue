@@ -7,6 +7,7 @@ import {
     Columns3,
     Download,
     Search,
+    Sparkles,
     Trash2,
 } from '@lucide/vue';
 import DOMPurify from 'dompurify';
@@ -429,6 +430,32 @@ function urlParam(suffix: string): string {
  * re-fetched, and the entry replaces rather than stacks — twenty keystrokes
  * should not be twenty presses of the back button.
  */
+/**
+ * A question in the reader's own words.
+ *
+ * Carried in the URL like every other view state, so it is shareable, survives
+ * a reload and shows in the page's own address what is being asked — and the
+ * server caches the translation, so coming back to the link does not buy the
+ * same answer twice.
+ */
+const askDraft = ref(
+    typeof window === 'undefined'
+        ? ''
+        : (new URLSearchParams(window.location.search).get(
+              `t${props.block.id.slice(-6)}_ask`,
+          ) ?? ''),
+);
+
+function runAsk(): void {
+    // Asking resets the page: page four of a different question is nowhere.
+    pushView({ _ask: askDraft.value.trim(), _p: '' });
+}
+
+function clearAsk(): void {
+    askDraft.value = '';
+    pushView({ _ask: '', _p: '' });
+}
+
 function pushView(changes: Record<string, string>): void {
     const params = new URLSearchParams(window.location.search);
     for (const [suffix, value] of Object.entries(changes)) {
@@ -1233,6 +1260,27 @@ function richTextCell(value: unknown): string {
                 <Download class="size-3" />
                 {{ exportLabel }}
             </a>
+            <!-- A question in the reader's own words. Beside the search box
+                 rather than instead of it: search finds a word, this answers a
+                 question, and they are not the same tool. -->
+            <label
+                v-if="block.ask && !isTrash"
+                :class="[
+                    'flex items-center gap-1.5 rounded-pill border px-2.5 py-1 text-[11px]',
+                    t.surfaceMuted,
+                ]"
+            >
+                <Sparkles class="size-3 shrink-0 opacity-60" />
+                <input
+                    v-model="askDraft"
+                    data-sp-ask
+                    type="search"
+                    :placeholder="runtimeWord(locale, 'ask_placeholder')"
+                    :class="['w-52 bg-transparent outline-none', t.text]"
+                    @keydown.enter.prevent="runAsk"
+                />
+            </label>
+
             <!-- Only when there is something in it: "Papelera (0)" is a door
                  into an empty room, and the reader has to try it to find out. -->
             <button
@@ -1251,6 +1299,39 @@ function richTextCell(value: unknown): string {
                         n: data?.trash_count ?? 0,
                     })
                 }}
+            </button>
+        </div>
+
+        <!-- What was asked, and whether it was understood. A phrase nobody
+             could compile must NOT quietly return every row: every row looks
+             like an answer to the question that was asked. -->
+        <div
+            v-if="data?.ask"
+            data-sp-ask-result
+            :class="[
+                'mb-2 flex flex-wrap items-center gap-2 rounded-md border px-3 py-2 text-xs',
+                t.surfaceMuted,
+                data.ask_understood === false ? 'text-amber-500' : t.textMuted,
+            ]"
+        >
+            <span>
+                {{
+                    runtimeWord(
+                        locale,
+                        data.ask_understood === false
+                            ? 'ask_not_understood'
+                            : 'ask_showing',
+                        { q: data.ask },
+                    )
+                }}
+            </span>
+            <button
+                type="button"
+                data-sp-ask-clear
+                class="ml-auto rounded-pill px-2 py-0.5 text-accent-blue transition-colors hover:bg-surface-hover"
+                @click="clearAsk"
+            >
+                {{ runtimeWord(locale, 'ask_clear') }}
             </button>
         </div>
 
