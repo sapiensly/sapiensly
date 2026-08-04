@@ -2051,6 +2051,70 @@ class ManifestValidator
      * @param  array<string, array<string, array<string, mixed>>>  $fieldsByObjectId
      * @param  ManifestValidationError[]  $errors
      */
+    /**
+     * A record_form whose wiring is dead on arrival.
+     *
+     * Both of these are silent at runtime: an unmapped question falls back to
+     * plain text, and an answer whose kind has no column is simply not written.
+     * The form renders, the person fills it in, and a scale question they
+     * answered as a textarea lands nowhere. Nothing raises its hand.
+     *
+     * Written as a rail because prose did not hold. The `forms` playbook says
+     * to key type_map by the option VALUE and a live build keyed it by the
+     * LABEL anyway — in the same turn where it had already read the values off
+     * the manifest and printed them. Every entry then missed, and every
+     * question, including the 1-5 scales, rendered as a textarea.
+     *
+     * @param  array<string, mixed>  $block
+     * @param  array<string, list<array<string, mixed>>>  $fieldsByObjectId
+     * @param  list<ManifestValidationError>  $errors
+     */
+    private function validateRecordForm(array $block, string $path, array $fieldsByObjectId, array &$errors): void
+    {
+        $typeMap = $block['type_map'] ?? null;
+        $questionsObject = (string) ($block['questions']['object_id'] ?? '');
+        $typeFieldId = (string) ($block['type_field_id'] ?? '');
+
+        if (! is_array($typeMap) || $typeMap === [] || $questionsObject === '' || $typeFieldId === '') {
+            return;
+        }
+
+        $typeField = collect($fieldsByObjectId[$questionsObject] ?? [])
+            ->firstWhere('id', $typeFieldId);
+
+        // Only checkable when the question's type field declares its options.
+        $options = collect($typeField['options'] ?? [])->pluck('value')->filter()->all();
+
+        if ($typeField !== null && $options !== []) {
+            foreach (array_keys($typeMap) as $key) {
+                if (in_array((string) $key, $options, true)) {
+                    continue;
+                }
+
+                $errors[] = new ManifestValidationError(
+                    "{$path}/type_map/{$key}",
+                    "type_map key '{$key}' is not one of the values of '{$typeField['slug']}' (".implode(', ', $options).'). Key it by the option VALUE, never by its label — a key that matches no value never fires, so that question renders as plain text however it was authored.',
+                    'record_form_type_map_key',
+                );
+            }
+        }
+
+        // Every kind mapped to must have somewhere to land.
+        $columns = array_keys($block['answers']['value_field_ids'] ?? []);
+
+        foreach (array_unique(array_values($typeMap)) as $kind) {
+            if (in_array((string) $kind, $columns, true)) {
+                continue;
+            }
+
+            $errors[] = new ManifestValidationError(
+                "{$path}/answers/value_field_ids",
+                "type_map produces the kind '{$kind}' but answers.value_field_ids has no column for it (has: ".(implode(', ', $columns) ?: 'none').'). An answer of that kind is dropped at file time without an error.',
+                'record_form_missing_answer_column',
+            );
+        }
+    }
+
     private function validateBlocks(array $blocks, string $pathPrefix, array $objectsById, array $fieldsByObjectId, array $modalIdsInPage, array &$errors): void
     {
         foreach ($blocks as $i => $block) {
@@ -2067,6 +2131,10 @@ class ManifestValidator
                     $modalIdsInPage,
                     $errors,
                 );
+            }
+
+            if ($block['type'] === 'record_form') {
+                $this->validateRecordForm($block, $blockPath, $fieldsByObjectId, $errors);
             }
 
             if ($block['type'] === 'container' || $block['type'] === 'modal'

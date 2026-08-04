@@ -109,6 +109,12 @@ use RuntimeException;
 class BuilderAiService
 {
     /**
+     * Live updates gave up for this turn — see safeBroadcast. Reset at the
+     * start of every turn, never sticky across them.
+     */
+    private bool $broadcastsDisabled = false;
+
+    /**
      * Model used specifically for "Pedir revisión visual" turns. Sonnet 4.5
      * follows scope instructions much more reliably than Haiku — relevant
      * here because visual review has a hard scope limit ("don't add new
@@ -410,6 +416,10 @@ class BuilderAiService
 
         $conversation = $placeholder->conversation;
         $app = $conversation->app;
+
+        // Fresh per turn: a worker serves many, and a broadcaster that was
+        // down for the last one may be up for this.
+        $this->broadcastsDisabled = false;
 
         Log::info('Builder AI streamMessage starting', [
             'conversation_id' => $conversation->id,
@@ -926,23 +936,41 @@ class BuilderAiService
 
     /**
      * Broadcasts go to Reverb over HTTP. If Reverb is misconfigured or down,
-     * we must NOT crash the job — the message is already persisted in DB,
-     * so a page refresh will pick it up. We log once per turn and continue.
+     * we must NOT crash the job — the message is already persisted in DB, so a
+     * page refresh picks it up.
+     *
+     * Not crashing was never the expensive part. A refused connection to the
+     * broadcaster does not fail fast: it costs THIRTY SECONDS, and a turn makes
+     * a dozen of these — one per tool call, one per tool result, more while
+     * text streams. At 30s each they consume the entire 300s budget before the
+     * model has applied a single patch, and the turn dies telling the user
+     * their request was too big. It was not; nothing was ever slow except this.
+     *
+     * Observed live: `tool_seconds: 30.0` for read_manifest on a 56k manifest
+     * AND on an empty one, with `model_seconds` landing on 90.9, 120.9, 211.6 —
+     * every figure a multiple of 30, because none of it was the model.
+     *
+     * So the first failure disables broadcasting for the REST OF THE TURN. This
+     * is what the old comment claimed ("log once per turn and continue") and
+     * what the code did not do — it throttled the LOG and kept paying the full
+     * cost on every single call.
      */
     private function safeBroadcast(\Closure $dispatch): void
     {
+        if ($this->broadcastsDisabled) {
+            return;
+        }
+
         try {
             $dispatch();
         } catch (\Throwable $e) {
-            // Log only once per second to avoid filling logs with one entry
-            // per delta when the broadcaster is dead.
-            static $lastWarn = 0;
-            if (microtime(true) - $lastWarn > 1) {
-                Log::warning('Builder AI broadcast failed (continuing)', [
-                    'error' => $e->getMessage(),
-                ]);
-                $lastWarn = microtime(true);
-            }
+            // Per turn rather than per process: a worker handles many turns,
+            // and Reverb coming back must not stay punished by an earlier one.
+            $this->broadcastsDisabled = true;
+
+            Log::warning('Builder AI broadcast failed; live updates off for this turn', [
+                'error' => $e->getMessage(),
+            ]);
         }
     }
 

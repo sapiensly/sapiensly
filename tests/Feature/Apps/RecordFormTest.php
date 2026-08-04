@@ -5,6 +5,7 @@ use App\Models\App;
 use App\Models\Record;
 use App\Models\User;
 use App\Services\Manifest\AppManifestService;
+use App\Services\Manifest\ManifestValidator;
 use App\Services\Records\FormParticipation;
 use Database\Seeders\RolesAndPermissionsSeeder;
 use Illuminate\Support\Str;
@@ -489,4 +490,102 @@ it('stamps the field the author named, whatever it is called', function () {
     $submission = Record::where('object_definition_id', 'obj_envio000001')->first();
 
     expect($submission->data['filed_at'])->toBe(now()->toDateString());
+});
+
+/**
+ * The block on its own, against the validator.
+ *
+ * Not through formApp: its overrides merge recursively, so "remove this entry"
+ * is not expressible there — the maps came back with the valid entries intact
+ * and nothing to reject.
+ */
+function validateRecordForm(array $typeMap, array $columns): array
+{
+    $manifest = [
+        'schema_version' => '1.0.0',
+        'id' => 'app_0000000000000001',
+        'slug' => 'enc',
+        'name' => 'Encuestas',
+        'version' => 1,
+        'objects' => [
+            [
+                'id' => 'obj_pregunta001', 'slug' => 'preguntas', 'name' => 'Preguntas',
+                'fields' => [
+                    ['id' => 'fld_texto000001', 'slug' => 'texto', 'name' => 'Texto', 'type' => 'string', 'required' => true],
+                    [
+                        'id' => 'fld_tipo000001', 'slug' => 'tipo', 'name' => 'Tipo', 'type' => 'single_select',
+                        'options' => [
+                            ['id' => 'opt_escala00001', 'value' => 'escala_1_5', 'label' => 'Escala 1-5'],
+                            ['id' => 'opt_texto000001', 'value' => 'texto_libre', 'label' => 'Texto libre'],
+                        ],
+                    ],
+                ],
+            ],
+            [
+                'id' => 'obj_respuesta01', 'slug' => 'respuestas', 'name' => 'Respuestas',
+                'fields' => [
+                    ['id' => 'fld_num00000001', 'slug' => 'numero', 'name' => 'Número', 'type' => 'number'],
+                    ['id' => 'fld_libre000001', 'slug' => 'libre', 'name' => 'Libre', 'type' => 'long_text'],
+                    ['id' => 'fld_preg000001', 'slug' => 'pregunta', 'name' => 'Pregunta', 'type' => 'relation', 'cardinality' => 'many_to_one', 'target_object_id' => 'obj_pregunta001'],
+                ],
+            ],
+        ],
+        'pages' => [[
+            'id' => 'pag_contestar01', 'slug' => 'contestar', 'path' => '/contestar', 'name' => 'Contestar',
+            'blocks' => [[
+                'id' => 'blk_encuesta001',
+                'type' => 'record_form',
+                'questions' => ['object_id' => 'obj_pregunta001'],
+                'label_field_id' => 'fld_texto000001',
+                'type_field_id' => 'fld_tipo000001',
+                'type_map' => $typeMap,
+                'answers' => [
+                    'object_id' => 'obj_respuesta01',
+                    'question_field_id' => 'fld_preg000001',
+                    'value_field_ids' => $columns,
+                ],
+            ]],
+        ]],
+        'permissions' => ['roles' => [['id' => 'rol_admin00001', 'slug' => 'admin', 'name' => 'Admin', 'is_default' => true]]],
+    ];
+
+    return collect(app(ManifestValidator::class)->validate($manifest)->errors)
+        ->map(fn ($e): string => $e->message)
+        ->all();
+}
+
+it('rejects a type_map keyed by the label instead of the value', function () {
+    // Taken from a live build. The model had already read the option values off
+    // the manifest and printed them — then keyed the map by label anyway. Every
+    // lookup missed, so every question, 1-5 scales included, rendered as plain
+    // text while the build reported success.
+    $errors = validateRecordForm(
+        ['Escala 1-5' => 'rating', 'Texto libre' => 'long_text'],
+        ['rating' => 'fld_num00000001', 'long_text' => 'fld_libre000001'],
+    );
+
+    expect(implode(' | ', $errors))
+        ->toContain("type_map key 'Escala 1-5' is not one of the values")
+        // …and it says what the values ARE, so the fix needs no second guess.
+        ->toContain('escala_1_5');
+});
+
+it('rejects a kind that has nowhere to land', function () {
+    // Silent at runtime: the answer is simply not written. Somebody fills in a
+    // question and it lands nowhere, with nothing raising its hand.
+    $errors = validateRecordForm(
+        ['escala_1_5' => 'rating', 'texto_libre' => 'long_text'],
+        ['rating' => 'fld_num00000001'],
+    );
+
+    expect(implode(' | ', $errors))->toContain("the kind 'long_text' but answers.value_field_ids has no column");
+});
+
+it('accepts the wiring when every key and kind lines up', function () {
+    $errors = validateRecordForm(
+        ['escala_1_5' => 'rating', 'texto_libre' => 'long_text'],
+        ['rating' => 'fld_num00000001', 'long_text' => 'fld_libre000001'],
+    );
+
+    expect($errors)->toBe([]);
 });
