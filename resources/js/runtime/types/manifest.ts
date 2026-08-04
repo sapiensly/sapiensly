@@ -42,8 +42,8 @@ export interface FieldDef {
     include_time?: boolean;
     max_size_mb?: number;
     mime_types?: string[];
-    /** On a file field: where the bytes come from, when not the disk. */
-    capture?: 'camera' | 'signature';
+    /** Where a value comes from when not the keyboard or the disk. */
+    capture?: 'camera' | 'signature' | 'barcode';
     /** Derived fields (rollup/lookup/formula): what they draw from and return. */
     target_field_id?: string;
     aggregator?: string;

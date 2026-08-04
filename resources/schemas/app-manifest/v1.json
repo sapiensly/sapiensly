@@ -526,6 +526,10 @@
                         },
                         "pattern": {
                             "type": "string"
+                        },
+                        "capture": {
+                            "enum": ["barcode"],
+                            "description": "Where the value comes FROM. Omit for an ordinary text box. `barcode` adds a Scan button that reads a barcode or QR with the camera, and makes the field recognise a handheld scanner gun (which types the code and sends Enter) so the operator never touches the screen. The box still accepts a typed code — on a desktop, with no camera, or with a damaged label — so the field is never a dead end. The VALUE is a plain string either way, so filters, tables and exports need no special handling. Use it for SKUs, asset tags, tracking numbers, batch and serial numbers."
                         }
                     },
                     "required": ["type"]

@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { Camera } from '@lucide/vue';
-import { computed, defineAsyncComponent } from 'vue';
+import { Camera, ScanLine } from '@lucide/vue';
+import { computed, defineAsyncComponent, ref } from 'vue';
 import type { FieldDef } from '../types/manifest';
 import { useFileUpload, type UploadedFile } from '../useFileUpload';
 import { themeTokens, useRuntimeTheme } from '../useRuntimeTheme';
 import { runtimeWord } from '../words';
+import BarcodeScanner from './BarcodeScanner.vue';
 import SignaturePad from './SignaturePad.vue';
 /**
  * Loaded only by a form that actually has a rich_text field.
@@ -110,6 +111,59 @@ function patchRange(side: 'from' | 'to', ev: Event) {
  * device.
  */
 const wantsCamera = computed(() => props.field.capture === 'camera');
+
+/**
+ * A code read off a label rather than typed.
+ *
+ * An option on `string` and not a type of its own, for the same reason the
+ * camera is an option on `file`: the VALUE is a string either way, so tables,
+ * filters, exports and validation all keep working untouched.
+ */
+const wantsBarcode = computed(() => props.field.capture === 'barcode');
+
+const scanning = ref(false);
+const gunScanned = ref(false);
+
+function onScanned(value: string): void {
+    scanning.value = false;
+    update(value);
+}
+
+/**
+ * A handheld scanner is a keyboard.
+ *
+ * It types the code far faster than a person can and finishes with Enter — so a
+ * burst of sub-30ms keystrokes ending in Enter is a scan, not typing. Worth
+ * detecting because it is what warehouses actually use: the operator never
+ * touches the screen, and swallowing that Enter keeps a half-filled form from
+ * submitting itself between two scans.
+ */
+let lastKeyAt = 0;
+let fastKeys = 0;
+
+function onKeyForGun(event: KeyboardEvent): void {
+    if (!wantsBarcode.value) return;
+
+    const now = performance.now();
+    const gap = now - lastKeyAt;
+    lastKeyAt = now;
+
+    if (event.key === 'Enter') {
+        const wasGun = fastKeys >= 3;
+        fastKeys = 0;
+
+        if (wasGun) {
+            // Not a submit. The next scan should land in this same field.
+            event.preventDefault();
+            gunScanned.value = true;
+            window.setTimeout(() => (gunScanned.value = false), 1500);
+        }
+
+        return;
+    }
+
+    fastKeys = gap < 30 ? fastKeys + 1 : 0;
+}
 
 /** Drawn rather than chosen — the bytes come from a canvas, not the disk. */
 const wantsSignature = computed(() => props.field.capture === 'signature');
@@ -603,24 +657,59 @@ function isInMulti(value: string): boolean {
     <!-- Fall-through text input: string and the contact trio, which get the
          matching native input type (mobile keyboards + browser validation). -->
     <template v-else>
-        <input
-            :id="inputId"
-            :value="(modelValue as string) ?? ''"
-            @input="onInput"
-            :type="
-                field.type === 'email'
-                    ? 'email'
-                    : field.type === 'url'
-                      ? 'url'
-                      : field.type === 'phone'
-                        ? 'tel'
-                        : 'text'
-            "
-            :class="[
-                'h-9 w-full rounded-md border px-3 text-sm',
-                t.surfaceMuted,
-                t.text,
-            ]"
+        <div class="flex items-center gap-2">
+            <input
+                :id="inputId"
+                :value="(modelValue as string) ?? ''"
+                @input="onInput"
+                @keydown="onKeyForGun"
+                :type="
+                    field.type === 'email'
+                        ? 'email'
+                        : field.type === 'url'
+                          ? 'url'
+                          : field.type === 'phone'
+                            ? 'tel'
+                            : 'text'
+                "
+                :class="[
+                    'h-9 w-full rounded-md border px-3 text-sm',
+                    t.surfaceMuted,
+                    t.text,
+                ]"
+            />
+            <!-- The camera is an EXTRA way in, never the only one: the box
+                 beside it still takes a typed code, which is what happens on a
+                 desktop, with a dead camera, or with a damaged label. -->
+            <button
+                v-if="wantsBarcode"
+                type="button"
+                data-sp-scan-open
+                :class="[
+                    'inline-flex h-9 shrink-0 items-center gap-1.5 rounded-md border px-2.5 text-xs transition-colors hover:bg-surface-hover',
+                    t.surfaceMuted,
+                    t.textMuted,
+                ]"
+                @click="scanning = true"
+            >
+                <ScanLine class="size-3.5" />
+                {{ runtimeWord(locale ?? 'en', 'scan_button') }}
+            </button>
+        </div>
+
+        <p
+            v-if="wantsBarcode && gunScanned"
+            data-sp-scan-captured
+            class="mt-1 text-[10px] text-emerald-500"
+        >
+            {{ runtimeWord(locale ?? 'en', 'scan_captured') }}
+        </p>
+
+        <BarcodeScanner
+            v-if="scanning"
+            :locale="locale ?? 'en'"
+            @scanned="onScanned"
+            @close="scanning = false"
         />
     </template>
 </template>

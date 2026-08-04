@@ -29,7 +29,7 @@ class ListAvailableFieldTypesTool implements Tool
     public function handle(Request $request): string
     {
         $catalog = [
-            ['type' => 'string', 'props' => 'default?, min_length?, max_length?, pattern?'],
+            ['type' => 'string', 'props' => 'default?, min_length?, max_length?, pattern?, capture? ("barcode" — adds a camera Scan button AND handheld-scanner-gun support; the box still takes a typed code, so it is always safe. Use for SKUs, asset tags, tracking, batch and serial numbers)'],
             ['type' => 'email', 'props' => 'default?, max_length?. Validated server-side on write; forms render an email input. Use for any email-address field (leads, contacts) instead of a plain string.'],
             ['type' => 'url', 'props' => 'default?, max_length?. Validated as http(s) on write; forms render a url input.'],
             ['type' => 'phone', 'props' => 'default?, max_length?. Light format validation on write (digits, spaces, +()-.); forms render a tel input.'],
