@@ -72,10 +72,16 @@ class AppRecordExtractController extends Controller
             throw new NotFoundHttpException('No such file here.');
         }
 
-        $result = $this->extractor->extract($file, $object, $user);
+        // Audio is read in two steps — transcribe, then read the transcript —
+        // and the transcript comes back so the person can SEE what was heard.
+        // A wrong field with no transcript beside it is a mystery.
+        $result = str_starts_with((string) $file->mime, 'audio/')
+            ? $this->extractor->extractFromSpeech($file, $object, $user)
+            : $this->extractor->extract($file, $object, $user);
 
         return response()->json([
             'values' => $result['values'],
+            'transcript' => $result['transcript'] ?? null,
             // Reported rather than thrown: a form that could not be filled is
             // still a form, and the person can type. Every capture in this wave
             // ends somewhere usable.

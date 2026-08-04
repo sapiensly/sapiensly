@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Sparkles } from '@lucide/vue';
+import { Mic, Sparkles } from '@lucide/vue';
 import { computed, inject, ref, type Ref } from 'vue';
 import type { FieldDef, ObjectDef } from '../types/manifest';
 import { useActionExecutor, type RuntimeAction } from '../useActionExecutor';
@@ -8,6 +8,7 @@ import { themeTokens, useRuntimeTheme } from '../useRuntimeTheme';
 import { useRuntimeWrite } from '../useRuntimeWrite';
 import { runtimeWord } from '../words';
 import FormFieldInput from './FormFieldInput.vue';
+import VoiceRecorder from './VoiceRecorder.vue';
 import { evaluateFieldCondition, type FieldCondition } from './fieldCondition';
 import { initialFieldValue } from './formFieldDefault';
 
@@ -32,6 +33,7 @@ interface FormBlock {
     on_submit?: RuntimeAction[];
     on_cancel?: RuntimeAction[];
     fill_from_document?: boolean;
+    fill_from_voice?: boolean;
 }
 
 /** Server-pre-resolved form payload (default_expression / readonly_expression). */
@@ -221,10 +223,30 @@ async function onDocumentChosen(event: Event): Promise<void> {
     const input = event.target as HTMLInputElement;
     const file = input.files?.[0];
     input.value = '';
-    if (!file || !object.value) return;
+    if (file) await fillFrom(file);
+}
+
+/**
+ * Dictating it instead. Same journey from here: upload, read, merge — the
+ * server decides that audio needs transcribing first, because only it knows
+ * which models are configured.
+ */
+const recording = ref(false);
+const heard = ref<string | null>(null);
+
+async function onRecorded(blob: Blob): Promise<void> {
+    recording.value = false;
+    await fillFrom(
+        new File([blob], 'nota.webm', { type: blob.type || 'audio/webm' }),
+    );
+}
+
+async function fillFrom(file: File): Promise<void> {
+    if (!object.value) return;
 
     extracting.value = true;
     extractError.value = null;
+    heard.value = null;
 
     const uploaded = await upload(file);
     if (uploaded === null) {
@@ -236,6 +258,7 @@ async function onDocumentChosen(event: Event): Promise<void> {
 
     const result = await write<{
         values?: Record<string, unknown>;
+        transcript?: string | null;
         error?: string | null;
     }>(`/r/${appSlug}/objects/${object.value.slug}/extract`, {
         file_id: uploaded.file_id,
@@ -247,6 +270,15 @@ async function onDocumentChosen(event: Event): Promise<void> {
         extractError.value = runtimeWord(props.locale, 'fill_failed');
 
         return;
+    }
+
+    // What was heard, shown beside the result. A wrong field with no
+    // transcript next to it is a mystery; with one it is obvious.
+    const transcript = result.data?.transcript;
+    if (typeof transcript === 'string' && transcript !== '') {
+        heard.value = runtimeWord(props.locale, 'voice_heard', {
+            text: transcript.slice(0, 240),
+        });
     }
 
     const values = result.data?.values ?? {};
@@ -393,10 +425,11 @@ async function cancel() {
         <!-- Above the fields, because it is a way of STARTING the form rather
              than a step in it. It fills; the person checks and saves. -->
         <div
-            v-if="block.fill_from_document"
+            v-if="block.fill_from_document || block.fill_from_voice"
             class="mb-3 flex flex-wrap items-center gap-2"
         >
             <button
+                v-if="block.fill_from_document"
                 type="button"
                 data-sp-fill-doc
                 :disabled="extracting"
@@ -415,6 +448,21 @@ async function cancel() {
                     )
                 }}
             </button>
+            <button
+                v-if="block.fill_from_voice"
+                type="button"
+                data-sp-fill-voice
+                :disabled="extracting"
+                :class="[
+                    'inline-flex h-9 items-center gap-1.5 rounded-md border px-2.5 text-xs transition-colors hover:bg-surface-hover disabled:opacity-50',
+                    t.surfaceMuted,
+                    t.textMuted,
+                ]"
+                @click="recording = true"
+            >
+                <Mic class="size-3.5" />
+                {{ runtimeWord(locale, 'fill_from_voice') }}
+            </button>
             <span :class="['text-[10px]', t.textSubtle]">
                 {{ runtimeWord(locale, 'fill_check') }}
             </span>
@@ -427,6 +475,21 @@ async function cancel() {
                 @change="onDocumentChosen"
             />
         </div>
+
+        <VoiceRecorder
+            v-if="recording"
+            :locale="locale"
+            @recorded="onRecorded"
+            @close="recording = false"
+        />
+
+        <p
+            v-if="heard"
+            data-sp-fill-heard
+            :class="['mb-2 text-[11px]', t.textMuted]"
+        >
+            {{ heard }}
+        </p>
 
         <p
             v-if="extractError"

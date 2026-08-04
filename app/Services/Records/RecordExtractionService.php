@@ -10,6 +10,7 @@ use Illuminate\Support\Facades\Storage;
 use Laravel\Ai\AnonymousAgent;
 use Laravel\Ai\Files;
 use Laravel\Ai\Streaming\Events\TextDelta;
+use Laravel\Ai\Transcription;
 use Throwable;
 
 /**
@@ -72,6 +73,123 @@ class RecordExtractionService
         }
 
         return ['values' => $this->mapToFields($json, $fields), 'error' => null];
+    }
+
+    /**
+     * The same, said out loud.
+     *
+     * Two model calls rather than one: the audio is transcribed, and the
+     * transcript is read for fields. Kept apart because they fail differently
+     * and a person can act on the difference — "I could not hear that" sends
+     * somebody back to a quiet room, while "I heard you but there was no total
+     * in it" sends them back to the receipt.
+     *
+     * @param  array<string, mixed>  $object
+     * @return array{values: array<string, mixed>, transcript: string, error: string|null}
+     */
+    public function extractFromSpeech(AppFile $file, array $object, User $actor): array
+    {
+        $handler = $this->capabilities->resolve('audio_recognition');
+
+        if ($handler === null) {
+            return [
+                'values' => [],
+                'transcript' => '',
+                'error' => 'No speech model is configured for this platform.',
+            ];
+        }
+
+        try {
+            $transcript = trim($this->transcribe($file, $handler, $actor));
+        } catch (Throwable $e) {
+            report($e);
+
+            return ['values' => [], 'transcript' => '', 'error' => 'The recording could not be understood.'];
+        }
+
+        if ($transcript === '') {
+            return ['values' => [], 'transcript' => '', 'error' => 'Nothing could be heard in that recording.'];
+        }
+
+        $fields = $this->describeFields($object);
+        if ($fields === []) {
+            return ['values' => [], 'transcript' => $transcript, 'error' => 'This object has nothing to fill.'];
+        }
+
+        // The reading is an ordinary text call: the picture is gone by now, and
+        // what is left is words on a page like any other.
+        $reader = $this->capabilities->resolve('chat') ?? $this->capabilities->resolve('image_vision');
+        if ($reader === null) {
+            return ['values' => [], 'transcript' => $transcript, 'error' => 'No model is configured for this platform.'];
+        }
+
+        $prompt = $this->prompt($object, $fields)
+            .'
+
+The document is this transcript of somebody speaking:
+
+'.$transcript;
+
+        try {
+            $json = $this->askText($prompt, $reader);
+        } catch (Throwable $e) {
+            report($e);
+
+            return ['values' => [], 'transcript' => $transcript, 'error' => 'That could not be read.'];
+        }
+
+        return [
+            'values' => $this->mapToFields($json, $fields),
+            // Returned so the person can SEE what was heard. A wrong field with
+            // no transcript beside it is a mystery; with one it is obvious.
+            'transcript' => $transcript,
+            'error' => null,
+        ];
+    }
+
+    /**
+     * @param  array{driver: string, provider: mixed, model: string}  $handler
+     */
+    private function transcribe(AppFile $file, array $handler, User $actor): string
+    {
+        if ($handler['driver'] === 'openrouter') {
+            $bytes = Storage::disk($file->disk)->get($file->storage_path);
+            $format = pathinfo((string) $file->storage_path, PATHINFO_EXTENSION) ?: 'webm';
+
+            $response = $this->openRouter->chat($actor, $handler['model'], [
+                OpenRouterClient::textBlock('Transcribe the attached audio verbatim. Output only the transcript.'),
+                OpenRouterClient::audioBlock(base64_encode((string) $bytes), $format),
+            ]);
+
+            return OpenRouterClient::text($response);
+        }
+
+        return (string) Transcription::fromStorage($file->storage_path, $file->disk)
+            ->generate($handler['provider'], $handler['model'])
+            ->text;
+    }
+
+    /**
+     * @param  array{driver: string, provider: mixed, model: string}  $handler
+     * @return array<string, mixed>
+     */
+    private function askText(string $prompt, array $handler): array
+    {
+        $reply = '';
+
+        $stream = (new AnonymousAgent('You extract structured data from text.', [], []))->stream(
+            $prompt,
+            provider: $handler['provider'],
+            model: $handler['model'],
+        );
+
+        foreach ($stream as $event) {
+            if ($event instanceof TextDelta) {
+                $reply .= $event->delta;
+            }
+        }
+
+        return $this->decode($reply);
     }
 
     /**

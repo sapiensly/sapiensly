@@ -46,6 +46,7 @@ function fillDocApp(bool $enabled = true): App
 
     if ($enabled) {
         $form['fill_from_document'] = true;
+        $form['fill_from_voice'] = true;
     }
 
     app(AppManifestService::class)->createVersion($app, [
@@ -225,4 +226,66 @@ it('says so and leaves a usable form when nothing could be read', function () {
     $page->assertSee('No se pudo leer nada')
         ->assertNoJavaScriptErrors()
         ->assertScript('document.querySelectorAll("input[type=text]").length', 1);
+})->group('browser');
+
+it('offers dictation, and records in the page rather than asking for a file', function () {
+    // MediaRecorder rather than a file input with `capture`: on a phone that
+    // trick opens the voice memo app, but on a DESKTOP it opens a file picker,
+    // and nobody dictating a delivery note has an audio file lying around.
+    $this->seed(RolesAndPermissionsSeeder::class);
+    $app = fillDocApp();
+
+    $page = visit("/r/{$app->slug}/nueva")->on()->macbookAir()
+        ->assertNoJavaScriptErrors()
+        ->assertSee('Dictarlo');
+
+    $page->script('document.querySelector("[data-sp-fill-voice]").click()');
+
+    $page->assertScript('!!document.querySelector("[data-sp-voice]")', true)
+        ->assertSee('Toca para grabar');
+
+    $page->script('document.querySelector("[data-sp-voice-close]").click()');
+
+    $page->assertNoJavaScriptErrors()
+        ->assertScript('!!document.querySelector("[data-sp-voice]")', false)
+        // Back to a form somebody can still type into.
+        ->assertScript('document.querySelectorAll("input[type=text]").length', 1);
+})->group('browser');
+
+it('says so and stays usable when there is no microphone', function () {
+    // The rail again: a refused permission ends somewhere a person can work.
+    $this->seed(RolesAndPermissionsSeeder::class);
+    $app = fillDocApp();
+
+    $page = visit("/r/{$app->slug}/nueva")->on()->macbookAir()
+        ->assertNoJavaScriptErrors();
+
+    $page->script(<<<'JS'
+        navigator.mediaDevices.getUserMedia = () => Promise.reject(new Error('no'));
+        true
+    JS);
+
+    $page->script('document.querySelector("[data-sp-fill-voice]").click()');
+    $page->script('document.querySelector("[data-sp-voice-start]").click()');
+
+    $page->assertSee('No hay micrófono disponible')
+        ->assertNoJavaScriptErrors();
+})->group('browser');
+
+it('shows what it heard beside what it filled', function () {
+    // A wrong field with no transcript next to it is a mystery; with one it is
+    // obvious, and the person knows whether to re-record or just fix a digit.
+    $this->seed(RolesAndPermissionsSeeder::class);
+    $app = fillDocApp();
+
+    $page = visit("/r/{$app->slug}/nueva")->on()->macbookAir()
+        ->assertNoJavaScriptErrors();
+
+    $page->script(stubExtraction(
+        'JSON.stringify({ values: { folio: "B-7" }, transcript: "factura be siete por mil doscientos", error: null })',
+    ));
+    $page->script(chooseDocument());
+
+    $page->assertSee('Se escuchó: factura be siete')
+        ->assertScript('document.querySelector("input[type=text]").value', 'B-7');
 })->group('browser');

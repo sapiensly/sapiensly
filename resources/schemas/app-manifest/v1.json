@@ -2468,6 +2468,11 @@
                             "default": false,
                             "description": "Offers a \u00abfill from a photo or PDF\u00bb button above the form: a vision model reads the document and fills the fields it can. It FILLS and never saves \u2014 the person checks every value and submits as usual, because a model reading a crumpled receipt in bad light is a suggestion and not a record. Fields the document does not clearly state are left empty on purpose, since somebody proof-reads what is filled in and not what is missing. Use it wherever a record is copied off a piece of paper: supplier invoices, receipts, delivery notes, meter readings, ID documents."
                         },
+                        "fill_from_voice": {
+                            "type": "boolean",
+                            "default": false,
+                            "description": "Offers a \u00abdictate it\u00bb button above the form: the person records, the platform transcribes and reads the transcript for fields. Same rules as fill_from_document \u2014 it FILLS and never saves, never overwrites what somebody already typed, and leaves blank whatever was not clearly said. The transcript comes back and is shown, so a wrong field has the words that produced it beside it. Use it for hands-busy work: an inspector on a ladder, a driver at a gate, a technician with gloves on."
+                        },
                         "on_submit": {
                             "$ref": "#/$defs/action_sequence"
                         },
