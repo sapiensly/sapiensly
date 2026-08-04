@@ -1322,6 +1322,10 @@
                                 "pattern": "^[a-z0-9.+-]+/(\\*|[a-z0-9.+-]+)$"
                             },
                             "description": "Optional MIME allowlist. Accepts wildcards like image/*. When omitted, any MIME is allowed (subject to the global size limit)."
+                        },
+                        "capture": {
+                            "enum": ["camera"],
+                            "description": "Where the file comes FROM. Omit for the ordinary file picker. `camera` asks the device for a photo instead: on a phone or tablet it opens the camera directly, and on a desktop — where there is nothing to open — it falls back to the picker, so the field always works. Implies an image/* accept unless mime_types says otherwise. Use it for damage reports, proof of delivery, meter readings and site inspections: anywhere the answer is something the person is standing in front of."
                         }
                     },
                     "required": ["type"]

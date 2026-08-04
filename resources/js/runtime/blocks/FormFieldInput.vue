@@ -1,8 +1,10 @@
 <script setup lang="ts">
+import { Camera } from '@lucide/vue';
 import axios from 'axios';
 import { computed, defineAsyncComponent, ref } from 'vue';
 import type { FieldDef } from '../types/manifest';
 import { themeTokens, useRuntimeTheme } from '../useRuntimeTheme';
+import { runtimeWord } from '../words';
 /**
  * Loaded only by a form that actually has a rich_text field.
  *
@@ -102,6 +104,30 @@ function patchRange(side: 'from' | 'to', ev: Event) {
     };
     update({ ...current, [side]: v });
 }
+
+/**
+ * Whether this field wants the DEVICE rather than the disk.
+ *
+ * `capture: 'camera'` uses the browser's own capture attribute rather than a
+ * camera we open ourselves: on a phone that hands over to the OS camera app,
+ * which focuses, exposes and compresses better than anything we would build,
+ * and asks for permission in the way the person already recognises. On a
+ * desktop the attribute is ignored and the file picker opens — which is the
+ * right thing to happen, so the field never becomes a dead end on the wrong
+ * device.
+ */
+const wantsCamera = computed(() => props.field.capture === 'camera');
+
+/**
+ * A camera field is asking for a photo, so it says so — unless the author was
+ * more specific, in which case they meant it.
+ */
+const acceptAttr = computed<string | undefined>(() => {
+    const declared = (props.field.mime_types ?? []).join(',');
+    if (declared !== '') return declared;
+
+    return wantsCamera.value ? 'image/*' : undefined;
+});
 
 // File upload state — local to this input.
 const uploadProgress = ref(0);
@@ -459,11 +485,34 @@ function isInMulti(value: string): boolean {
                     ]"
                 >
                     <span v-if="uploadProgress > 0 && uploadProgress < 100">
-                        Uploading {{ uploadProgress }}%…
+                        {{
+                            runtimeWord(locale ?? 'en', 'file_uploading', {
+                                n: uploadProgress,
+                            })
+                        }}
                     </span>
                     <template v-else>
-                        <span>Click to upload</span>
+                        <span class="inline-flex items-center gap-1.5">
+                            <Camera v-if="wantsCamera" class="size-3.5" />
+                            {{
+                                runtimeWord(
+                                    locale ?? 'en',
+                                    wantsCamera
+                                        ? 'file_take_photo'
+                                        : 'file_upload',
+                                )
+                            }}
+                        </span>
                         <span class="text-[10px] opacity-60">
+                            <template v-if="wantsCamera">
+                                {{
+                                    runtimeWord(
+                                        locale ?? 'en',
+                                        'file_photo_hint',
+                                    )
+                                }}
+                                ·
+                            </template>
                             Max
                             {{ field.max_size_mb ?? 10 }}MB
                             <template v-if="field.mime_types?.length">
@@ -476,9 +525,8 @@ function isInMulti(value: string): boolean {
                         :id="inputId"
                         type="file"
                         class="hidden"
-                        :accept="
-                            (field.mime_types ?? []).join(',') || undefined
-                        "
+                        :accept="acceptAttr"
+                        :capture="wantsCamera ? 'environment' : undefined"
                         @change="onFileSelected"
                     />
                 </label>
