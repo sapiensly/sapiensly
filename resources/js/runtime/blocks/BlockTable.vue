@@ -9,7 +9,6 @@ import {
     Search,
     Trash2,
 } from '@lucide/vue';
-import axios from 'axios';
 import DOMPurify from 'dompurify';
 import { computed, inject, ref, watch } from 'vue';
 import RuntimeIcon from '../RuntimeIcon.vue';
@@ -23,6 +22,7 @@ import type {
 import { resolveField } from '../types/manifest';
 import { useActionExecutor, type RuntimeAction } from '../useActionExecutor';
 import { themeTokens, useRuntimeTheme } from '../useRuntimeTheme';
+import { useRuntimeWrite } from '../useRuntimeWrite';
 import { runtimeWord } from '../words';
 import FieldValue from './FieldValue.vue';
 import { formatFieldValue, type DisplayContext } from './fieldDisplay';
@@ -38,6 +38,7 @@ const props = defineProps<{
 const theme = useRuntimeTheme();
 const t = themeTokens(theme);
 const { execute } = useActionExecutor();
+const { write } = useRuntimeWrite();
 
 const appSlug = inject<string>('appSlug', deriveSlugFromUrl());
 function deriveSlugFromUrl(): string {
@@ -975,25 +976,24 @@ const settableColumns = computed(() =>
 async function dependentsWarning(): Promise<string> {
     if (!object.value) return '';
 
-    try {
-        const { data } = await axios.post(`/r/${appSlug}/bulk`, {
-            object_id: object.value.id,
-            action: 'delete',
-            record_ids: [...selected.value],
-            dry_run: true,
-        });
+    const result = await write<{
+        dependents?: Array<{ object: string; count: number }>;
+    }>(`/r/${appSlug}/bulk`, {
+        object_id: object.value.id,
+        action: 'delete',
+        record_ids: [...selected.value],
+        dry_run: true,
+    });
 
-        const found: Array<{ object: string; count: number }> =
-            data.dependents ?? [];
-        if (found.length === 0) return '';
+    if (!result.ok) return '';
 
-        // "3 in Orders" sends somebody somewhere; "3" does not.
-        const detail = found.map((d) => `${d.count} × ${d.object}`).join(', ');
+    const found = result.data?.dependents ?? [];
+    if (found.length === 0) return '';
 
-        return runtimeWord(props.locale, 'bulk_delete_dependents', { detail });
-    } catch {
-        return '';
-    }
+    // "3 in Orders" sends somebody somewhere; "3" does not.
+    const detail = found.map((d) => `${d.count} × ${d.object}`).join(', ');
+
+    return runtimeWord(props.locale, 'bulk_delete_dependents', { detail });
 }
 
 async function confirmBulkDelete(): Promise<void> {
@@ -1054,33 +1054,39 @@ async function runBulk(
 
     bulkBusy.value = true;
     bulkResult.value = null;
-    try {
-        const { data } = await axios.post(`/r/${appSlug}/bulk`, {
+    const result = await write<{ changed?: number; skipped?: number }>(
+        `/r/${appSlug}/bulk`,
+        {
             object_id: object.value.id,
             action,
             record_ids: [...selected.value],
             ...(fieldId ? { field_id: fieldId, value } : {}),
-        });
-        // Both numbers: "12 changed" while 3 were silently skipped is the kind
-        // of report somebody acts on. And each action names its own outcome —
-        // reporting "3 changed" for rows that are gone reads as an edit
-        // somebody can go and inspect.
-        bulkResult.value = runtimeWord(
-            props.locale,
-            BULK_RESULT_WORD[action] ?? 'bulk_done',
-            {
-                n: data.changed ?? 0,
-                skipped: data.skipped ?? 0,
-            },
-        );
-        selected.value = new Set();
-        awaitingOwnReload = true;
-        router.reload({ only: ['blockData'] });
-    } catch {
+        },
+    );
+
+    bulkBusy.value = false;
+
+    if (!result.ok) {
         bulkResult.value = runtimeWord(props.locale, 'bulk_failed');
-    } finally {
-        bulkBusy.value = false;
+
+        return;
     }
+
+    // Both numbers: "12 changed" while 3 were silently skipped is the kind of
+    // report somebody acts on. And each action names its own outcome —
+    // reporting "3 changed" for rows that are gone reads as an edit somebody
+    // can go and inspect.
+    bulkResult.value = runtimeWord(
+        props.locale,
+        BULK_RESULT_WORD[action] ?? 'bulk_done',
+        {
+            n: result.data?.changed ?? 0,
+            skipped: result.data?.skipped ?? 0,
+        },
+    );
+    selected.value = new Set();
+    awaitingOwnReload = true;
+    router.reload({ only: ['blockData'] });
 }
 
 function goToPage(p: number) {

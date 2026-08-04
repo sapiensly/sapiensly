@@ -231,7 +231,14 @@ class BlockDataResolver
         }
 
         if (in_array($block['type'], ['kanban', 'calendar', 'sparkline', 'heatmap', 'timeline', 'gantt', 'map', 'card_grid', 'word_cloud', 'data_grid'], true)) {
-            return ['rows' => $this->queryRows($app, $block['data_source'], $manifest, $context)];
+            return [
+                'rows' => $this->queryRows($app, $block['data_source'], $manifest, $context),
+                // What this role may do to these rows. The blocks that let
+                // somebody DRAG a record to a new date or a new column need it
+                // for the same reason the table's bulk bar does: a control that
+                // is always refused should not be drawn.
+                'can' => $this->bulkAbilities($block, $context),
+            ];
         }
 
         if ($block['type'] === 'metric_grid') {

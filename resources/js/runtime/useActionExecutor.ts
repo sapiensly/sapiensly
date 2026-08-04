@@ -1,7 +1,7 @@
 import { router } from '@inertiajs/vue3';
-import axios from 'axios';
 import { inject } from 'vue';
 import { toast } from 'vue-sonner';
+import { useRuntimeWrite } from './useRuntimeWrite';
 
 export type RuntimeAction = Record<string, unknown> & { type: string };
 
@@ -204,6 +204,9 @@ function interpolateTemplate(raw: unknown, ctx: ExecutionContext): unknown {
  */
 export function useActionExecutor() {
     const environment = inject<string | null>('runtimeEnvironment', null);
+    // Every record mutation in the runtime goes out through here — see
+    // useRuntimeWrite for why that matters before offline exists.
+    const { write } = useRuntimeWrite();
     async function execute(
         actions: RuntimeAction[],
         context: ExecutionContext,
@@ -233,22 +236,23 @@ export function useActionExecutor() {
             return { ok: true };
         }
 
-        try {
-            const { data } = await axios.post(
-                `${mountFor(ctx)}/actions`,
-                {
-                    actions,
-                    params: ctx.params ?? {},
-                    // Only ever 'demo', and only from a surface that provides
-                    // it (the builder preview). The server narrows on this and
-                    // never widens, so saying it cannot reach real records.
-                    ...(environment ? { environment } : {}),
-                    form: ctx.form ?? {},
-                    row: ctx.row ?? {},
-                    page: ctx.page ?? currentPageSlug(),
-                },
-                { timeout: 30_000 },
-            );
+        const result = await write<ExecutionResult & Record<string, unknown>>(
+            `${mountFor(ctx)}/actions`,
+            {
+                actions,
+                params: ctx.params ?? {},
+                // Only ever 'demo', and only from a surface that provides it
+                // (the builder preview). The server narrows on this and never
+                // widens, so saying it cannot reach real records.
+                ...(environment ? { environment } : {}),
+                form: ctx.form ?? {},
+                row: ctx.row ?? {},
+                page: ctx.page ?? currentPageSlug(),
+            },
+        );
+
+        if (result.ok) {
+            const data = (result.data ?? {}) as Record<string, unknown>;
 
             // Single round-trip refresh: when the server returned fresh block
             // data, patch it in place and skip the `refresh` reload — the second
@@ -271,64 +275,61 @@ export function useActionExecutor() {
             );
 
             return { ok: data.ok === true };
-        } catch (e) {
-            const err = e as {
-                response?: {
-                    status?: number;
-                    headers?: Record<string, string>;
-                    data?: ExecutionResult & {
-                        errors?: Record<
-                            string,
-                            {
-                                type?: string;
-                                fields?: Record<string, string[]>;
-                                message?: string;
-                            }
-                        >;
-                    };
-                };
-            };
-            // Rate limited (429): surface a clear, retry-aware toast rather than
-            // a generic failure. Retry-After is seconds.
-            if (err.response?.status === 429) {
-                const retry = Number(err.response.headers?.['retry-after']);
-                const wait =
-                    Number.isFinite(retry) && retry > 0
-                        ? ` Retry in ${retry}s.`
-                        : '';
-                toast.error(`Too many requests.${wait}`);
-                return { ok: false };
-            }
-            const body = err.response?.data;
-            const validationErrors = body?.errors ?? {};
-            const fieldErrors: Record<string, string[]> = {};
-            // Field-level validation errors get attached to the form inputs by
-            // the caller. Non-validation errors (a workflow step crashing, a
-            // missing record, an unknown action) have no field to land on, so
-            // we surface their message as an error toast — otherwise the
-            // failure is completely invisible to the user.
-            const toastMessages: string[] = [];
-            for (const entry of Object.values(validationErrors)) {
-                if (entry?.fields) {
-                    for (const [slug, messages] of Object.entries(
-                        entry.fields,
-                    )) {
-                        fieldErrors[slug] = messages;
-                    }
-                } else if (
-                    typeof entry?.message === 'string' &&
-                    entry.message !== ''
-                ) {
-                    toastMessages.push(entry.message);
-                }
-            }
-            if (toastMessages.length === 0 && !err.response) {
-                // No structured body at all — network error / timeout.
-                toastMessages.push('The request failed. Please try again.');
-            }
-            toastMessages.forEach((message) => toast.error(message));
-            return { ok: false, errors: body?.errors, fieldErrors };
         }
+
+        // Rate limited (429): surface a clear, retry-aware toast rather than a
+        // generic failure. Retry-After is seconds.
+        if (result.status === 429) {
+            const retry = Number(result.headers?.['retry-after']);
+            const wait =
+                Number.isFinite(retry) && retry > 0
+                    ? ` Retry in ${retry}s.`
+                    : '';
+            toast.error(`Too many requests.${wait}`);
+
+            return { ok: false };
+        }
+
+        const body = result.body as
+            | (ExecutionResult & {
+                  errors?: Record<
+                      string,
+                      {
+                          type?: string;
+                          fields?: Record<string, string[]>;
+                          message?: string;
+                      }
+                  >;
+              })
+            | undefined;
+
+        const validationErrors = body?.errors ?? {};
+        const fieldErrors: Record<string, string[]> = {};
+        // Field-level validation errors get attached to the form inputs by the
+        // caller. Non-validation errors (a workflow step crashing, a missing
+        // record, an unknown action) have no field to land on, so we surface
+        // their message as an error toast — otherwise the failure is completely
+        // invisible to the user.
+        const toastMessages: string[] = [];
+        for (const entry of Object.values(validationErrors)) {
+            if (entry?.fields) {
+                for (const [slug, messages] of Object.entries(entry.fields)) {
+                    fieldErrors[slug] = messages;
+                }
+            } else if (
+                typeof entry?.message === 'string' &&
+                entry.message !== ''
+            ) {
+                toastMessages.push(entry.message);
+            }
+        }
+        if (toastMessages.length === 0 && result.status === undefined) {
+            // No structured body at all — network error / timeout.
+            toastMessages.push('The request failed. Please try again.');
+        }
+        toastMessages.forEach((message) => toast.error(message));
+
+        return { ok: false, errors: body?.errors, fieldErrors };
     }
 
     function runClientAction(action: RuntimeAction, ctx: ExecutionContext) {

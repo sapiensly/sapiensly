@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { ChevronLeft, ChevronRight } from '@lucide/vue';
-import { computed, ref, watch } from 'vue';
+import { computed, inject, ref, watch } from 'vue';
 import type { FieldDef, ObjectDef } from '../types/manifest';
 import { resolveField } from '../types/manifest';
+import { useActionExecutor, type RuntimeAction } from '../useActionExecutor';
 import { useChartTooltip } from '../useChartTooltip';
 import { themeTokens, useRuntimeTheme } from '../useRuntimeTheme';
 import ChartTooltip from './ChartTooltip.vue';
@@ -23,13 +24,17 @@ interface RowData {
 
 const props = defineProps<{
     block: CalendarBlock;
-    data: { rows: RowData[] } | undefined;
+    data:
+        | { rows: RowData[]; can?: { update: boolean; delete: boolean } }
+        | undefined;
     objects: ObjectDef[];
     locale: string;
     defaultCurrency: string;
 }>();
 
 const t = themeTokens(useRuntimeTheme());
+const appSlug = inject<string>('appSlug', '');
+const { execute } = useActionExecutor();
 const { card, mouse, tip, onMove, showTip, hideTip } = useChartTooltip();
 
 const object = computed<ObjectDef | undefined>(() =>
@@ -41,6 +46,65 @@ function fieldOf(id: string | undefined): FieldDef | undefined {
 }
 
 const dateField = computed(() => fieldOf(props.block.date_field_id));
+
+/**
+ * Moving an event to another day.
+ *
+ * Offered only where the reader could have changed the same value by opening
+ * the record — the server decides that, and sends it with the rows. A control
+ * that is always refused should not be drawn, which is the rule the bulk bar
+ * and the row actions already follow.
+ */
+const canReschedule = computed(
+    () => props.data?.can?.update === true && dateField.value !== undefined,
+);
+
+const dragging = ref<string | null>(null);
+
+/**
+ * The day each record shows on, overriding what the row says.
+ *
+ * A drop writes here FIRST and the request goes afterwards: dragging a card and
+ * watching it snap back for half a second while a round trip happens is the
+ * difference between a calendar and a form with a calendar drawn on it. If the
+ * write fails the entry is removed and the card returns to where it was — which
+ * is the whole contract, and the one an offline queue will need too.
+ */
+const movedTo = ref<Record<string, string>>({});
+
+async function dropOn(iso: string): Promise<void> {
+    const id = dragging.value;
+    dragging.value = null;
+
+    if (id === null || !canReschedule.value || !object.value) return;
+
+    const previous = movedTo.value[id];
+    movedTo.value = { ...movedTo.value, [id]: iso };
+
+    const result = await execute(
+        [
+            {
+                type: 'update_record',
+                object_id: object.value.id,
+                record_id_expression: id,
+                values: { [dateField.value!.slug]: iso },
+            } as RuntimeAction,
+        ],
+        { appSlug, params: {}, row: {} },
+    );
+
+    if (!result.ok) {
+        // Back where it came from. A card left showing a date the server
+        // refused is a lie the reader will act on.
+        const next = { ...movedTo.value };
+        if (previous === undefined) {
+            delete next[id];
+        } else {
+            next[id] = previous;
+        }
+        movedTo.value = next;
+    }
+}
 const titleField = computed(() => fieldOf(props.block.title_field_id));
 const colorField = computed(() => fieldOf(props.block.color_field_id));
 
@@ -115,11 +179,14 @@ const eventsByDay = computed<Record<string, CalendarEvent[]>>(() => {
     const colorSlug = colorField.value?.slug;
 
     for (const r of props.data?.rows ?? []) {
-        const raw = r.data[dateSlug];
+        // A card the reader just dragged shows where they dropped it, until
+        // the server either confirms it or refuses and it goes back.
+        const moved = movedTo.value[r.id];
+        const raw = moved ?? r.data[dateSlug];
         if (!raw) continue;
         const d = new Date(String(raw));
         if (isNaN(d.getTime())) continue;
-        const iso = toIsoLocal(d);
+        const iso = moved ?? toIsoLocal(d);
         const title = titleSlug ? String(r.data[titleSlug] ?? r.id) : r.id;
 
         let color: string | null = null;
@@ -252,10 +319,16 @@ const weekdayHeaders = computed(() => {
             <div
                 v-for="day in days"
                 :key="day.iso"
+                :data-sp-calendar-day="day.iso"
                 :class="[
                     'min-h-[96px] border-r border-b border-soft p-1.5 text-[11px] transition-colors hover:bg-surface',
                     day.isCurrentMonth ? '' : 'opacity-40',
+                    canReschedule && dragging !== null
+                        ? 'outline-1 -outline-offset-1 outline-accent-blue/40 outline-dashed'
+                        : '',
                 ]"
+                @dragover.prevent
+                @drop.prevent="dropOn(day.iso)"
             >
                 <p
                     :class="[
@@ -271,10 +344,16 @@ const weekdayHeaders = computed(() => {
                     <li
                         v-for="ev in (eventsByDay[day.iso] ?? []).slice(0, 3)"
                         :key="ev.id"
+                        :data-sp-calendar-event="ev.id"
+                        :draggable="canReschedule"
                         :class="[
-                            'cursor-pointer truncate rounded-xs px-1.5 py-0.5 text-[10px] transition-opacity hover:opacity-80',
+                            'truncate rounded-xs px-1.5 py-0.5 text-[10px] transition-opacity hover:opacity-80',
+                            canReschedule ? 'cursor-grab' : 'cursor-pointer',
+                            dragging === ev.id ? 'opacity-50' : '',
                             t.text,
                         ]"
+                        @dragstart="dragging = ev.id"
+                        @dragend="dragging = null"
                         :style="
                             ev.color
                                 ? `background: color-mix(in oklab, ${ev.color} 25%, transparent); border-left: 2px solid ${ev.color}`

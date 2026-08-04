@@ -18,6 +18,7 @@ import { computed, inject, onMounted, onUnmounted, ref, watch } from 'vue';
 import type { ObjectDef } from '../types/manifest';
 import { blockDataBus } from '../useActionExecutor';
 import { themeTokens, useRuntimeTheme } from '../useRuntimeTheme';
+import { useRuntimeWrite } from '../useRuntimeWrite';
 import { runtimeWord } from '../words';
 
 interface Change {
@@ -68,6 +69,7 @@ const recordId = computed<string | null>(() => {
 });
 
 const t = themeTokens(useRuntimeTheme());
+const { write } = useRuntimeWrite();
 
 const events = ref<TrailEvent[]>([]);
 const loading = ref(true);
@@ -123,20 +125,24 @@ async function send(): Promise<void> {
     if (body === '' || sending.value || !recordId.value) return;
 
     sending.value = true;
-    try {
-        const { data } = await axios.post(
-            `${mount()}/records/${recordId.value}/trail`,
-            { body },
-        );
-        events.value = [data.event, ...events.value];
-        draft.value = '';
-    } catch {
+
+    const result = await write<{ event: unknown }>(
+        `${mount()}/records/${recordId.value}/trail`,
+        { body },
+    );
+
+    sending.value = false;
+
+    if (!result.ok) {
         // A role that may read but not update, or a surface with no endpoint.
         // Saying so beats a box that swallows what somebody typed.
         cannotComment.value = true;
-    } finally {
-        sending.value = false;
+
+        return;
     }
+
+    events.value = [result.data?.event, ...events.value];
+    draft.value = '';
 }
 
 onMounted(load);
