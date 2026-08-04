@@ -1,0 +1,866 @@
+{
+ "format": "sapiensly.app-package",
+ "format_version": 1,
+ "exported_at": "2026-08-04T00:00:00+00:00",
+ "app": {
+  "name": "Encuestas",
+  "description": "Encuestas de clima y evaluaciones: RH escribe las preguntas y las respuestas llegan anónimas.",
+  "icon": "clipboard-list",
+  "color": null,
+  "kind": "app"
+ },
+ "manifest": {
+  "schema_version": "1.0.0",
+  "name": "Encuestas",
+  "version": 1,
+  "objects": [
+   {
+    "id": "obj_encuesta0000000000000001",
+    "slug": "encuestas",
+    "name": "Encuestas",
+    "fields": [
+     {
+      "id": "fld_encuesta0000000000000001",
+      "slug": "nombre",
+      "name": "Nombre",
+      "type": "string",
+      "required": true
+     },
+     {
+      "id": "fld_encuesta0000000000000002",
+      "slug": "descripcion",
+      "name": "Descripción",
+      "type": "long_text"
+     },
+     {
+      "id": "fld_encuesta0000000000000003",
+      "slug": "activa",
+      "name": "Abierta",
+      "type": "boolean",
+      "default": true
+     },
+     {
+      "id": "fld_encuesta0000000000000004",
+      "slug": "anonima",
+      "name": "Anónima",
+      "type": "boolean",
+      "default": true
+     }
+    ]
+   },
+   {
+    "id": "obj_encuesta0000000000000002",
+    "slug": "preguntas",
+    "name": "Preguntas",
+    "fields": [
+     {
+      "id": "fld_encuesta0000000000000010",
+      "slug": "encuesta",
+      "name": "Encuesta",
+      "type": "relation",
+      "cardinality": "many_to_one",
+      "target_object_id": "obj_encuesta0000000000000001",
+      "required": true
+     },
+     {
+      "id": "fld_encuesta0000000000000011",
+      "slug": "texto",
+      "name": "Pregunta",
+      "type": "string",
+      "required": true
+     },
+     {
+      "id": "fld_encuesta0000000000000012",
+      "slug": "tipo",
+      "name": "Tipo de respuesta",
+      "type": "single_select",
+      "required": true,
+      "default": "escala_1_5",
+      "options": [
+       {
+        "id": "opt_encuesta0000000000000001",
+        "value": "escala_1_5",
+        "label": "Escala 1-5",
+        "color": "#6366f1"
+       },
+       {
+        "id": "opt_encuesta0000000000000002",
+        "value": "si_no",
+        "label": "Sí / No",
+        "color": "#0ea5e9"
+       },
+       {
+        "id": "opt_encuesta0000000000000003",
+        "value": "texto_libre",
+        "label": "Texto libre",
+        "color": "#64748b"
+       },
+       {
+        "id": "opt_encuesta0000000000000004",
+        "value": "opcion_unica",
+        "label": "Opción única",
+        "color": "#f59e0b"
+       }
+      ]
+     },
+     {
+      "id": "fld_encuesta0000000000000013",
+      "slug": "opciones",
+      "name": "Opciones",
+      "type": "long_text",
+      "help_text": "Solo para 'Opción única': una opción por línea."
+     },
+     {
+      "id": "fld_encuesta0000000000000014",
+      "slug": "obligatoria",
+      "name": "Obligatoria",
+      "type": "boolean",
+      "default": false
+     },
+     {
+      "id": "fld_encuesta0000000000000015",
+      "slug": "orden",
+      "name": "Orden",
+      "type": "number",
+      "default": 1
+     }
+    ]
+   },
+   {
+    "id": "obj_encuesta0000000000000003",
+    "slug": "envios",
+    "name": "Envíos",
+    "fields": [
+     {
+      "id": "fld_encuesta0000000000000020",
+      "slug": "encuesta",
+      "name": "Encuesta",
+      "type": "relation",
+      "cardinality": "many_to_one",
+      "target_object_id": "obj_encuesta0000000000000001"
+     },
+     {
+      "id": "fld_encuesta0000000000000021",
+      "slug": "completado_en",
+      "name": "Completado en",
+      "type": "string",
+      "required": true
+     }
+    ]
+   },
+   {
+    "id": "obj_encuesta0000000000000004",
+    "slug": "respuestas",
+    "name": "Respuestas",
+    "fields": [
+     {
+      "id": "fld_encuesta0000000000000030",
+      "slug": "envio",
+      "name": "Envío",
+      "type": "relation",
+      "cardinality": "many_to_one",
+      "target_object_id": "obj_encuesta0000000000000003",
+      "required": true
+     },
+     {
+      "id": "fld_encuesta0000000000000031",
+      "slug": "pregunta",
+      "name": "Pregunta",
+      "type": "relation",
+      "cardinality": "many_to_one",
+      "target_object_id": "obj_encuesta0000000000000002"
+     },
+     {
+      "id": "fld_encuesta0000000000000032",
+      "slug": "escala",
+      "name": "Escala",
+      "type": "number"
+     },
+     {
+      "id": "fld_encuesta0000000000000033",
+      "slug": "si_no",
+      "name": "Sí / No",
+      "type": "boolean"
+     },
+     {
+      "id": "fld_encuesta0000000000000034",
+      "slug": "texto",
+      "name": "Texto",
+      "type": "long_text"
+     }
+    ]
+   },
+   {
+    "id": "obj_encuesta0000000000000005",
+    "slug": "participacion",
+    "name": "Participaciones",
+    "fields": [
+     {
+      "id": "fld_encuesta0000000000000040",
+      "slug": "encuesta",
+      "name": "Encuesta",
+      "type": "relation",
+      "cardinality": "many_to_one",
+      "target_object_id": "obj_encuesta0000000000000001"
+     },
+     {
+      "id": "fld_encuesta0000000000000041",
+      "slug": "persona",
+      "name": "Persona",
+      "type": "string",
+      "required": true
+     }
+    ]
+   }
+  ],
+  "pages": [
+   {
+    "id": "pag_encuesta0000000000000001",
+    "slug": "encuestas",
+    "name": "Encuestas",
+    "path": "/",
+    "blocks": [
+     {
+      "id": "blk_encuesta0000000000000001",
+      "type": "heading",
+      "content": "Encuestas"
+     },
+     {
+      "id": "blk_encuesta0000000000000002",
+      "type": "modal",
+      "title": "Nueva encuesta",
+      "blocks": [
+       {
+        "id": "blk_encuesta0000000000000002f",
+        "type": "form",
+        "object_id": "obj_encuesta0000000000000001",
+        "mode": "create",
+        "fields": [
+         {
+          "field_id": "fld_encuesta0000000000000001"
+         },
+         {
+          "field_id": "fld_encuesta0000000000000002"
+         },
+         {
+          "field_id": "fld_encuesta0000000000000003"
+         },
+         {
+          "field_id": "fld_encuesta0000000000000004"
+         }
+        ],
+        "submit_label": "Guardar",
+        "on_submit": [
+         {
+          "type": "create_record",
+          "object_id": "obj_encuesta0000000000000001",
+          "values": {
+           "nombre": "{{form.nombre}}",
+           "descripcion": "{{form.descripcion}}",
+           "activa": "{{form.activa}}",
+           "anonima": "{{form.anonima}}"
+          }
+         },
+         {
+          "type": "close_modal"
+         },
+         {
+          "type": "show_toast",
+          "level": "success",
+          "message": "Guardado"
+         },
+         {
+          "type": "refresh"
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "id": "blk_encuesta0000000000000008",
+      "type": "modal",
+      "title": "Editar encuesta",
+      "blocks": [
+       {
+        "id": "blk_encuesta0000000000000008f",
+        "type": "form",
+        "object_id": "obj_encuesta0000000000000001",
+        "mode": "edit",
+        "record_id_expression": "{{params.record_id}}",
+        "fields": [
+         {
+          "field_id": "fld_encuesta0000000000000001"
+         },
+         {
+          "field_id": "fld_encuesta0000000000000002"
+         },
+         {
+          "field_id": "fld_encuesta0000000000000003"
+         },
+         {
+          "field_id": "fld_encuesta0000000000000004"
+         }
+        ],
+        "submit_label": "Guardar",
+        "on_submit": [
+         {
+          "type": "update_record",
+          "object_id": "obj_encuesta0000000000000001",
+          "record_id_expression": "{{params.record_id}}",
+          "values": {
+           "nombre": "{{form.nombre}}",
+           "descripcion": "{{form.descripcion}}",
+           "activa": "{{form.activa}}",
+           "anonima": "{{form.anonima}}"
+          }
+         },
+         {
+          "type": "close_modal"
+         },
+         {
+          "type": "show_toast",
+          "level": "success",
+          "message": "Guardado"
+         },
+         {
+          "type": "refresh"
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "id": "blk_encuesta0000000000000003",
+      "type": "button",
+      "label": "Nueva encuesta",
+      "variant": "primary",
+      "on_click": [
+       {
+        "type": "open_modal",
+        "modal_block_id": "blk_encuesta0000000000000002"
+       }
+      ]
+     },
+     {
+      "id": "blk_encuesta0000000000000004",
+      "type": "table",
+      "data_source": {
+       "object_id": "obj_encuesta0000000000000001",
+       "sort": [
+        {
+         "field_id": "sys_created_at",
+         "direction": "desc"
+        }
+       ]
+      },
+      "columns": [
+       {
+        "id": "col_encuesta0000000000000001",
+        "field_id": "fld_encuesta0000000000000001"
+       },
+       {
+        "id": "col_encuesta0000000000000002",
+        "field_id": "fld_encuesta0000000000000002"
+       },
+       {
+        "id": "col_encuesta0000000000000003",
+        "field_id": "fld_encuesta0000000000000003"
+       },
+       {
+        "id": "col_encuesta0000000000000004",
+        "field_id": "fld_encuesta0000000000000004"
+       },
+       {
+        "id": "col_encuesta0000000000000005",
+        "type": "action",
+        "label": "Preguntas",
+        "icon": "list",
+        "on_click": [
+         {
+          "type": "navigate",
+          "to": "/preguntas?encuesta={{row.id}}"
+         }
+        ]
+       },
+       {
+        "id": "col_encuesta0000000000000006",
+        "type": "action",
+        "label": "Contestar",
+        "icon": "edit",
+        "variant": "primary",
+        "on_click": [
+         {
+          "type": "navigate",
+          "to": "/contestar?encuesta={{row.id}}"
+         }
+        ]
+       },
+       {
+        "id": "col_encuesta0000000000000007",
+        "type": "action",
+        "label": "Resultados",
+        "icon": "bar-chart",
+        "on_click": [
+         {
+          "type": "navigate",
+          "to": "/resultados?encuesta={{row.id}}"
+         }
+        ]
+       },
+       {
+        "id": "col_encuesta0000000000000008",
+        "type": "action",
+        "label": "Editar",
+        "icon": "pencil",
+        "on_click": [
+         {
+          "type": "open_modal",
+          "modal_block_id": "blk_encuesta0000000000000008",
+          "params": {
+           "record_id": "{{row.id}}",
+           "record": "{{row.data}}"
+          }
+         }
+        ]
+       }
+      ]
+     }
+    ]
+   },
+   {
+    "id": "pag_encuesta0000000000000002",
+    "slug": "preguntas",
+    "name": "Preguntas",
+    "path": "/preguntas",
+    "blocks": [
+     {
+      "id": "blk_encuesta0000000000000010",
+      "type": "heading",
+      "content": "Preguntas"
+     },
+     {
+      "id": "blk_encuesta0000000000000011",
+      "type": "modal",
+      "title": "Nueva pregunta",
+      "blocks": [
+       {
+        "id": "blk_encuesta0000000000000011f",
+        "type": "form",
+        "object_id": "obj_encuesta0000000000000002",
+        "mode": "create",
+        "fields": [
+         {
+          "field_id": "fld_encuesta0000000000000011"
+         },
+         {
+          "field_id": "fld_encuesta0000000000000012"
+         },
+         {
+          "field_id": "fld_encuesta0000000000000013"
+         },
+         {
+          "field_id": "fld_encuesta0000000000000014"
+         },
+         {
+          "field_id": "fld_encuesta0000000000000015"
+         }
+        ],
+        "submit_label": "Guardar",
+        "on_submit": [
+         {
+          "type": "create_record",
+          "object_id": "obj_encuesta0000000000000002",
+          "values": {
+           "encuesta": "{{params.encuesta}}",
+           "texto": "{{form.texto}}",
+           "tipo": "{{form.tipo}}",
+           "opciones": "{{form.opciones}}",
+           "obligatoria": "{{form.obligatoria}}",
+           "orden": "{{form.orden}}"
+          }
+         },
+         {
+          "type": "close_modal"
+         },
+         {
+          "type": "show_toast",
+          "level": "success",
+          "message": "Guardado"
+         },
+         {
+          "type": "refresh"
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "id": "blk_encuesta0000000000000014",
+      "type": "modal",
+      "title": "Editar pregunta",
+      "blocks": [
+       {
+        "id": "blk_encuesta0000000000000014f",
+        "type": "form",
+        "object_id": "obj_encuesta0000000000000002",
+        "mode": "edit",
+        "record_id_expression": "{{params.record_id}}",
+        "fields": [
+         {
+          "field_id": "fld_encuesta0000000000000011"
+         },
+         {
+          "field_id": "fld_encuesta0000000000000012"
+         },
+         {
+          "field_id": "fld_encuesta0000000000000013"
+         },
+         {
+          "field_id": "fld_encuesta0000000000000014"
+         },
+         {
+          "field_id": "fld_encuesta0000000000000015"
+         }
+        ],
+        "submit_label": "Guardar",
+        "on_submit": [
+         {
+          "type": "update_record",
+          "object_id": "obj_encuesta0000000000000002",
+          "record_id_expression": "{{params.record_id}}",
+          "values": {
+           "texto": "{{form.texto}}",
+           "tipo": "{{form.tipo}}",
+           "opciones": "{{form.opciones}}",
+           "obligatoria": "{{form.obligatoria}}",
+           "orden": "{{form.orden}}"
+          }
+         },
+         {
+          "type": "close_modal"
+         },
+         {
+          "type": "show_toast",
+          "level": "success",
+          "message": "Guardado"
+         },
+         {
+          "type": "refresh"
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "id": "blk_encuesta0000000000000012",
+      "type": "button",
+      "label": "Nueva pregunta",
+      "variant": "primary",
+      "on_click": [
+       {
+        "type": "open_modal",
+        "modal_block_id": "blk_encuesta0000000000000011"
+       }
+      ]
+     },
+     {
+      "id": "blk_encuesta0000000000000013",
+      "type": "table",
+      "data_source": {
+       "object_id": "obj_encuesta0000000000000002",
+       "filter": {
+        "op": "eq",
+        "field_id": "fld_encuesta0000000000000010",
+        "value_expression": "{{params.encuesta}}"
+       },
+       "sort": [
+        {
+         "field_id": "fld_encuesta0000000000000015",
+         "direction": "asc"
+        }
+       ]
+      },
+      "columns": [
+       {
+        "id": "col_encuesta0000000000000010",
+        "field_id": "fld_encuesta0000000000000015"
+       },
+       {
+        "id": "col_encuesta0000000000000011",
+        "field_id": "fld_encuesta0000000000000011"
+       },
+       {
+        "id": "col_encuesta0000000000000012",
+        "field_id": "fld_encuesta0000000000000012"
+       },
+       {
+        "id": "col_encuesta0000000000000013",
+        "field_id": "fld_encuesta0000000000000014"
+       },
+       {
+        "id": "col_encuesta0000000000000014",
+        "type": "action",
+        "label": "Editar",
+        "icon": "pencil",
+        "on_click": [
+         {
+          "type": "open_modal",
+          "modal_block_id": "blk_encuesta0000000000000014",
+          "params": {
+           "record_id": "{{row.id}}",
+           "record": "{{row.data}}"
+          }
+         }
+        ]
+       }
+      ]
+     }
+    ]
+   },
+   {
+    "id": "pag_encuesta0000000000000003",
+    "slug": "contestar",
+    "name": "Contestar",
+    "path": "/contestar",
+    "blocks": [
+     {
+      "id": "blk_encuesta0000000000000020",
+      "type": "heading",
+      "content": "Contestar"
+     },
+     {
+      "id": "blk_encuesta0000000000000021",
+      "type": "record_form",
+      "label": "Tus respuestas",
+      "questions": {
+       "object_id": "obj_encuesta0000000000000002",
+       "filter": {
+        "op": "eq",
+        "field_id": "fld_encuesta0000000000000010",
+        "value_expression": "{{params.encuesta}}"
+       },
+       "sort": [
+        {
+         "field_id": "fld_encuesta0000000000000015",
+         "direction": "asc"
+        }
+       ]
+      },
+      "label_field_id": "fld_encuesta0000000000000011",
+      "type_field_id": "fld_encuesta0000000000000012",
+      "type_map": {
+       "escala_1_5": "rating",
+       "si_no": "boolean",
+       "texto_libre": "long_text",
+       "opcion_unica": "single_select"
+      },
+      "options_field_id": "fld_encuesta0000000000000013",
+      "required_field_id": "fld_encuesta0000000000000014",
+      "answers": {
+       "object_id": "obj_encuesta0000000000000004",
+       "question_field_id": "fld_encuesta0000000000000031",
+       "parent_field_id": "fld_encuesta0000000000000030",
+       "value_field_ids": {
+        "rating": "fld_encuesta0000000000000032",
+        "boolean": "fld_encuesta0000000000000033",
+        "long_text": "fld_encuesta0000000000000034",
+        "single_select": "fld_encuesta0000000000000034"
+       }
+      },
+      "submission": {
+       "object_id": "obj_encuesta0000000000000003",
+       "anonymous": true,
+       "completed_field_id": "fld_encuesta0000000000000021",
+       "values": {
+        "fld_encuesta0000000000000020": "{{params.encuesta}}"
+       }
+      },
+      "participation": {
+       "object_id": "obj_encuesta0000000000000005",
+       "person_field_id": "fld_encuesta0000000000000041",
+       "values": {
+        "fld_encuesta0000000000000040": "{{params.encuesta}}"
+       }
+      },
+      "submit_label": "Enviar respuestas"
+     }
+    ]
+   },
+   {
+    "id": "pag_encuesta0000000000000004",
+    "slug": "resultados",
+    "name": "Resultados",
+    "path": "/resultados",
+    "blocks": [
+     {
+      "id": "blk_encuesta0000000000000030",
+      "type": "heading",
+      "content": "Resultados"
+     },
+     {
+      "id": "blk_encuesta0000000000000031",
+      "type": "chart",
+      "label": "Promedio por pregunta",
+      "chart_type": "bar",
+      "data_source": {
+       "object_id": "obj_encuesta0000000000000004",
+       "limit": 500
+      },
+      "aggregation": "avg",
+      "y_field_id": "fld_encuesta0000000000000032",
+      "group_by_field_id": "fld_encuesta0000000000000031"
+     },
+     {
+      "id": "blk_encuesta0000000000000032",
+      "type": "table",
+      "data_source": {
+       "object_id": "obj_encuesta0000000000000004",
+       "sort": [
+        {
+         "field_id": "sys_created_at",
+         "direction": "desc"
+        }
+       ]
+      },
+      "columns": [
+       {
+        "id": "col_encuesta0000000000000020",
+        "field_id": "fld_encuesta0000000000000031"
+       },
+       {
+        "id": "col_encuesta0000000000000021",
+        "field_id": "fld_encuesta0000000000000034"
+       }
+      ]
+     },
+     {
+      "id": "blk_encuesta0000000000000033",
+      "type": "table",
+      "data_source": {
+       "object_id": "obj_encuesta0000000000000005",
+       "filter": {
+        "op": "eq",
+        "field_id": "fld_encuesta0000000000000040",
+        "value_expression": "{{params.encuesta}}"
+       },
+       "sort": [
+        {
+         "field_id": "sys_created_at",
+         "direction": "desc"
+        }
+       ]
+      },
+      "columns": [
+       {
+        "id": "col_encuesta0000000000000030",
+        "field_id": "fld_encuesta0000000000000041"
+       }
+      ]
+     }
+    ]
+   }
+  ],
+  "permissions": {
+   "roles": [
+    {
+     "id": "rol_encuesta0000000000000001",
+     "slug": "rh",
+     "name": "Recursos Humanos",
+     "is_default": false
+    },
+    {
+     "id": "rol_encuesta0000000000000002",
+     "slug": "empleado",
+     "name": "Empleado",
+     "is_default": true
+    }
+   ],
+   "object_policies": [
+    {
+     "object_id": "obj_encuesta0000000000000001",
+     "role_id": "rol_encuesta0000000000000001",
+     "actions": [
+      "create",
+      "read",
+      "update",
+      "delete"
+     ]
+    },
+    {
+     "object_id": "obj_encuesta0000000000000002",
+     "role_id": "rol_encuesta0000000000000001",
+     "actions": [
+      "create",
+      "read",
+      "update",
+      "delete"
+     ]
+    },
+    {
+     "object_id": "obj_encuesta0000000000000003",
+     "role_id": "rol_encuesta0000000000000001",
+     "actions": [
+      "read"
+     ]
+    },
+    {
+     "object_id": "obj_encuesta0000000000000004",
+     "role_id": "rol_encuesta0000000000000001",
+     "actions": [
+      "read"
+     ]
+    },
+    {
+     "object_id": "obj_encuesta0000000000000005",
+     "role_id": "rol_encuesta0000000000000001",
+     "actions": [
+      "read"
+     ]
+    },
+    {
+     "object_id": "obj_encuesta0000000000000001",
+     "role_id": "rol_encuesta0000000000000002",
+     "actions": [
+      "read"
+     ]
+    },
+    {
+     "object_id": "obj_encuesta0000000000000002",
+     "role_id": "rol_encuesta0000000000000002",
+     "actions": [
+      "read"
+     ]
+    },
+    {
+     "object_id": "obj_encuesta0000000000000003",
+     "role_id": "rol_encuesta0000000000000002",
+     "actions": [
+      "create"
+     ]
+    },
+    {
+     "object_id": "obj_encuesta0000000000000004",
+     "role_id": "rol_encuesta0000000000000002",
+     "actions": [
+      "create"
+     ]
+    },
+    {
+     "object_id": "obj_encuesta0000000000000005",
+     "role_id": "rol_encuesta0000000000000002",
+     "actions": [
+      "create"
+     ]
+    }
+   ]
+  },
+  "settings": {
+   "default_locale": "es-MX",
+   "default_timezone": "America/Mexico_City",
+   "default_currency": "MXN"
+  }
+ },
+ "portability": {
+  "removed": []
+ }
+}

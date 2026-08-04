@@ -158,7 +158,16 @@ it('gives every role something it may actually do', function () {
                     fn (array $p): bool => $p['role_id'] === $role['id'] && $p['object_id'] === $object['id']
                 );
                 expect($policy)->not->toBeNull("{$name}: role '{$role['slug']}' has no policy on '{$object['slug']}'");
-                expect($policy['actions'])->toContain('read');
+
+                // At least one action, rather than `read` specifically. This
+                // asked for read until the survey template, where an employee
+                // may CREATE a submission, its answers and their participation
+                // marker and may not read any of them back — the whole promise
+                // of an anonymous questionnaire is that nobody can list what
+                // everybody said. A write-only policy is not the decoration
+                // this guard exists to catch; it grants something real.
+                expect($policy['actions'])
+                    ->not->toBeEmpty("{$name}: role '{$role['slug']}' has an empty policy on '{$object['slug']}'");
             }
         }
     }

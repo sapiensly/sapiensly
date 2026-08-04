@@ -56,7 +56,12 @@ final class ManifestIdRemap
 
         $out = [];
         foreach ($node as $key => $value) {
-            $out[$key] = self::walk($value, $map);
+            // Keys too, not only values. An id can BE a key — a record_form's
+            // `submission.values` and `participation.values` are keyed by the
+            // field they write to — and a key left behind points at an object
+            // that no longer exists, so the write fails with "unknown field"
+            // on an app that installed without a word of complaint.
+            $out[is_string($key) ? self::rewrite($key, $map) : $key] = self::walk($value, $map);
         }
 
         return $out;
