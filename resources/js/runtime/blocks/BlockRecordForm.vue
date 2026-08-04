@@ -39,7 +39,9 @@ interface RowData {
 
 const props = defineProps<{
     block: RecordFormBlock;
-    data: { rows: RowData[]; can?: { answer?: boolean } } | undefined;
+    data:
+        | { rows: RowData[]; can?: { answer?: boolean }; answered?: boolean }
+        | undefined;
     objects: ObjectDef[];
     locale: string;
     defaultCurrency: string;
@@ -52,6 +54,7 @@ const { write } = useRuntimeWrite();
 const answers = ref<Record<string, unknown>>({});
 const sending = ref(false);
 const done = ref(false);
+const answeredElsewhere = ref(false);
 const error = ref<string | null>(null);
 const missing = ref<string[]>([]);
 
@@ -120,6 +123,18 @@ const questions = computed(() =>
 
 const canAnswer = computed(() => props.data?.can?.answer !== false);
 
+/**
+ * Filed already — on this visit or a previous one.
+ *
+ * The server says so on load, which is the half a client-side flag cannot
+ * cover: a reload used to bring the whole form back, and on an anonymous
+ * questionnaire a second filing can never be told from the first afterwards.
+ */
+const filed = computed(
+    () =>
+        done.value || answeredElsewhere.value || props.data?.answered === true,
+);
+
 async function submit(): Promise<void> {
     if (sending.value) return;
 
@@ -160,6 +175,15 @@ async function submit(): Promise<void> {
     sending.value = false;
 
     if (!result.ok) {
+        // The server says it was already filed — by a second tab, or a first
+        // click this one raced. Not an error to retry: showing the form again
+        // would invite exactly the duplicate that was just refused.
+        if (result.status === 409) {
+            answeredElsewhere.value = true;
+
+            return;
+        }
+
         error.value = runtimeWord(props.locale, 'form_send_failed');
 
         return;
@@ -182,11 +206,15 @@ async function submit(): Promise<void> {
              accidentally answers twice, and on an anonymous survey there is no
              way afterwards to tell which of the two was theirs. -->
         <p
-            v-if="done"
+            v-if="filed"
             data-sp-form-done
             :class="['py-8 text-center text-sm', t.text]"
         >
-            {{ runtimeWord(locale, 'form_thanks') }}
+            {{
+                done
+                    ? runtimeWord(locale, 'form_thanks')
+                    : runtimeWord(locale, 'form_already_answered')
+            }}
         </p>
 
         <p

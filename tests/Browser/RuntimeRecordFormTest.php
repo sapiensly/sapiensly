@@ -63,6 +63,14 @@ function recordFormApp(): App
                     ['id' => 'fld_preg000001', 'slug' => 'pregunta', 'name' => 'Pregunta', 'type' => 'relation', 'cardinality' => 'many_to_one', 'target_object_id' => 'obj_pregunta001'],
                 ],
             ],
+            [
+                'id' => 'obj_particip001',
+                'slug' => 'participacion',
+                'name' => 'Participación',
+                'fields' => [
+                    ['id' => 'fld_persona0001', 'slug' => 'persona', 'name' => 'Persona', 'type' => 'string'],
+                ],
+            ],
         ],
         'pages' => [[
             'id' => 'pag_contestar01',
@@ -89,6 +97,12 @@ function recordFormApp(): App
                         'boolean' => 'fld_bool00000001',
                         'long_text' => 'fld_libre000001',
                     ],
+                ],
+                // Who answered, in a record pointing at nothing they said —
+                // and the only thing that makes "already filed" enforceable.
+                'participation' => [
+                    'object_id' => 'obj_particip001',
+                    'person_field_id' => 'fld_persona0001',
                 ],
                 'submit_label' => 'Enviar',
             ]],
@@ -183,4 +197,34 @@ it('files the answers and then stops offering to file them again', function () {
         // Each landed in the column its kind belongs to.
         ->and($answers->pluck('data.numero')->filter()->values()->all())->toBe([4])
         ->and($answers->pluck('data.libre')->filter()->values()->all())->toBe(['Menos reuniones']);
+})->group('browser');
+
+it('does not offer the form again after a reload', function () {
+    // The hole a client-side flag cannot cover. The block hid itself on send,
+    // but that lived in the browser: reloading brought the whole form back, and
+    // on an anonymous questionnaire nothing afterwards can tell a duplicate
+    // filing from the original — so it cannot even be cleaned up later.
+    $this->seed(RolesAndPermissionsSeeder::class);
+    $app = recordFormApp();
+
+    $page = visit("/r/{$app->slug}/contestar")->on()->macbookAir()
+        ->assertNoJavaScriptErrors();
+
+    $page->script(<<<'JS'
+        (() => {
+            document.querySelectorAll('[data-sp-question] button[title]')[2].click();
+            return true;
+        })()
+    JS);
+
+    $page->click('Enviar')->assertSee('Gracias');
+
+    $filed = Record::where('object_definition_id', 'obj_respuesta01')->count();
+
+    visit("/r/{$app->slug}/contestar")->on()->macbookAir()
+        ->assertNoJavaScriptErrors()
+        ->assertSee('Ya contestaste esto')
+        ->assertScript('!!document.querySelector("[data-sp-form-submit]")', false);
+
+    expect(Record::where('object_definition_id', 'obj_respuesta01')->count())->toBe($filed);
 })->group('browser');

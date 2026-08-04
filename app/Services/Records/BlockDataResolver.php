@@ -246,6 +246,15 @@ class BlockDataResolver
                     'answer' => ($context['__access'] ?? null) instanceof AppAccessContext
                         && $context['__access']->can((string) ($block['answers']['object_id'] ?? ''), 'create'),
                 ],
+                // Already filed. Same question the controller asks before
+                // writing — here so the page says so instead of offering a form
+                // whose submit is going to be refused.
+                'answered' => app(FormParticipation::class)->hasAnswered(
+                    $app,
+                    $block,
+                    $manifest,
+                    ($context['__actor'] ?? null) instanceof User ? $context['__actor'] : null,
+                ),
             ];
         }
 

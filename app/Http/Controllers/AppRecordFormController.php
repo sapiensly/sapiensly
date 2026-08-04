@@ -2,9 +2,11 @@
 
 namespace App\Http\Controllers;
 
+use App\Facades\TenantCache;
 use App\Models\App;
 use App\Services\Apps\AppAccessResolver;
 use App\Services\Manifest\AppManifestService;
+use App\Services\Records\FormParticipation;
 use App\Services\Records\RecordWriteService;
 use App\Support\Tenancy\Schemas;
 use Illuminate\Http\JsonResponse;
@@ -40,6 +42,7 @@ class AppRecordFormController extends Controller
         private readonly AppManifestService $manifests,
         private readonly AppAccessResolver $accessResolver,
         private readonly RecordWriteService $writes,
+        private readonly FormParticipation $participation,
     ) {}
 
     public function __invoke(Request $request, string $appSlug, string $blockId): JsonResponse
@@ -81,11 +84,57 @@ class AppRecordFormController extends Controller
         $submissionSpec = $block['submission'] ?? null;
         $anonymous = ($submissionSpec['anonymous'] ?? false) === true;
 
-        $written = DB::connection(Schemas::connectionFor('records'))->transaction(
-            fn (): int => $this->file($app, $manifest, $block, $data['answers'], $user, $anonymous),
-        );
+        // What `submission.values` and `participation.values` are resolved
+        // against. This is what lets ONE app hold several questionnaires: the
+        // marker carries {{params.survey}} off the URL, so answering one is not
+        // answering another.
+        $context = [
+            'params' => array_filter($request->query(), static fn ($v): bool => is_string($v) || is_array($v)),
+            'current_user' => $user === null ? [] : ['id' => $user->id, 'email' => $user->email],
+        ];
+
+        // Two filings at once — a double-click, or two tabs. Put-if-absent is
+        // atomic, so exactly one of them gets past here; the loser is told the
+        // same thing a reload is told. The `once` check below cannot do this on
+        // its own because both requests would read "not answered yet" before
+        // either had written its marker.
+        $gate = 'form_filing:'.$app->id.':'.$blockId.':'.($user?->id ?? 'anon');
+        $held = $user !== null && TenantCache::add($gate, true, 30);
+
+        if ($user !== null && ! $held) {
+            return $this->alreadyAnswered();
+        }
+
+        try {
+            if ($this->participation->hasAnswered($app, $block, $manifest, $user, $context)) {
+                return $this->alreadyAnswered();
+            }
+
+            $written = DB::connection(Schemas::connectionFor('records'))->transaction(
+                fn (): int => $this->file($app, $manifest, $block, $data['answers'], $user, $anonymous, $context),
+            );
+        } finally {
+            // Released rather than left to expire: a filing that failed should
+            // be retryable now, not in thirty seconds.
+            if ($held) {
+                TenantCache::forget($gate);
+            }
+        }
 
         return response()->json(['answers' => $written, 'anonymous' => $anonymous]);
+    }
+
+    /**
+     * Refused because this person already filed it.
+     *
+     * 409 rather than 422: nothing about the answers is wrong, and on an
+     * anonymous questionnaire a duplicate is not merely untidy — there is no
+     * way afterwards to tell which of the two filings was theirs, so it cannot
+     * even be cleaned up later.
+     */
+    private function alreadyAnswered(): JsonResponse
+    {
+        return response()->json(['error' => 'already_answered'], 409);
     }
 
     /**
@@ -93,19 +142,34 @@ class AppRecordFormController extends Controller
      * @param  array<string, mixed>  $block
      * @param  list<array<string, mixed>>  $answers
      */
-    private function file(App $app, array $manifest, array $block, array $answers, mixed $user, bool $anonymous): int
+    private function file(App $app, array $manifest, array $block, array $answers, mixed $user, bool $anonymous, array $context): int
     {
         $answersSpec = $block['answers'];
         $submissionSpec = $block['submission'] ?? null;
         $submissionId = null;
 
         if ($submissionSpec !== null) {
-            $values = $this->stringKeyed($submissionSpec['values'] ?? []);
+            // current_user is withheld from an ANONYMOUS submission's own
+            // values: {{current_user.id}} there would write the very name this
+            // design exists to leave out, and it would look deliberate.
+            $values = $this->participation->values(
+                $submissionSpec,
+                $anonymous ? ['params' => $context['params']] : $context,
+            );
 
-            // Coarsened on purpose when anonymous — see the class docblock.
-            $values['completado_en'] = $anonymous
-                ? now()->toDateString()
-                : now()->toIso8601String();
+            // Stamped only where the author said to. It used to go into a
+            // hardcoded `completado_en`, which meant the write path silently
+            // dropped it for every app that did not happen to name the field
+            // in Spanish — RecordWriteService builds its row from the object's
+            // DECLARED fields and discards anything else.
+            $stampField = $submissionSpec['completed_field_id'] ?? null;
+
+            if ($stampField !== null) {
+                // Coarsened on purpose when anonymous — see the class docblock.
+                $values[(string) $stampField] = $anonymous
+                    ? now()->toDateString()
+                    : now()->toIso8601String();
+            }
 
             $submission = $this->writes->create(
                 $app,
@@ -157,7 +221,7 @@ class AppRecordFormController extends Controller
                 $manifest,
                 (string) $participation['object_id'],
                 array_merge(
-                    $this->stringKeyed($participation['values'] ?? []),
+                    $this->participation->values($participation, $context),
                     [$participation['person_field_id'] => (string) $user->id],
                 ),
                 $user,
@@ -165,26 +229,6 @@ class AppRecordFormController extends Controller
         }
 
         return $written;
-    }
-
-    /**
-     * Field ids, kept as strings.
-     *
-     * PHP turns a numeric-looking array key into an int on the way in, and a
-     * field id that arrives as 123 matches nothing downstream.
-     *
-     * @param  array<string, mixed>  $values
-     * @return array<string, mixed>
-     */
-    private function stringKeyed(array $values): array
-    {
-        $out = [];
-
-        foreach ($values as $key => $value) {
-            $out[(string) $key] = $value;
-        }
-
-        return $out;
     }
 
     /**

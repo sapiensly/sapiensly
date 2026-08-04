@@ -5,6 +5,7 @@ use App\Models\App;
 use App\Models\Record;
 use App\Models\User;
 use App\Services\Manifest\AppManifestService;
+use App\Services\Records\FormParticipation;
 use Database\Seeders\RolesAndPermissionsSeeder;
 use Illuminate\Support\Str;
 
@@ -106,7 +107,7 @@ function formApp(User $owner, array $overrides = []): App
                     'parent_field_id' => 'fld_envio000001',
                     'value_field_ids' => ['rating' => 'fld_num00000001', 'long_text' => 'fld_libre000001'],
                 ],
-                'submission' => ['object_id' => 'obj_envio000001', 'anonymous' => true],
+                'submission' => ['object_id' => 'obj_envio000001', 'anonymous' => true, 'completed_field_id' => 'fld_compl000001'],
                 'participation' => ['object_id' => 'obj_particip001', 'person_field_id' => 'fld_persona0001'],
                 'submit_label' => 'Enviar',
             ]],
@@ -329,4 +330,163 @@ it('bounds how many answers one submission may carry', function () {
             'answers' => array_fill(0, 201, ['question_id' => $q->id, 'kind' => 'rating', 'value' => 1]),
         ])
         ->assertStatus(422);
+});
+
+it('refuses a second filing from the same person', function () {
+    // The hole this closes. The block hid itself after sending, but that lived
+    // in the browser: a reload brought the whole form back. On an ANONYMOUS
+    // questionnaire a duplicate is not merely untidy — nothing afterwards can
+    // tell which of the two filings was theirs, so it cannot even be cleaned up.
+    $owner = User::factory()->create();
+    $app = formApp($owner);
+    $q = question($app, 'Escala', 'escala_1_5');
+
+    $submit = fn () => $this->actingAs($owner)
+        ->postJson("/r/{$app->slug}/forms/blk_encuesta001/submit", [
+            'answers' => [['question_id' => $q->id, 'kind' => 'rating', 'value' => 3]],
+        ]);
+
+    $submit()->assertOk();
+    $submit()->assertStatus(409)->assertJson(['error' => 'already_answered']);
+
+    expect(Record::where('object_definition_id', 'obj_envio000001')->count())->toBe(1)
+        ->and(Record::where('object_definition_id', 'obj_respuesta01')->count())->toBe(1)
+        ->and(Record::where('object_definition_id', 'obj_particip001')->count())->toBe(1);
+});
+
+it('lets a questionnaire be filed repeatedly when the author asks for it', function () {
+    // A daily checklist and a shift inspection are the same block, and they are
+    // MEANT to be filed again tomorrow. One-per-person is the safe default, not
+    // a law: the loud failure (a checklist that refuses today) beats the silent
+    // one (a survey quietly counting duplicates).
+    $owner = User::factory()->create();
+    $app = formApp($owner, ['pages' => [['blocks' => [[
+        'participation' => [
+            'object_id' => 'obj_particip001',
+            'person_field_id' => 'fld_persona0001',
+            'once' => false,
+        ],
+    ]]]]]);
+    $q = question($app, 'Escala', 'escala_1_5');
+
+    foreach ([1, 2] as $round) {
+        $this->actingAs($owner)
+            ->postJson("/r/{$app->slug}/forms/blk_encuesta001/submit", [
+                'answers' => [['question_id' => $q->id, 'kind' => 'rating', 'value' => $round]],
+            ])
+            ->assertOk();
+    }
+
+    expect(Record::where('object_definition_id', 'obj_envio000001')->count())->toBe(2);
+});
+
+it('does not let one person answering block anybody else', function () {
+    $this->seed(RolesAndPermissionsSeeder::class);
+
+    $org = mcpOrg();
+    $owner = mcpMember($org);
+    $other = mcpMember($org);
+    $app = formApp($owner);
+    // Personal by default; two people can only share a questionnaire that
+    // belongs to the organization.
+    $app->update(['visibility' => 'organization']);
+    $q = question($app, 'Escala', 'escala_1_5');
+
+    $this->actingAs($owner)
+        ->postJson("/r/{$app->slug}/forms/blk_encuesta001/submit", [
+            'answers' => [['question_id' => $q->id, 'kind' => 'rating', 'value' => 1]],
+        ])->assertOk();
+
+    $this->actingAs($other)
+        ->postJson("/r/{$app->slug}/forms/blk_encuesta001/submit", [
+            'answers' => [['question_id' => $q->id, 'kind' => 'rating', 'value' => 5]],
+        ])->assertOk();
+
+    expect(Record::where('object_definition_id', 'obj_envio000001')->count())->toBe(2);
+});
+
+it('does not make answering one questionnaire count as answering another', function () {
+    // One participation object usually serves every questionnaire in an app.
+    // Without scoping by what the marker CARRIES, filing the climate survey
+    // would silently mark somebody as having done the onboarding one too.
+    $owner = User::factory()->create();
+    $app = formApp($owner, [
+        'objects' => [3 => ['fields' => [1 => [
+            'id' => 'fld_cual00000001', 'name' => 'Cuál', 'slug' => 'cual', 'type' => 'string',
+        ]]]],
+        'pages' => [['blocks' => [
+            0 => ['participation' => [
+                'object_id' => 'obj_particip001',
+                'person_field_id' => 'fld_persona0001',
+                'values' => ['fld_cual00000001' => 'clima'],
+            ]],
+        ]]],
+    ]);
+    $q = question($app, 'Escala', 'escala_1_5');
+
+    $this->actingAs($owner)
+        ->postJson("/r/{$app->slug}/forms/blk_encuesta001/submit", [
+            'answers' => [['question_id' => $q->id, 'kind' => 'rating', 'value' => 3]],
+        ])->assertOk();
+
+    $marker = Record::where('object_definition_id', 'obj_particip001')->first();
+
+    // The marker says WHICH questionnaire, so the same person is still owed by
+    // any other one keyed differently.
+    expect($marker->data['cual'])->toBe('clima')
+        ->and(app(FormParticipation::class)->hasAnswered(
+            $app->fresh(),
+            ['participation' => [
+                'object_id' => 'obj_particip001',
+                'person_field_id' => 'fld_persona0001',
+                'values' => ['fld_cual00000001' => 'onboarding'],
+            ]],
+            app(AppManifestService::class)->getActiveManifest($app->fresh()),
+            $owner,
+        ))->toBeFalse();
+});
+
+it('leaves a questionnaire with no marker open, because nothing can key it', function () {
+    // A suggestion box: anonymous, no marker, unlimited filings. Undedupable by
+    // construction rather than by oversight — the marker is the ONLY thing an
+    // anonymous submission leaves behind that names anybody.
+    $owner = User::factory()->create();
+    $app = formApp($owner);
+
+    $manifest = app(AppManifestService::class)->getActiveManifest($app);
+    unset($manifest['pages'][0]['blocks'][0]['participation']);
+    app(AppManifestService::class)->createVersion($app, $manifest, $owner);
+
+    $q = question($app, 'Escala', 'escala_1_5');
+
+    foreach ([1, 2] as $round) {
+        $this->actingAs($owner)
+            ->postJson("/r/{$app->slug}/forms/blk_encuesta001/submit", [
+                'answers' => [['question_id' => $q->id, 'kind' => 'rating', 'value' => $round]],
+            ])->assertOk();
+    }
+
+    expect(Record::where('object_definition_id', 'obj_envio000001')->count())->toBe(2)
+        ->and(Record::where('object_definition_id', 'obj_particip001')->count())->toBe(0);
+});
+
+it('stamps the field the author named, whatever it is called', function () {
+    // The regression this guards. The stamp used to go into a hardcoded
+    // `completado_en`, and RecordWriteService builds its row from the object's
+    // DECLARED fields — so for every app that did not happen to name the field
+    // in Spanish the timestamp was dropped without a word.
+    $owner = User::factory()->create();
+    $app = formApp($owner, ['objects' => [2 => ['fields' => [0 => [
+        'id' => 'fld_compl000001', 'name' => 'Filed at', 'slug' => 'filed_at', 'type' => 'string',
+    ]]]]]);
+    $q = question($app, 'Escala', 'escala_1_5');
+
+    $this->actingAs($owner)
+        ->postJson("/r/{$app->slug}/forms/blk_encuesta001/submit", [
+            'answers' => [['question_id' => $q->id, 'kind' => 'rating', 'value' => 2]],
+        ])->assertOk();
+
+    $submission = Record::where('object_definition_id', 'obj_envio000001')->first();
+
+    expect($submission->data['filed_at'])->toBe(now()->toDateString());
 });

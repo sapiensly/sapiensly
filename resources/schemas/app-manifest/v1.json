@@ -4834,6 +4834,10 @@
                                         ]
                                     }
                                 },
+                                "completed_field_id": {
+                                    "$ref": "#/$defs/id",
+                                    "description": "Optional. A string field on the submission object to stamp with when it was filed. COARSENED TO THE DATE when anonymous is true, because an exact time re-identifies as surely as a name — thirty people produce thirty distinct minutes. Omit it and nothing is stamped."
+                                },
                                 "anonymous": {
                                     "type": "boolean",
                                     "default": false,
@@ -4852,6 +4856,11 @@
                                 },
                                 "person_field_id": {
                                     "$ref": "#/$defs/id"
+                                },
+                                "once": {
+                                    "type": "boolean",
+                                    "default": true,
+                                    "description": "Default true: one filing per person. The marker is what makes this enforceable, so a questionnaire meant to be filed REPEATEDLY (a daily checklist, a shift inspection) must set false — or declare no participation at all. Scoped by whatever `values` puts on the marker, so one participation object can serve several questionnaires without them counting as each other."
                                 },
                                 "values": {
                                     "type": "object",
