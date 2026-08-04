@@ -9,6 +9,7 @@ use App\Jobs\RunSlideBuilderJob;
 use App\Models\DeckVersion;
 use App\Models\Document;
 use App\Models\User;
+use App\Services\Print\HeadlessPdf;
 use App\Services\Slides\DeckDataResolver;
 use App\Services\Slides\DeckEditor;
 use App\Services\Slides\DeckVersioner;
@@ -20,7 +21,6 @@ use Illuminate\Support\Facades\URL;
 use Illuminate\Support\Str;
 use Inertia\Inertia;
 use Inertia\Response;
-use Spatie\Browsershot\Browsershot;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 /**
@@ -347,28 +347,19 @@ class SlidesController extends Controller
             'uid' => $user->id,
         ]);
 
-        $pdfPath = sys_get_temp_dir().'/deck-'.Str::random(12).'.pdf';
+        // Through the shared renderer — see HeadlessPdf for why it came out of
+        // here when a record's printable copy needed the same six decisions.
+        // A deck keeps its own paper: 1280×720 CSS px at 96dpi, one slide per
+        // page, no letterboxing and no margins.
+        $pdfPath = app(HeadlessPdf::class)->render(
+            url: $printUrl,
+            readySignal: 'window.deckReady === true',
+            paper: [13.3333, 7.5, 'in'],
+            margin: 0,
+        );
 
-        $shot = Browsershot::url($printUrl)
-            ->windowSize(1280, 720)
-            ->waitForFunction('window.deckReady === true')
-            ->timeout(90)
-            ->showBackground()
-            ->margins(0, 0, 0, 0)
-            // 1280×720 CSS px at 96dpi — one slide per page, no letterboxing.
-            ->paperSize(13.3333, 7.5, 'in')
-            ->noSandbox()
-            ->setNodeModulePath(base_path('node_modules'));
-
-        if (is_string($node = config('services.node.binary')) && $node !== 'node') {
-            $shot->setNodeBinary($node);
-        }
-
-        try {
-            $shot->savePdf($pdfPath);
-        } catch (\Throwable $e) {
-            report($e);
-            abort(500, 'The PDF could not be generated: '.$e->getMessage());
+        if ($pdfPath === null) {
+            abort(500, 'The PDF could not be generated.');
         }
 
         return response()

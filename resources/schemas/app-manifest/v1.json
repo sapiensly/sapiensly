@@ -5063,6 +5063,27 @@
                 },
                 {
                     "type": "object",
+                    "required": ["type", "page_slug"],
+                    "additionalProperties": false,
+                    "description": "Download a PDF of one of this app's pages, rendered by a real browser so it looks like the screen. `page_slug` names the page; `params` scope it — {\"id\": \"{{params.id}}\"} on a record detail prints THAT record, and a filtered list prints the rows the reader is looking at. Use it for work orders, quotes, delivery notes and certificates: the person who needs the paper is usually the customer, who does not have the app.",
+                    "properties": {
+                        "type": {
+                            "const": "download_pdf"
+                        },
+                        "page_slug": {
+                            "type": "string",
+                            "maxLength": 120
+                        },
+                        "params": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": ["string", "number", "boolean", "null"]
+                            }
+                        }
+                    }
+                },
+                {
+                    "type": "object",
                     "required": ["type", "modal_block_id"],
                     "additionalProperties": false,
                     "description": "Open a modal block by id. Optional `params` are injected as the modal's local context — read inside the modal's child blocks with {{params.<key>}}, including the form's record_id_expression for an Edit modal that needs the row id.",

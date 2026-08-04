@@ -338,6 +338,8 @@ export interface RuntimePageProps {
     page: PageDef;
     /** Menu slug to highlight — a detail page reports its parent list's slug. */
     activeSlug?: string;
+    /** This render is going onto paper: the page's blocks, no chrome. */
+    printing?: boolean;
     blockData: BlockData;
     /** Current URL filter params, so a filter_bar renders pre-filled. */
     params?: Record<string, string | string[]>;

@@ -340,6 +340,36 @@ export function useActionExecutor() {
                 }
                 break;
             }
+            case 'download_pdf': {
+                // A hard navigation, not an Inertia visit: the response is a
+                // file, and router.visit would be waiting for a page that
+                // never comes. The browser takes the download and leaves the
+                // app where it was.
+                const slug = String(action.page_slug ?? '');
+                if (slug === '') break;
+
+                const query = new URLSearchParams();
+                for (const [key, raw] of Object.entries(
+                    (action.params as Record<string, unknown>) ?? {},
+                )) {
+                    const value = interpolateTemplate(String(raw ?? ''), ctx);
+                    if (value !== '' && value !== null && value !== undefined) {
+                        query.set(key, String(value));
+                    }
+                }
+
+                // Signed-in runtime only. A portal grants a visitor their own
+                // row, not a rendering of the business's pages — the route is
+                // not mounted there, and offering a link that 404s is worse
+                // than offering nothing.
+                const mount = mountFor(ctx);
+                if (!mount.startsWith('/r/')) break;
+
+                const qs = query.toString();
+                window.location.href =
+                    `${mount}/${slug}/pdf` + (qs !== '' ? `?${qs}` : '');
+                break;
+            }
             case 'refresh':
                 // `blockData` is a DEFERRED prop, and a deferred prop is left
                 // OUT of a plain reload's response — the page would come back

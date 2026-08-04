@@ -10,6 +10,7 @@ use App\Http\Controllers\AppEnvironmentController;
 use App\Http\Controllers\AppExportController;
 use App\Http\Controllers\AppFileController;
 use App\Http\Controllers\AppNotificationController;
+use App\Http\Controllers\AppPrintController;
 use App\Http\Controllers\AppRecordOptionsController;
 use App\Http\Controllers\AppRecordTrailController;
 use App\Http\Controllers\AppRuntimeAgentController;
@@ -226,6 +227,14 @@ Route::middleware([
     Route::post('/r/{app_slug}/uploads', [AppFileController::class, 'upload'])
         ->where('app_slug', '[a-z][a-z0-9_]*')
         ->name('apps.runtime.uploads');
+
+    // A printable copy of a page: the record the reader is looking at, as a
+    // PDF they can hand to the customer who does not have the app. Everything
+    // on the query string rides along, so ?id=… prints THAT record.
+    Route::get('/r/{app_slug}/{page_slug}/pdf', [AppPrintController::class, 'download'])
+        ->where('app_slug', '[a-z][a-z0-9_]*')
+        ->where('page_slug', '[a-z][a-z0-9_]*')
+        ->name('apps.runtime.pdf');
 
     // In-app notification inbox: what notify.send raised for THIS person in
     // THIS app. Filtered by recipient inside the controller — RLS scopes the

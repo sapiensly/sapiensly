@@ -41,6 +41,7 @@ class ListAvailableActionsTool implements Tool
             ['type' => 'update_record', 'props' => 'object_id, record_id_expression, values ({field_slug: value_or_expression}). Only sent fields are touched.'],
             ['type' => 'delete_record', 'props' => 'object_id, record_id_expression'],
             ['type' => 'show_toast', 'props' => 'message, level? (info|success|warning|error)'],
+            ['type' => 'download_pdf', 'props' => 'page_slug (a page of THIS app), params? ({key: value_or_expression}). Downloads that page as a PDF rendered by a real browser, so it looks like the screen rather than a second template that can drift from it. params SCOPE it: {"id": "{{params.id}}"} on a record detail prints THAT record; on a filtered list it prints the rows the reader is looking at. Use for work orders, quotes, delivery notes and certificates — the person who needs the paper is usually the customer, who does not have the app. Signed-in runtime only (never offered on a public portal).'],
             ['type' => 'refresh', 'props' => 'target_block_id? (optional — reloads the page if omitted)'],
         ];
 

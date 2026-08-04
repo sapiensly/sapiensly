@@ -115,6 +115,17 @@ const contentWidthClass = computed(() =>
 // no content gutters — the page brings its own navbar/footer section blocks and
 // each section paints itself edge to edge.
 const isLanding = computed(() => props.app.kind === 'landing');
+
+/**
+ * This render is going onto paper.
+ *
+ * Set by the signed route headless Chrome loads. The page is otherwise
+ * identical — same blocks, same data, same styling — because a print-only
+ * template built beside the real one is a second thing to keep true. What goes
+ * is the chrome: a menu, a header and a footer are navigation, and paper has
+ * nowhere to navigate to.
+ */
+const isPrinting = computed(() => props.printing === true);
 // Head metadata: the public controller ships a resolved top-level `seo` prop;
 // the authenticated runtime falls back to the manifest's settings.seo. A
 // landing uses the SEO title alone (no "· page" suffix — that's an app idiom).
@@ -249,20 +260,45 @@ useScrollReveal(sectionsEl);
 // visible state) and waits for this flag before capturing — so the screenshot
 // includes the web fonts and the settled first paint, not a flash of unstyled
 // text. Harmless outside the renderer: nothing else reads window.__spLandingReady.
+let fontsSettled = false;
+
+/**
+ * Raise the flags a headless renderer waits on — but only once there is
+ * something worth capturing.
+ *
+ * `blockData` is a DEFERRED Inertia prop: it is not in the first response, it
+ * arrives on a second request after mount. Fonts and first paint are therefore
+ * NOT enough to say the page is ready, and saying so anyway printed a work
+ * order whose table was empty — the capture beat the data. Found by rendering
+ * one and reading it, which is the only way this kind of thing shows up.
+ */
+function raiseWhenSettled(): void {
+    if (!fontsSettled || blockDataPending.value) return;
+
+    requestAnimationFrame(() => {
+        const w = window as unknown as {
+            __spLandingReady?: boolean;
+            __spPrintReady?: boolean;
+        };
+        w.__spLandingReady = true;
+        w.__spPrintReady = true;
+    });
+}
+
+watch(blockDataPending, raiseWhenSettled);
+
 onMounted(() => {
-    const ready = () =>
-        requestAnimationFrame(() => {
-            (
-                window as unknown as { __spLandingReady?: boolean }
-            ).__spLandingReady = true;
-        });
+    const settle = () => {
+        fontsSettled = true;
+        raiseWhenSettled();
+    };
     const fonts = (
         document as unknown as { fonts?: { ready?: Promise<unknown> } }
     ).fonts;
     if (fonts?.ready) {
-        fonts.ready.then(ready, ready);
+        fonts.ready.then(settle, settle);
     } else {
-        ready();
+        settle();
     }
 });
 </script>
@@ -342,6 +378,21 @@ onMounted(() => {
                 :position="chatbot.position"
                 :greeting="chatbot.greeting"
                 :accent="landingAccent"
+            />
+        </div>
+
+        <!-- Going onto paper: the page's own blocks and nothing else. One
+             branch rather than a v-if on each piece of chrome, so nothing new
+             can leak into a printed page by being added elsewhere. -->
+        <div v-else-if="isPrinting" class="bg-white p-6 text-black">
+            <AppRenderer
+                :blocks="page.blocks"
+                :block-data="liveBlockData"
+                :loading="blockDataPending"
+                :objects="manifest.objects"
+                :locale="locale"
+                :default-currency="defaultCurrency"
+                :theme="theme"
             />
         </div>
 

@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\AccountSwitchController;
+use App\Http\Controllers\AppPrintController;
 use App\Http\Controllers\LandingRenderController;
 use App\Http\Controllers\PortalAuthController;
 use App\Http\Controllers\PublicAppActionController;
@@ -125,6 +126,16 @@ Route::get('a/{public_slug}/files/{file_id}', [PublicAppFileController::class, '
 Route::get('apps/{app}/landing-render', LandingRenderController::class)
     ->middleware('signed')
     ->name('landing.render');
+
+// Signed headless-render of a runtime page for its PDF. Same shape and same
+// reason: Chromium arrives with no cookies, so the signature carries the tenant
+// scope. It renders the page through AppRuntimeController itself, so what
+// prints is what the owner would see (see AppPrintController).
+Route::get('apps/{app_slug}/print/{page_slug}', [AppPrintController::class, 'render'])
+    ->middleware('signed')
+    ->where('app_slug', '[a-z][a-z0-9_]*')
+    ->where('page_slug', '[a-z][a-z0-9_]*')
+    ->name('apps.runtime.print');
 
 Route::middleware([
     'auth',
