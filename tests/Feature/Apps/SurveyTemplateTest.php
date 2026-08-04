@@ -2,10 +2,12 @@
 
 use App\Models\App;
 use App\Models\Record;
+use App\Models\User;
 use App\Services\Apps\AppPackage;
 use App\Services\Apps\AppTemplateCatalog;
 use App\Services\Manifest\AppManifestService;
 use App\Services\Records\FormParticipation;
+use App\Services\Records\RecordQueryService;
 use Database\Seeders\RolesAndPermissionsSeeder;
 
 /**
@@ -53,8 +55,20 @@ function surveyIds(array $manifest): array
         'envios' => $bySlug['envios']['id'],
         'respuestas' => $bySlug['respuestas']['id'],
         'participacion' => $bySlug['participacion']['id'],
+        'personas' => $bySlug['personas']['id'],
         'block' => collect($form)->firstWhere('type', 'record_form')['id'],
     ];
+}
+
+/** A roster row for somebody, so the questionnaire is actually sent to them. */
+function rosterRow(App $app, array $ids, User $person, string $name = 'Ana'): Record
+{
+    return Record::create([
+        'app_id' => $app->id,
+        'organization_id' => $app->organization_id,
+        'object_definition_id' => $ids['personas'],
+        'data' => ['nombre' => $name, 'usuario' => (string) $person->id],
+    ]);
 }
 
 it('installs and carries every piece the questionnaire needs', function () {
@@ -65,7 +79,7 @@ it('installs and carries every piece the questionnaire needs', function () {
     $form = collect($block)->firstWhere('type', 'record_form');
 
     expect(collect($manifest['objects'])->pluck('slug')->all())
-        ->toBe(['encuestas', 'preguntas', 'envios', 'respuestas', 'participacion'])
+        ->toBe(['encuestas', 'preguntas', 'envios', 'respuestas', 'participacion', 'personas'])
         // The pair the whole design rests on: anonymous submission, separate marker.
         ->and($form['submission']['anonymous'])->toBeTrue()
         ->and($form['participation']['object_id'])->toBe($ids['participacion'])
@@ -106,6 +120,8 @@ it('files a real answer, keeps it anonymous, and refuses a second one', function
         ],
     ]);
 
+    $roster = rosterRow($app, $ids, $owner);
+
     // ?encuesta is how one app holds many questionnaires. It reaches the
     // submission and the marker as an expression, so if it were written
     // literally this would fail on the relation validation.
@@ -127,7 +143,7 @@ it('files a real answer, keeps it anonymous, and refuses a second one', function
         ->and($answer->data['escala'])->toBe(5)
         ->and($answer->created_by_user_id)->toBeNull()
         // …and the marker names the person, pointing at nothing they said.
-        ->and($marker->data['persona'])->toBe((string) $owner->id)
+        ->and($marker->data['persona'])->toBe($roster->id)
         ->and($marker->data['encuesta'])->toBe($survey->id);
 
     $post()->assertStatus(409);
@@ -156,6 +172,8 @@ it('does not let answering one questionnaire count as answering another', functi
         'data' => ['encuesta' => $s->id, 'texto' => '¿Qué tal?', 'tipo' => 'escala_1_5', 'orden' => 1],
     ]));
 
+    rosterRow($app, $ids, $owner);
+
     foreach ([0, 1] as $i) {
         $this->actingAs($owner)->postJson(
             "/r/{$app->slug}/forms/{$ids['block']}/submit?encuesta={$surveys[$i]->id}",
@@ -183,6 +201,7 @@ it('shows the form as already answered on the way in, not on the way out', funct
     $block = collect(collect($manifest['pages'])->firstWhere('slug', 'contestar')['blocks'])
         ->firstWhere('type', 'record_form');
 
+    $roster = rosterRow($app, $ids, $owner);
     $context = ['params' => ['encuesta' => $survey->id]];
     $participation = app(FormParticipation::class);
 
@@ -192,11 +211,99 @@ it('shows the form as already answered on the way in, not on the way out', funct
         'app_id' => $app->id,
         'organization_id' => $app->organization_id,
         'object_definition_id' => $ids['participacion'],
-        'data' => ['persona' => (string) $owner->id, 'encuesta' => $survey->id],
+        'data' => ['persona' => $roster->id, 'encuesta' => $survey->id],
     ]);
 
     expect($participation->hasAnswered($app, $block, $manifest, $owner, $context))->toBeTrue()
         // …and still open for a survey they have not touched.
         ->and($participation->hasAnswered($app, $block, $manifest, $owner, ['params' => ['encuesta' => 'rec_otra']]))
         ->toBeFalse();
+});
+
+it('shrinks the list of who still owes a response as they answer', function () {
+    // The half the marker was always for. This list is readable without a
+    // single answer being readable — which is the entire reason the marker is
+    // a separate record that points at nothing anybody said.
+    [$app, $manifest, $owner] = installSurveyTemplate();
+    $ids = surveyIds($manifest);
+
+    $survey = Record::create([
+        'app_id' => $app->id,
+        'organization_id' => $app->organization_id,
+        'object_definition_id' => $ids['encuestas'],
+        'data' => ['nombre' => 'Clima', 'activa' => true, 'anonima' => true],
+    ]);
+
+    $question = Record::create([
+        'app_id' => $app->id,
+        'organization_id' => $app->organization_id,
+        'object_definition_id' => $ids['preguntas'],
+        'data' => ['encuesta' => $survey->id, 'texto' => '¿Qué tal?', 'tipo' => 'escala_1_5', 'orden' => 1],
+    ]);
+
+    // Two people on the roster; one of them is the person about to answer.
+    foreach ([['Ana', (string) $owner->id], ['Beto', '999999']] as [$nombre, $usuario]) {
+        Record::create([
+            'app_id' => $app->id,
+            'organization_id' => $app->organization_id,
+            'object_definition_id' => $ids['personas'],
+            'data' => ['nombre' => $nombre, 'usuario' => $usuario],
+        ]);
+    }
+
+    $pending = function () use ($app, $manifest, $survey): array {
+        $page = collect($manifest['pages'])->firstWhere('slug', 'pendientes');
+        $block = collect($page['blocks'])->firstWhere('type', 'table');
+
+        return app(RecordQueryService::class)
+            ->query($app, $block['data_source'], $manifest, ['params' => ['encuesta' => $survey->id]])
+            ->pluck('data.nombre')
+            ->all();
+    };
+
+    expect($pending())->toBe(['Ana', 'Beto']);
+
+    $this->actingAs($owner)->postJson(
+        "/r/{$app->slug}/forms/{$ids['block']}/submit?encuesta={$survey->id}",
+        ['answers' => [['question_id' => $question->id, 'kind' => 'rating', 'value' => 3]]],
+    )->assertOk();
+
+    // Ana answered; the marker points at her ROSTER row, not at her answers.
+    expect($pending())->toBe(['Beto']);
+
+    $marker = Record::where('object_definition_id', $ids['participacion'])->first();
+    $ana = Record::where('object_definition_id', $ids['personas'])->where('data->nombre', 'Ana')->first();
+
+    expect($marker->data['persona'])->toBe($ana->id);
+});
+
+it('refuses somebody who is not on the roster, before writing anything', function () {
+    // Filing the answers and quietly skipping the marker would be worse than
+    // refusing: they could answer again tomorrow, and they would never appear
+    // on the list of who still owes a response.
+    [$app, $manifest, $owner] = installSurveyTemplate();
+    $ids = surveyIds($manifest);
+
+    $survey = Record::create([
+        'app_id' => $app->id,
+        'organization_id' => $app->organization_id,
+        'object_definition_id' => $ids['encuestas'],
+        'data' => ['nombre' => 'Clima', 'activa' => true, 'anonima' => true],
+    ]);
+
+    $question = Record::create([
+        'app_id' => $app->id,
+        'organization_id' => $app->organization_id,
+        'object_definition_id' => $ids['preguntas'],
+        'data' => ['encuesta' => $survey->id, 'texto' => '¿Qué tal?', 'tipo' => 'escala_1_5', 'orden' => 1],
+    ]);
+
+    // Nobody on the roster at all.
+    $this->actingAs($owner)->postJson(
+        "/r/{$app->slug}/forms/{$ids['block']}/submit?encuesta={$survey->id}",
+        ['answers' => [['question_id' => $question->id, 'kind' => 'rating', 'value' => 3]]],
+    )->assertStatus(403)->assertJson(['error' => 'not_invited']);
+
+    expect(Record::where('object_definition_id', $ids['envios'])->count())->toBe(0)
+        ->and(Record::where('object_definition_id', $ids['respuestas'])->count())->toBe(0);
 });

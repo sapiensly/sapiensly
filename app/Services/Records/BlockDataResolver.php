@@ -254,6 +254,16 @@ class BlockDataResolver
                     $block,
                     $manifest,
                     ($context['__actor'] ?? null) instanceof User ? $context['__actor'] : null,
+                    $context,
+                ),
+                // A roster questionnaire is by invitation, and somebody absent
+                // from the roster is refused on submit. Said here so they are
+                // not asked to fill in a form first.
+                'invited' => app(FormParticipation::class)->isInvited(
+                    $app,
+                    $block,
+                    $manifest,
+                    ($context['__actor'] ?? null) instanceof User ? $context['__actor'] : null,
                 ),
             ];
         }

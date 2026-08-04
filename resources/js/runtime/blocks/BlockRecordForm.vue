@@ -40,7 +40,12 @@ interface RowData {
 const props = defineProps<{
     block: RecordFormBlock;
     data:
-        | { rows: RowData[]; can?: { answer?: boolean }; answered?: boolean }
+        | {
+              rows: RowData[];
+              can?: { answer?: boolean };
+              answered?: boolean;
+              invited?: boolean;
+          }
         | undefined;
     objects: ObjectDef[];
     locale: string;
@@ -215,6 +220,14 @@ async function submit(): Promise<void> {
                     ? runtimeWord(locale, 'form_thanks')
                     : runtimeWord(locale, 'form_already_answered')
             }}
+        </p>
+
+        <p
+            v-else-if="uninvited"
+            data-sp-form-uninvited
+            :class="['py-8 text-center text-sm', t.textMuted]"
+        >
+            {{ runtimeWord(locale, 'form_not_invited') }}
         </p>
 
         <p

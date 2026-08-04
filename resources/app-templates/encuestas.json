@@ -201,14 +201,52 @@
       "name": "Encuesta",
       "type": "relation",
       "cardinality": "many_to_one",
-      "target_object_id": "obj_encuesta0000000000000001"
+      "target_object_id": "obj_encuesta0000000000000001",
+      "required": true
      },
      {
       "id": "fld_encuesta0000000000000041",
       "slug": "persona",
       "name": "Persona",
+      "type": "relation",
+      "cardinality": "many_to_one",
+      "target_object_id": "obj_encuesta0000000000000006",
+      "required": true
+     }
+    ]
+   },
+   {
+    "id": "obj_encuesta0000000000000006",
+    "slug": "personas",
+    "name": "Personas",
+    "fields": [
+     {
+      "id": "fld_encuesta0000000000000050",
+      "slug": "nombre",
+      "name": "Nombre",
       "type": "string",
       "required": true
+     },
+     {
+      "id": "fld_encuesta0000000000000051",
+      "slug": "correo",
+      "name": "Correo",
+      "type": "email"
+     },
+     {
+      "id": "fld_encuesta0000000000000052",
+      "slug": "usuario",
+      "name": "Usuario",
+      "type": "string"
+     },
+     {
+      "id": "fld_encuesta0000000000000053",
+      "slug": "participaciones",
+      "name": "Participaciones",
+      "type": "relation",
+      "cardinality": "one_to_many",
+      "target_object_id": "obj_encuesta0000000000000005",
+      "inverse_field_id": "fld_encuesta0000000000000041"
      }
     ]
    }
@@ -404,6 +442,18 @@
          {
           "type": "navigate",
           "to": "/resultados?encuesta={{row.id}}"
+         }
+        ]
+       },
+       {
+        "id": "col_encuesta0000000000000009",
+        "type": "action",
+        "label": "Pendientes",
+        "icon": "user-x",
+        "on_click": [
+         {
+          "type": "navigate",
+          "to": "/pendientes?encuesta={{row.id}}"
          }
         ]
        },
@@ -678,6 +728,10 @@
       "participation": {
        "object_id": "obj_encuesta0000000000000005",
        "person_field_id": "fld_encuesta0000000000000041",
+       "person_lookup": {
+        "object_id": "obj_encuesta0000000000000006",
+        "match_field_id": "fld_encuesta0000000000000052"
+       },
        "values": {
         "fld_encuesta0000000000000040": "{{params.encuesta}}"
        }
@@ -758,6 +812,218 @@
       ]
      }
     ]
+   },
+   {
+    "id": "pag_encuesta0000000000000005",
+    "slug": "pendientes",
+    "name": "Pendientes",
+    "path": "/pendientes",
+    "blocks": [
+     {
+      "id": "blk_encuesta0000000000000040",
+      "type": "heading",
+      "content": "Quién falta por contestar"
+     },
+     {
+      "id": "blk_encuesta0000000000000041",
+      "type": "table",
+      "data_source": {
+       "object_id": "obj_encuesta0000000000000006",
+       "filter": {
+        "op": "not",
+        "condition": {
+         "op": "related",
+         "field_id": "fld_encuesta0000000000000053",
+         "condition": {
+          "op": "eq",
+          "field_id": "fld_encuesta0000000000000040",
+          "value_expression": "{{params.encuesta}}"
+         }
+        }
+       },
+       "sort": [
+        {
+         "field_id": "fld_encuesta0000000000000050",
+         "direction": "asc"
+        }
+       ]
+      },
+      "columns": [
+       {
+        "id": "col_encuesta0000000000000040",
+        "field_id": "fld_encuesta0000000000000050"
+       },
+       {
+        "id": "col_encuesta0000000000000041",
+        "field_id": "fld_encuesta0000000000000051"
+       }
+      ]
+     }
+    ]
+   },
+   {
+    "id": "pag_encuesta0000000000000006",
+    "slug": "personas",
+    "name": "Personas",
+    "path": "/personas",
+    "blocks": [
+     {
+      "id": "blk_encuesta0000000000000050",
+      "type": "heading",
+      "content": "Personas"
+     },
+     {
+      "id": "blk_encuesta0000000000000051",
+      "type": "modal",
+      "title": "Agregar persona",
+      "blocks": [
+       {
+        "id": "blk_encuesta0000000000000051f",
+        "type": "form",
+        "object_id": "obj_encuesta0000000000000006",
+        "mode": "create",
+        "fields": [
+         {
+          "field_id": "fld_encuesta0000000000000050"
+         },
+         {
+          "field_id": "fld_encuesta0000000000000051"
+         },
+         {
+          "field_id": "fld_encuesta0000000000000052"
+         }
+        ],
+        "submit_label": "Guardar",
+        "on_submit": [
+         {
+          "type": "create_record",
+          "object_id": "obj_encuesta0000000000000006",
+          "values": {
+           "nombre": "{{form.nombre}}",
+           "correo": "{{form.correo}}",
+           "usuario": "{{form.usuario}}"
+          }
+         },
+         {
+          "type": "close_modal"
+         },
+         {
+          "type": "show_toast",
+          "level": "success",
+          "message": "Guardado"
+         },
+         {
+          "type": "refresh"
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "id": "blk_encuesta0000000000000052",
+      "type": "modal",
+      "title": "Editar persona",
+      "blocks": [
+       {
+        "id": "blk_encuesta0000000000000052f",
+        "type": "form",
+        "object_id": "obj_encuesta0000000000000006",
+        "mode": "edit",
+        "record_id_expression": "{{params.record_id}}",
+        "fields": [
+         {
+          "field_id": "fld_encuesta0000000000000050"
+         },
+         {
+          "field_id": "fld_encuesta0000000000000051"
+         },
+         {
+          "field_id": "fld_encuesta0000000000000052"
+         }
+        ],
+        "submit_label": "Guardar",
+        "on_submit": [
+         {
+          "type": "update_record",
+          "object_id": "obj_encuesta0000000000000006",
+          "record_id_expression": "{{params.record_id}}",
+          "values": {
+           "nombre": "{{form.nombre}}",
+           "correo": "{{form.correo}}",
+           "usuario": "{{form.usuario}}"
+          }
+         },
+         {
+          "type": "close_modal"
+         },
+         {
+          "type": "show_toast",
+          "level": "success",
+          "message": "Guardado"
+         },
+         {
+          "type": "refresh"
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "id": "blk_encuesta0000000000000053",
+      "type": "button",
+      "label": "Agregar persona",
+      "variant": "primary",
+      "on_click": [
+       {
+        "type": "open_modal",
+        "modal_block_id": "blk_encuesta0000000000000051"
+       }
+      ]
+     },
+     {
+      "id": "blk_encuesta0000000000000054",
+      "type": "table",
+      "data_source": {
+       "object_id": "obj_encuesta0000000000000006",
+       "sort": [
+        {
+         "field_id": "fld_encuesta0000000000000050",
+         "direction": "asc"
+        }
+       ]
+      },
+      "columns": [
+       {
+        "id": "col_encuesta0000000000000050",
+        "field_id": "fld_encuesta0000000000000050"
+       },
+       {
+        "id": "col_encuesta0000000000000051",
+        "field_id": "fld_encuesta0000000000000051"
+       },
+       {
+        "id": "col_encuesta0000000000000052",
+        "field_id": "fld_encuesta0000000000000052"
+       },
+       {
+        "id": "col_encuesta0000000000000053",
+        "type": "action",
+        "label": "Editar",
+        "icon": "pencil",
+        "on_click": [
+         {
+          "type": "open_modal",
+          "modal_block_id": "blk_encuesta0000000000000052",
+          "params": {
+           "record_id": "{{row.id}}",
+           "record": "{{row.data}}"
+          }
+         }
+        ]
+       }
+      ]
+     }
+    ]
    }
   ],
   "permissions": {
@@ -818,6 +1084,16 @@
      ]
     },
     {
+     "object_id": "obj_encuesta0000000000000006",
+     "role_id": "rol_encuesta0000000000000001",
+     "actions": [
+      "create",
+      "read",
+      "update",
+      "delete"
+     ]
+    },
+    {
      "object_id": "obj_encuesta0000000000000001",
      "role_id": "rol_encuesta0000000000000002",
      "actions": [
@@ -850,6 +1126,13 @@
      "role_id": "rol_encuesta0000000000000002",
      "actions": [
       "create"
+     ]
+    },
+    {
+     "object_id": "obj_encuesta0000000000000006",
+     "role_id": "rol_encuesta0000000000000002",
+     "actions": [
+      "read"
      ]
     }
    ]

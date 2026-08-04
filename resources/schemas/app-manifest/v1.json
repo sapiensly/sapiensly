@@ -4857,6 +4857,16 @@
                                 "person_field_id": {
                                     "$ref": "#/$defs/id"
                                 },
+                                "person_lookup": {
+                                    "type": "object",
+                                    "additionalProperties": false,
+                                    "required": ["object_id", "match_field_id"],
+                                    "description": "Optional. Send the questionnaire to a ROSTER the app keeps: find the row whose match_field_id holds the current user's id, and write THAT record's id into person_field_id (which must then be a relation to this object). Without it the marker carries the raw user id, which nothing can join against — so \"who has not answered yet\" is only expressible with this. Somebody absent from the roster is refused, rather than answering with no marker and being able to answer again tomorrow.",
+                                    "properties": {
+                                        "object_id": {"$ref": "#/$defs/id"},
+                                        "match_field_id": {"$ref": "#/$defs/id"}
+                                    }
+                                },
                                 "once": {
                                     "type": "boolean",
                                     "default": true,

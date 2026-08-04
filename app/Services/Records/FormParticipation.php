@@ -35,6 +35,63 @@ class FormParticipation
      * @param  array<string, mixed>  $block
      * @param  array<string, mixed>  $manifest
      */
+    /**
+     * What the marker should carry for this person.
+     *
+     * Plainly their user id, unless the questionnaire goes to a ROSTER the app
+     * keeps — then it is the id of their row in it, so the marker is a real
+     * relation and "who has not answered yet" becomes an ordinary filter over
+     * the roster instead of a set subtraction nothing can express.
+     *
+     * Null means declared-but-not-found: this person is not on the roster.
+     *
+     * @param  array<string, mixed>  $participation
+     * @param  array<string, mixed>  $manifest
+     */
+    public function personValue(App $app, array $participation, array $manifest, User $user): ?string
+    {
+        $lookup = $participation['person_lookup'] ?? null;
+
+        if ($lookup === null) {
+            return (string) $user->id;
+        }
+
+        $objectId = (string) ($lookup['object_id'] ?? '');
+        $slug = $this->slugFor($manifest, $objectId, (string) ($lookup['match_field_id'] ?? ''));
+
+        if ($objectId === '' || $slug === null) {
+            return null;
+        }
+
+        return Record::query()
+            ->where('app_id', $app->id)
+            ->where('object_definition_id', $objectId)
+            ->where('environment', app(EnvironmentContext::class)->current())
+            ->where('data->'.$slug, (string) $user->id)
+            ->value('id');
+    }
+
+    /**
+     * Is this person on the roster the questionnaire goes to?
+     *
+     * True whenever there is no roster — an ordinary questionnaire is open to
+     * anybody the app's permissions already let in.
+     *
+     * @param  array<string, mixed>  $block
+     * @param  array<string, mixed>  $manifest
+     */
+    public function isInvited(App $app, array $block, array $manifest, ?User $user): bool
+    {
+        $participation = $block['participation'] ?? null;
+
+        if ($participation === null || ! isset($participation['person_lookup'])) {
+            return true;
+        }
+
+        return $user !== null
+            && $this->personValue($app, $participation, $manifest, $user) !== null;
+    }
+
     public function hasAnswered(App $app, array $block, array $manifest, ?User $user, array $context = []): bool
     {
         $participation = $block['participation'] ?? null;
@@ -50,13 +107,19 @@ class FormParticipation
             return false;
         }
 
+        $person = $this->personValue($app, $participation, $manifest, $user);
+
+        if ($person === null) {
+            return false;
+        }
+
         $query = Record::query()
             ->where('app_id', $app->id)
             ->where('object_definition_id', $objectId)
             // Sandbox and production keep separate books. Without this, testing
             // a survey in the sandbox would lock the tester out of the real one.
             ->where('environment', app(EnvironmentContext::class)->current())
-            ->where('data->'.$personSlug, (string) $user->id);
+            ->where('data->'.$personSlug, $person);
 
         // Scoped by whatever the author put ON the marker. One participation
         // object usually serves every questionnaire in an app, so a marker that

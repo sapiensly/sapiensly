@@ -110,6 +110,17 @@ class AppRecordFormController extends Controller
                 return $this->alreadyAnswered();
             }
 
+            // A roster questionnaire is by invitation. Refused BEFORE anything
+            // is written, and loudly: filing the answers while quietly skipping
+            // the marker would let this person answer again tomorrow, and would
+            // leave them missing from the list of who still owes a response.
+            $roster = $block['participation']['person_lookup'] ?? null;
+
+            if ($roster !== null && $user !== null
+                && $this->participation->personValue($app, $block['participation'], $manifest, $user) === null) {
+                return response()->json(['error' => 'not_invited'], 403);
+            }
+
             $written = DB::connection(Schemas::connectionFor('records'))->transaction(
                 fn (): int => $this->file($app, $manifest, $block, $data['answers'], $user, $anonymous, $context),
             );
@@ -216,16 +227,22 @@ class AppRecordFormController extends Controller
         // the half that lets somebody be reminded without being read.
         $participation = $block['participation'] ?? null;
         if ($participation !== null && $user !== null) {
-            $this->writes->create(
-                $app,
-                $manifest,
-                (string) $participation['object_id'],
-                array_merge(
-                    $this->participation->values($participation, $context),
-                    [$participation['person_field_id'] => (string) $user->id],
-                ),
-                $user,
-            );
+            $person = $this->participation->personValue($app, $participation, $manifest, $user);
+
+            // Null only when the questionnaire goes to a ROSTER and this person
+            // is not on it. Checked before anything is written — see __invoke.
+            if ($person !== null) {
+                $this->writes->create(
+                    $app,
+                    $manifest,
+                    (string) $participation['object_id'],
+                    array_merge(
+                        $this->participation->values($participation, $context),
+                        [$participation['person_field_id'] => $person],
+                    ),
+                    $user,
+                );
+            }
         }
 
         return $written;
