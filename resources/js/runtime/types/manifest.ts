@@ -232,7 +232,9 @@ export interface BlockOther extends BlockBase {
         | 'tabs'
         | 'testimonials'
         | 'timeline'
-        | 'word_cloud';
+        | 'word_cloud'
+        | 'barcode'
+        | 'record_form';
     [key: string]: unknown;
 }
 

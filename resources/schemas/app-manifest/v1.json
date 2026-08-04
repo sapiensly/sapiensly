@@ -4736,6 +4736,155 @@
                 }
             ]
         },
+        "block_record_form": {
+            "description": "A form whose FIELDS COME FROM RECORDS instead of the manifest \u2014 one input per row returned by `questions`. This is what lets an app's own users define a questionnaire: HR writes the questions as data, and employees answer a real form rather than a spreadsheet. Use it for surveys, inspection checklists, audits and performance reviews. Each answer is written as its own record (so filters, charts, per-question aggregates and exports all work with the ordinary engine), grouped by one submission record. Requires questions, label_field_id, type_field_id, type_map and answers.",
+            "allOf": [
+                {
+                    "$ref": "#/$defs/block_base"
+                },
+                {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                        "id": true,
+                        "live": true,
+                        "visibility": true,
+                        "style": true,
+                        "type": {
+                            "const": "record_form"
+                        },
+                        "label": {
+                            "type": "string",
+                            "maxLength": 120
+                        },
+                        "questions": {
+                            "$ref": "#/$defs/query",
+                            "description": "Which records become the questions. Filter it to one questionnaire and sort it, because the order questions appear in is part of what somebody authored."
+                        },
+                        "label_field_id": {
+                            "$ref": "#/$defs/id",
+                            "description": "The field holding the question TEXT."
+                        },
+                        "type_field_id": {
+                            "$ref": "#/$defs/id",
+                            "description": "The field holding what KIND of answer this question wants, in the app's own vocabulary."
+                        },
+                        "type_map": {
+                            "type": "object",
+                            "description": "How that vocabulary maps to inputs: {\"escala_1_5\": \"rating\", \"si_no\": \"boolean\"}. The right-hand side is a field type (rating, slider, boolean, long_text, string, number, date, single_select). Anything unmapped renders as text rather than nothing.",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        },
+                        "options_field_id": {
+                            "$ref": "#/$defs/id",
+                            "description": "For choice questions: a field holding the options, as an array or a newline/comma separated list."
+                        },
+                        "required_field_id": {
+                            "$ref": "#/$defs/id",
+                            "description": "A boolean field marking a question as required."
+                        },
+                        "answers": {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "required": [
+                                "object_id",
+                                "question_field_id",
+                                "value_field_ids"
+                            ],
+                            "properties": {
+                                "object_id": {
+                                    "$ref": "#/$defs/id"
+                                },
+                                "question_field_id": {
+                                    "$ref": "#/$defs/id",
+                                    "description": "Relation on the answer pointing back at its question."
+                                },
+                                "value_field_ids": {
+                                    "type": "object",
+                                    "description": "Which column each kind of answer is written to: {\"rating\": \"<numeric field>\", \"long_text\": \"<text field>\"}. Separate columns rather than one, because a number stored as text cannot be averaged.",
+                                    "additionalProperties": {
+                                        "$ref": "#/$defs/id"
+                                    }
+                                },
+                                "parent_field_id": {
+                                    "$ref": "#/$defs/id",
+                                    "description": "Relation on the answer pointing at the submission that groups it."
+                                }
+                            }
+                        },
+                        "submission": {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "required": ["object_id"],
+                            "description": "The record that groups one person's answers.",
+                            "properties": {
+                                "object_id": {
+                                    "$ref": "#/$defs/id"
+                                },
+                                "values": {
+                                    "type": "object",
+                                    "description": "Field-slug \u2192 value map written on the submission, e.g. {\"encuesta\": \"{{params.id}}\"}.",
+                                    "additionalProperties": {
+                                        "type": [
+                                            "string",
+                                            "number",
+                                            "boolean",
+                                            "null"
+                                        ]
+                                    }
+                                },
+                                "anonymous": {
+                                    "type": "boolean",
+                                    "default": false,
+                                    "description": "The submission carries NO link to the person answering, and its timestamp is coarsened to the DATE \u2014 an exact time re-identifies somebody as surely as a name would. Pair it with `participation` to know who still has to answer without being able to read what anybody said. This is what makes a climate survey worth running: the moment employees suspect it is traceable, the answers stop meaning anything."
+                                }
+                            }
+                        },
+                        "participation": {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "required": ["object_id", "person_field_id"],
+                            "description": "Optional. Records that THIS person answered, in a separate object with no link to their answers \u2014 so somebody can be reminded without anybody being able to read what they said.",
+                            "properties": {
+                                "object_id": {
+                                    "$ref": "#/$defs/id"
+                                },
+                                "person_field_id": {
+                                    "$ref": "#/$defs/id"
+                                },
+                                "values": {
+                                    "type": "object",
+                                    "additionalProperties": {
+                                        "type": [
+                                            "string",
+                                            "number",
+                                            "boolean",
+                                            "null"
+                                        ]
+                                    }
+                                }
+                            }
+                        },
+                        "submit_label": {
+                            "type": "string",
+                            "maxLength": 60
+                        },
+                        "on_submit": {
+                            "$ref": "#/$defs/action_sequence"
+                        }
+                    },
+                    "required": [
+                        "type",
+                        "questions",
+                        "label_field_id",
+                        "type_field_id",
+                        "type_map",
+                        "answers"
+                    ]
+                }
+            ]
+        },
         "block_alert": {
             "allOf": [
                 {
@@ -5137,6 +5286,9 @@
                 },
                 {
                     "$ref": "#/$defs/block_badge"
+                },
+                {
+                    "$ref": "#/$defs/block_record_form"
                 },
                 {
                     "$ref": "#/$defs/block_barcode"

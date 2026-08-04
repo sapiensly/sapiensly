@@ -12,6 +12,7 @@ use App\Http\Controllers\AppFileController;
 use App\Http\Controllers\AppNotificationController;
 use App\Http\Controllers\AppPrintController;
 use App\Http\Controllers\AppRecordExtractController;
+use App\Http\Controllers\AppRecordFormController;
 use App\Http\Controllers\AppRecordLookupController;
 use App\Http\Controllers\AppRecordOptionsController;
 use App\Http\Controllers\AppRecordTrailController;
@@ -282,6 +283,15 @@ Route::middleware([
         ->where('field_id', 'fld_[a-z0-9]+')
         ->middleware(['throttle:120,1', BindAppEnvironment::class])
         ->name('apps.runtime.options');
+
+    // File a questionnaire somebody else authored: one submission and N answers
+    // in one transaction. See the controller on why anonymity has to live here
+    // rather than in a sequence of create_record actions.
+    Route::post('/r/{app_slug}/forms/{block_id}/submit', AppRecordFormController::class)
+        ->where('app_slug', '[a-z][a-z0-9_]*')
+        ->where('block_id', 'blk_[a-z0-9]+')
+        ->middleware(['throttle:60,1', BindAppEnvironment::class])
+        ->name('apps.runtime.form.submit');
 
     // Read a document, fill a form. Writes nothing — see the controller on why
     // an extraction is a suggestion and never a saved record.

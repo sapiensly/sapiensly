@@ -89,6 +89,9 @@ const BlockHeatmap = defineAsyncComponent(
 const BlockTimeline = defineAsyncComponent(
     () => import('./blocks/BlockTimeline.vue'),
 );
+const BlockRecordForm = defineAsyncComponent(
+    () => import('./blocks/BlockRecordForm.vue'),
+);
 const BlockBarcode = defineAsyncComponent(
     () => import('./blocks/BlockBarcode.vue'),
 );
@@ -186,6 +189,7 @@ const componentForType = {
     heatmap: BlockHeatmap,
     timeline: BlockTimeline,
     barcode: BlockBarcode,
+    record_form: BlockRecordForm,
     gantt: BlockGantt,
     funnel: BlockFunnel,
     map: BlockMap,
@@ -257,6 +261,7 @@ const DATA_BLOCK_TYPES = new Set([
     'timeline',
     'gantt',
     'barcode',
+    'record_form',
     'map',
     'card_grid',
     'word_cloud',

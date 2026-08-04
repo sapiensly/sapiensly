@@ -110,7 +110,18 @@ it('the runtime type union knows every block the schema allows', function () {
     // A block is typed either by its own interface (`type: 'table';`) or as a
     // member of the catch-all union (`| 'heatmap'`). Both count; neither is
     // optional, because `block.type === 'pivot'` is a TS error without one.
-    preg_match_all("/\|\s*'([a-z_]+)'/", $types, $union);
+    //
+    // Scoped to BlockOther's own union rather than swept off the whole file.
+    // A bare pipe-and-quote regex also matched unrelated unions — a field's
+    // `capture?: 'camera' | 'signature' | 'barcode'` made `barcode` look
+    // declared for two commits while it was not, which is a guard handing out
+    // confidence it had not earned.
+    $catchAll = '';
+    if (preg_match('/interface BlockOther.*?type:(.*?);/s', $types, $only) === 1) {
+        $catchAll = $only[1];
+    }
+
+    preg_match_all("/\|\s*'([a-z_]+)'/", $catchAll, $union);
     preg_match_all("/^\s*type: '([a-z_]+)';/m", $types, $dedicated);
     $declared = array_unique([...($union[1] ?? []), ...($dedicated[1] ?? [])]);
 

@@ -234,6 +234,21 @@ class BlockDataResolver
             }
         }
 
+        // A form whose fields come from records: the questions are just rows,
+        // read through the same access-filtered path as any other list.
+        if ($block['type'] === 'record_form') {
+            return [
+                'rows' => $this->queryRows($app, $block['questions'], $manifest, $context),
+                // Whether this reader may actually file an answer. A form that
+                // renders and then refuses on submit is worse than one that
+                // never offered.
+                'can' => [
+                    'answer' => ($context['__access'] ?? null) instanceof AppAccessContext
+                        && $context['__access']->can((string) ($block['answers']['object_id'] ?? ''), 'create'),
+                ],
+            ];
+        }
+
         if (in_array($block['type'], ['kanban', 'calendar', 'sparkline', 'heatmap', 'timeline', 'gantt', 'map', 'card_grid', 'word_cloud', 'data_grid', 'barcode'], true)) {
             return [
                 'rows' => $this->queryRows($app, $block['data_source'], $manifest, $context),
