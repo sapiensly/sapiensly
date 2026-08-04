@@ -1,8 +1,12 @@
 <script setup lang="ts">
+import { Sparkles } from '@lucide/vue';
 import { computed, inject, ref, type Ref } from 'vue';
 import type { FieldDef, ObjectDef } from '../types/manifest';
 import { useActionExecutor, type RuntimeAction } from '../useActionExecutor';
+import { useFileUpload } from '../useFileUpload';
 import { themeTokens, useRuntimeTheme } from '../useRuntimeTheme';
+import { useRuntimeWrite } from '../useRuntimeWrite';
+import { runtimeWord } from '../words';
 import FormFieldInput from './FormFieldInput.vue';
 import { evaluateFieldCondition, type FieldCondition } from './fieldCondition';
 import { initialFieldValue } from './formFieldDefault';
@@ -27,6 +31,7 @@ interface FormBlock {
     cancel_label?: string;
     on_submit?: RuntimeAction[];
     on_cancel?: RuntimeAction[];
+    fill_from_document?: boolean;
 }
 
 /** Server-pre-resolved form payload (default_expression / readonly_expression). */
@@ -195,6 +200,74 @@ const modalRecord = computed<Record<string, unknown>>(() => {
 });
 
 const formData = ref<Record<string, unknown>>(initialState());
+
+/**
+ * Filling the form from a photograph of the thing it is about.
+ *
+ * It fills, and never saves. The model read a crumpled receipt in bad light,
+ * and the person holding it is the one who knows whether it says 1,250 or
+ * 7,250 — so what arrives is a filled form they check, not a record they never
+ * saw. Only fields the document actually stated come back; the rest stay empty
+ * on purpose, because somebody proof-reads what is filled in and not what is
+ * missing.
+ */
+const extracting = ref(false);
+const extractError = ref<string | null>(null);
+const extractInput = ref<HTMLInputElement | null>(null);
+const { upload } = useFileUpload(appSlug);
+const { write } = useRuntimeWrite();
+
+async function onDocumentChosen(event: Event): Promise<void> {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0];
+    input.value = '';
+    if (!file || !object.value) return;
+
+    extracting.value = true;
+    extractError.value = null;
+
+    const uploaded = await upload(file);
+    if (uploaded === null) {
+        extracting.value = false;
+        extractError.value = runtimeWord(props.locale, 'fill_failed');
+
+        return;
+    }
+
+    const result = await write<{
+        values?: Record<string, unknown>;
+        error?: string | null;
+    }>(`/r/${appSlug}/objects/${object.value.slug}/extract`, {
+        file_id: uploaded.file_id,
+    });
+
+    extracting.value = false;
+
+    if (!result.ok || result.data?.error) {
+        extractError.value = runtimeWord(props.locale, 'fill_failed');
+
+        return;
+    }
+
+    const values = result.data?.values ?? {};
+    if (Object.keys(values).length === 0) {
+        extractError.value = runtimeWord(props.locale, 'fill_nothing');
+
+        return;
+    }
+
+    // Merged, not replaced: whatever somebody already typed is theirs, and a
+    // model is not entitled to overwrite it.
+    for (const [slug, value] of Object.entries(values)) {
+        if (
+            formData.value[slug] === undefined ||
+            formData.value[slug] === null ||
+            formData.value[slug] === ''
+        ) {
+            formData.value[slug] = value;
+        }
+    }
+}
 // What the form opened with. An edit submits the DIFFERENCE against this, so
 // keep it as the pristine copy — never the same object as formData.
 const pristine = ref<Record<string, unknown>>({ ...formData.value });
@@ -317,6 +390,52 @@ async function cancel() {
 
 <template>
     <form :class="wrapperClass" @submit.prevent="submit">
+        <!-- Above the fields, because it is a way of STARTING the form rather
+             than a step in it. It fills; the person checks and saves. -->
+        <div
+            v-if="block.fill_from_document"
+            class="mb-3 flex flex-wrap items-center gap-2"
+        >
+            <button
+                type="button"
+                data-sp-fill-doc
+                :disabled="extracting"
+                :class="[
+                    'inline-flex h-9 items-center gap-1.5 rounded-md border px-2.5 text-xs transition-colors hover:bg-surface-hover disabled:opacity-50',
+                    t.surfaceMuted,
+                    t.textMuted,
+                ]"
+                @click="extractInput?.click()"
+            >
+                <Sparkles class="size-3.5" />
+                {{
+                    runtimeWord(
+                        locale,
+                        extracting ? 'fill_reading' : 'fill_from_document',
+                    )
+                }}
+            </button>
+            <span :class="['text-[10px]', t.textSubtle]">
+                {{ runtimeWord(locale, 'fill_check') }}
+            </span>
+            <input
+                ref="extractInput"
+                type="file"
+                class="hidden"
+                accept="image/*,application/pdf"
+                capture="environment"
+                @change="onDocumentChosen"
+            />
+        </div>
+
+        <p
+            v-if="extractError"
+            data-sp-fill-error
+            class="mb-2 text-[11px] text-amber-500"
+        >
+            {{ extractError }}
+        </p>
+
         <div :class="gridClass">
             <div
                 v-for="rf in visibleFields"

@@ -2463,6 +2463,11 @@
                             "type": "string",
                             "default": "Cancel"
                         },
+                        "fill_from_document": {
+                            "type": "boolean",
+                            "default": false,
+                            "description": "Offers a \u00abfill from a photo or PDF\u00bb button above the form: a vision model reads the document and fills the fields it can. It FILLS and never saves \u2014 the person checks every value and submits as usual, because a model reading a crumpled receipt in bad light is a suggestion and not a record. Fields the document does not clearly state are left empty on purpose, since somebody proof-reads what is filled in and not what is missing. Use it wherever a record is copied off a piece of paper: supplier invoices, receipts, delivery notes, meter readings, ID documents."
+                        },
                         "on_submit": {
                             "$ref": "#/$defs/action_sequence"
                         },

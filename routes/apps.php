@@ -11,6 +11,7 @@ use App\Http\Controllers\AppExportController;
 use App\Http\Controllers\AppFileController;
 use App\Http\Controllers\AppNotificationController;
 use App\Http\Controllers\AppPrintController;
+use App\Http\Controllers\AppRecordExtractController;
 use App\Http\Controllers\AppRecordLookupController;
 use App\Http\Controllers\AppRecordOptionsController;
 use App\Http\Controllers\AppRecordTrailController;
@@ -281,6 +282,14 @@ Route::middleware([
         ->where('field_id', 'fld_[a-z0-9]+')
         ->middleware(['throttle:120,1', BindAppEnvironment::class])
         ->name('apps.runtime.options');
+
+    // Read a document, fill a form. Writes nothing — see the controller on why
+    // an extraction is a suggestion and never a saved record.
+    Route::post('/r/{app_slug}/objects/{object_slug}/extract', AppRecordExtractController::class)
+        ->where('app_slug', '[a-z][a-z0-9_]*')
+        ->where('object_slug', '[a-z][a-z0-9_]*')
+        ->middleware(['throttle:20,1', BindAppEnvironment::class])
+        ->name('apps.runtime.extract');
 
     // Which record carries a scanned code. Addressed by the field for the same
     // reason as the options above, and answering with at most one id — it is a
