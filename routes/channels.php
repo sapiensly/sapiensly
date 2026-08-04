@@ -1,6 +1,7 @@
 <?php
 
 use App\Enums\DocumentType;
+use App\Models\App;
 use App\Models\AppImport;
 use App\Models\BuilderConversation;
 use App\Models\Chat;
@@ -66,6 +67,29 @@ Broadcast::channel('knowledge-base.{knowledgeBaseId}', function ($user, string $
 // Admin V2 dashboard — sysadmins only. Events (health snapshot changes, audit
 // rows, stat recomputes) will be broadcast onto this channel by the dashboard
 // step; for now only the authorization gate is registered.
+// "Something in this app changed" — see App\Events\Apps\RecordChanged for why
+// the payload is three ids and a verb and never the row itself. Gated on being
+// able to SEE the app; what each listener may actually read is decided when it
+// re-reads through the ordinary access-filtered path.
+Broadcast::channel('app.records.{appId}', function ($user, string $appId) {
+    $app = App::find($appId);
+
+    return $app !== null && $app->isVisibleTo($user);
+});
+
+// Who else is looking at this record. A presence channel carries its members'
+// names to every other member, so it is gated the same way — and it says only
+// that somebody is HERE, never what they are doing.
+Broadcast::channel('app.presence.{appId}.{recordId}', function ($user, string $appId, string $recordId) {
+    $app = App::find($appId);
+
+    if ($app === null || ! $app->isVisibleTo($user)) {
+        return false;
+    }
+
+    return ['id' => $user->id, 'name' => $user->name, 'record_id' => $recordId];
+});
+
 Broadcast::channel('admin.dashboard', fn ($user) => $user?->hasRole('sysadmin') ?? false);
 
 /*

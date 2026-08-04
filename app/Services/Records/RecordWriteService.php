@@ -2,6 +2,7 @@
 
 namespace App\Services\Records;
 
+use App\Events\Apps\RecordChanged;
 use App\Models\App;
 use App\Models\AppFile;
 use App\Models\Record;
@@ -13,6 +14,7 @@ use DateTimeZone;
 use Exception;
 use InvalidArgumentException;
 use RuntimeException;
+use Throwable;
 
 /**
  * Validates and persists Record CRUD operations using the App's manifest as
@@ -60,6 +62,7 @@ class RecordWriteService
         ]);
 
         $this->trail()->created($app, $manifest, $record, $user);
+        $this->announce($app, $record, 'created', $user);
 
         $this->triggers()->dispatch($app, $manifest, 'record.created', [
             'record' => $this->recordPayload($record),
@@ -91,6 +94,7 @@ class RecordWriteService
         $updated = $record->refresh();
 
         $this->trail()->updated($app, $manifest, $updated, $before, $clean, $user);
+        $this->announce($app, $updated, 'updated', $user);
 
         $this->triggers()->dispatch($app, $manifest, 'record.updated', [
             'record' => $this->recordPayload($updated),
@@ -114,6 +118,7 @@ class RecordWriteService
         }
 
         $record->delete();
+        $this->announce($app, $record, 'deleted', $user);
 
         if ($app !== null && $manifest !== null) {
             $this->triggers()->dispatch($app, $manifest, 'record.deleted', [
@@ -152,6 +157,37 @@ class RecordWriteService
         }
 
         $record->forceDelete();
+    }
+
+    /**
+     * Tell anybody watching that something moved.
+     *
+     * From the single write chokepoint, so every path that changes a record —
+     * a form, an inline grid edit, a bulk action, a workflow step, an MCP tool
+     * — announces itself without any of them knowing this exists.
+     *
+     * Best-effort by design: a broadcaster that is down must never fail a write
+     * that already succeeded. The worst case is a table that refreshes when
+     * somebody clicks instead of by itself.
+     */
+    private function announce(?App $app, Record $record, string $verb, ?User $user): void
+    {
+        if ($app === null) {
+            return;
+        }
+
+        try {
+            RecordChanged::dispatch(
+                $app->id,
+                (string) $record->object_definition_id,
+                (string) $record->id,
+                $verb,
+                (string) ($record->environment ?? EnvironmentContext::PRODUCTION),
+                $user?->id,
+            );
+        } catch (Throwable $e) {
+            report($e);
+        }
     }
 
     private function trail(): RecordTrail

@@ -15,9 +15,10 @@ import SiteHeader from '@/runtime/SiteHeader.vue';
 import SiteSidebar from '@/runtime/SiteSidebar.vue';
 import type { AnyBlock, RuntimePageProps } from '@/runtime/types/manifest';
 import { blockDataBus } from '@/runtime/useActionExecutor';
+import { useLiveRecords } from '@/runtime/useLiveRecords';
 import { useScrollReveal } from '@/runtime/useReveal';
 import { useSidebarCollapsed } from '@/runtime/useSidebarCollapsed';
-import { Head } from '@inertiajs/vue3';
+import { Head, usePage } from '@inertiajs/vue3';
 import { PanelLeftClose, PanelLeftOpen } from '@lucide/vue';
 import { computed, onMounted, onUnmounted, provide, ref, watch } from 'vue';
 
@@ -116,6 +117,50 @@ const contentWidthClass = computed(() =>
 // A landing renders chrome-less and full-bleed: no site header/sidebar/footer,
 // no content gutters — the page brings its own navbar/footer section blocks and
 // each section paints itself edge to edge.
+/**
+ * The page's single live subscription.
+ *
+ * Here rather than in each block: a dashboard with six live tables would
+ * otherwise open six channels to the same app and refresh six times for one
+ * write. They all reload together anyway — `blockData` is one deferred prop.
+ *
+ * Started only when some block on the page asked for it, because a websocket
+ * nobody needs is a connection the tenant pays to keep open.
+ */
+const liveObjectIds = computed<string[]>(() => {
+    const ids: string[] = [];
+
+    const walk = (blocks: AnyBlock[]): void => {
+        for (const block of blocks) {
+            const source = (block as { data_source?: { object_id?: string } })
+                .data_source;
+            if (
+                (block as { live?: boolean }).live === true &&
+                typeof source?.object_id === 'string'
+            ) {
+                ids.push(source.object_id);
+            }
+            const children = (block as { blocks?: AnyBlock[] }).blocks;
+            if (Array.isArray(children)) walk(children);
+        }
+    };
+
+    walk(props.page.blocks ?? []);
+
+    return ids;
+});
+
+if (liveObjectIds.value.length > 0) {
+    useLiveRecords({
+        appId: props.app.id,
+        objectIds: liveObjectIds.value,
+        environment: props.environment?.current ?? 'production',
+        currentUserId:
+            (usePage().props.auth as { user?: { id?: number } } | undefined)
+                ?.user?.id ?? null,
+    });
+}
+
 const isLanding = computed(() => props.app.kind === 'landing');
 
 /**
@@ -237,6 +282,14 @@ const hrefFor = (slug: string) => `${mount.value}/${slug}`;
 // Provide the slug the app is addressed by so BlockForm/BlockButton can POST to
 // <mount>/actions — the public slug on a portal, the app slug in the runtime.
 provide('appSlug', mount.value.split('/')[2] ?? props.app.slug);
+// Presence needs the app's ID (channels are keyed by it, not by slug) and the
+// viewer's own id, so a block can leave itself out of "who else is here".
+provide('appId', props.app.id);
+provide(
+    'currentUserId',
+    (usePage().props.auth as { user?: { id?: number } } | undefined)?.user
+        ?.id ?? null,
+);
 provide('runtimeLocale', locale.value);
 // Public-surface flags for the lead_form block: live submits happen only on
 // the published /l page; the preview/authenticated runtime render it disabled.

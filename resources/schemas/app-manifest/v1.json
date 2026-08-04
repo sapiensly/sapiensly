@@ -1797,6 +1797,11 @@
                 "id": {
                     "$ref": "#/$defs/id"
                 },
+                "live": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Refresh this block when somebody ELSE changes one of its records. The server broadcasts three ids and a verb — never the row — and the page re-reads through the ordinary access-filtered path, so nobody learns of a record they could not already open. One subscription per page however many blocks ask for it, and writes are coalesced, so a busy app costs one query rather than a queue of them. Use it for shared queues, dispatch boards and dashboards on a wall; leave it off for a form somebody is typing into."
+                },
                 "visibility": {
                     "$ref": "#/$defs/visibility_rule"
                 },
@@ -1815,6 +1820,7 @@
                     "additionalProperties": false,
                     "properties": {
                         "id": true,
+                        "live": true,
                         "visibility": true,
                         "style": true,
                         "type": {
@@ -1851,6 +1857,7 @@
                     "additionalProperties": false,
                     "properties": {
                         "id": true,
+                        "live": true,
                         "visibility": true,
                         "style": true,
                         "type": {
@@ -1923,6 +1930,7 @@
                     "additionalProperties": false,
                     "properties": {
                         "id": true,
+                        "live": true,
                         "visibility": true,
                         "style": true,
                         "type": {
@@ -1958,6 +1966,7 @@
                     "additionalProperties": false,
                     "properties": {
                         "id": true,
+                        "live": true,
                         "visibility": true,
                         "style": true,
                         "type": {
@@ -1986,6 +1995,7 @@
                     "additionalProperties": false,
                     "properties": {
                         "id": true,
+                        "live": true,
                         "visibility": true,
                         "style": true,
                         "type": {
@@ -2020,6 +2030,7 @@
                     "additionalProperties": false,
                     "properties": {
                         "id": true,
+                        "live": true,
                         "visibility": true,
                         "style": true,
                         "type": {
@@ -2040,6 +2051,7 @@
                     "additionalProperties": false,
                     "properties": {
                         "id": true,
+                        "live": true,
                         "visibility": true,
                         "style": true,
                         "type": {
@@ -2064,6 +2076,7 @@
                     "additionalProperties": false,
                     "properties": {
                         "id": true,
+                        "live": true,
                         "visibility": true,
                         "style": true,
                         "type": {
@@ -2227,6 +2240,7 @@
                     "additionalProperties": false,
                     "properties": {
                         "id": true,
+                        "live": true,
                         "visibility": true,
                         "style": true,
                         "type": {
@@ -2311,6 +2325,7 @@
                     "additionalProperties": false,
                     "properties": {
                         "id": true,
+                        "live": true,
                         "visibility": true,
                         "style": true,
                         "type": {
@@ -2418,6 +2433,7 @@
                     "additionalProperties": false,
                     "properties": {
                         "id": true,
+                        "live": true,
                         "visibility": true,
                         "style": true,
                         "type": {
@@ -2500,6 +2516,7 @@
                     "additionalProperties": false,
                     "properties": {
                         "id": true,
+                        "live": true,
                         "visibility": true,
                         "style": true,
                         "type": {
@@ -2598,6 +2615,7 @@
                     "additionalProperties": false,
                     "properties": {
                         "id": true,
+                        "live": true,
                         "visibility": true,
                         "style": true,
                         "type": {
@@ -2652,6 +2670,7 @@
                     "additionalProperties": false,
                     "properties": {
                         "id": true,
+                        "live": true,
                         "visibility": true,
                         "style": true,
                         "type": {
@@ -2692,6 +2711,7 @@
                     "additionalProperties": false,
                     "properties": {
                         "id": true,
+                        "live": true,
                         "visibility": true,
                         "style": true,
                         "type": {
@@ -2703,6 +2723,11 @@
                         },
                         "object_id": {
                             "$ref": "#/$defs/id"
+                        },
+                        "presence": {
+                            "type": "boolean",
+                            "default": false,
+                            "description": "Shows who ELSE has this record open. Two people about to edit the same order is the thing worth knowing, and knowing it is what stops the second one wasting the work. It says somebody is HERE and never what they are doing."
                         },
                         "record_id_expression": {
                             "type": "string",
@@ -2747,6 +2772,7 @@
                     "additionalProperties": false,
                     "properties": {
                         "id": true,
+                        "live": true,
                         "visibility": true,
                         "style": true,
                         "type": {
@@ -2781,6 +2807,7 @@
                     "additionalProperties": false,
                     "properties": {
                         "id": true,
+                        "live": true,
                         "visibility": true,
                         "style": true,
                         "type": {
@@ -2904,6 +2931,7 @@
                     "additionalProperties": false,
                     "properties": {
                         "id": true,
+                        "live": true,
                         "visibility": true,
                         "style": true,
                         "type": {
@@ -2953,6 +2981,7 @@
                     "additionalProperties": false,
                     "properties": {
                         "id": true,
+                        "live": true,
                         "visibility": true,
                         "style": true,
                         "type": {
@@ -3031,6 +3060,7 @@
                     "additionalProperties": false,
                     "properties": {
                         "id": true,
+                        "live": true,
                         "visibility": true,
                         "style": true,
                         "type": {
@@ -3172,6 +3202,7 @@
                     "additionalProperties": false,
                     "properties": {
                         "id": true,
+                        "live": true,
                         "visibility": true,
                         "style": true,
                         "type": {
@@ -3246,6 +3277,7 @@
                     "additionalProperties": false,
                     "properties": {
                         "id": true,
+                        "live": true,
                         "visibility": true,
                         "style": true,
                         "type": {
@@ -3296,6 +3328,7 @@
                     "additionalProperties": false,
                     "properties": {
                         "id": true,
+                        "live": true,
                         "visibility": true,
                         "style": true,
                         "label": true,
@@ -3334,6 +3367,7 @@
                     "additionalProperties": false,
                     "properties": {
                         "id": true,
+                        "live": true,
                         "visibility": true,
                         "style": true,
                         "type": {
@@ -3358,6 +3392,7 @@
                     "additionalProperties": false,
                     "properties": {
                         "id": true,
+                        "live": true,
                         "visibility": true,
                         "style": true,
                         "type": {
@@ -3399,6 +3434,7 @@
                     "additionalProperties": false,
                     "properties": {
                         "id": true,
+                        "live": true,
                         "visibility": true,
                         "style": true,
                         "type": {
@@ -3512,6 +3548,7 @@
                     "additionalProperties": false,
                     "properties": {
                         "id": true,
+                        "live": true,
                         "visibility": true,
                         "style": true,
                         "type": {
@@ -3565,6 +3602,7 @@
                     "additionalProperties": false,
                     "properties": {
                         "id": true,
+                        "live": true,
                         "visibility": true,
                         "style": true,
                         "type": {
@@ -3613,6 +3651,7 @@
                     "additionalProperties": false,
                     "properties": {
                         "id": true,
+                        "live": true,
                         "visibility": true,
                         "style": true,
                         "type": {
@@ -3656,6 +3695,7 @@
                     "additionalProperties": false,
                     "properties": {
                         "id": true,
+                        "live": true,
                         "visibility": true,
                         "style": true,
                         "type": {
@@ -3711,6 +3751,7 @@
                     "additionalProperties": false,
                     "properties": {
                         "id": true,
+                        "live": true,
                         "visibility": true,
                         "style": true,
                         "type": {
@@ -3754,6 +3795,7 @@
                     "additionalProperties": false,
                     "properties": {
                         "id": true,
+                        "live": true,
                         "visibility": true,
                         "style": true,
                         "type": {
@@ -3830,6 +3872,7 @@
                     "additionalProperties": false,
                     "properties": {
                         "id": true,
+                        "live": true,
                         "visibility": true,
                         "style": true,
                         "type": {
@@ -3867,6 +3910,7 @@
                     "additionalProperties": false,
                     "properties": {
                         "id": true,
+                        "live": true,
                         "visibility": true,
                         "style": true,
                         "type": {
@@ -3922,6 +3966,7 @@
                     "additionalProperties": false,
                     "properties": {
                         "id": true,
+                        "live": true,
                         "visibility": true,
                         "style": true,
                         "type": {
@@ -4029,6 +4074,7 @@
                     "additionalProperties": false,
                     "properties": {
                         "id": true,
+                        "live": true,
                         "visibility": true,
                         "style": true,
                         "type": {
@@ -4070,6 +4116,7 @@
                     "additionalProperties": false,
                     "properties": {
                         "id": true,
+                        "live": true,
                         "visibility": true,
                         "style": true,
                         "type": {
@@ -4130,6 +4177,7 @@
                     "additionalProperties": false,
                     "properties": {
                         "id": true,
+                        "live": true,
                         "visibility": true,
                         "style": true,
                         "type": {
@@ -4189,6 +4237,7 @@
                     "additionalProperties": false,
                     "properties": {
                         "id": true,
+                        "live": true,
                         "visibility": true,
                         "style": true,
                         "type": {
@@ -4229,6 +4278,7 @@
                     "additionalProperties": false,
                     "properties": {
                         "id": true,
+                        "live": true,
                         "visibility": true,
                         "style": true,
                         "type": {
@@ -4274,6 +4324,7 @@
                     "additionalProperties": false,
                     "properties": {
                         "id": true,
+                        "live": true,
                         "visibility": true,
                         "style": true,
                         "type": {
@@ -4319,6 +4370,7 @@
                     "additionalProperties": false,
                     "properties": {
                         "id": true,
+                        "live": true,
                         "visibility": true,
                         "style": true,
                         "type": {
@@ -4379,6 +4431,7 @@
                     "additionalProperties": false,
                     "properties": {
                         "id": true,
+                        "live": true,
                         "visibility": true,
                         "style": true,
                         "type": {
@@ -4430,6 +4483,7 @@
                     "additionalProperties": false,
                     "properties": {
                         "id": true,
+                        "live": true,
                         "visibility": true,
                         "style": true,
                         "type": {
@@ -4482,6 +4536,7 @@
                     "additionalProperties": false,
                     "properties": {
                         "id": true,
+                        "live": true,
                         "visibility": true,
                         "style": true,
                         "type": {
@@ -4521,6 +4576,7 @@
                     "additionalProperties": false,
                     "properties": {
                         "id": true,
+                        "live": true,
                         "visibility": true,
                         "style": true,
                         "type": {
@@ -4579,6 +4635,7 @@
                     "additionalProperties": false,
                     "properties": {
                         "id": true,
+                        "live": true,
                         "visibility": true,
                         "style": true,
                         "type": {
@@ -4637,6 +4694,7 @@
                     "additionalProperties": false,
                     "properties": {
                         "id": true,
+                        "live": true,
                         "visibility": true,
                         "style": true,
                         "type": {
@@ -4688,6 +4746,7 @@
                     "additionalProperties": false,
                     "properties": {
                         "id": true,
+                        "live": true,
                         "visibility": true,
                         "style": true,
                         "type": {
@@ -4732,6 +4791,7 @@
                     "additionalProperties": false,
                     "properties": {
                         "id": true,
+                        "live": true,
                         "visibility": true,
                         "style": true,
                         "type": {
@@ -4780,6 +4840,7 @@
                     "additionalProperties": false,
                     "properties": {
                         "id": true,
+                        "live": true,
                         "visibility": true,
                         "style": true,
                         "type": {
@@ -4825,6 +4886,7 @@
                     "additionalProperties": false,
                     "properties": {
                         "id": true,
+                        "live": true,
                         "visibility": true,
                         "style": true,
                         "type": {
@@ -4894,6 +4956,7 @@
                     "additionalProperties": false,
                     "properties": {
                         "id": true,
+                        "live": true,
                         "visibility": true,
                         "style": true,
                         "type": {
@@ -4947,6 +5010,7 @@
                     "additionalProperties": false,
                     "properties": {
                         "id": true,
+                        "live": true,
                         "visibility": true,
                         "style": true,
                         "type": {

@@ -1,8 +1,11 @@
 <script setup lang="ts">
-import { computed } from 'vue';
+import { Eye } from '@lucide/vue';
+import { computed, inject, ref } from 'vue';
 import type { FieldDef, ObjectDef } from '../types/manifest';
 import { resolveField } from '../types/manifest';
+import { useRecordPresence, type Watcher } from '../useLiveRecords';
 import { themeTokens, useRuntimeTheme } from '../useRuntimeTheme';
+import { runtimeWord } from '../words';
 import FieldValue from './FieldValue.vue';
 import { type DisplayContext } from './fieldDisplay';
 
@@ -18,6 +21,8 @@ interface RecordDetailBlock {
     object_id: string;
     record_id_expression: string;
     fields: DetailField[];
+    /** Show who else has this record open. */
+    presence?: boolean;
 }
 
 const props = defineProps<{
@@ -42,6 +47,23 @@ const object = computed<ObjectDef | undefined>(() =>
     props.objects.find((o) => o.id === props.block.object_id),
 );
 const record = computed(() => props.data?.record ?? null);
+
+/**
+ * Who else is looking at this.
+ *
+ * Two people about to edit the same order is the thing worth knowing, and
+ * knowing it is what stops the second one wasting the work. It says somebody is
+ * HERE and never what they are doing — a presence channel carries names to
+ * every other member, so anything more would be telling people about each
+ * other's work rather than about their own collision.
+ */
+const appId = inject<string>('appId', '');
+const currentUserId = inject<number | null>('currentUserId', null);
+
+const { watchers } =
+    props.block.presence === true && record.value !== null
+        ? useRecordPresence(appId, record.value.id, currentUserId)
+        : { watchers: ref<Watcher[]>([]) };
 
 const context = computed<DisplayContext>(() => ({
     locale: props.locale,
@@ -97,6 +119,21 @@ const rows = computed<DetailRow[]>(() =>
             :class="['mb-4 text-[11px] tracking-wider uppercase', t.textSubtle]"
         >
             {{ block.label }}
+        </p>
+
+        <!-- Somebody else has this open. Said plainly and without alarm: it is
+             information, not a lock. -->
+        <p
+            v-if="watchers.length > 0"
+            data-sp-presence
+            :class="['mb-3 flex items-center gap-1.5 text-[11px]', t.textMuted]"
+        >
+            <Eye class="size-3.5 shrink-0" />
+            {{
+                runtimeWord(locale, 'presence_here', {
+                    who: watchers.map((w) => w.name).join(', '),
+                })
+            }}
         </p>
 
         <p v-if="!record" :class="['py-6 text-center text-xs', t.textMuted]">

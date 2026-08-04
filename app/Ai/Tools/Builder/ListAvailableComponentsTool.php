@@ -31,12 +31,19 @@ class ListAvailableComponentsTool implements Tool
         return [];
     }
 
+    /**
+     * Two flags every data block understands, documented once rather than
+     * repeated on fifty entries.
+     */
+    private const SHARED_NOTE = 'ANY data block also takes live:true — it refreshes when somebody ELSE changes one of its records (the server broadcasts three ids and a verb, never the row, and the page re-reads through the ordinary access-filtered path). Use it for shared queues, dispatch boards and wall dashboards; leave it off a form somebody is typing into. record_detail also takes presence:true, which shows who else has that record open.';
+
     public function handle(Request $request): string
     {
         $catalog = self::catalog();
 
         return json_encode([
             'components' => $this->withSchema('component', $catalog),
+            'shared_props' => self::SHARED_NOTE,
             'site' => self::SITE_GUIDANCE,
             'style' => self::STYLE_GUIDANCE,
         ], JSON_THROW_ON_ERROR);
