@@ -99,6 +99,9 @@ const WORDS: Record<string, Dict> = {
             'Could not get your location. Type the coordinates instead.',
         geo_unavailable:
             'This device cannot locate itself. Type the coordinates instead.',
+        geo_pick: 'Pick on a map',
+        geo_pick_hint: 'Tap the map, then drag the pin to adjust',
+        geo_pick_accept: 'Use this point',
         trash_open: 'Trash ({n})',
         trash_viewing: 'Viewing the trash. These records are not in the list.',
         trash_back: 'Back to the list',
@@ -194,6 +197,9 @@ const WORDS: Record<string, Dict> = {
         geo_denied: 'No se pudo obtener tu ubicación. Escribe las coordenadas.',
         geo_unavailable:
             'Este dispositivo no puede ubicarse. Escribe las coordenadas.',
+        geo_pick: 'Elegir en el mapa',
+        geo_pick_hint: 'Toca el mapa y arrastra el pin para ajustar',
+        geo_pick_accept: 'Usar este punto',
         trash_open: 'Papelera ({n})',
         trash_viewing:
             'Estás en la papelera. Estos registros no salen en la lista.',
@@ -290,6 +296,9 @@ const WORDS: Record<string, Dict> = {
             'Não foi possível obter sua localização. Digite as coordenadas.',
         geo_unavailable:
             'Este aparelho não consegue se localizar. Digite as coordenadas.',
+        geo_pick: 'Escolher no mapa',
+        geo_pick_hint: 'Toque no mapa e arraste o pino para ajustar',
+        geo_pick_accept: 'Usar este ponto',
         trash_open: 'Lixeira ({n})',
         trash_viewing:
             'Você está na lixeira. Estes registros não aparecem na lista.',
@@ -386,6 +395,9 @@ const WORDS: Record<string, Dict> = {
         geo_denied: 'Position indisponible. Saisissez les coordonnées.',
         geo_unavailable:
             'Cet appareil ne peut pas se localiser. Saisissez les coordonnées.',
+        geo_pick: 'Choisir sur la carte',
+        geo_pick_hint: 'Touchez la carte, puis déplacez le repère',
+        geo_pick_accept: 'Utiliser ce point',
         trash_open: 'Corbeille ({n})',
         trash_viewing:
             'Vous êtes dans la corbeille. Ces enregistrements ne figurent pas dans la liste.',

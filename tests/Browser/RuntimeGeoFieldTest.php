@@ -182,3 +182,57 @@ it('fills both boxes from the device when it does locate', function () {
         ->assertScript('document.querySelector("[data-sp-geo-lat]").value', '19.432608')
         ->assertScript('document.querySelector("[data-sp-geo-lng]").value', '-99.133209');
 })->group('browser');
+
+it('opens a map to pick a point, and lets somebody back out', function () {
+    // Headless Chrome has no GPU, so the tiles may never paint — what is
+    // proved here is the sheet, its guard and the way out. The point of the
+    // guard: an empty pin must not be acceptable, or somebody confirms a
+    // location nobody chose.
+    $this->seed(RolesAndPermissionsSeeder::class);
+    $app = geoRuntimeApp();
+
+    $page = visit("/r/{$app->slug}/nueva")->on()->macbookAir()
+        ->assertNoJavaScriptErrors();
+
+    $page->script('document.querySelector("[data-sp-geo-pick]").click()');
+
+    $page->assertScript(<<<'JS'
+        (async () => {
+            for (let i = 0; i < 50; i++) {
+                if (document.querySelector('[data-sp-geo-picker]')) return true;
+                await new Promise((r) => setTimeout(r, 100));
+            }
+            return false;
+        })()
+    JS, true);
+
+    $page->assertSee('Toca el mapa y arrastra el pin')
+        // Nothing chosen yet, so nothing to accept.
+        ->assertScript(
+            'document.querySelector("[data-sp-geo-picker-accept]").disabled',
+            true,
+        );
+
+    $page->script('document.querySelector("[data-sp-geo-picker-close]").click()');
+
+    $page->assertNoJavaScriptErrors()
+        ->assertScript('!!document.querySelector("[data-sp-geo-picker]")', false)
+        // And the coordinate boxes are still the way in.
+        ->assertScript('!!document.querySelector("[data-sp-geo-lat]")', true);
+})->group('browser');
+
+it('does not make a form without a map pay for one', function () {
+    // MapLibre and its style are about a megabyte. A form that never opens the
+    // picker must not download them, which is why the component is lazy — and
+    // a lazy import is exactly the kind of thing that quietly stops being lazy.
+    $this->seed(RolesAndPermissionsSeeder::class);
+    $app = geoRuntimeApp();
+
+    visit("/r/{$app->slug}/nueva")->on()->macbookAir()
+        ->assertNoJavaScriptErrors()
+        ->assertScript(<<<'JS'
+            performance
+                .getEntriesByType('resource')
+                .filter((r) => /maplibre|GeoPicker/i.test(r.name)).length
+        JS, 0);
+})->group('browser');

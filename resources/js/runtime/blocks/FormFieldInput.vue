@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Camera, MapPin, ScanLine } from '@lucide/vue';
+import { Camera, Map, MapPin, ScanLine } from '@lucide/vue';
 import { computed, defineAsyncComponent, ref, watch } from 'vue';
 import { requestScan } from '../scanner';
 import type { FieldDef } from '../types/manifest';
@@ -7,6 +7,12 @@ import { useFileUpload, type UploadedFile } from '../useFileUpload';
 import { themeTokens, useRuntimeTheme } from '../useRuntimeTheme';
 import { runtimeWord } from '../words';
 import SignaturePad from './SignaturePad.vue';
+
+/**
+ * Lazy on purpose: MapLibre and its style are about a megabyte, and a form that
+ * never opens the picker has no reason to download them.
+ */
+const GeoPicker = defineAsyncComponent(() => import('./GeoPicker.vue'));
 /**
  * Loaded only by a form that actually has a rich_text field.
  *
@@ -178,6 +184,23 @@ interface GeoValue {
 }
 
 const locating = ref(false);
+const picking = ref(false);
+
+/** Where the picker opens: on the point already chosen, or nowhere. */
+const pickerStart = computed<{ lat: number; lng: number } | null>(() => {
+    const point = props.modelValue as GeoValue | null | undefined;
+
+    return typeof point?.lat === 'number' && typeof point?.lng === 'number'
+        ? { lat: point.lat, lng: point.lng }
+        : null;
+});
+
+function onPicked(point: { lat: number; lng: number }): void {
+    picking.value = false;
+    geoText.value = { lat: String(point.lat), lng: String(point.lng) };
+    update(point);
+}
+
 const geoError = ref<string | null>(null);
 
 /**
@@ -804,6 +827,19 @@ function isInMulti(value: string): boolean {
             />
             <button
                 type="button"
+                data-sp-geo-pick
+                :class="[
+                    'inline-flex h-9 shrink-0 items-center gap-1.5 rounded-md border px-2.5 text-xs transition-colors hover:bg-surface-hover',
+                    t.surfaceMuted,
+                    t.textMuted,
+                ]"
+                @click="picking = true"
+            >
+                <Map class="size-3.5" />
+                {{ runtimeWord(locale ?? 'en', 'geo_pick') }}
+            </button>
+            <button
+                type="button"
                 data-sp-geo-locate
                 :disabled="locating"
                 :class="[
@@ -822,6 +858,14 @@ function isInMulti(value: string): boolean {
                 }}
             </button>
         </div>
+
+        <GeoPicker
+            v-if="picking"
+            :locale="locale ?? 'en'"
+            :initial="pickerStart"
+            @picked="onPicked"
+            @close="picking = false"
+        />
 
         <p
             v-if="geoError"
