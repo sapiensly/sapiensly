@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { Camera } from '@lucide/vue';
-import axios from 'axios';
-import { computed, defineAsyncComponent, ref } from 'vue';
+import { computed, defineAsyncComponent } from 'vue';
 import type { FieldDef } from '../types/manifest';
+import { useFileUpload, type UploadedFile } from '../useFileUpload';
 import { themeTokens, useRuntimeTheme } from '../useRuntimeTheme';
 import { runtimeWord } from '../words';
+import SignaturePad from './SignaturePad.vue';
 /**
  * Loaded only by a form that actually has a rich_text field.
  *
@@ -19,14 +20,6 @@ const RichTextEditor = defineAsyncComponent(
 );
 
 import RelationPicker from './RelationPicker.vue';
-
-interface UploadedFile {
-    file_id: string;
-    original_name: string;
-    mime: string;
-    size_bytes: number;
-    url: string;
-}
 
 const props = defineProps<{
     /** Field descriptor from the manifest. Drives which input is rendered. */
@@ -118,6 +111,9 @@ function patchRange(side: 'from' | 'to', ev: Event) {
  */
 const wantsCamera = computed(() => props.field.capture === 'camera');
 
+/** Drawn rather than chosen — the bytes come from a canvas, not the disk. */
+const wantsSignature = computed(() => props.field.capture === 'signature');
+
 /**
  * A camera field is asking for a photo, so it says so — unless the author was
  * more specific, in which case they meant it.
@@ -129,65 +125,40 @@ const acceptAttr = computed<string | undefined>(() => {
     return wantsCamera.value ? 'image/*' : undefined;
 });
 
-// File upload state — local to this input.
-const uploadProgress = ref(0);
-const uploadError = ref<string | null>(null);
-
 /**
- * Where uploads go. The runtime is mounted at /r/{slug} when signed in and at
- * /a/{public_slug} on a public portal, and only the URL knows which — a form on
- * a portal that posted to /r/ would 401 on every attachment.
+ * Getting bytes to the server. Shared with the signature pad below and with
+ * whatever captures come next — see useFileUpload for why it lives out there.
  */
-function uploadMount(): string {
-    if (typeof window !== 'undefined') {
-        const m = window.location.pathname.match(
-            /^\/(r|a)\/([a-z0-9][a-z0-9_-]*)/,
-        );
-        if (m) return `/${m[1]}/${m[2]}`;
-    }
-    return `/r/${props.appSlug}`;
-}
+const {
+    progress: uploadProgress,
+    error: uploadError,
+    upload,
+    reset: resetUpload,
+} = useFileUpload(props.appSlug);
 
 async function onFileSelected(ev: Event) {
     const input = ev.target as HTMLInputElement;
     const file = input.files?.[0];
     if (!file) return;
-    uploadError.value = null;
-    uploadProgress.value = 0;
-    try {
-        const form = new FormData();
-        form.append('file', file);
-        const { data } = await axios.post<UploadedFile>(
-            `${uploadMount()}/uploads`,
-            form,
-            {
-                headers: { 'Content-Type': 'multipart/form-data' },
-                onUploadProgress: (e) => {
-                    if (e.total)
-                        uploadProgress.value = Math.round(
-                            (e.loaded / e.total) * 100,
-                        );
-                },
-            },
-        );
-        update(data);
-        uploadProgress.value = 100;
-    } catch (e) {
-        const err = e as {
-            response?: { data?: { message?: string } };
-            message?: string;
-        };
-        uploadError.value =
-            err.response?.data?.message ?? err.message ?? 'Upload failed.';
-    } finally {
-        input.value = '';
-    }
+
+    const uploaded = await upload(file);
+    if (uploaded !== null) update(uploaded);
+
+    input.value = '';
+}
+
+/**
+ * A finished signature is a PNG like any other, so from here on it IS a file:
+ * same upload, same storage, same preview, same value in the record.
+ */
+async function onSigned(blob: Blob) {
+    const uploaded = await upload(blob, 'firma.png');
+    if (uploaded !== null) update(uploaded);
 }
 
 function clearFile() {
     update(null);
-    uploadProgress.value = 0;
-    uploadError.value = null;
+    resetUpload();
 }
 
 function isImageMime(mime?: string): boolean {
@@ -474,7 +445,15 @@ function isInMulti(value: string): boolean {
 
     <template v-else-if="field.type === 'file'">
         <div class="space-y-2">
-            <template v-if="!modelValue">
+            <!-- Drawn, not chosen. Once accepted it is a PNG like any other,
+                 so the preview below is the same one every file gets. -->
+            <SignaturePad
+                v-if="wantsSignature && !modelValue"
+                :locale="locale ?? 'en'"
+                :busy="uploadProgress > 0 && uploadProgress < 100"
+                @signed="onSigned"
+            />
+            <template v-else-if="!modelValue">
                 <label
                     :for="inputId"
                     :class="[
