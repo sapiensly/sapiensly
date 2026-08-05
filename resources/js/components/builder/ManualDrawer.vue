@@ -13,6 +13,7 @@
  * height presets, and a sticky footer with a Restablecer action that
  * reverts to the values the card had when it was selected.
  */
+import type { BlockData } from '@/runtime/types/manifest';
 import { ChevronDown, Trash2, TrendingUp, X } from '@lucide/vue';
 import axios from 'axios';
 import { computed, reactive, ref, watch } from 'vue';
@@ -32,8 +33,13 @@ const props = defineProps<{
     appId: string;
     block: Record<string, unknown>;
     object: { fields?: FieldDef[]; name?: string } | null;
-    /** The block's resolved rows (deferred previewBlockData), for the mini preview. */
-    data?: { rows?: Array<{ data: Record<string, unknown> }> } | null;
+    /**
+     * The block's resolved data (deferred previewBlockData), for the mini
+     * preview. Declared as the whole union the map holds rather than the
+     * row-shaped slice this uses: the caller passes whatever the selected block
+     * resolved to, and a stat or an error carries no rows at all.
+     */
+    data?: BlockData[string] | null;
     /**
      * The whole deferred previewBlockData prop is still in flight. This — not
      * an empty `data` — is what tells the mini preview to say "Loading…".
@@ -331,7 +337,9 @@ function stepWidth(delta: number) {
 // BlockChart's bucketing, trimmed): the preview reacts to every edit even
 // before the canvas refreshes.
 const miniSeries = computed<{ label: string; value: number }[]>(() => {
-    const rows = props.data?.rows ?? [];
+    // Only a table resolves to rows; a stat or an error has nothing to chart.
+    const rows =
+        props.data && 'rows' in props.data ? (props.data.rows ?? []) : [];
     if (!isChart.value || rows.length === 0) return [];
     const fields = props.object?.fields ?? [];
     const groupId =

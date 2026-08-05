@@ -87,9 +87,9 @@ import {
     AlignRight,
     ArrowDown,
     ArrowLeft,
-    BookOpen,
     ArrowUp,
     BarChart3,
+    BookOpen,
     Camera,
     Check,
     ChevronDown,
@@ -149,7 +149,6 @@ import {
     reactive,
     ref,
     watch,
-    type Component,
 } from 'vue';
 import { useI18n } from 'vue-i18n';
 
@@ -1566,13 +1565,15 @@ function onDrop(event: DragEvent) {
 // to the language of the latest user message so the pre-filled prompt
 // matches what Claude is replying in.
 
-type Component = typeof Sparkles;
+// Named for what it is rather than `Component`, which shadowed Vue's own type
+// import of that name across the whole file.
+type IconComponent = typeof Sparkles;
 
 interface ChipSuggestion {
     id: string;
     label: string;
     prompt: string;
-    icon: Component;
+    icon: IconComponent;
 }
 
 const SUPPORTED_CHIP_LOCALES = ['es', 'en'] as const;
@@ -1812,7 +1813,11 @@ const chipSuggestions = computed<ChipSuggestion[]>(() => {
 });
 
 /** Build a ChipSuggestion from an i18n key root (`.label` + `.prompt`). */
-function chip(id: string, baseKey: string, icon: Component): ChipSuggestion {
+function chip(
+    id: string,
+    baseKey: string,
+    icon: IconComponent,
+): ChipSuggestion {
     return {
         id,
         label: chipText(baseKey, 'label'),
@@ -1986,8 +1991,15 @@ watch(previewLanguages, (langs) => {
         previewLanguage.value = langs[0] ?? '';
     }
 });
-/** Swap each html block's content for the chosen language, like the runtime. */
-function withLanguage(blocks: unknown[], lang: string): unknown[] {
+/**
+ * Swap each html block's content for the chosen language, like the runtime.
+ *
+ * Typed as blocks in and blocks out: the walk is structural (it reads
+ * content_i18n and recurses into nested block arrays) and hands back the same
+ * shape, so widening to `unknown[]` only cost the caller its type on the way to
+ * AppRenderer.
+ */
+function withLanguage(blocks: AnyBlock[], lang: string): AnyBlock[] {
     return (blocks as Record<string, any>[]).map((b) => {
         if (!b || typeof b !== 'object') return b;
         const next: Record<string, any> = { ...b };
@@ -2012,16 +2024,15 @@ function withLanguage(blocks: unknown[], lang: string): unknown[] {
             }
         }
         return next;
-    });
+        // The walk is deliberately structural inside — it reads keys no single
+        // block type declares — so the shape is re-asserted on the way out.
+    }) as AnyBlock[];
 }
 const previewLandingBlocks = computed(() =>
     previewLanguages.value.length &&
     previewLanguage.value !== previewLanguages.value[0]
-        ? withLanguage(
-              (props.preview?.page.blocks ?? []) as unknown[],
-              previewLanguage.value,
-          )
-        : ((props.preview?.page.blocks ?? []) as unknown[]),
+        ? withLanguage(props.preview?.page.blocks ?? [], previewLanguage.value)
+        : (props.preview?.page.blocks ?? []),
 );
 
 const previewIsLanding = computed(
@@ -2061,7 +2072,7 @@ const previewAccent = computed<string | null>(
 // the app becomes a landing while a now-hidden tab is open, fall back to the
 // preview so the pane never shows a hidden tab's content.
 const viewTabs = computed(() => {
-    const all: { id: ViewMode; label: string; icon: Component }[] = [
+    const all: { id: ViewMode; label: string; icon: IconComponent }[] = [
         { id: 'preview', label: t('apps.builder.tab_preview'), icon: Eye },
         { id: 'schema', label: t('apps.builder.tab_schema'), icon: Database },
         {
@@ -2596,6 +2607,31 @@ async function unpublishLanding() {
 // manifest, since importing into a new object changes the schema.
 const importOpen = ref(false);
 const apiKeysOpen = ref(false);
+
+/**
+ * What both panels want from the manifest: something with a name to pick from.
+ *
+ * These were inline `as { … }[]` casts in the template. Prettier wraps a cast
+ * that long across lines, and vue-tsc then parses the type's `id: string;` as an
+ * expression and fails the whole FILE with "',' expected" — so the one page that
+ * most needs type checking silently had none. Hoisting them here keeps the cast
+ * (the manifest is Record<string, unknown> either way) but puts it somewhere the
+ * checker can read.
+ */
+type NamedOption = { id: string; slug: string; name: string };
+
+const apiKeyRoles = computed<NamedOption[]>(() => {
+    const permissions = props.manifest?.permissions as
+        | Record<string, unknown>
+        | undefined;
+
+    return (permissions?.roles ?? []) as NamedOption[];
+});
+
+const importObjects = computed<NamedOption[]>(
+    () => (props.preview?.objects ?? []) as unknown as NamedOption[],
+);
+
 function onImported() {
     router.reload({
         only: ['preview', 'previewBlockData', 'manifest', 'schema'],
@@ -3350,7 +3386,7 @@ onUnmounted(() => clearTimeout(previewShotTimer));
 const draftShot = ref<{
     nonce: string;
     page: { blocks: AnyBlock[] };
-    objects: Record<string, unknown>[];
+    objects: ObjectDef[];
     settings: Record<string, unknown>;
     custom_css: string | null;
 } | null>(null);
@@ -6550,26 +6586,14 @@ function statusTone(status: Message['status']): string {
         <ApiKeysPanel
             v-if="apiKeysOpen"
             :app-id="props.app.id"
-            :roles="
-                (manifest?.permissions?.roles ?? []) as {
-                    id: string;
-                    slug: string;
-                    name: string;
-                }[]
-            "
+            :roles="apiKeyRoles"
             @close="apiKeysOpen = false"
         />
 
         <ImportPanel
             v-if="importOpen"
             :app-id="props.app.id"
-            :objects="
-                (preview?.objects ?? []) as {
-                    id: string;
-                    slug: string;
-                    name: string;
-                }[]
-            "
+            :objects="importObjects"
             @close="importOpen = false"
             @imported="onImported"
         />
