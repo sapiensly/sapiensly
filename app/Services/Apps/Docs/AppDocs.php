@@ -77,6 +77,18 @@ class AppDocs
         return is_array($manifest) ? $manifest : [];
     }
 
+    /**
+     * The technical sheet for an app, optionally from a manifest that is not
+     * the applied one — a builder turn's running DRAFT, so a reader judges what
+     * was just authored rather than the version it replaces.
+     *
+     * @param  array<string, mixed>|null  $manifest
+     */
+    public function technicalForApp(App $app, ?array $manifest = null): Doc
+    {
+        return $this->technical($manifest ?? $this->manifestOf($app), $this->runtimeUrl($app));
+    }
+
     private function runtimeUrl(App $app): ?string
     {
         return $app->slug === null ? null : route('apps.runtime', ['app_slug' => $app->slug]);

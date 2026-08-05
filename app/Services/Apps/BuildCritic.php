@@ -94,6 +94,7 @@ class BuildCritic
         User $user,
         ?string $explicitModel = null,
         ?string $conversationId = null,
+        ?array $draftManifest = null,
     ): array {
         $request = trim($request);
         if ($request === '') {
@@ -103,7 +104,14 @@ class BuildCritic
             ];
         }
 
-        $sheet = $this->docs->of($app, 'technical')->toMarkdown();
+        // The RUNNING DRAFT when the turn has one, not the applied version.
+        // Judging the applied manifest makes the critic answer about the app as
+        // it was BEFORE the fixes it just asked for — the model then re-reads
+        // its own corrections as still missing and cannot converge inside a
+        // turn. Observed live: the model diagnosed it itself ("el crítico está
+        // validando contra lo que está PUBLICADO, no contra lo que está en
+        // DRAFT") and the loop ran the critic seven times for a two-pass job.
+        $sheet = $this->docs->technicalForApp($app, $draftManifest)->toMarkdown();
 
         foreach ($this->criticCandidates($explicitModel) as $model) {
             $verdict = $this->attempt($request, $sheet, $user, $model, $app, $conversationId);

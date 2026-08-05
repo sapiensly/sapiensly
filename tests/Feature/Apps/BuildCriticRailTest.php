@@ -182,3 +182,43 @@ it('a review that never ran does not retire the rail', function () {
 
     expect($conv->fresh()->build_reviewed_at)->toBeNull();
 });
+
+it('judges the running draft, not the version it replaces', function () {
+    // The bug this was written from: the critic read the APPLIED manifest, so a
+    // model that fixed everything and re-called saw its own corrections still
+    // reported as missing. It diagnosed the loop itself — "el crítico está
+    // validando contra lo que está PUBLICADO, no contra lo que está en DRAFT" —
+    // and the review ran seven times for a two-pass job.
+    [$conv, , $app, $user] = reviewRailSetup();
+
+    $seen = null;
+    $critic = new class(app(AiDefaults::class), app(AiProviderService::class), app(AppDocs::class), $seen) extends BuildCritic
+    {
+        public ?string $sheet = null;
+
+        public function __construct(AiDefaults $d, AiProviderService $p, AppDocs $docs, private mixed $unused)
+        {
+            parent::__construct($d, $p, $docs);
+        }
+
+        protected function attempt(string $request, string $sheet, User $user, string $model, App $app, ?string $conversationId): ?array
+        {
+            $this->sheet = $sheet;
+
+            return ['complete' => true, 'missing' => [], 'unrequested' => [], 'summary' => ''];
+        }
+    };
+
+    $draft = [
+        'schema_version' => '1.0.0', 'id' => $app->id, 'slug' => 'x', 'name' => 'X', 'version' => 9,
+        'objects' => [[
+            'id' => 'obj_draftonly01', 'slug' => 'solo_en_borrador', 'name' => 'Solo en borrador',
+            'fields' => [['id' => 'fld_d1', 'slug' => 'firma', 'name' => 'Firma', 'type' => 'file', 'capture' => 'signature']],
+        ]],
+        'pages' => [], 'permissions' => ['roles' => []],
+    ];
+
+    $critic->critique($app, 'Firma con el dedo.', $user, null, $conv->id, $draft);
+
+    expect($critic->sheet)->toContain('solo_en_borrador');
+});

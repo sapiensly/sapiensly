@@ -28,6 +28,8 @@ class CritiqueBuildTool implements Tool
         private BuildCritic $critic,
         private ?User $user = null,
         private ?string $conversationId = null,
+        /** Reads the running turn's draft so it judges what you JUST authored. */
+        private ?ProposeChangeTool $proposeTool = null,
     ) {}
 
     public function name(): string
@@ -79,6 +81,7 @@ DESC;
             $user,
             $request->all()['model'] ?? null,
             $this->conversationId,
+            $this->proposeTool?->currentManifest(),
         );
 
         $this->stampWhenClean($verdict);
