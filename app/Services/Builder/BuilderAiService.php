@@ -177,6 +177,42 @@ class BuilderAiService
     }
 
     /**
+     * Did the tool DO what it was asked, or merely return?
+     *
+     * The SDK's `successful` means only that the call came back instead of
+     * throwing. Every builder tool reports a refused or invalid request as an
+     * ordinary return carrying `{"ok": false, "errors": [...]}` — a patch whose
+     * path did not resolve, a scaffold declining landing intent. Recording just
+     * the SDK flag logged all of those as successes.
+     *
+     * Measured on one live turn: 34 propose_change calls, every one written to
+     * the timeline as `successful: true`, while 20 changed nothing and the app
+     * sat on the same version throughout. The timeline is what anyone reads to
+     * ask why a build went wrong, so it has to tell them apart.
+     *
+     * A tool that returns something other than an `ok`-shaped payload (plain
+     * text, or JSON without the key) keeps the SDK's verdict.
+     */
+    public static function toolReportedSuccess(StreamingToolResult $event): bool
+    {
+        if (! $event->successful) {
+            return false;
+        }
+
+        $result = $event->toolResult->result;
+
+        if (is_string($result)) {
+            $result = json_decode($result, true);
+        }
+
+        if (! is_array($result) || ! array_key_exists('ok', $result)) {
+            return true;
+        }
+
+        return $result['ok'] !== false;
+    }
+
+    /**
      * Pre-load the landings playbook into the system prompt for landing work
      * (tagged app, or a landing-intent request). Same words the model would
      * pull via framework_reference('landings') — delivered without the paid
@@ -678,7 +714,7 @@ class BuilderAiService
                         'tool' => $event->toolResult->name,
                         'tool_seconds' => round($now - $lastMark, 1),
                         't' => round($now - $startedAt, 1),
-                        'successful' => $event->successful,
+                        'successful' => self::toolReportedSuccess($event),
                     ];
                     Log::info('Builder turn timing: tool finished', ['message_id' => $placeholder->id] + $entry);
                     $recordTiming($entry);
