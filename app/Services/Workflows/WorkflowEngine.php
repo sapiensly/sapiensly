@@ -45,7 +45,13 @@ use Laravel\Ai\Responses\AgentResponse;
  */
 class WorkflowEngine
 {
-    private const DEFAULT_AI_MODEL = 'claude-sonnet-4-20250514';
+    /**
+     * The model an `ai.complete` step gets when the author names none. A
+     * retired id here is silent until it runs: the manifest saves, the dry-run
+     * passes, and the step 404s on the first real fire. Keep it pointing at a
+     * model the platform still serves.
+     */
+    private const DEFAULT_AI_MODEL = 'claude-sonnet-5';
 
     /** Safety cap so a runaway `items` array can't create unbounded records. */
     private const MAX_FOREACH_ITERATIONS = 1000;

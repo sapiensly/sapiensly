@@ -514,14 +514,18 @@ class AiProviderService
 
     /**
      * Get recommended models per agent type.
+     *
+     * Unlike the catalog, these ids are not DB-backed — they go straight to the
+     * agent form as the suggested pick, so a retired id here is handed to every
+     * person who creates an agent and only fails once that agent is used.
      */
     public function getRecommendedModels(): array
     {
         return [
-            'general' => ['claude-sonnet-4-20250514', 'gpt-4o'],
-            'triage' => ['claude-haiku-4-5-20251001', 'gpt-4o-mini'],
-            'knowledge' => ['claude-sonnet-4-20250514', 'gpt-4o'],
-            'action' => ['claude-sonnet-4-20250514', 'gpt-4o'],
+            'general' => ['claude-sonnet-5', 'gpt-5.5'],
+            'triage' => ['claude-haiku-4-5-20251001', 'gpt-5.4-mini'],
+            'knowledge' => ['claude-sonnet-5', 'gpt-5.5'],
+            'action' => ['claude-sonnet-5', 'gpt-5.5'],
         ];
     }
 
