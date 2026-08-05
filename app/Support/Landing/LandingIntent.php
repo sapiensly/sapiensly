@@ -15,9 +15,11 @@ namespace App\Support\Landing;
  *    model default from the FIRST turn, not only after tagging.
  *
  * Matching is accent- and case-insensitive. Two tiers keep the common app path
- * safe: strong markers (landing, página web, sitio web, website, …) always
- * match; bare "página"/"sitio" match only when the text does NOT also talk
- * about an app/dashboard build ("una app con páginas por objeto" must scaffold).
+ * safe: strong markers (landing, página web, sitio web, website, …) match
+ * unless they read as a field name rather than as the thing being built (see
+ * {@see weighStrongMarkers}); bare "página"/"sitio" match only when the text does
+ * NOT also talk about an app/dashboard build ("una app con páginas por objeto"
+ * must scaffold).
  */
 final class LandingIntent
 {
@@ -34,11 +36,73 @@ final class LandingIntent
             return false;
         }
 
-        if (preg_match(self::STRONG, $t) === 1) {
+        [$isIntent, $withoutFieldNames] = self::weighStrongMarkers($t);
+
+        if ($isIntent) {
             return true;
         }
 
-        return preg_match(self::BARE, $t) === 1 && preg_match(self::APPISH, $t) !== 1;
+        // A marker dismissed as a field name must not come back through the
+        // bare tier: "sitio web" contains "sitio", so leaving it in the text
+        // would re-match everything the tier above just excused.
+        return preg_match(self::BARE, $withoutFieldNames) === 1
+            && preg_match(self::APPISH, $withoutFieldNames) !== 1;
+    }
+
+    /**
+     * Whether a strong marker names what is being BUILT.
+     *
+     * "sitio web" and "website" are also ordinary FIELDS on a customer or
+     * supplier record, and there they arrive as one item in a comma-separated
+     * list of attributes — "telefono, sitio web, direccion". A build request
+     * never phrases itself that way, so an occurrence fenced by commas is read
+     * as a field name. Observed live: a field-service brief with eight CRUD
+     * entities matched on that one field, which refused the scaffold AND
+     * silently billed the whole turn to the landing model.
+     *
+     * The APPISH guard cannot do this job — "quiero una landing para mi app de
+     * inventario" is a landing request that also talks about an app — so the
+     * distinction has to be positional, not vocabulary.
+     *
+     * @return array{0: bool, 1: string} whether any occurrence reads as intent,
+     *                                   and the text with the field-name ones removed
+     */
+    private static function weighStrongMarkers(string $t): array
+    {
+        if (preg_match_all(self::STRONG, $t, $matches, PREG_OFFSET_CAPTURE) < 1) {
+            return [false, $t];
+        }
+
+        $fieldNames = [];
+
+        foreach ($matches[0] as [$match, $offset]) {
+            if (! self::isEnumerationItem($t, $offset, strlen($match))) {
+                return [true, $t];
+            }
+
+            $fieldNames[] = $match;
+        }
+
+        return [false, str_replace($fieldNames, ' ', $t)];
+    }
+
+    /** Is this occurrence just one item in a comma-separated list? */
+    private static function isEnumerationItem(string $t, int $offset, int $length): bool
+    {
+        $before = rtrim(substr($t, 0, $offset));
+        $after = ltrim(substr($t, $offset + $length));
+
+        if (! str_ends_with($before, ',')) {
+            return false;
+        }
+
+        return $after === ''
+            || str_starts_with($after, ',')
+            || str_starts_with($after, '.')
+            || str_starts_with($after, ';')
+            || str_starts_with($after, ')')
+            || str_starts_with($after, 'y ')
+            || str_starts_with($after, 'and ');
     }
 
     private static function normalize(?string $text): string
