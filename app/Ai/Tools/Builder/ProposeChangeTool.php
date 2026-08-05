@@ -266,10 +266,18 @@ DESC;
         $hinted = 0;
 
         foreach ($errors as $i => $error) {
-            if ($hinted >= 3) {
-                break;
+            // Unconditional and uncapped: it is one short string, and a wrong
+            // index is exactly the error a model cannot diagnose from the id it
+            // gets back.
+            $location = $this->locationOf($draft, (string) ($error['path'] ?? ''));
+            if ($location !== null) {
+                $errors[$i]['at'] = $location;
             }
-            $type = $this->nearestTypedNode($draft, (string) ($error['path'] ?? ''));
+
+            // The hint is the expensive one, so it stays capped — but by
+            // skipping the rest of THIS error, not by leaving the loop, or
+            // every error past the third loses its location too.
+            $type = $hinted >= 3 ? null : $this->nearestTypedNode($draft, (string) ($error['path'] ?? ''));
             if ($type === null) {
                 continue;
             }
@@ -284,6 +292,49 @@ DESC;
         }
 
         return $errors;
+    }
+
+    /**
+     * Name the page/object a failing pointer actually lands in.
+     *
+     * `/pages/11/...` is an index, and the model addresses pages by index while
+     * reasoning about them by name. When the two disagree the validator answers
+     * in ids — "obj_01… is not this form's object" — which says the patch is
+     * wrong without saying WHERE it went, so the next attempt is another guess.
+     * Observed live: five consecutive rejections aiming at `ordenes_detail`,
+     * each landing somewhere else, then the model abandoned the edit and
+     * reported it as done.
+     *
+     * @param  array<string, mixed>  $draft
+     */
+    private function locationOf(array $draft, string $path): ?string
+    {
+        $segments = array_values(array_filter(explode('/', $path), fn (string $s): bool => $s !== ''));
+        if (count($segments) < 2) {
+            return null;
+        }
+
+        [$collection, $index] = $segments;
+        if (! in_array($collection, ['pages', 'objects', 'workflows'], true)) {
+            return null;
+        }
+
+        $node = $draft[$collection][$index] ?? null;
+        if (! is_array($node)) {
+            return null;
+        }
+
+        $name = (string) ($node['name'] ?? '');
+        $slug = (string) ($node['slug'] ?? '');
+        $label = $slug !== '' ? $slug : $name;
+        if ($label === '') {
+            return null;
+        }
+
+        $singular = ['pages' => 'page', 'objects' => 'object', 'workflows' => 'workflow'][$collection];
+        $named = $name !== '' && $name !== $slug ? " («{$name}»)" : '';
+
+        return "/{$collection}/{$index} is the {$singular} `{$label}`{$named}";
     }
 
     /**
