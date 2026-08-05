@@ -292,6 +292,51 @@ it('add_field builds a computed field as read-only and keeps it out of the creat
     expect(collect($form['fields'] ?? [])->pluck('field_id'))->not->toContain($field['id']);
 });
 
+/**
+ * The mobile-capture fields are the ones the tool description sells hardest —
+ * "scan it with the camera or a scanner gun", a photo taken on the spot, a
+ * hand-signed PNG. `capture` was documented in add_field's own schema and then
+ * dropped by the config whitelist, so the tool accepted the request, reported a
+ * new version, and produced a plain text box. A live build asked for a
+ * scannable SKU and got exactly that.
+ */
+it('add_field makes a string scannable when config asks for it', function () {
+    SapiensServer::actingAs($this->user)
+        ->tool(AddFieldTool::class, [
+            'app_slug' => 'content_engine',
+            'object_slug' => 'ideas',
+            'name' => 'SKU',
+            'type' => 'string',
+            'config' => ['capture' => 'barcode'],
+        ])
+        ->assertOk();
+
+    $manifest = currentManifest($this->appModel);
+    $field = collect($manifest['objects'][0]['fields'])->firstWhere('slug', 'sku');
+
+    expect($field['type'])->toBe('string')
+        ->and($field['capture'])->toBe('barcode')
+        ->and(app(ManifestValidator::class)->validate($manifest)->valid)->toBeTrue();
+});
+
+it('add_field carries camera and signature onto a file field', function () {
+    foreach ([['Evidence', 'camera', 'evidence'], ['Sign Off', 'signature', 'sign_off']] as [$name, $capture, $slug]) {
+        SapiensServer::actingAs($this->user)
+            ->tool(AddFieldTool::class, [
+                'app_slug' => 'content_engine',
+                'object_slug' => 'ideas',
+                'name' => $name,
+                'type' => 'file',
+                'config' => ['capture' => $capture],
+            ])
+            ->assertOk();
+
+        $field = collect(currentManifest($this->appModel)['objects'][0]['fields'])->firstWhere('slug', $slug);
+
+        expect($field['capture'])->toBe($capture);
+    }
+});
+
 it('add_field carries common base props from config', function () {
     SapiensServer::actingAs($this->user)
         ->tool(AddFieldTool::class, [

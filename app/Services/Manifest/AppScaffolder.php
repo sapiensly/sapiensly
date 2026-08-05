@@ -109,7 +109,12 @@ class AppScaffolder
      * @var array<string, list<string>>
      */
     private const FIELD_CONFIG_PROPS = [
-        'string' => ['min_length', 'max_length', 'pattern', 'default'],
+        // `capture` is the whole point of the mobile-capture fields, and it was
+        // missing here on both types that take it — so a typed add_field could
+        // not produce a scannable, camera or signature field at all, only a raw
+        // RFC 6902 patch could. A build asked to make a SKU scannable therefore
+        // got a plain text box and reported success.
+        'string' => ['min_length', 'max_length', 'pattern', 'default', 'capture'],
         'long_text' => ['max_length', 'default'],
         'number' => ['min', 'max', 'precision', 'format', 'default'],
         'currency' => ['currency_code', 'min', 'max', 'default'],
@@ -119,7 +124,7 @@ class AppScaffolder
         'rating' => ['max', 'default', 'icon'],
         'slider' => ['min', 'max', 'step', 'default', 'format', 'currency_code'],
         'date_range' => ['include_time', 'default'],
-        'file' => ['max_size_mb', 'mime_types'],
+        'file' => ['max_size_mb', 'mime_types', 'capture'],
         'rich_text' => ['default', 'max_length'],
         'relation' => ['target_object_id', 'cardinality', 'on_delete', 'inverse_field_id'],
         'formula' => ['expression', 'return_type', 'currency_code'],
