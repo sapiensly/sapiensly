@@ -172,13 +172,13 @@ function builderLabel(string $key): string
  * Agent writes and provider probes validate the model against the catalog, so
  * a test that spells an id out starts failing the day the provider retires it
  * — which is how ten files came to pin one dead string, and why refreshing the
- * catalog looked like a ten-file change. Ask for the Nth chat model and the
- * fixtures follow the catalog on their own.
+ * catalog looked like a ten-file change. Ask for the Nth chat model of a driver
+ * and the fixtures follow the catalog on their own.
  */
-function catalogChatModel(int $index = 0): string
+function catalogChatModel(int $index = 0, string $driver = 'anthropic'): string
 {
-    return AiProviderService::bootstrapChatModelId(index: $index)
-        ?? throw new OutOfRangeException("No chat model at index {$index} in the anthropic catalog.");
+    return AiProviderService::bootstrapChatModelId($driver, $index)
+        ?? throw new OutOfRangeException("No chat model at index {$index} in the {$driver} catalog.");
 }
 
 function mcpToken(Organization $org, User $user, array $attrs = []): string

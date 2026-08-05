@@ -72,17 +72,19 @@ it('rejects a model that is not enabled in the catalog', function () {
 it('accepts an enabled catalog model even without a tenant key for it', function () {
     Queue::fake();
 
-    // The tenant only has an Anthropic key, but gpt-4o is enabled in the
-    // shared catalog (served by the global system key), so it is selectable.
+    // The tenant only has an Anthropic key, but the OpenAI model is enabled in
+    // the shared catalog (served by the global system key), so it is selectable.
+    $openAiModel = catalogChatModel(0, 'openai');
+
     $this->actingAs($this->user)
         ->post(route('debates.store'), [
             'topic' => 'Cross-provider debate',
-            'model_ids' => [HAIKU, 'gpt-4o'],
+            'model_ids' => [HAIKU, $openAiModel],
         ])
         ->assertRedirect()
         ->assertSessionHasNoErrors();
 
     $debate = Debate::query()->where('user_id', $this->user->id)->firstOrFail();
     expect(DebateParticipant::query()->where('debate_id', $debate->id)->pluck('model')->all())
-        ->toContain('gpt-4o');
+        ->toContain($openAiModel);
 });

@@ -17,12 +17,12 @@ class AiProviderService
      * Predefined model catalogs per driver.
      *
      * For a driver in {@see SYNCABLE_DRIVERS} this is only a BOOTSTRAP: the
-     * rows it seeds are replaced the first time the catalog is refreshed from
-     * the provider's own `/models`, which now happens automatically when the
-     * key is saved. Do not read it as the current truth — read the DB catalog
-     * via getModelCatalog(). The rest (ollama, openrouter, voyageai, jina,
-     * eleven) have no listing endpoint, so here IS their catalog and it has to
-     * be curated by hand.
+     * rows it seeds are joined by the provider's own `/models` the first time
+     * the catalog is refreshed — automatically when the key is saved, and
+     * nightly thereafter via `ai:sync-models`. Do not read it as the current
+     * truth — read the DB catalog via getModelCatalog(). The rest (ollama,
+     * openrouter, voyageai, jina, eleven) have no listing endpoint, so here IS
+     * their catalog and it has to be curated by hand.
      */
     public const MODEL_CATALOGS = [
         'anthropic' => [
@@ -32,9 +32,11 @@ class AiProviderService
             ['id' => 'claude-haiku-4-5-20251001', 'label' => 'Claude Haiku 4.5', 'capabilities' => ['chat', 'vision']],
         ],
         'openai' => [
-            ['id' => 'gpt-4o', 'label' => 'GPT-4o', 'capabilities' => ['chat', 'vision']],
-            ['id' => 'gpt-4o-mini', 'label' => 'GPT-4o Mini', 'capabilities' => ['chat', 'vision']],
-            ['id' => 'gpt-4-turbo', 'label' => 'GPT-4 Turbo', 'capabilities' => ['chat']],
+            ['id' => 'gpt-5.5', 'label' => 'GPT-5.5', 'capabilities' => ['chat', 'vision']],
+            ['id' => 'gpt-5.5-pro', 'label' => 'GPT-5.5 Pro', 'capabilities' => ['chat', 'vision']],
+            ['id' => 'gpt-5.4-mini', 'label' => 'GPT-5.4 Mini', 'capabilities' => ['chat', 'vision']],
+            ['id' => 'gpt-5.4-nano', 'label' => 'GPT-5.4 Nano', 'capabilities' => ['chat', 'vision']],
+            ['id' => 'o4-mini', 'label' => 'o4-mini', 'capabilities' => ['chat']],
             ['id' => 'text-embedding-3-small', 'label' => 'Embedding 3 Small', 'capabilities' => ['embeddings']],
             ['id' => 'text-embedding-3-large', 'label' => 'Embedding 3 Large', 'capabilities' => ['embeddings']],
             ['id' => 'gpt-image-1', 'label' => 'GPT Image 1', 'capabilities' => ['image']],
@@ -1163,6 +1165,11 @@ class AiProviderService
      * Nothing is deleted, so defaults that reference a model id are never
      * orphaned.
      *
+     * A label is only refreshed when the provider actually sent one. OpenAI-style
+     * listings carry no display name, so their "label" is the bare id — writing
+     * that over a curated row would turn "GPT-5.5" into "gpt-5.5" every time the
+     * catalog refreshed, which since this runs nightly would erode the picker.
+     *
      * @param  array<int, array{id: string, label: string, capabilities: array<int, string>}>  $models
      * @return int Number of catalog rows created.
      */
@@ -1183,7 +1190,11 @@ class AiProviderService
                     'capability' => $capability,
                 ]);
 
-                $row->label = (string) ($model['label'] ?? $modelId);
+                $fetchedLabel = (string) ($model['label'] ?? $modelId);
+
+                if (! $row->exists || $fetchedLabel !== $modelId) {
+                    $row->label = $fetchedLabel;
+                }
 
                 if (! $row->exists) {
                     $row->is_enabled = false;

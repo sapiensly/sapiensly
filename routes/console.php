@@ -74,6 +74,16 @@ Schedule::command('slides:refresh-due')
     ->withoutOverlapping()
     ->runInBackground();
 
+// Refresh the model catalog from every connected provider. The bootstrap lists
+// go stale the moment a provider retires an id, and until this ran on a timer
+// the only cures were re-saving a key or an admin pressing Sync per driver —
+// so an install nobody touches drifted until inference failed. Cheap and safe
+// to repeat: new models arrive disabled and nothing is ever deleted.
+Schedule::command('ai:sync-models')
+    ->dailyAt('04:10')
+    ->withoutOverlapping()
+    ->runInBackground();
+
 // Resolve chat messages orphaned mid-stream (worker died without finalizing).
 Schedule::command('chat:fail-stale-streams')
     ->everyFiveMinutes()

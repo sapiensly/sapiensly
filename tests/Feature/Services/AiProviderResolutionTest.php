@@ -31,20 +31,21 @@ it('lists enabled catalog chat models regardless of tenant keys', function () {
 
     // Seeded by the catalog migration; no tenant provider exists for the user.
     expect($models->pluck('value'))
-        ->toContain('gpt-4o')
-        ->toContain('claude-haiku-4-5-20251001')
+        ->toContain(catalogChatModel(0, 'openai'))
+        ->toContain(catalogChatModel())
         // Embeddings models are excluded.
         ->not->toContain('text-embedding-3-small');
 });
 
 it('omits disabled catalog models from the chat list', function () {
-    // gpt-4-turbo is seeded only under the openai driver.
+    $openAiModel = catalogChatModel(0, 'openai');
+
     AiCatalogModel::query()
-        ->where('model_id', 'gpt-4-turbo')
+        ->where('model_id', $openAiModel)
         ->update(['is_enabled' => false]);
 
     expect(collect($this->service->getEnabledChatModels())->pluck('value'))
-        ->not->toContain('gpt-4-turbo');
+        ->not->toContain($openAiModel);
 });
 
 it('tags models byok when the tenant owns the key, system otherwise', function () {
@@ -54,9 +55,9 @@ it('tags models byok when the tenant owns the key, system otherwise', function (
     $models = collect($this->service->getEnabledChatModels($user))->keyBy('value');
 
     // Tenant has an Anthropic key → its models are BYOK.
-    expect($models['claude-haiku-4-5-20251001']['source'])->toBe('byok')
+    expect($models[catalogChatModel()]['source'])->toBe('byok')
         // No tenant OpenAI key → openai models fall back to the system key.
-        ->and($models['gpt-4-turbo']['source'])->toBe('system');
+        ->and($models[catalogChatModel(0, 'openai')]['source'])->toBe('system');
 });
 
 it('omits source when no user is given', function () {
@@ -64,9 +65,8 @@ it('omits source when no user is given', function () {
 });
 
 it('resolves a model provider from the catalog driver', function () {
-    // gpt-4-turbo is openai-only; gpt-4o is ambiguous (azure + openai).
-    expect($this->service->resolveProviderForCatalogModel('gpt-4-turbo'))->toBe(Lab::OpenAI)
-        ->and($this->service->resolveProviderForCatalogModel('claude-haiku-4-5-20251001'))->toBe(Lab::Anthropic)
+    expect($this->service->resolveProviderForCatalogModel(catalogChatModel(0, 'openai')))->toBe(Lab::OpenAI)
+        ->and($this->service->resolveProviderForCatalogModel(catalogChatModel()))->toBe(Lab::Anthropic)
         ->and($this->service->resolveProviderForCatalogModel('totally-made-up-model'))->toBeNull();
 });
 
