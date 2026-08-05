@@ -686,13 +686,18 @@ class ManifestValidator
      * Does an action sequence actually do something? For forms we require a
      * data change or workflow run; for buttons, navigation/modal counts too.
      *
+     * scan_to_find and download_pdf belong to the button list and not the form
+     * one: they leave the page or hand over a file, which is why a button
+     * carrying only one of them is finished — but neither writes the input a
+     * form just collected, so a submit that only does that is still a dead end.
+     *
      * @param  list<array<string, mixed>>  $actions
      */
     private function sequenceHasEffect(array $actions, bool $requirePersist): bool
     {
         $effectful = $requirePersist
             ? ['create_record', 'update_record', 'delete_record', 'run_workflow']
-            : ['create_record', 'update_record', 'delete_record', 'run_workflow', 'navigate', 'open_modal', 'close_modal'];
+            : ['create_record', 'update_record', 'delete_record', 'run_workflow', 'navigate', 'open_modal', 'close_modal', 'scan_to_find', 'download_pdf'];
 
         foreach ($actions as $action) {
             if (in_array($action['type'] ?? '', $effectful, true)) {

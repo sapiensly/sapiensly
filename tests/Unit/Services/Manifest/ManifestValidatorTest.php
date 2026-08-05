@@ -1218,6 +1218,43 @@ it('does not warn when a button opens a modal', function () {
     expect(collect($result->warnings)->pluck('code'))->not->toContain('no_effect');
 });
 
+it('does not warn when a button scans a code or hands over a PDF', function () {
+    $manifest = baseManifest();
+    $fieldId = $manifest['objects'][0]['fields'][0]['id'];
+    $manifest['pages'] = [[
+        'id' => id('pag'), 'slug' => 'clientes', 'name' => 'Clientes', 'path' => '/clientes',
+        'blocks' => [
+            ['id' => id('blk'), 'type' => 'button', 'label' => 'Escanear', 'on_click' => [
+                ['type' => 'scan_to_find', 'field_id' => $fieldId, 'page_slug' => 'clientes'],
+            ]],
+            ['id' => id('blk'), 'type' => 'button', 'label' => 'Descargar', 'on_click' => [
+                ['type' => 'download_pdf', 'page_slug' => 'clientes'],
+            ]],
+        ],
+    ]];
+
+    $result = (new ManifestValidator)->validate($manifest);
+
+    expect($result->valid)->toBeTrue()
+        ->and(collect($result->warnings)->pluck('code'))->not->toContain('no_effect');
+});
+
+it('still flags a form whose submit only downloads a PDF', function () {
+    $manifest = baseManifest();
+    $manifest['pages'] = [[
+        'id' => id('pag'), 'slug' => 'clientes', 'name' => 'Clientes', 'path' => '/clientes',
+        'blocks' => [[
+            'id' => id('blk'), 'type' => 'form', 'mode' => 'create',
+            'object_id' => $manifest['objects'][0]['id'],
+            'on_submit' => [['type' => 'download_pdf', 'page_slug' => 'clientes']],
+        ]],
+    ]];
+
+    $result = (new ManifestValidator)->validate($manifest);
+
+    expect(collect($result->warnings)->pluck('code'))->toContain('incomplete_action');
+});
+
 it('accepts a hero block, a coloured-background section and an external image', function () {
     $manifest = baseManifest();
     $manifest['pages'] = [[
