@@ -262,7 +262,7 @@ final class ManualWriter
             }
 
             // Action columns: the per-row buttons of a table.
-            foreach ($block['columns'] ?? [] as $column) {
+            foreach (ManifestReader::columnsOf($block) as $column) {
                 if (is_array($column) && ($column['type'] ?? '') === 'action') {
                     $label = trim((string) ($column['label'] ?? ''));
                     if ($label !== '') {
@@ -484,7 +484,7 @@ final class ManualWriter
         foreach ($entries as $entry) {
             $block = $entry['block'];
 
-            foreach ($block['columns'] ?? [] as $column) {
+            foreach (ManifestReader::columnsOf($block) as $column) {
                 if (! is_array($column) || ($column['type'] ?? '') !== 'action') {
                     continue;
                 }

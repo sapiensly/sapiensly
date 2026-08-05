@@ -262,3 +262,54 @@ describe('the words the documents are written in', function () {
         expect(DocWords::for('de-DE')->get('s_screens'))->toBe('The screens');
     });
 });
+
+/**
+ * `columns` is two different things in the manifest schema: a list of column
+ * definitions on table/related_list/data_grid, and a plain COUNT on the grid
+ * blocks. Both writers walked every block and iterated it, so the first app
+ * with a dashboard made read_app_docs fail with a TypeError instead of
+ * returning a document — and nearly every app has a dashboard.
+ */
+describe('the overloaded columns key', function () {
+    function gridManifest(): array
+    {
+        $manifest = docsManifest();
+        $manifest['pages'][] = [
+            'id' => 'pag_dash',
+            'name' => 'Tablero',
+            'slug' => 'dashboard',
+            'path' => '/dashboard',
+            'blocks' => [
+                // The count form, on the two blocks a dashboard is built from.
+                ['id' => 'blk_metrics', 'type' => 'metric_grid', 'columns' => 5, 'items' => [
+                    ['id' => 'itm_1', 'label' => 'Contratos', 'query' => ['object_id' => 'obj_leases'], 'aggregation' => 'count'],
+                ]],
+                ['id' => 'blk_cards', 'type' => 'card_grid', 'columns' => 3, 'data_source' => ['object_id' => 'obj_leases']],
+            ],
+        ];
+
+        return $manifest;
+    }
+
+    it('writes both documents for an app whose dashboard declares a column count', function () {
+        $manifest = gridManifest();
+
+        expect((new AppDocs)->technical($manifest, 'https://example.test/r/rentas')->toMarkdown())
+            ->toBeString()
+            ->and((new AppDocs)->manual($manifest)->toMarkdown())
+            ->toBeString();
+    });
+
+    it('reports the declared count rather than skipping the block', function () {
+        // Silently ignoring the integer would have been the cheap fix; the
+        // number is real and belongs in the sheet.
+        expect((new AppDocs)->technical(gridManifest(), 'https://example.test/r/rentas')->toMarkdown())
+            ->toContain('5 cols');
+    });
+
+    it('still counts a table\'s real column definitions', function () {
+        $sheet = (new AppDocs)->technical(docsManifest(), 'https://example.test/r/rentas')->toMarkdown();
+
+        expect($sheet)->toContain('cols');
+    });
+});

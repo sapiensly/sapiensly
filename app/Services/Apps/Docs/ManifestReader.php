@@ -211,6 +211,44 @@ final class ManifestReader
         return null;
     }
 
+    /**
+     * A block's COLUMN DEFINITIONS, or none.
+     *
+     * `columns` is two different things in the manifest schema: a list of
+     * column definitions on `table`, `related_list` and `data_grid`, and a
+     * plain COUNT on the grid blocks (`metric_grid`, `card_grid`,
+     * `feature_grid`, `testimonials`, `pricing`). Walking every block and
+     * iterating `columns` therefore hits an integer the moment an app has a
+     * dashboard — which is nearly every app, and is why both documents 500'd
+     * rather than rendered. BlockVisibilityFilter and ManifestIdFiller each
+     * solved this privately; this is the shared answer for the writers.
+     *
+     * @param  array<string, mixed>  $block
+     * @return list<array<string, mixed>>
+     */
+    public static function columnsOf(array $block): array
+    {
+        $columns = $block['columns'] ?? null;
+
+        return is_array($columns)
+            ? array_values(array_filter($columns, 'is_array'))
+            : [];
+    }
+
+    /**
+     * How many columns a block declares, whichever of the two shapes it uses.
+     */
+    public static function columnCountOf(array $block): ?int
+    {
+        $columns = $block['columns'] ?? null;
+
+        return match (true) {
+            is_array($columns) => count($columns),
+            is_int($columns) => $columns,
+            default => null,
+        };
+    }
+
     public function setting(string $key, mixed $default = null): mixed
     {
         return $this->manifest['settings'][$key] ?? $default;

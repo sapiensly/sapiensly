@@ -305,8 +305,9 @@ final class TechnicalWriter
             }
         }
 
-        if (isset($block['columns'])) {
-            $parts[] = count($block['columns']).' cols';
+        $columnCount = ManifestReader::columnCountOf($block);
+        if ($columnCount !== null) {
+            $parts[] = $columnCount.' cols';
         }
         if (isset($block['items'])) {
             $parts[] = count($block['items']).' items';
@@ -349,7 +350,7 @@ final class TechnicalWriter
             }
 
             // The per-row buttons of a table carry their own actions.
-            foreach ($block['columns'] ?? [] as $column) {
+            foreach (ManifestReader::columnsOf($block) as $column) {
                 if (! is_array($column) || ($column['type'] ?? '') !== 'action') {
                     continue;
                 }
