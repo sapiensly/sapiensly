@@ -4,6 +4,7 @@ namespace App\Services\Records;
 
 use App\Models\App;
 use App\Models\Record;
+use App\Support\Apps\EnvironmentContext;
 
 /**
  * Builds the "big picture" digest of an app's data model: the objects, their
@@ -119,6 +120,12 @@ class AppDataOverview
 
         return Record::query()
             ->where('app_id', $app->id)
+            // Scoped like every other read of an app's records. Without it the
+            // digest counts both sides at once, so a sandbox full of demo rows
+            // reports numbers that no query on this page can reproduce — and
+            // the agent that reads this before querying is told the app holds
+            // data it will never see.
+            ->where('environment', app(EnvironmentContext::class)->current())
             ->selectRaw('object_definition_id, count(*) as c')
             ->groupBy('object_definition_id')
             ->pluck('c', 'object_definition_id')

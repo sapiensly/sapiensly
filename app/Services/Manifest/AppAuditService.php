@@ -4,6 +4,8 @@ namespace App\Services\Manifest;
 
 use App\Models\App;
 use App\Models\Record;
+use App\Support\Apps\EnvironmentContext;
+use Illuminate\Database\Eloquent\Builder;
 
 /**
  * A full-app health check that spans both layers the other tools each cover only
@@ -109,8 +111,7 @@ class AppAuditService
         // is irrelevant (array_flip turns the id list into a membership set).
         $idsByObject = [];
         foreach ($objectIds as $objectId) {
-            $ids = Record::query()
-                ->where('app_id', $app->id)
+            $ids = $this->scopedRecords($app)
                 ->where('object_definition_id', $objectId)
                 ->pluck('id')
                 ->all();
@@ -262,8 +263,7 @@ class AppAuditService
      */
     private function orphanedRecords(App $app, array $manifestObjectIds): array
     {
-        $present = Record::query()
-            ->where('app_id', $app->id)
+        $present = $this->scopedRecords($app)
             ->distinct()
             ->pluck('object_definition_id')
             ->all();
@@ -271,8 +271,7 @@ class AppAuditService
         $byObject = [];
         $total = 0;
         foreach (array_diff($present, $manifestObjectIds) as $orphanId) {
-            $count = Record::query()
-                ->where('app_id', $app->id)
+            $count = $this->scopedRecords($app)
                 ->where('object_definition_id', $orphanId)
                 ->count();
             $byObject[] = ['object_definition_id' => $orphanId, 'record_count' => $count];
@@ -290,11 +289,27 @@ class AppAuditService
      */
     private function recordsOf(App $app, string $objectId): iterable
     {
-        return Record::query()
-            ->where('app_id', $app->id)
+        return $this->scopedRecords($app)
             ->where('object_definition_id', $objectId)
             ->select(['id', 'data'])
             ->cursor();
+    }
+
+    /**
+     * Every record read this audit makes, scoped to the environment the caller
+     * is actually in.
+     *
+     * Auditing across the boundary is worse than merely miscounting: a
+     * production row pointing at a production parent looks dangling when the
+     * id set was built from the sandbox, so the audit invents integrity
+     * failures — and a real one in the environment you are NOT in stays hidden
+     * behind the other side's rows.
+     */
+    private function scopedRecords(App $app): Builder
+    {
+        return Record::query()
+            ->where('app_id', $app->id)
+            ->where('environment', app(EnvironmentContext::class)->current());
     }
 
     /**

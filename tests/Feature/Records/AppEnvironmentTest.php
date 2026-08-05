@@ -4,7 +4,9 @@ use App\Http\Middleware\BindAppEnvironment;
 use App\Models\App;
 use App\Models\Record;
 use App\Models\User;
+use App\Services\Manifest\AppAuditService;
 use App\Services\Manifest\AppManifestService;
+use App\Services\Records\AppDataOverview;
 use App\Services\Records\DemoDataGenerator;
 use App\Services\Records\RecordQueryService;
 use App\Services\Records\RecordWriteService;
@@ -114,6 +116,36 @@ it('counts and aggregates behind the same wall', function () {
     // A production record is not reachable BY ID from the sandbox either —
     // which is what stops a demo action from editing the real thing.
     expect($env->runIn(EnvironmentContext::DEMO, fn () => $queries->find($app, 'obj_ordenes001', $real->id, $manifest)))->toBeNull();
+});
+
+it('describes and audits from one side of the wall only', function () {
+    // These two read records WITHOUT going through RecordQueryService, so each
+    // had to remember the wall on its own and neither did. The digest told an
+    // agent the app held rows it could never query; the audit built its id set
+    // from one environment and then checked the other one's relations against
+    // it, which invents dangling FKs and hides the real ones.
+    $owner = User::factory()->create();
+    [$app, $manifest] = envApp($owner);
+    $writes = app(RecordWriteService::class);
+    $env = app(EnvironmentContext::class);
+
+    $writes->create($app, $manifest, 'obj_ordenes001', ['folio' => 'REAL-1'], $owner);
+    $env->runIn(EnvironmentContext::DEMO, function () use ($writes, $app, $manifest, $owner) {
+        $writes->create($app, $manifest, 'obj_ordenes001', ['folio' => 'FAKE-1'], $owner);
+        $writes->create($app, $manifest, 'obj_ordenes001', ['folio' => 'FAKE-2'], $owner);
+    });
+
+    $digested = fn (): int => collect(app(AppDataOverview::class)->compact($app, $manifest)['objects'])
+        ->firstWhere('id', 'obj_ordenes001')['record_count'];
+
+    expect($digested())->toBe(1)
+        ->and($env->runIn(EnvironmentContext::DEMO, $digested))->toBe(2);
+
+    $audited = fn (): int => collect(app(AppAuditService::class)->audit($app)['data']['objects'])
+        ->firstWhere('object', 'ordenes')['record_count'];
+
+    expect($audited())->toBe(1)
+        ->and($env->runIn(EnvironmentContext::DEMO, $audited))->toBe(2);
 });
 
 it('puts generated sample data in the sandbox, not in the books', function () {
