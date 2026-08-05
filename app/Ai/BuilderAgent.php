@@ -3,6 +3,7 @@
 namespace App\Ai;
 
 use App\Ai\Gateway\CachingAnthropicGateway;
+use App\Ai\Gateway\CachingOpenRouterGateway;
 use App\Services\Ai\ReasoningOptions;
 use Laravel\Ai\AnonymousAgent;
 use Laravel\Ai\Contracts\HasProviderOptions;
@@ -25,11 +26,19 @@ use Laravel\Ai\Enums\Lab;
  * stable prefix re-sent on every turn of a conversation. Without a cache marker
  * they are re-billed at full price each turn (~9k tokens). Marking the system
  * block `cache_control: ephemeral` caches everything before it (tools + system),
- * so turns after the first bill that prefix at ~0.1x. This SDK hook only reaches
- * Anthropic (its `system` is a top-level field the providerOptions merge can
- * replace); OpenRouter/OpenAI no-op here and rely on automatic provider-side
- * caching of the stable prefix instead. Opt-in (default off) so any one-shot use
- * of this class never emits a cache marker.
+ * so turns after the first bill that prefix at ~0.1x. The `system` override only
+ * reaches Anthropic directly (there `system` is a top-level field the
+ * providerOptions merge can replace).
+ *
+ * OpenRouter needs its own path. It was assumed to cache the stable prefix
+ * server-side the way the OpenAI-compatible providers do — true for most of its
+ * catalog, but NOT for the Anthropic models it brokers, whose caching is
+ * explicit whoever fronts them. Measured live on the same brief through the same
+ * broker: grok read 533k cached tokens, `~anthropic/claude-haiku-latest` read
+ * zero and cost more than the pricier model. So for those the flag goes out and
+ * CachingOpenRouterGateway marks the breakpoints in the chat-message shape.
+ *
+ * Opt-in (default off) so any one-shot use of this class never emits a marker.
  */
 class BuilderAgent extends AnonymousAgent implements HasProviderOptions
 {
@@ -86,8 +95,9 @@ class BuilderAgent extends AnonymousAgent implements HasProviderOptions
         // model mandates reasoning, where an explicit disable would 400).
         $options = ReasoningOptions::forProvider('off', $provider, $this->model);
 
-        if ($this->cacheableSystem !== null && trim($this->cacheableSystem) !== ''
-            && ($provider === Lab::Anthropic || $provider === 'anthropic')) {
+        $wantsCaching = $this->cacheableSystem !== null && trim($this->cacheableSystem) !== '';
+
+        if ($wantsCaching && ($provider === Lab::Anthropic || $provider === 'anthropic')) {
             $options['system'] = [[
                 'type' => 'text',
                 'text' => $this->cacheableSystem,
@@ -100,6 +110,18 @@ class BuilderAgent extends AnonymousAgent implements HasProviderOptions
             // turn re-bills the whole growing history at the full input rate —
             // measured live at ~60% of a landing build's Anthropic bill.
             $options[CachingAnthropicGateway::CACHE_MESSAGES_FLAG] = true;
+        }
+
+        // An Anthropic model reached through OpenRouter needs the same
+        // breakpoints — its caching is explicit whoever fronts it, and the
+        // broker adds none. No `system` override here: OpenRouter speaks the
+        // OpenAI-compatible shape where the system prompt is a MESSAGE, so
+        // CachingOpenRouterGateway marks it there instead.
+        if ($wantsCaching
+            && ($provider === Lab::OpenRouter || $provider === 'openrouter')
+            && $this->model !== null
+            && CachingOpenRouterGateway::isAnthropicModel($this->model)) {
+            $options[CachingOpenRouterGateway::CACHE_MESSAGES_FLAG] = true;
         }
 
         return $options;

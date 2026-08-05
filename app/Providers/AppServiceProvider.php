@@ -3,6 +3,7 @@
 namespace App\Providers;
 
 use App\Ai\Gateway\CachingAnthropicGateway;
+use App\Ai\Gateway\CachingOpenRouterGateway;
 use App\Models\OrganizationMembership;
 use App\Models\User;
 use App\Observers\OrganizationMembershipObserver;
@@ -32,6 +33,7 @@ use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
 use Laravel\Ai\AiManager;
 use Laravel\Ai\Providers\AnthropicProvider;
+use Laravel\Ai\Providers\OpenRouterProvider;
 use Laravel\Passport\Passport;
 use Pgvector\Laravel\Schema;
 use Psr\Http\Message\RequestInterface;
@@ -95,6 +97,19 @@ class AppServiceProvider extends ServiceProvider
                 $config,
                 $app->make(EventDispatcher::class),
             ));
+
+            // The same caching, for the Anthropic models OpenRouter brokers.
+            // Their caching is explicit whoever fronts them, and the broker
+            // does not add it — so without this a builder turn on
+            // `~anthropic/claude-*` re-bills its whole history every round
+            // trip. Unlike Anthropic's, this provider takes its gateway
+            // after construction.
+            $manager->extend('openrouter', function ($app, array $config) {
+                $provider = new OpenRouterProvider($config, $app->make(EventDispatcher::class));
+                $provider->useTextGateway(new CachingOpenRouterGateway($app['events']));
+
+                return $provider;
+            });
         });
     }
 
