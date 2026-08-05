@@ -111,7 +111,7 @@ class BuildCritic
         // turn. Observed live: the model diagnosed it itself ("el crítico está
         // validando contra lo que está PUBLICADO, no contra lo que está en
         // DRAFT") and the loop ran the critic seven times for a two-pass job.
-        $sheet = $this->docs->technicalForApp($app, $draftManifest)->toMarkdown();
+        $sheet = $this->docs->criticSheet($app, $draftManifest)->toMarkdown();
 
         foreach ($this->criticCandidates($explicitModel) as $model) {
             $verdict = $this->attempt($request, $sheet, $user, $model, $app, $conversationId);

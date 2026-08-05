@@ -2,6 +2,8 @@
 
 use App\Services\Apps\Docs\AppDocs;
 use App\Services\Apps\Docs\DocWords;
+use App\Services\Apps\Docs\ManifestReader;
+use App\Services\Apps\Docs\TechnicalWriter;
 
 /**
  * The two documents every app carries, written from its manifest.
@@ -312,4 +314,23 @@ describe('the overloaded columns key', function () {
 
         expect($sheet)->toContain('cols');
     });
+});
+
+/**
+ * The critic reads a manifest that changes between calls, so nothing caches and
+ * every pass is paid in full. Measured on a real build: `actions` and `runtime`
+ * were 29% of the sheet, and neither bears on "was what was asked for built".
+ */
+it('can leave the CRUD wiring and the runtime blurb out of the sheet', function () {
+    $reader = new ManifestReader(docsManifest());
+    $words = DocWords::for('es-MX');
+
+    $full = (new TechnicalWriter($reader, $words, 'https://example.test'))->write()->toMarkdown();
+    $trimmed = (new TechnicalWriter($reader, $words, 'https://example.test'))
+        ->write(omit: ['actions', 'runtime'])->toMarkdown();
+
+    expect(strlen($trimmed))->toBeLessThan(strlen($full))
+        // What it must keep: the objects, their fields, and the pages.
+        ->and($trimmed)->toContain('Contratos')
+        ->and($trimmed)->toContain('leases');
 });

@@ -58,6 +58,26 @@ class AppDocs
     }
 
     /**
+     * The sheet as the closing critic reads it.
+     *
+     * Same document minus the two sections that answer a different question:
+     * `actions` (the CRUD wiring — eighty rows of «Editar | presionar |
+     * open_modal») and `runtime` (a fixed paragraph on RLS and how to patch).
+     * Neither bears on "was what was asked for built, and is anything here
+     * invented", and together they are 29% of the sheet — paid on every pass,
+     * uncached, because the critic reads a manifest that changes between calls.
+     *
+     * @param  array<string, mixed>|null  $manifest
+     */
+    public function criticSheet(App $app, ?array $manifest = null): Doc
+    {
+        $reader = new ManifestReader($manifest ?? $this->manifestOf($app));
+
+        return (new TechnicalWriter($reader, DocWords::for($reader->locale()), $this->runtimeUrl($app)))
+            ->write(omit: ['actions', 'runtime']);
+    }
+
+    /**
      * @param  array<string, mixed>  $manifest
      */
     public function technical(array $manifest, ?string $runtimeUrl = null): Doc

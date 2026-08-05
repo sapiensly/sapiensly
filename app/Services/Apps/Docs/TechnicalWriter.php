@@ -22,7 +22,17 @@ final class TechnicalWriter
         private readonly ?string $runtimeUrl = null,
     ) {}
 
-    public function write(): Doc
+    /**
+     * @param  list<string>  $omit  Section ids to leave out — for a reader that
+     *                              does not need all of it. The closing critic
+     *                              drops `actions` and `runtime`: eighty rows of
+     *                              «Clientes › Editar | presionar | open_modal»
+     *                              and a paragraph on RLS say nothing about
+     *                              whether what was asked for got built, and
+     *                              together they are 29% of the sheet it pays
+     *                              for on every pass.
+     */
+    public function write(array $omit = []): Doc
     {
         $sections = array_values(array_filter([
             $this->section('identity', $this->w->get('s_identity'), $this->identity()),
@@ -33,7 +43,7 @@ final class TechnicalWriter
             $this->section('workflows', $this->w->get('s_workflows'), $this->workflows()),
             $this->section('permissions', $this->w->get('s_permissions'), $this->permissions()),
             $this->section('runtime', $this->w->get('s_runtime'), $this->runtime()),
-        ]));
+        ], fn (?array $section): bool => $section !== null && ! in_array($section['id'], $omit, true)));
 
         return new Doc(
             kind: 'technical',

@@ -9,7 +9,6 @@ use App\Ai\Tools\Builder\AddDashboardPageTool;
 use App\Ai\Tools\Builder\AddDetailPageTool;
 use App\Ai\Tools\Builder\AnalyzeDataTool;
 use App\Ai\Tools\Builder\CreateIntegrationTool;
-use App\Ai\Tools\Builder\CritiqueBuildTool;
 use App\Ai\Tools\Builder\CritiqueLandingDesignTool;
 use App\Ai\Tools\Builder\DeleteBlockByIdTool;
 use App\Ai\Tools\Builder\DiscoverIntegrationTool;
@@ -1367,7 +1366,7 @@ class BuilderAiService
      * and two rails taking turns on one conversation would fight. Bounded by the
      * same $gateRemaining budget, so a critic that keeps finding gaps cannot loop
      * a build forever. First clean verdict stamps `build_reviewed_at` (see
-     * CritiqueBuildTool) and retires the rail — later tweak turns are never
+     * this rail) and retires it — later tweak turns are never
      * re-reviewed.
      */
     public function continueForBuildCritic(BuilderMessage $finished, ?string $modelOverride, int $gateRemaining): void
@@ -1410,13 +1409,85 @@ class BuilderAiService
             return;
         }
 
+        $request = self::conversationIntentText($conversation);
+        $user = $conversation->user;
+        if (trim($request) === '' || $user === null) {
+            return;
+        }
+
+        // ONE pass, here, on the applied manifest — not a tool the model can
+        // call in a loop. Six passes on one build was the product of two
+        // unbounded knobs (the model's discretion inside a turn, plus this rail
+        // queueing more turns) and cost more than half the build. Running it
+        // server-side makes the count exactly one per applied turn, by
+        // construction rather than by asking.
+        $verdict = app(BuildCritic::class)->critique(
+            $app, $request, $user, null, $conversation->id,
+        );
+
+        // 'failed' is not approval: leave the stamp off and let the next
+        // applied turn try again, within the same budget.
+        if (($verdict['critic'] ?? null) !== 'ok') {
+            return;
+        }
+
+        $missing = array_values(array_filter((array) ($verdict['missing'] ?? []), 'is_string'));
+        $unrequested = array_values(array_filter((array) ($verdict['unrequested'] ?? []), 'is_string'));
+
+        if (($verdict['complete'] ?? false) === true && $unrequested === []) {
+            $conversation->forceFill(['build_reviewed_at' => now()])->save();
+
+            return;
+        }
+
+        if (($verdict['complete'] ?? false) === true) {
+            // Nothing missing: the review is done and the rail retires. The
+            // inventions still go to the model, but as a last errand rather
+            // than a reason to keep reviewing.
+            $conversation->forceFill(['build_reviewed_at' => now()])->save();
+        }
+
         $this->queueAutoTurn(
             $conversation,
-            '(riel de cierre) La app tiene cambios aplicados pero critique_build no ha devuelto complete:true en esta conversación. Llámalo ahora pasando en `request` la petición ORIGINAL del usuario tal como la escribió, sin parafrasear. Corrige con propose_change todo lo que aparezca en `missing` y vuelve a llamarlo hasta complete:true. Si algo aparece en `unrequested`, quítalo o explica en una línea por qué pertenece. No hagas nada más.',
+            $this->reviewPrompt($missing, $unrequested),
             $modelOverride,
             0,
             gateRemaining: $gateRemaining - 1,
         );
+    }
+
+    /**
+     * The queued turn carries the FINDINGS, not an instruction to go and look.
+     * The model never sees the critic, so it cannot spend passes on it — it
+     * receives a list and works it.
+     *
+     * @param  list<string>  $missing
+     * @param  list<string>  $unrequested
+     */
+    private function reviewPrompt(array $missing, array $unrequested): string
+    {
+        $lines = ['(riel de cierre) La revisión de la app encontró esto:'];
+
+        if ($missing !== []) {
+            $lines[] = '';
+            $lines[] = 'FALTA (se pidió y no está) — corrige cada punto con propose_change:';
+            foreach ($missing as $item) {
+                $lines[] = '- '.$item;
+            }
+        }
+
+        if ($unrequested !== []) {
+            $lines[] = '';
+            $lines[] = 'NO SE PIDIÓ (está y nadie lo pidió) — quítalo, o deja una línea diciendo por qué pertenece:';
+            foreach ($unrequested as $item) {
+                $lines[] = '- '.$item;
+            }
+        }
+
+        $lines[] = '';
+        $lines[] = 'Haz solo eso. Al terminar, para: la plataforma vuelve a revisar sola.';
+
+        return implode("\n", $lines);
     }
 
     /**
@@ -1854,7 +1925,6 @@ class BuilderAiService
             new ListDashboardBlueprintsTool,
             new PlanDashboardTool,
             new CritiqueLandingDesignTool($app, $this->manifestService, app(LandingDesignCritic::class), $conversation->user, $proposeTool, $conversation->id),
-            new CritiqueBuildTool($app, app(BuildCritic::class), $conversation->user, $conversation->id, $proposeTool),
             new ListAvailableIconsTool,
             new GeneratePaletteTool($app->organization?->brandbook()),
             new ListAvailableFieldTypesTool,
