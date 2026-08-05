@@ -106,6 +106,12 @@ class AppScaffolder
      * just whitelists what each type may carry so a typed add_field is as capable
      * as a hand-written patch.
      *
+     * Every prop here is one `list_available_field_types` ALREADY promises the
+     * model — that catalog is the contract, and a prop it advertises which this
+     * map omits is not an unsupported feature, it is a request accepted, dropped
+     * and reported as done. Keep the two in step: adding a prop to the catalog
+     * without adding it here re-creates exactly that.
+     *
      * @var array<string, list<string>>
      */
     private const FIELD_CONFIG_PROPS = [
@@ -116,9 +122,21 @@ class AppScaffolder
         // got a plain text box and reported success.
         'string' => ['min_length', 'max_length', 'pattern', 'default', 'capture'],
         'long_text' => ['max_length', 'default'],
+        // These four had no entry at all, so they carried base props only — the
+        // catalog offers each of them a default, and the text-like three a
+        // max_length.
+        'email' => ['default', 'max_length'],
+        'url' => ['default', 'max_length'],
+        'phone' => ['default', 'max_length'],
+        'color' => ['default'],
+        // `display` is a real rendering switch the runtime reads (a boolean as a
+        // toggle, a select as a radio group), advertised in the catalog and
+        // unreachable through the typed path until now.
+        'single_select' => ['default', 'display'],
+        'multi_select' => ['default'],
         'number' => ['min', 'max', 'precision', 'format', 'default'],
         'currency' => ['currency_code', 'min', 'max', 'default'],
-        'boolean' => ['default'],
+        'boolean' => ['default', 'display'],
         'date' => ['default'],
         'datetime' => ['default'],
         'rating' => ['max', 'default', 'icon'],
