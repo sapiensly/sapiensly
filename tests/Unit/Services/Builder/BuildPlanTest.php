@@ -155,3 +155,38 @@ it('skip marks rejected steps skipped, never touches done, and can complete the 
         ->and($plan['steps'][1]['status'])->toBe('skipped')
         ->and($plan['status'])->toBe('done');
 });
+
+/**
+ * The plan is injected into every turn under a line telling the model to "call
+ * target_plan_steps with their ids". It rendered "1. [pending] Title" — no id
+ * anywhere. Only the first turn worked, because set_build_plan's own reply still
+ * carried the minted ids; from the second turn on the model had to guess and the
+ * tool refused with "Unknown step id(s)", 6 times out of 6 on a live build.
+ */
+it('shows each step id, because the prompt asks the model to pass them', function () {
+    $plan = BuildPlan::reconcile(null, 'Campo', [
+        ['title' => 'Objetos'],
+        ['title' => 'Páginas'],
+    ]);
+
+    $lines = BuildPlan::toContextLines($plan);
+
+    foreach ($plan['steps'] as $step) {
+        expect($lines)->toContain($step['id']);
+    }
+});
+
+it('still shows the position, status and title alongside the id', function () {
+    $plan = BuildPlan::reconcile(null, null, [['title' => 'Objetos']]);
+    $plan = BuildPlan::markInProgress($plan, [$plan['steps'][0]['id']]);
+
+    expect(BuildPlan::toContextLines($plan))
+        ->toStartWith('1. [in_progress] ')
+        ->toContain('Objetos');
+});
+
+it('renders a step with no id rather than printing an empty separator', function () {
+    // Plans predating minted ids, and any hand-built fixture.
+    expect(BuildPlan::toContextLines(['steps' => [['title' => 'Suelto', 'status' => 'pending']]]))
+        ->toBe('1. [pending] Suelto');
+});

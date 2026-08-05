@@ -286,13 +286,25 @@ class BuildPlan
     /**
      * One-line-per-step plain-text rendering for injecting the plan into a turn.
      *
+     * The id is part of the line because the prompt this renders into tells the
+     * model to "call target_plan_steps with their ids" — and the ids appeared
+     * nowhere else on any turn but the first, where set_build_plan's own reply
+     * still carried them. From the second turn on the model had to invent them,
+     * so target_plan_steps failed with "Unknown step id(s)" EVERY time: measured
+     * 6 of 6 on a live build. Nothing then marked the steps, so they closed
+     * against whichever summary happened to land, and the builder rebuilt a
+     * dashboard it had already made because the step still read pending.
+     *
      * @param  array<string, mixed>  $plan
      */
     public static function toContextLines(array $plan): string
     {
         $lines = [];
         foreach ($plan['steps'] ?? [] as $i => $step) {
-            $lines[] = ($i + 1).'. ['.($step['status'] ?? 'pending').'] '.($step['title'] ?? '');
+            $id = (string) ($step['id'] ?? '');
+            $lines[] = ($i + 1).'. ['.($step['status'] ?? 'pending').'] '
+                .($id !== '' ? $id.' · ' : '')
+                .($step['title'] ?? '');
         }
 
         return implode("\n", $lines);
