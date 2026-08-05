@@ -3903,3 +3903,92 @@ it('design-lint R7: a table too wide to scan, unless the extras are folded away'
     expect(designWarnings((new ManifestValidator)->validate($m))->pluck('message')->implode(' '))
         ->not->toContain('stops the row reading as one record');
 });
+
+/**
+ * R11 — a capture the manifest declares as plain text or bare numbers.
+ *
+ * Both live builds of the same brief typed the signature, the photo and the
+ * arrival point as `string`, and one of them split the point into `latitud`
+ * and `longitud` numbers. The runtime has a type for each; the value is lost
+ * only because the field was typed before the intent was. These are not
+ * "could be richer" suggestions — a signature in a string has nowhere to put
+ * the bytes.
+ */
+function capturedFieldsManifest(array $fields, string $locale = 'es-MX'): array
+{
+    // The lexicon is locale-driven: 'latitud' is not 'latitude', so a manifest
+    // with Spanish field names and no locale matches nothing. Both live builds
+    // were es-MX, which is why they tripped these rules.
+    $m = baseManifest();
+    $m['settings']['default_locale'] = $locale;
+    foreach ($fields as $f) {
+        $m['objects'][0]['fields'][] = $f + ['id' => id('fld')];
+    }
+
+    return $m;
+}
+
+it('design-lint R11: flags a signature held as text', function () {
+    $r = (new ManifestValidator)->validate(capturedFieldsManifest([
+        ['slug' => 'firma_cliente', 'name' => 'Firma del cliente', 'type' => 'string'],
+    ]));
+
+    expect(designWarnings($r)->pluck('message')->implode(' '))
+        ->toContain('signature')
+        ->toContain('capture: "signature"');
+});
+
+it('design-lint R11: flags a photo held as text but not a link to one', function () {
+    $r = (new ManifestValidator)->validate(capturedFieldsManifest([
+        ['slug' => 'foto_evidencia', 'name' => 'Foto de evidencia', 'type' => 'string'],
+        // A URL column is a link, not a capture — and 'foto' lives in the
+        // `image` category, so excluding on that category would have silenced
+        // the rule entirely in Spanish.
+        ['slug' => 'foto_url', 'name' => 'Foto URL', 'type' => 'string'],
+    ]));
+
+    $messages = designWarnings($r)->pluck('message');
+
+    expect($messages->filter(fn ($m) => str_contains($m, 'photo')))->toHaveCount(1)
+        ->and($messages->implode(' '))->toContain('foto_evidencia');
+});
+
+it('design-lint R11: flags a location held as text', function () {
+    $r = (new ManifestValidator)->validate(capturedFieldsManifest([
+        ['slug' => 'geolocalizacion', 'name' => 'Geolocalización', 'type' => 'string'],
+    ]));
+
+    expect(designWarnings($r)->pluck('message')->implode(' '))->toContain('no map can plot it');
+});
+
+it('design-lint R11: flags a point split across two number columns', function () {
+    $r = (new ManifestValidator)->validate(capturedFieldsManifest([
+        ['slug' => 'latitud', 'name' => 'Latitud', 'type' => 'number'],
+        ['slug' => 'longitud', 'name' => 'Longitud', 'type' => 'number'],
+    ]));
+
+    expect(designWarnings($r)->pluck('message')->implode(' '))->toContain('splits a point');
+});
+
+it('design-lint R11: says nothing when the fields already carry the right types', function () {
+    $r = (new ManifestValidator)->validate(capturedFieldsManifest([
+        ['slug' => 'firma', 'name' => 'Firma', 'type' => 'file', 'capture' => 'signature'],
+        ['slug' => 'foto', 'name' => 'Foto', 'type' => 'file', 'capture' => 'camera'],
+        ['slug' => 'llegada', 'name' => 'Llegada', 'type' => 'geo'],
+    ]));
+
+    expect(designWarnings($r)->pluck('message')->implode(' '))
+        ->not->toContain('signature')
+        ->not->toContain('photo held')
+        ->not->toContain('no map can plot');
+});
+
+it('design-lint R11: leaves a lone latitude alone', function () {
+    // One coordinate is not a point — it may be a reading, a threshold, a
+    // column imported from somewhere. Only the pair is unambiguous.
+    $r = (new ManifestValidator)->validate(capturedFieldsManifest([
+        ['slug' => 'latitud', 'name' => 'Latitud', 'type' => 'number'],
+    ]));
+
+    expect(designWarnings($r)->pluck('message')->implode(' '))->not->toContain('splits a point');
+});

@@ -344,6 +344,89 @@ class ManifestValidator
                     );
                 }
             }
+
+            $this->warnAboutFlatCaptureTypes($object, $oi, $lex, $warnings);
+        }
+    }
+
+    /**
+     * R11 — a capture the manifest declares as plain text or bare numbers.
+     *
+     * These are not suboptimal choices, they are unusable ones: a signature or
+     * a photo held in a `string` has nowhere to put the bytes, and a pair of
+     * `number` columns for lat/lng renders no map and reads as two KPIs a
+     * dashboard will happily average. The runtime has a type for each — `file`
+     * with capture signature/camera, and `geo` — so the value is lost only
+     * because the field was typed before the intent was.
+     *
+     * Deliberately narrow. Every rule here fires on a name that means one thing
+     * and a type that cannot hold it; "this could be richer" is not a warning
+     * anyone should have to read, and a noisy linter is an ignored one.
+     *
+     * @param  array<string, mixed>  $object
+     * @param  list<ManifestValidationError>  $warnings
+     */
+    private function warnAboutFlatCaptureTypes(array $object, int $oi, SemanticLexicon $lex, array &$warnings): void
+    {
+        $flat = ['string', 'long_text'];
+        $latitude = null;
+        $longitude = null;
+
+        foreach ($object['fields'] ?? [] as $fi => $field) {
+            $type = (string) ($field['type'] ?? '');
+            $slug = (string) ($field['slug'] ?? $fi);
+            $words = [(string) ($field['name'] ?? ''), $slug];
+            $at = "/objects/{$oi}/fields/{$fi}";
+
+            if ($type === 'number') {
+                $latitude ??= $lex->matches('latitude', ...$words) ? $slug : null;
+                $longitude ??= $lex->matches('longitude', ...$words) ? $slug : null;
+
+                continue;
+            }
+
+            if (! in_array($type, $flat, true)) {
+                continue;
+            }
+
+            if ($lex->matches('signature', ...$words)) {
+                $warnings[] = new ManifestValidationError(
+                    $at,
+                    "'{$slug}' is a signature held as text, which cannot store one. Use type `file` with `capture: \"signature\"` — it gives the person a pad to sign on and stores the result as a PNG.",
+                    'design_smell',
+                );
+
+                continue;
+            }
+
+            // `foto_url` is a link to an image, not a capture — leave it alone.
+            // Excluding on the `image` category instead would swallow the rule
+            // whole: in Spanish that category contains 'foto'.
+            if ($lex->matches('snapshot', ...$words) && ! $lex->matches('weblink', ...$words)) {
+                $warnings[] = new ManifestValidationError(
+                    $at,
+                    "'{$slug}' is a photo held as text, which cannot store one. Use type `file` with `capture: \"camera\"` — it opens the camera on a phone and falls back to the file picker elsewhere.",
+                    'design_smell',
+                );
+
+                continue;
+            }
+
+            if ($lex->matches('geopoint', ...$words)) {
+                $warnings[] = new ManifestValidationError(
+                    $at,
+                    "'{$slug}' is a location held as text, so no map can plot it. Use type `geo` — it stores {lat, lng} and offers a «use my location» button.",
+                    'design_smell',
+                );
+            }
+        }
+
+        if ($latitude !== null && $longitude !== null) {
+            $warnings[] = new ManifestValidationError(
+                "/objects/{$oi}",
+                "object '".($object['slug'] ?? $oi)."' splits a point across '{$latitude}' and '{$longitude}' as numbers — a map block reads neither, and a dashboard will offer to average them. Replace both with one `geo` field.",
+                'design_smell',
+            );
         }
     }
 

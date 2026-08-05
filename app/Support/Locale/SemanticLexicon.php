@@ -96,6 +96,15 @@ class SemanticLexicon
         'en' => [
             'quantity' => ['qty', 'quantity', 'count', '\bunits?\b', '\bkilos?\b', '\bkg\b', '\bhours?\b', '\blit(re|er)s?\b', '\bmet(re|er)s?\b'],
             'image' => ['image', 'photo', 'picture', 'thumbnail', 'avatar', 'url'],
+            // A value that is a signature, a photo taken on the spot, or a
+            // point on the earth. Deliberately narrower than `image`,
+            // which includes url/avatar: these decide a field's TYPE.
+            'signature' => ['signature', 'signed by', 'autograph'],
+            'weblink' => ['\\burl\\b', '\\blink\\b', 'href'],
+            'snapshot' => ['\\bphoto', 'photograph', 'evidence', '\\bpicture'],
+            'geopoint' => ['geolocation', 'coordinates', '\\bgps\\b', 'geo.?point'],
+            'latitude' => ['latitude', '\\blat\\b'],
+            'longitude' => ['longitude', '\\blng\\b', '\\blon\\b'],
             'amount' => ['subtotal', 'amount', 'total'],
             'unit_price' => ['\bunit', 'price'],
             'price' => ['price', '\brate\b', 'pvp', 'amount', 'subtotal', 'total'],
@@ -120,6 +129,12 @@ class SemanticLexicon
         'es' => [
             'quantity' => ['cant', 'unidad', 'piezas', 'qty', 'count', '\bkilos?\b', '\bkg\b', '\bhoras\b', '\blitros\b', '\bmetros\b'],
             'image' => ['imagen', 'foto', 'url', 'avatar'],
+            'signature' => ['firma', 'firmado por', 'rubrica'],
+            'weblink' => ['\\burl\\b', '\\blink\\b', 'enlace'],
+            'snapshot' => ['\\bfoto', 'fotografia', 'evidencia'],
+            'geopoint' => ['geolocaliz', 'coordenad', '\\bgps\\b'],
+            'latitude' => ['latitud', '\\blat\\b'],
+            'longitude' => ['longitud', '\\blng\\b', '\\blon\\b'],
             'amount' => ['subtotal', 'importe', '\bmonto\b', 'total'],
             'unit_price' => ['unitario', 'precio'],
             'price' => ['precio', 'tarifa', 'importe', 'pvp', 'subtotal', 'total'],
