@@ -18,19 +18,20 @@ interface Props {
 
 const props = defineProps<Props>();
 
-const dot = computed(() => {
-    switch (props.status) {
-        case 'ok':
-            return { color: 'var(--sp-success)', title: 'Running' };
-        case 'outdated':
-            return {
-                color: 'var(--sp-warning)',
-                title: 'Degraded / not reachable',
-            };
-        case 'missing':
-            return { color: 'var(--sp-danger)', title: 'Missing' };
-    }
-});
+/**
+ * Keyed on the status union, so adding a state to Props is a type error here
+ * rather than a dot that silently renders with no colour.
+ */
+const dotMap: Record<Props['status'], { color: string; title: string }> = {
+    ok: { color: 'var(--sp-success)', title: 'Running' },
+    outdated: {
+        color: 'var(--sp-warning)',
+        title: 'Degraded / not reachable',
+    },
+    missing: { color: 'var(--sp-danger)', title: 'Missing' },
+};
+
+const dot = computed(() => dotMap[props.status]);
 </script>
 
 <template>

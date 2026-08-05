@@ -65,7 +65,11 @@ function setSort(key: NonNullable<UsersIndexProps['filters']['sort']>) {
 
 function toggle(id: number) {
     const next = new Set(selectedIds.value);
-    next.has(id) ? next.delete(id) : next.add(id);
+    if (next.has(id)) {
+        next.delete(id);
+    } else {
+        next.add(id);
+    }
     selectedIds.value = next;
 }
 

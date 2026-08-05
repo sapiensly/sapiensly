@@ -53,16 +53,18 @@ const tintMap: Record<string, string> = {
 const icon = computed<Component>(() => iconMap[props.check.id] ?? Activity);
 const tint = computed(() => tintMap[props.check.id] ?? 'var(--sp-accent-blue)');
 
-const statusColor = computed(() => {
-    switch (props.check.status) {
-        case 'ok':
-            return 'var(--sp-success)';
-        case 'warn':
-            return 'var(--sp-warning)';
-        case 'error':
-            return 'var(--sp-danger)';
-    }
-});
+/**
+ * A map rather than a switch, like the two above: keying a Record on the union
+ * makes TypeScript demand every status, where an exhaustive switch only looks
+ * exhaustive — it still falls through to undefined for anything added later.
+ */
+const statusColorMap: Record<HealthCheck['status'], string> = {
+    ok: 'var(--sp-success)',
+    warn: 'var(--sp-warning)',
+    error: 'var(--sp-danger)',
+};
+
+const statusColor = computed(() => statusColorMap[props.check.status]);
 
 const timeAgo = computed(() => {
     const then = new Date(props.check.lastCheckAt).getTime();

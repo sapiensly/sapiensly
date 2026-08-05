@@ -61,19 +61,6 @@ function trendFor(item: MetricItem) {
 
 const t = themeTokens(useRuntimeTheme());
 
-// Semantic tint for the card icon, from the metric's goodness direction:
-// a "higher is better" KPI reads positive (emerald), a "lower is better" one
-// (delays, errors) reads as a watch-metric (amber). Neutral KPIs stay muted.
-function iconTint(item: MetricItem): string {
-    if (item.delta_good === 'up') {
-        return 'text-emerald-500';
-    }
-    if (item.delta_good === 'down') {
-        return 'text-amber-500';
-    }
-    return t.textSubtle;
-}
-
 const gridClass = computed(() => {
     const cols = props.block.columns ?? 3;
     return (
