@@ -24,6 +24,7 @@ use App\Models\Tool;
 use App\Models\User;
 use App\Models\WhatsAppConnection;
 use App\Models\WhatsAppConversation;
+use App\Services\AiProviderService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Str;
 use Tests\TestCase;
@@ -163,6 +164,21 @@ function builderLabel(string $key): string
     );
 
     return $messages[$key] ?? $key;
+}
+
+/**
+ * A chat model id the catalog actually contains.
+ *
+ * Agent writes and provider probes validate the model against the catalog, so
+ * a test that spells an id out starts failing the day the provider retires it
+ * — which is how ten files came to pin one dead string, and why refreshing the
+ * catalog looked like a ten-file change. Ask for the Nth chat model and the
+ * fixtures follow the catalog on their own.
+ */
+function catalogChatModel(int $index = 0): string
+{
+    return AiProviderService::bootstrapChatModelId(index: $index)
+        ?? throw new OutOfRangeException("No chat model at index {$index} in the anthropic catalog.");
 }
 
 function mcpToken(Organization $org, User $user, array $attrs = []): string

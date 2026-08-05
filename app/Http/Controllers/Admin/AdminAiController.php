@@ -317,7 +317,59 @@ class AdminAiController extends Controller
             'by_user_id' => $request->user()?->id,
         ]);
 
-        return back()->with('success', __('API key saved.'));
+        $synced = $this->syncCatalogAfterKeyChange($driver, $credentials, $request->user()?->id);
+
+        return back()->with('success', $synced === null
+            ? __('API key saved.')
+            : __('API key saved. :count new models added.', ['count' => $synced]));
+    }
+
+    /**
+     * Refresh a syncable driver's catalog right after its key changes.
+     *
+     * Without this the driver runs on whatever MODEL_CATALOGS seeded until an
+     * admin happens to press Sync, and that constant goes stale the moment a
+     * provider retires an id — which is how a picker ends up offering models
+     * the API no longer serves. The key was just proven to exist, so this is
+     * the first moment the real list is reachable.
+     *
+     * Returns the number of models added, or null when nothing was attempted.
+     * A provider that is down must never cost the admin their key, so every
+     * failure here is swallowed: the key is already saved either way.
+     */
+    private function syncCatalogAfterKeyChange(string $driver, array $credentials, ?int $byUserId): ?int
+    {
+        if (! $this->aiProviderService->isSyncable($driver)) {
+            return null;
+        }
+
+        try {
+            $models = $this->aiProviderService->fetchProviderModels($driver, $credentials);
+
+            if ($models === []) {
+                return null;
+            }
+
+            $created = $this->aiProviderService->syncDirectCatalogModels($driver, $models);
+        } catch (\Throwable $e) {
+            Log::channel('daily')->warning('admin_v2.ai.key_set_sync_failed', [
+                'driver' => $driver,
+                'reason' => $e->getMessage(),
+                'by_user_id' => $byUserId,
+            ]);
+
+            return null;
+        }
+
+        Log::channel('daily')->info('admin_v2.ai.models_synced', [
+            'driver' => $driver,
+            'fetched' => count($models),
+            'created' => $created,
+            'trigger' => 'key_set',
+            'by_user_id' => $byUserId,
+        ]);
+
+        return $created;
     }
 
     /**

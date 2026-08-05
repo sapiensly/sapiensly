@@ -42,7 +42,7 @@ it('makes the first provider the default when opted in', function () {
         ->post('/system/ai-providers', [
             'driver' => 'anthropic',
             'credentials' => ['api_key' => 'sk-test'],
-            'chat_model_id' => 'claude-sonnet-4-20250514',
+            'chat_model_id' => catalogChatModel(),
             'make_default_chat' => true,
         ])
         ->assertRedirect();

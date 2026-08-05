@@ -36,7 +36,7 @@ test('two separate submissions create two providers', function () {
     actingAs($this->user)->post('/system/ai-providers', [
         'driver' => 'anthropic',
         'credentials' => ['api_key' => 'sk-ant-test'],
-        'chat_model_id' => 'claude-sonnet-4-20250514',
+        'chat_model_id' => catalogChatModel(),
         'make_default_chat' => true,
     ])->assertRedirect('/system/ai-providers');
 
@@ -61,7 +61,7 @@ test('adding a provider keeps existing defaults when not opted in', function () 
     actingAs($this->user)->post('/system/ai-providers', [
         'driver' => 'anthropic',
         'credentials' => ['api_key' => 'sk-ant-new'],
-        'chat_model_id' => 'claude-sonnet-4-20250514',
+        'chat_model_id' => catalogChatModel(),
     ])->assertRedirect('/system/ai-providers');
 
     $defaults = AiProvider::where('user_id', $this->user->id)->where('is_default', true)->get();

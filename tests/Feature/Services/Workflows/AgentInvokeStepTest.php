@@ -43,7 +43,7 @@ beforeEach(function () {
     $this->agent = Agent::factory()->create([
         'user_id' => $this->user->id,
         'organization_id' => $this->user->organization_id,
-        'model' => 'claude-sonnet-4-20250514',
+        'model' => catalogChatModel(),
         'prompt_template' => 'You are the CMO.',
     ]);
     $this->objectId = ai_id('obj');

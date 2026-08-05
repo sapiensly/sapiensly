@@ -114,7 +114,7 @@ describe('store', function () {
             ->post(route('agents.store'), [
                 'type' => AgentType::General->value,
                 'name' => 'Researcher',
-                'model' => 'claude-sonnet-4-20250514',
+                'model' => catalogChatModel(),
                 'web_search' => true,
             ])
             ->assertRedirect();
@@ -128,7 +128,7 @@ describe('store', function () {
         $data = [
             'type' => AgentType::Knowledge->value,
             'name' => 'My Knowledge Agent',
-            'model' => 'claude-sonnet-4-20250514',
+            'model' => catalogChatModel(),
             'knowledge_base_ids' => [$kb->id],
             'config' => [
                 'rag_params' => [
@@ -154,7 +154,7 @@ describe('store', function () {
         $data = [
             'type' => AgentType::Action->value,
             'name' => 'My Action Agent',
-            'model' => 'claude-sonnet-4-20250514',
+            'model' => catalogChatModel(),
             'tool_ids' => [$tool->id],
             'config' => [
                 'tool_execution' => [
@@ -296,7 +296,7 @@ describe('update', function () {
         $this->actingAs($this->user)
             ->put(route('agents.update', $otherAgent), [
                 'name' => 'Hacked',
-                'model' => 'claude-sonnet-4-20250514',
+                'model' => catalogChatModel(),
             ])
             ->assertForbidden();
     });

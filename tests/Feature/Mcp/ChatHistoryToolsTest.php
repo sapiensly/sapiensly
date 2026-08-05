@@ -153,7 +153,7 @@ it('search_chat_messages honours the role filter', function () {
 it('continue_chat posts a message and returns the assistant reply', function () {
     Ai::fakeAgent(ChatAgent::class, ['Our paid-marketing budget should be about 15% of revenue.']);
 
-    $chat = Chat::factory()->forUser($this->user)->create(['title' => 'Budget', 'model' => 'claude-sonnet-4-20250514']);
+    $chat = Chat::factory()->forUser($this->user)->create(['title' => 'Budget', 'model' => catalogChatModel()]);
 
     SapiensServer::actingAs($this->user)
         ->tool(ContinueChatTool::class, ['chat_id' => $chat->id, 'message' => 'How much for paid marketing?'])

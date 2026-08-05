@@ -464,6 +464,67 @@ test('setProviderKey rotates the key in place without duplicating the row', func
         ->and($rows->first()->credentials['api_key'])->toBe('sk-rotated-test-key-9876543210');
 });
 
+test('setProviderKey refreshes a syncable driver catalog from the provider', function () {
+    // The bootstrap constant goes stale the moment a provider retires an id,
+    // and until now it stood until an admin happened to press Sync. The key was
+    // just proven to exist, so this is the first moment the real list is
+    // reachable — take it.
+    $admin = sysadminForAi();
+
+    Http::fake([
+        'api.anthropic.com/v1/models*' => Http::response([
+            'data' => [
+                ['id' => 'claude-freshly-published', 'display_name' => 'Freshly Published'],
+            ],
+        ]),
+    ]);
+
+    $this->actingAs($admin)
+        ->post('/admin/ai/providers/key', [
+            'driver' => 'anthropic',
+            'credentials' => ['api_key' => 'sk-fresh-test-key-0123456789'],
+        ])
+        ->assertRedirect();
+
+    expect(AiCatalogModel::where('driver', 'anthropic')->where('model_id', 'claude-freshly-published')->exists())
+        ->toBeTrue();
+});
+
+test('setProviderKey keeps the key when the provider is unreachable', function () {
+    // A provider being down must never cost the admin the key they just typed.
+    $admin = sysadminForAi();
+
+    Http::fake([
+        'api.anthropic.com/*' => Http::response(['error' => 'upstream is down'], 500),
+    ]);
+
+    $this->actingAs($admin)
+        ->post('/admin/ai/providers/key', [
+            'driver' => 'anthropic',
+            'credentials' => ['api_key' => 'sk-fresh-test-key-0123456789'],
+        ])
+        ->assertRedirect()
+        ->assertSessionHasNoErrors();
+
+    expect(AiProvider::where('visibility', 'global')->where('driver', 'anthropic')->first()?->credentials['api_key'])
+        ->toBe('sk-fresh-test-key-0123456789');
+});
+
+test('setProviderKey does not try to sync a driver with no listing endpoint', function () {
+    $admin = sysadminForAi();
+
+    Http::fake();
+
+    $this->actingAs($admin)
+        ->post('/admin/ai/providers/key', [
+            'driver' => 'voyageai',
+            'credentials' => ['api_key' => 'pa-fresh-test-key-0123456789'],
+        ])
+        ->assertRedirect();
+
+    Http::assertNothingSent();
+});
+
 test('setProviderKey rejects an unknown driver', function () {
     $admin = sysadminForAi();
 

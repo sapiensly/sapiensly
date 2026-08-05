@@ -7,9 +7,9 @@ use App\Models\DebateParticipant;
 use App\Models\User;
 use Illuminate\Support\Facades\Queue;
 
-// These model ids are seeded into ai_catalog_models by the catalog migration.
+// Seeded into ai_catalog_models by the catalog migration. A const cannot call
+// catalogChatModel(), so the second model is asked for at the point of use.
 const HAIKU = 'claude-haiku-4-5-20251001';
-const SONNET = 'claude-sonnet-4-20250514';
 
 beforeEach(function () {
     $this->user = User::factory()->create();
@@ -22,7 +22,7 @@ it('creates a debate with participants and dispatches the start job', function (
     $this->actingAs($this->user)
         ->post(route('debates.store'), [
             'topic' => 'Should we build or buy our CRM?',
-            'model_ids' => [HAIKU, SONNET],
+            'model_ids' => [HAIKU, catalogChatModel()],
             'max_rounds' => 3,
         ])
         ->assertRedirect();

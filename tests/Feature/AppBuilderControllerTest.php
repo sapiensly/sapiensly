@@ -772,13 +772,13 @@ it('forwards a chosen model to the builder job', function () {
         ->postJson("/apps/{$this->testApp->id}/builder/messages", [
             'conversation_id' => $conv->id,
             'message' => 'crea un website bonito sobre cambio climático',
-            'model' => 'claude-sonnet-4-5-20250929',
+            'model' => catalogChatModel(),
         ])
         ->assertOk();
 
     Queue::assertPushed(
         RunBuilderAiJob::class,
-        fn (RunBuilderAiJob $job) => $job->modelOverride === 'claude-sonnet-4-5-20250929',
+        fn (RunBuilderAiJob $job) => $job->modelOverride === catalogChatModel(),
     );
 });
 

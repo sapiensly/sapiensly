@@ -15,12 +15,20 @@ class AiProviderService
 {
     /**
      * Predefined model catalogs per driver.
+     *
+     * For a driver in {@see SYNCABLE_DRIVERS} this is only a BOOTSTRAP: the
+     * rows it seeds are replaced the first time the catalog is refreshed from
+     * the provider's own `/models`, which now happens automatically when the
+     * key is saved. Do not read it as the current truth — read the DB catalog
+     * via getModelCatalog(). The rest (ollama, openrouter, voyageai, jina,
+     * eleven) have no listing endpoint, so here IS their catalog and it has to
+     * be curated by hand.
      */
     public const MODEL_CATALOGS = [
         'anthropic' => [
-            ['id' => 'claude-sonnet-4-20250514', 'label' => 'Claude Sonnet 4', 'capabilities' => ['chat', 'vision']],
-            ['id' => 'claude-sonnet-4-5-20250929', 'label' => 'Claude Sonnet 4.5', 'capabilities' => ['chat', 'vision']],
-            ['id' => 'claude-opus-4-20250514', 'label' => 'Claude Opus 4', 'capabilities' => ['chat', 'vision']],
+            ['id' => 'claude-opus-4-8', 'label' => 'Claude Opus 4.8', 'capabilities' => ['chat', 'vision']],
+            ['id' => 'claude-sonnet-5', 'label' => 'Claude Sonnet 5', 'capabilities' => ['chat', 'vision']],
+            ['id' => 'claude-opus-4-7', 'label' => 'Claude Opus 4.7', 'capabilities' => ['chat', 'vision']],
             ['id' => 'claude-haiku-4-5-20251001', 'label' => 'Claude Haiku 4.5', 'capabilities' => ['chat', 'vision']],
         ],
         'openai' => [
@@ -160,6 +168,22 @@ class AiProviderService
     public function isSyncable(string $driver): bool
     {
         return in_array($driver, self::SYNCABLE_DRIVERS, true);
+    }
+
+    /**
+     * The Nth chat-capable model id in a driver's bootstrap catalog.
+     *
+     * For callers that need "a model this install considers valid" without
+     * spelling one out — factories, fixtures, defaults. Writes validate the
+     * model against the catalog, so a literal id becomes wrong the day the
+     * provider retires it, and every such caller starts failing at once.
+     */
+    public static function bootstrapChatModelId(string $driver = 'anthropic', int $index = 0): ?string
+    {
+        return collect(self::MODEL_CATALOGS[$driver] ?? [])
+            ->filter(fn (array $model) => in_array('chat', $model['capabilities'] ?? [], true))
+            ->values()
+            ->get($index)['id'] ?? null;
     }
 
     /**
@@ -813,14 +837,16 @@ class AiProviderService
 
         try {
             $response = match ($provider->driver) {
+                // Every other driver here proves the key by GETting its listing
+                // endpoint. Anthropic was the exception: it POSTed a one-token
+                // message, which needs a model id, so a provider with no models
+                // configured fell back to a hardcoded one — and once that id was
+                // retired the probe called a working key broken. /v1/models is
+                // the endpoint the catalog sync already uses and names no model.
                 'anthropic' => Http::withHeaders([
                     'x-api-key' => $apiKey,
                     'anthropic-version' => '2023-06-01',
-                ])->timeout(10)->post('https://api.anthropic.com/v1/messages', [
-                    'model' => collect($provider->getChatModels())->first()['id'] ?? 'claude-sonnet-4-20250514',
-                    'max_tokens' => 1,
-                    'messages' => [['role' => 'user', 'content' => 'hi']],
-                ]),
+                ])->timeout(10)->get('https://api.anthropic.com/v1/models', ['limit' => 1]),
                 'openai' => Http::withToken($apiKey)
                     ->timeout(10)
                     ->get('https://api.openai.com/v1/models'),

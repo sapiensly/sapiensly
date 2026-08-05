@@ -23,7 +23,7 @@ it('creates a general agent connected to both knowledge bases and tools', functi
         ->post(route('agents.store'), [
             'type' => AgentType::General->value,
             'name' => 'My General Agent',
-            'model' => 'claude-sonnet-4-20250514',
+            'model' => catalogChatModel(),
             'prompt_template' => 'You do everything.',
             'knowledge_base_ids' => [$kb->id],
             'tool_ids' => [$tool->id],
@@ -60,7 +60,7 @@ it('collects a streamed turn into full text via chatStreamed', function () {
 
     $agent = Agent::factory()->standalone()->general()->create([
         'user_id' => $this->user->id,
-        'model' => 'claude-sonnet-4-20250514',
+        'model' => catalogChatModel(),
     ]);
     $message = new Message(['role' => MessageRole::User, 'content' => 'Is it eligible?']);
 
@@ -74,7 +74,7 @@ it('returns response and knowledge-base metadata from chatWithKnowledgeAndTools'
 
     $agent = Agent::factory()->standalone()->general()->create([
         'user_id' => $this->user->id,
-        'model' => 'claude-sonnet-4-20250514',
+        'model' => catalogChatModel(),
     ]);
     $message = new Message([
         'role' => MessageRole::User,

@@ -33,7 +33,7 @@ it('selecting an agent in a message sets agent_id + model on the chat', function
     Queue::fake();
     $agent = Agent::factory()->standalone()->general()->create([
         'user_id' => $this->user->id,
-        'model' => 'claude-sonnet-4-20250514',
+        'model' => catalogChatModel(),
     ]);
     $chat = Chat::factory()->forUser($this->user)->create();
 
@@ -46,7 +46,7 @@ it('selecting an agent in a message sets agent_id + model on the chat', function
 
     $chat->refresh();
     expect($chat->agent_id)->toBe($agent->id)
-        ->and($chat->model)->toBe('claude-sonnet-4-20250514');
+        ->and($chat->model)->toBe(catalogChatModel());
 });
 
 it('selecting a plain model clears a previously selected agent', function () {
@@ -57,7 +57,7 @@ it('selecting a plain model clears a previously selected agent', function () {
     $this->actingAs($this->user)
         ->postJson(route('chat.messages.store', $chat), [
             'content' => 'Hi',
-            'model' => 'claude-sonnet-4-20250514',
+            'model' => catalogChatModel(),
         ])
         ->assertCreated();
 
@@ -84,7 +84,7 @@ it('runs the chat turn with the agent model and prompt when an agent is selected
 
     $agent = Agent::factory()->standalone()->general()->create([
         'user_id' => $this->user->id,
-        'model' => 'claude-opus-4-20250514',
+        'model' => catalogChatModel(1),
         'prompt_template' => 'You are the council agent.',
     ]);
     $chat = Chat::factory()->forUser($this->user)->create(['agent_id' => $agent->id, 'model' => $agent->model]);
@@ -96,5 +96,5 @@ it('runs the chat turn with the agent model and prompt when an agent is selected
     $placeholder->refresh();
     expect($placeholder->status)->toBe('complete')
         ->and($placeholder->content)->toBe('Answer as the agent.')
-        ->and($placeholder->model)->toBe('claude-opus-4-20250514');
+        ->and($placeholder->model)->toBe(catalogChatModel(1));
 });

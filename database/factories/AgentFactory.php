@@ -6,6 +6,7 @@ use App\Enums\AgentStatus;
 use App\Enums\AgentType;
 use App\Models\Agent;
 use App\Models\User;
+use App\Services\AiProviderService;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
 /**
@@ -22,7 +23,7 @@ class AgentFactory extends Factory
             'description' => fake()->sentence(),
             'status' => AgentStatus::Draft,
             'prompt_template' => null,
-            'model' => 'claude-sonnet-4-20250514',
+            'model' => AiProviderService::bootstrapChatModelId(),
             'config' => null,
         ];
     }

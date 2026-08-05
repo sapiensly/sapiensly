@@ -175,7 +175,7 @@ it('create_agent creates a draft agent in the caller account context', function 
         ->tool(CreateAgentTool::class, [
             'type' => 'general',
             'name' => 'My MCP Bot',
-            'model' => 'claude-sonnet-4-20250514',
+            'model' => catalogChatModel(),
             'description' => 'Built over MCP',
         ])
         ->assertOk()

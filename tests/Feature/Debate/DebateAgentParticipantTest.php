@@ -37,7 +37,7 @@ it('creates an agent participant from an agent:{id} selection', function () {
     Queue::fake();
     $agent = Agent::factory()->standalone()->general()->create([
         'user_id' => $this->user->id,
-        'model' => 'claude-sonnet-4-20250514',
+        'model' => catalogChatModel(),
         'name' => 'Strategist',
     ]);
 
@@ -54,7 +54,7 @@ it('creates an agent participant from an agent:{id} selection', function () {
 
     expect($participants)->toHaveCount(2)
         ->and($participants[0]->agent_id)->toBe($agent->id)
-        ->and($participants[0]->model)->toBe('claude-sonnet-4-20250514')
+        ->and($participants[0]->model)->toBe(catalogChatModel())
         ->and($participants[0]->display_name)->toBe('Strategist')
         ->and($participants[1]->agent_id)->toBeNull();
 });
@@ -75,7 +75,7 @@ it('runs an agent participant turn using the agent model and persona', function 
 
     $agent = Agent::factory()->standalone()->general()->create([
         'user_id' => $this->user->id,
-        'model' => 'claude-opus-4-20250514',
+        'model' => catalogChatModel(1),
         'prompt_template' => 'You are a procurement strategist.',
     ]);
     $debate = Debate::factory()->forUser($this->user)->debating()->create();
@@ -99,5 +99,5 @@ it('runs an agent participant turn using the agent model and persona', function 
     $turn->refresh();
     expect($turn->status)->toBe('complete')
         ->and($turn->content)->toContain('Build it in-house')
-        ->and($turn->model)->toBe('claude-opus-4-20250514');
+        ->and($turn->model)->toBe(catalogChatModel(1));
 });
