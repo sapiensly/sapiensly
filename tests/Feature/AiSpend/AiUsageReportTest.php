@@ -288,3 +288,48 @@ it('scopes a single-org drill-down to that org with a per-service split', functi
     expect($r['totals']['cost'])->toBe(1.0)
         ->and(collect($r['by_service'])->pluck('service')->all())->toBe(['Chat']);
 });
+
+/**
+ * The per-build report and the org-wide one read the SAME ledger rows, so a
+ * disagreement about one app is always the window, never the money. Their
+ * defaults differ (90 days vs 30), which is exactly how a build read as $0.0143
+ * next to $0.1661 for the same app — the gap being one turn from the day before.
+ */
+it('agrees with the org-wide artifact line for the same app and window', function () {
+    $app = App::factory()->create(['name' => 'Order Desk']);
+
+    spendEvent(['module' => 'builder', 'cost' => 2.0, 'app_id' => $app->id]);
+    spendEvent(['module' => 'landing_director', 'cost' => 0.5, 'app_id' => $app->id]);
+    // Another app's spend must not bleed into either reading.
+    spendEvent(['module' => 'builder', 'cost' => 7.0, 'app_id' => App::factory()->create()->id]);
+
+    $build = app(AiUsageReport::class)->forApp($app->id, days: 30);
+    $line = collect(app(AiUsageReport::class)->forCurrentOrg(30)['by_artifact'])
+        ->firstWhere('id', $app->id);
+
+    expect($build['totals']['cost'])->toBe($line['cost'])
+        ->and($build['totals']['calls'])->toBe($line['calls'])
+        ->and($build['totals']['cost'])->toBe(2.5);
+});
+
+it('states the dates a build total actually covers, not just the day count', function () {
+    $app = App::factory()->create();
+
+    spendEvent(['module' => 'builder', 'cost' => 1.0, 'app_id' => $app->id]);
+    // Older than the window: legitimately absent from a 30-day read, and the
+    // reason a 90-day read of the same app returns more. Backdated after the
+    // insert — created_at is not fillable, so passing it to create() is silently
+    // ignored and the row lands today.
+    spendEvent(['module' => 'builder', 'cost' => 4.0, 'app_id' => $app->id])
+        ->forceFill(['created_at' => now()->subDays(45)])->save();
+
+    $short = app(AiUsageReport::class)->forApp($app->id, days: 30);
+    $long = app(AiUsageReport::class)->forApp($app->id, days: 90);
+
+    expect($short['totals']['cost'])->toBe(1.0)
+        ->and($long['totals']['cost'])->toBe(5.0)
+        // Without this a reader has two totals and no way to see why they differ.
+        ->and($short['window']['from'])->toBe(today()->subDays(29)->toDateString())
+        ->and($short['window']['to'])->toBe(today()->toDateString())
+        ->and($long['window']['from'])->toBe(today()->subDays(89)->toDateString());
+});

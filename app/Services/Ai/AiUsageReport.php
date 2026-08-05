@@ -136,6 +136,14 @@ class AiUsageReport
      * of the build regardless of who paid. Shaped for attribution, not the
      * dashboard: totals + per-model + per-conversation, no daily series.
      *
+     * The resolved window is reported, not just its length. This report and the
+     * org-wide one read the SAME rows but default to DIFFERENT windows (90 days
+     * here, 30 there), so their totals for one app diverge whenever it has spend
+     * outside the shorter one — which reads as two billing surfaces disagreeing
+     * unless each states the dates it actually covers. Observed: a build read as
+     * $0.0143 next to $0.1661 for the same app, the gap being one turn from the
+     * day before.
+     *
      * @return array<string, mixed>
      */
     public function forApp(string $appId, ?string $conversationId = null, int $days = 90): array
@@ -166,6 +174,12 @@ class AiUsageReport
             'app_id' => $appId,
             'conversation_id' => $conversationId,
             'range_days' => $days,
+            'window' => [
+                'since' => $since->toDateTimeString(),
+                'from' => $since->toDateString(),
+                'to' => Carbon::today()->toDateString(),
+                'timezone' => $since->format('T'),
+            ],
             'totals' => $sum($rows),
             'by_model' => $rows->groupBy('model')
                 ->map(fn (Collection $g, string $model): array => ['model' => $model] + $sum($g))
