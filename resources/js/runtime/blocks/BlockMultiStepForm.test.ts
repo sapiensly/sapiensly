@@ -35,7 +35,9 @@ function wizard(props: Record<string, unknown> = {}) {
                         id: `fld_${n}`,
                         slug: `f${n}`,
                         name: `Campo ${n}`,
-                        type: 'string',
+                        // as const, or the map widens it to `string` and the
+                        // fixture stops being a FieldDef.
+                        type: 'string' as const,
                     })),
                 },
             ],

@@ -255,7 +255,9 @@ function subscribe(id: string) {
                 }),
             );
             const idx = list.findIndex((t) => t.id === data.tool_id);
-            const status =
+            // Annotated, or the nested ternary widens to `string` and stops
+            // matching the entry shape the list is typed with.
+            const status: 'running' | 'done' | 'error' =
                 data.phase === 'result'
                     ? data.successful === false
                         ? 'error'

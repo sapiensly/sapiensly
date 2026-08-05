@@ -18,7 +18,14 @@ export type FieldType =
     | 'file'
     | 'rich_text'
     | 'color'
-    | 'geo';
+    | 'geo'
+    // Derived: the server computes them, nobody types them. FieldDef already
+    // described their config (target_field_id, aggregator, return_type) while
+    // the union could not express the types themselves — so every switch that
+    // handled them was a comparison TypeScript called impossible.
+    | 'formula'
+    | 'lookup'
+    | 'rollup';
 
 export interface FieldDef {
     id: string;
@@ -49,6 +56,10 @@ export interface FieldDef {
     target_field_id?: string;
     aggregator?: string;
     return_type?: string;
+    /** A hint rendered under the input (field_base's `help_text`). */
+    help_text?: string;
+    /** Relation fields: which side is the many. */
+    cardinality?: 'one_to_one' | 'one_to_many' | 'many_to_one' | 'many_to_many';
 }
 
 export interface ObjectDef {
@@ -106,7 +117,27 @@ export interface BlockBase {
         max_width?: string;
         full_bleed?: boolean;
         gradient?: { from: string; to: string; direction?: string };
+        /** Explicit card height, written by the manual-adjust drawer. */
+        min_height?: number;
     };
+}
+
+/**
+ * One row as the block-data resolver sends it.
+ *
+ * `labels` names a relation's target for display; `labels_trashed` names the
+ * ones whose target is in the trash, so a reference to a deleted record reads
+ * as deleted rather than as a name that failed to load. Declared once here
+ * because four blocks had each written their own row shape and all four had
+ * left `labels_trashed` off it.
+ */
+export interface RowRef {
+    id: string;
+    data: Record<string, unknown>;
+    labels?: Record<string, unknown>;
+    labels_trashed?: Record<string, unknown>;
+    /** Inline-expanded belongs_to relations, when the query asked for them. */
+    expanded?: Record<string, unknown>;
 }
 
 export interface BlockContainer extends BlockBase {
@@ -274,11 +305,13 @@ export type BlockData = Record<
 >;
 
 export interface TableBlockData {
-    rows: Array<{ id: string; data: Record<string, unknown> }>;
+    rows: RowRef[];
     /** How many records match, which is not always how many were sent. */
     total?: number;
     /** True when `rows` is a page of a larger result. */
     truncated?: boolean;
+    /** True when the server paginated rather than sending one capped page. */
+    paged?: boolean;
     /**
      * Sum per money column, keyed by field id, over the WHOLE result rather
      * than the page — summing what happens to be loaded would answer a

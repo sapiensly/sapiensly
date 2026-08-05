@@ -126,7 +126,7 @@ async function send(): Promise<void> {
 
     sending.value = true;
 
-    const result = await write<{ event: unknown }>(
+    const result = await write<{ event?: TrailEvent }>(
         `${mount()}/records/${recordId.value}/trail`,
         { body },
     );
@@ -141,7 +141,13 @@ async function send(): Promise<void> {
         return;
     }
 
-    events.value = [result.data?.event, ...events.value];
+    // The comment IS filed — the draft clears either way. A response without
+    // the event just means this list waits for the next load rather than
+    // showing a hole where an entry should be.
+    const event = result.data?.event;
+    if (event !== undefined) {
+        events.value = [event, ...events.value];
+    }
     draft.value = '';
 }
 

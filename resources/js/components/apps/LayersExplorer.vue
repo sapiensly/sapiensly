@@ -117,7 +117,9 @@ async function restore(version: VersionEntry): Promise<void> {
 // Generic helpers — the manifest is loosely typed (it comes from JSON), so we
 // read each layer defensively and never assume a shape that may be absent.
 function arr(value: unknown): Array<Record<string, unknown>> {
-    return Array.isArray(value) ? (value as Array<Record<string, unknown>>) : [];
+    return Array.isArray(value)
+        ? (value as Array<Record<string, unknown>>)
+        : [];
 }
 function str(value: unknown, fallback = ''): string {
     return typeof value === 'string' ? value : fallback;
@@ -125,9 +127,22 @@ function str(value: unknown, fallback = ''): string {
 
 const objects = computed(() => arr(props.manifest?.objects));
 const pages = computed(() => arr(props.manifest?.pages));
+/**
+ * A workflow's trigger type, or 'manual'. A function rather than an inline
+ * cast: a generic in a template expression parses as a TAG, which is what made
+ * this file unreadable to Prettier.
+ */
+function triggerType(workflow: Record<string, unknown>): string {
+    const trigger = workflow.trigger as Record<string, unknown> | undefined;
+
+    return str(trigger?.type, 'manual');
+}
+
 const workflows = computed(() => arr(props.manifest?.workflows));
 const integrations = computed(() => arr(props.manifest?.integrations));
-const agent = computed(() => (props.manifest?.agent ?? null) as Record<string, unknown> | null);
+const agent = computed(
+    () => (props.manifest?.agent ?? null) as Record<string, unknown> | null,
+);
 const versionList = computed(() => props.versions ?? []);
 
 function recordCount(objectId: string): number | null {
@@ -169,16 +184,25 @@ function toggleSection(key: string): void {
 }
 
 function fmtDate(iso: string | null): string {
-    if (! iso) {
+    if (!iso) {
         return '';
     }
-    return new Date(iso).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+    return new Date(iso).toLocaleString(undefined, {
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+    });
 }
 
 function agentCapabilitySummary(): string {
     const caps = (agent.value?.capabilities ?? {}) as Record<string, unknown>;
-    const fmt = (g: unknown): string => (g === 'all' ? 'all' : Array.isArray(g) ? String(g.length) : '0');
-    return t('apps.builder.layers.caps_summary', { read: fmt(caps.read), write: fmt(caps.write) });
+    const fmt = (g: unknown): string =>
+        g === 'all' ? 'all' : Array.isArray(g) ? String(g.length) : '0';
+    return t('apps.builder.layers.caps_summary', {
+        read: fmt(caps.read),
+        write: fmt(caps.write),
+    });
 }
 </script>
 
@@ -186,29 +210,80 @@ function agentCapabilitySummary(): string {
     <div class="flex h-full flex-col text-sm">
         <!-- OBJECTS -->
         <section class="border-b border-soft">
-            <button type="button" class="lx-section" @click="toggleSection('objects')">
-                <component :is="openSections.has('objects') ? ChevronDown : ChevronRight" class="size-3.5 text-ink-subtle" />
+            <button
+                type="button"
+                class="lx-section"
+                @click="toggleSection('objects')"
+            >
+                <component
+                    :is="
+                        openSections.has('objects') ? ChevronDown : ChevronRight
+                    "
+                    class="size-3.5 text-ink-subtle"
+                />
                 <Database class="size-4 text-accent-blue" />
-                <span class="font-medium text-ink">{{ t('apps.builder.layers.objects') }}</span>
-                <Badge variant="secondary" class="ml-auto">{{ objects.length }}</Badge>
+                <span class="font-medium text-ink">{{
+                    t('apps.builder.layers.objects')
+                }}</span>
+                <Badge variant="secondary" class="ml-auto">{{
+                    objects.length
+                }}</Badge>
             </button>
             <div v-if="openSections.has('objects')" class="pb-1">
-                <p v-if="objects.length === 0" class="lx-empty">{{ t('apps.builder.layers.no_objects') }}</p>
+                <p v-if="objects.length === 0" class="lx-empty">
+                    {{ t('apps.builder.layers.no_objects') }}
+                </p>
                 <div v-for="o in objects" :key="String(o.id)">
-                    <button type="button" class="lx-item" @click="toggle('obj:' + o.id)">
-                        <component :is="isOpen('obj:' + o.id) ? ChevronDown : ChevronRight" class="size-3 text-ink-subtle" />
-                        <span class="truncate text-ink">{{ str(o.name, str(o.slug)) }}</span>
-                        <Badge v-if="sourceType(o) === 'connected'" variant="outline" class="ml-1 text-[10px]">{{ t('apps.builder.layers.badge_connected') }}</Badge>
-                        <span v-if="recordCount(String(o.id)) !== null" class="ml-auto text-xs text-ink-subtle">
+                    <button
+                        type="button"
+                        class="lx-item"
+                        @click="toggle('obj:' + o.id)"
+                    >
+                        <component
+                            :is="
+                                isOpen('obj:' + o.id)
+                                    ? ChevronDown
+                                    : ChevronRight
+                            "
+                            class="size-3 text-ink-subtle"
+                        />
+                        <span class="truncate text-ink">{{
+                            str(o.name, str(o.slug))
+                        }}</span>
+                        <Badge
+                            v-if="sourceType(o) === 'connected'"
+                            variant="outline"
+                            class="ml-1 text-[10px]"
+                            >{{
+                                t('apps.builder.layers.badge_connected')
+                            }}</Badge
+                        >
+                        <span
+                            v-if="recordCount(String(o.id)) !== null"
+                            class="ml-auto text-xs text-ink-subtle"
+                        >
                             {{ recordCount(String(o.id)) }}
                         </span>
                     </button>
                     <ul v-if="isOpen('obj:' + o.id)" class="lx-children">
-                        <li v-for="f in arr(o.fields)" :key="String(f.id)" class="lx-leaf">
-                            <span class="truncate text-ink-muted">{{ str(f.name, str(f.slug)) }}</span>
-                            <span class="ml-auto text-[10px] text-ink-subtle">{{ str(f.type) }}</span>
+                        <li
+                            v-for="f in arr(o.fields)"
+                            :key="String(f.id)"
+                            class="lx-leaf"
+                        >
+                            <span class="truncate text-ink-muted">{{
+                                str(f.name, str(f.slug))
+                            }}</span>
+                            <span class="ml-auto text-[10px] text-ink-subtle">{{
+                                str(f.type)
+                            }}</span>
                         </li>
-                        <li v-if="arr(o.fields).length === 0" class="lx-leaf text-ink-subtle">{{ t('apps.builder.layers.no_fields') }}</li>
+                        <li
+                            v-if="arr(o.fields).length === 0"
+                            class="lx-leaf text-ink-subtle"
+                        >
+                            {{ t('apps.builder.layers.no_fields') }}
+                        </li>
                     </ul>
                 </div>
             </div>
@@ -216,25 +291,64 @@ function agentCapabilitySummary(): string {
 
         <!-- PAGES -->
         <section class="border-b border-soft">
-            <button type="button" class="lx-section" @click="toggleSection('pages')">
-                <component :is="openSections.has('pages') ? ChevronDown : ChevronRight" class="size-3.5 text-ink-subtle" />
+            <button
+                type="button"
+                class="lx-section"
+                @click="toggleSection('pages')"
+            >
+                <component
+                    :is="openSections.has('pages') ? ChevronDown : ChevronRight"
+                    class="size-3.5 text-ink-subtle"
+                />
                 <LayoutDashboard class="size-4 text-accent-blue" />
-                <span class="font-medium text-ink">{{ t('apps.builder.layers.pages') }}</span>
-                <Badge variant="secondary" class="ml-auto">{{ pages.length }}</Badge>
+                <span class="font-medium text-ink">{{
+                    t('apps.builder.layers.pages')
+                }}</span>
+                <Badge variant="secondary" class="ml-auto">{{
+                    pages.length
+                }}</Badge>
             </button>
             <div v-if="openSections.has('pages')" class="pb-1">
-                <p v-if="pages.length === 0" class="lx-empty">{{ t('apps.builder.layers.no_pages') }}</p>
+                <p v-if="pages.length === 0" class="lx-empty">
+                    {{ t('apps.builder.layers.no_pages') }}
+                </p>
                 <div v-for="p in pages" :key="String(p.id)">
-                    <button type="button" class="lx-item" @click="toggle('page:' + p.id)">
-                        <component :is="isOpen('page:' + p.id) ? ChevronDown : ChevronRight" class="size-3 text-ink-subtle" />
-                        <span class="truncate text-ink">{{ str(p.name, str(p.slug)) }}</span>
-                        <span class="ml-auto text-xs text-ink-subtle">{{ arr(p.blocks).length }}</span>
+                    <button
+                        type="button"
+                        class="lx-item"
+                        @click="toggle('page:' + p.id)"
+                    >
+                        <component
+                            :is="
+                                isOpen('page:' + p.id)
+                                    ? ChevronDown
+                                    : ChevronRight
+                            "
+                            class="size-3 text-ink-subtle"
+                        />
+                        <span class="truncate text-ink">{{
+                            str(p.name, str(p.slug))
+                        }}</span>
+                        <span class="ml-auto text-xs text-ink-subtle">{{
+                            arr(p.blocks).length
+                        }}</span>
                     </button>
                     <ul v-if="isOpen('page:' + p.id)" class="lx-children">
-                        <li v-for="(b, i) in arr(p.blocks)" :key="String(b.id ?? i)" class="lx-leaf">
-                            <span class="truncate text-ink-muted">{{ str(b.type, 'block') }}</span>
+                        <li
+                            v-for="(b, i) in arr(p.blocks)"
+                            :key="String(b.id ?? i)"
+                            class="lx-leaf"
+                        >
+                            <span class="truncate text-ink-muted">{{
+                                str(b.type, 'block')
+                            }}</span>
                         </li>
-                        <li v-if="arr(p.blocks).length === 0" class="lx-leaf text-ink-subtle">{{ t('apps.builder.layers.no_blocks') }}</li>
+                        <li
+                            v-if="arr(p.blocks).length === 0"
+                            class="lx-leaf text-ink-subtle"
+                        >
+                            {{ t('apps.builder.layers.no_blocks') }}
+                        </li>
                     </ul>
                 </div>
             </div>
@@ -242,27 +356,68 @@ function agentCapabilitySummary(): string {
 
         <!-- WORKFLOWS -->
         <section class="border-b border-soft">
-            <button type="button" class="lx-section" @click="toggleSection('workflows')">
-                <component :is="openSections.has('workflows') ? ChevronDown : ChevronRight" class="size-3.5 text-ink-subtle" />
+            <button
+                type="button"
+                class="lx-section"
+                @click="toggleSection('workflows')"
+            >
+                <component
+                    :is="
+                        openSections.has('workflows')
+                            ? ChevronDown
+                            : ChevronRight
+                    "
+                    class="size-3.5 text-ink-subtle"
+                />
                 <WorkflowIcon class="size-4 text-accent-blue" />
-                <span class="font-medium text-ink">{{ t('apps.builder.layers.workflows') }}</span>
-                <Badge variant="secondary" class="ml-auto">{{ workflows.length }}</Badge>
+                <span class="font-medium text-ink">{{
+                    t('apps.builder.layers.workflows')
+                }}</span>
+                <Badge variant="secondary" class="ml-auto">{{
+                    workflows.length
+                }}</Badge>
             </button>
             <div v-if="openSections.has('workflows')" class="pb-1">
-                <p v-if="workflows.length === 0" class="lx-empty">{{ t('apps.builder.layers.no_workflows') }}</p>
+                <p v-if="workflows.length === 0" class="lx-empty">
+                    {{ t('apps.builder.layers.no_workflows') }}
+                </p>
                 <div v-for="w in workflows" :key="String(w.id)">
-                    <button type="button" class="lx-item" @click="toggle('wf:' + w.id)">
-                        <component :is="isOpen('wf:' + w.id) ? ChevronDown : ChevronRight" class="size-3 text-ink-subtle" />
-                        <span class="truncate text-ink">{{ str(w.name, str(w.slug)) }}</span>
+                    <button
+                        type="button"
+                        class="lx-item"
+                        @click="toggle('wf:' + w.id)"
+                    >
+                        <component
+                            :is="
+                                isOpen('wf:' + w.id)
+                                    ? ChevronDown
+                                    : ChevronRight
+                            "
+                            class="size-3 text-ink-subtle"
+                        />
+                        <span class="truncate text-ink">{{
+                            str(w.name, str(w.slug))
+                        }}</span>
                         <span class="ml-auto text-[10px] text-ink-subtle">
-                            {{ str((w.trigger as Record<string, unknown> | undefined)?.type as string, 'manual') }}
+                            {{ triggerType(w) }}
                         </span>
                     </button>
                     <ul v-if="isOpen('wf:' + w.id)" class="lx-children">
-                        <li v-for="(s, i) in arr(w.steps)" :key="String(s.id ?? i)" class="lx-leaf">
-                            <span class="truncate text-ink-muted">{{ str(s.type, 'step') }}</span>
+                        <li
+                            v-for="(s, i) in arr(w.steps)"
+                            :key="String(s.id ?? i)"
+                            class="lx-leaf"
+                        >
+                            <span class="truncate text-ink-muted">{{
+                                str(s.type, 'step')
+                            }}</span>
                         </li>
-                        <li v-if="arr(w.steps).length === 0" class="lx-leaf text-ink-subtle">{{ t('apps.builder.layers.no_steps') }}</li>
+                        <li
+                            v-if="arr(w.steps).length === 0"
+                            class="lx-leaf text-ink-subtle"
+                        >
+                            {{ t('apps.builder.layers.no_steps') }}
+                        </li>
                     </ul>
                 </div>
             </div>
@@ -270,34 +425,87 @@ function agentCapabilitySummary(): string {
 
         <!-- INTEGRATIONS -->
         <section v-if="integrations.length > 0" class="border-b border-soft">
-            <button type="button" class="lx-section" @click="toggleSection('integrations')">
-                <component :is="openSections.has('integrations') ? ChevronDown : ChevronRight" class="size-3.5 text-ink-subtle" />
+            <button
+                type="button"
+                class="lx-section"
+                @click="toggleSection('integrations')"
+            >
+                <component
+                    :is="
+                        openSections.has('integrations')
+                            ? ChevronDown
+                            : ChevronRight
+                    "
+                    class="size-3.5 text-ink-subtle"
+                />
                 <Link2 class="size-4 text-accent-blue" />
-                <span class="font-medium text-ink">{{ t('apps.builder.layers.integrations') }}</span>
-                <Badge variant="secondary" class="ml-auto">{{ integrations.length }}</Badge>
+                <span class="font-medium text-ink">{{
+                    t('apps.builder.layers.integrations')
+                }}</span>
+                <Badge variant="secondary" class="ml-auto">{{
+                    integrations.length
+                }}</Badge>
             </button>
             <div v-if="openSections.has('integrations')" class="pb-1">
-                <div v-for="ig in integrations" :key="String(ig.id)" class="lx-item">
+                <div
+                    v-for="ig in integrations"
+                    :key="String(ig.id)"
+                    class="lx-item"
+                >
                     <Link2 class="size-3 text-ink-subtle" />
-                    <span class="truncate text-ink">{{ str(ig.name, str(ig.slug)) }}</span>
-                    <span class="ml-auto text-[10px] text-ink-subtle">{{ str(ig.status) }}</span>
+                    <span class="truncate text-ink">{{
+                        str(ig.name, str(ig.slug))
+                    }}</span>
+                    <span class="ml-auto text-[10px] text-ink-subtle">{{
+                        str(ig.status)
+                    }}</span>
                 </div>
             </div>
         </section>
 
         <!-- AGENT -->
         <section v-if="agent" class="border-b border-soft">
-            <button type="button" class="lx-section" @click="toggleSection('agent')">
-                <component :is="openSections.has('agent') ? ChevronDown : ChevronRight" class="size-3.5 text-ink-subtle" />
+            <button
+                type="button"
+                class="lx-section"
+                @click="toggleSection('agent')"
+            >
+                <component
+                    :is="openSections.has('agent') ? ChevronDown : ChevronRight"
+                    class="size-3.5 text-ink-subtle"
+                />
                 <Bot class="size-4 text-accent-blue" />
-                <span class="font-medium text-ink">{{ t('apps.builder.layers.agent') }}</span>
-                <Badge :variant="agent.enabled ? 'default' : 'secondary'" class="ml-auto">
-                    {{ agent.enabled ? t('apps.builder.layers.agent_on') : t('apps.builder.layers.agent_off') }}
+                <span class="font-medium text-ink">{{
+                    t('apps.builder.layers.agent')
+                }}</span>
+                <Badge
+                    :variant="agent.enabled ? 'default' : 'secondary'"
+                    class="ml-auto"
+                >
+                    {{
+                        agent.enabled
+                            ? t('apps.builder.layers.agent_on')
+                            : t('apps.builder.layers.agent_off')
+                    }}
                 </Badge>
             </button>
-            <div v-if="openSections.has('agent')" class="px-3 pb-2 text-xs text-ink-muted">
-                <div>{{ str(agent.name, t('apps.builder.layers.agent_default_name')) }}</div>
-                <div class="mt-0.5 text-ink-subtle">{{ agentCapabilitySummary() }} · {{ t('apps.builder.layers.autonomy_label') }} {{ str(agent.autonomy, 'propose') }}</div>
+            <div
+                v-if="openSections.has('agent')"
+                class="px-3 pb-2 text-xs text-ink-muted"
+            >
+                <div>
+                    {{
+                        str(
+                            agent.name,
+                            t('apps.builder.layers.agent_default_name'),
+                        )
+                    }}
+                </div>
+                <div class="mt-0.5 text-ink-subtle">
+                    {{ agentCapabilitySummary() }} ·
+                    {{ t('apps.builder.layers.autonomy_label') }}
+                    {{ str(agent.autonomy, 'propose') }}
+                </div>
             </div>
         </section>
 
@@ -311,26 +519,55 @@ function agentCapabilitySummary(): string {
                     loadActivity();
                 "
             >
-                <component :is="openSections.has('activity') ? ChevronDown : ChevronRight" class="size-3.5 text-ink-subtle" />
+                <component
+                    :is="
+                        openSections.has('activity')
+                            ? ChevronDown
+                            : ChevronRight
+                    "
+                    class="size-3.5 text-ink-subtle"
+                />
                 <Clock class="size-4 text-accent-blue" />
-                <span class="font-medium text-ink">{{ t('apps.activity.title') }}</span>
+                <span class="font-medium text-ink">{{
+                    t('apps.activity.title')
+                }}</span>
             </button>
             <div v-if="openSections.has('activity')" class="pb-2">
-                <p v-if="!activity.length" class="lx-empty">{{ t('apps.activity.empty') }}</p>
-                <div v-for="(entry, i) in activity" :key="i" class="px-3 py-1.5">
+                <p v-if="!activity.length" class="lx-empty">
+                    {{ t('apps.activity.empty') }}
+                </p>
+                <div
+                    v-for="(entry, i) in activity"
+                    :key="i"
+                    class="px-3 py-1.5"
+                >
                     <div class="flex items-baseline gap-2">
                         <span
                             class="shrink-0 rounded-pill border border-medium px-1.5 text-[9px] tracking-wide text-ink-subtle uppercase"
                             >{{ t(`apps.activity.kind_${entry.kind}`) }}</span
                         >
-                        <span class="min-w-0 flex-1 truncate text-xs text-ink">{{
-                            entry.summary ||
-                            (entry.event ? t(`apps.activity.event_${entry.event}`) : '')
+                        <span
+                            class="min-w-0 flex-1 truncate text-xs text-ink"
+                            >{{
+                                entry.summary ||
+                                (entry.event
+                                    ? t(`apps.activity.event_${entry.event}`)
+                                    : '')
+                            }}</span
+                        >
+                        <span class="shrink-0 text-[10px] text-ink-subtle">{{
+                            fmtDate(entry.at)
                         }}</span>
-                        <span class="shrink-0 text-[10px] text-ink-subtle">{{ fmtDate(entry.at) }}</span>
                     </div>
-                    <p v-if="entry.detail || entry.actor" class="mt-0.5 truncate text-[11px] text-ink-muted">
-                        {{ [entry.actor, entry.detail].filter(Boolean).join(' · ') }}
+                    <p
+                        v-if="entry.detail || entry.actor"
+                        class="mt-0.5 truncate text-[11px] text-ink-muted"
+                    >
+                        {{
+                            [entry.actor, entry.detail]
+                                .filter(Boolean)
+                                .join(' · ')
+                        }}
                     </p>
                 </div>
             </div>
@@ -338,35 +575,81 @@ function agentCapabilitySummary(): string {
 
         <!-- VERSIONS -->
         <section>
-            <button type="button" class="lx-section" @click="toggleSection('versions')">
-                <component :is="openSections.has('versions') ? ChevronDown : ChevronRight" class="size-3.5 text-ink-subtle" />
+            <button
+                type="button"
+                class="lx-section"
+                @click="toggleSection('versions')"
+            >
+                <component
+                    :is="
+                        openSections.has('versions')
+                            ? ChevronDown
+                            : ChevronRight
+                    "
+                    class="size-3.5 text-ink-subtle"
+                />
                 <Clock class="size-4 text-accent-blue" />
-                <span class="font-medium text-ink">{{ t('apps.builder.layers.history') }}</span>
-                <Badge variant="secondary" class="ml-auto">{{ versionList.length }}</Badge>
+                <span class="font-medium text-ink">{{
+                    t('apps.builder.layers.history')
+                }}</span>
+                <Badge variant="secondary" class="ml-auto">{{
+                    versionList.length
+                }}</Badge>
             </button>
             <div v-if="openSections.has('versions')" class="pb-2">
-                <p v-if="versionList.length === 0" class="lx-empty">{{ t('apps.builder.layers.no_versions') }}</p>
-                <p v-else-if="appId" class="px-3 pb-1 text-[10px] leading-relaxed text-ink-subtle">{{ t('apps.versions.note') }}</p>
+                <p v-if="versionList.length === 0" class="lx-empty">
+                    {{ t('apps.builder.layers.no_versions') }}
+                </p>
+                <p
+                    v-else-if="appId"
+                    class="px-3 pb-1 text-[10px] leading-relaxed text-ink-subtle"
+                >
+                    {{ t('apps.versions.note') }}
+                </p>
                 <div v-for="v in versionList" :key="v.id" class="px-3 py-1.5">
                     <div class="flex items-center gap-2">
-                        <span class="text-xs font-medium text-ink">v{{ v.version }}</span>
-                        <Badge v-if="v.current" variant="default" class="text-[10px]">{{ t('apps.builder.layers.badge_current') }}</Badge>
-                        <span class="ml-auto text-[10px] text-ink-subtle">{{ fmtDate(v.created_at) }}</span>
+                        <span class="text-xs font-medium text-ink"
+                            >v{{ v.version }}</span
+                        >
+                        <Badge
+                            v-if="v.current"
+                            variant="default"
+                            class="text-[10px]"
+                            >{{ t('apps.builder.layers.badge_current') }}</Badge
+                        >
+                        <span class="ml-auto text-[10px] text-ink-subtle">{{
+                            fmtDate(v.created_at)
+                        }}</span>
                         <button
                             v-if="appId && !v.current"
                             type="button"
                             :data-sp-restore="v.version"
                             :disabled="restoringId !== null"
                             class="shrink-0 rounded-pill border border-medium px-2 py-0.5 text-[10px] text-ink-muted transition-colors hover:text-ink disabled:opacity-40"
-                            :class="confirmingId === v.id && 'border-accent-blue/40 text-accent-blue'"
+                            :class="
+                                confirmingId === v.id &&
+                                'border-accent-blue/40 text-accent-blue'
+                            "
                             @click="restore(v)"
                         >
-                            <Loader2 v-if="restoringId === v.id" class="inline size-3 animate-spin" />
+                            <Loader2
+                                v-if="restoringId === v.id"
+                                class="inline size-3 animate-spin"
+                            />
                             <RotateCcw v-else class="mr-0.5 inline size-3" />
-                            {{ confirmingId === v.id ? t('apps.versions.confirm') : t('apps.versions.restore') }}
+                            {{
+                                confirmingId === v.id
+                                    ? t('apps.versions.confirm')
+                                    : t('apps.versions.restore')
+                            }}
                         </button>
                     </div>
-                    <p v-if="v.summary" class="mt-0.5 truncate text-xs text-ink-muted">{{ v.summary }}</p>
+                    <p
+                        v-if="v.summary"
+                        class="mt-0.5 truncate text-xs text-ink-muted"
+                    >
+                        {{ v.summary }}
+                    </p>
                 </div>
             </div>
         </section>

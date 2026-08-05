@@ -39,6 +39,17 @@ export interface Watcher {
     name: string;
 }
 
+/**
+ * Echo's presence channel, which is fluent — each subscriber returns the
+ * channel. Typed as returning `unknown` it chained fine at runtime and not at
+ * all in the checker, which then had no type left for the callbacks either.
+ */
+interface PresenceChannel {
+    here: (cb: (users: Watcher[]) => void) => PresenceChannel;
+    joining: (cb: (user: Watcher) => void) => PresenceChannel;
+    leaving: (cb: (user: Watcher) => void) => PresenceChannel;
+}
+
 export function useLiveRecords(options: LiveOptions) {
     const watchers = ref<Watcher[]>([]);
 
@@ -124,11 +135,7 @@ export function useRecordPresence(
 
     const echo = (window as unknown as { Echo?: unknown }).Echo as
         | {
-              join: (name: string) => {
-                  here: (cb: (users: Watcher[]) => void) => unknown;
-                  joining: (cb: (user: Watcher) => void) => unknown;
-                  leaving: (cb: (user: Watcher) => void) => unknown;
-              };
+              join: (name: string) => PresenceChannel;
               leave: (name: string) => void;
           }
         | undefined;

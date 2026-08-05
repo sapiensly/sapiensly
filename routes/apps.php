@@ -282,7 +282,7 @@ Route::middleware([
     Route::get('/r/{app_slug}/fields/{field_id}/options', AppRecordOptionsController::class)
         ->where('field_id', 'fld_[a-z0-9]+')
         ->middleware(['throttle:120,1', BindAppEnvironment::class])
-        ->name('apps.runtime.options');
+        ->name('apps.runtime.field_options');
 
     // File a questionnaire somebody else authored: one submission and N answers
     // in one transaction. See the controller on why anonymity has to live here

@@ -5,7 +5,7 @@ import TreemapChart from '@/components/charts/TreemapChart.vue';
 import { useElementSize } from '@/composables/useElementSize';
 import { router, usePage } from '@inertiajs/vue3';
 import { computed, ref } from 'vue';
-import type { FieldDef, ObjectDef } from '../types/manifest';
+import type { BlockBase, FieldDef, ObjectDef } from '../types/manifest';
 import { resolveField } from '../types/manifest';
 import { themeTokens, useRuntimeTheme } from '../useRuntimeTheme';
 import { runtimeWord } from '../words';
@@ -21,8 +21,7 @@ interface ComboSeries {
     color?: string;
 }
 
-interface ChartBlock {
-    id: string;
+interface ChartBlock extends BlockBase {
     type: 'chart';
     label?: string;
     description?: string;
@@ -51,6 +50,24 @@ interface ChartBlock {
     series?: ComboSeries[];
 }
 
+/**
+ * One aggregated group as the resolver sends it.
+ *
+ * Named rather than spelled inline twice: pivotGrid had written its own
+ * narrower copy, so the labels below were invisible exactly where they get
+ * read.
+ */
+interface GroupDatum {
+    group: unknown;
+    group2?: unknown;
+    value: number;
+    // Present when the group IS a record: grouping by a relation groups by the
+    // stored id, and an axis of `rec_01k…` is a correct answer nobody can read.
+    // The server sends the name beside the id rather than instead of it.
+    group_label?: string;
+    group2_label?: string;
+}
+
 interface RowData {
     id: string;
     data: Record<string, unknown>;
@@ -67,17 +84,7 @@ const props = defineProps<{
     data:
         | {
               rows?: RowData[];
-              groups?: {
-                  group: unknown;
-                  group2?: unknown;
-                  value: number;
-                  // Present when the group IS a record: grouping by a relation
-                  // groups by the stored id, and an axis of `rec_01k…` is a
-                  // correct answer nobody can read. The server sends the name
-                  // beside the id rather than instead of it.
-                  group_label?: string;
-                  group2_label?: string;
-              }[];
+              groups?: GroupDatum[];
               combo?: {
                   groups: { group: unknown; value: number }[];
               }[];
@@ -259,7 +266,7 @@ function foldRows(): { label: string; value: number }[] {
  * over every matching record rather than over a row window.
  */
 function pivotGrid(
-    groups: { group: unknown; group2?: unknown; value: number }[],
+    groups: GroupDatum[],
     catField: FieldDef | undefined,
     serField: FieldDef | undefined,
 ): { cats: string[]; sers: string[]; data: number[][] } {

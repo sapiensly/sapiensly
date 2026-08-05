@@ -28,7 +28,11 @@ const props = defineProps<{
     printMode?: boolean;
 }>();
 
-const s = props.slide as Record<string, never>;
+// Every layout reads its own keys off the same slide union. `never` is
+// assignable to any prop type, so this one alias lets the template address them
+// all without a cast per layout — but the two types share no members, which is
+// the conversion TypeScript asks to be spelled out through `unknown`.
+const s = props.slide as unknown as Record<string, never>;
 </script>
 
 <template>

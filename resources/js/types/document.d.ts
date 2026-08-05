@@ -1,12 +1,17 @@
 export type Visibility = 'private' | 'organization' | 'public';
+/** Mirrors App\Enums\DocumentType. */
 export type DocumentType =
     | 'pdf'
     | 'txt'
     | 'docx'
     | 'md'
+    | 'url'
     | 'csv'
     | 'json'
-    | 'artifact';
+    | 'artifact'
+    // Both were in the PHP enum and not here, so the deck's "Present" link read
+    // as an impossible comparison — a live feature the checker could not see.
+    | 'deck';
 export type EmbeddingStatus = 'pending' | 'processing' | 'ready' | 'failed';
 
 export interface VisibilityOption {

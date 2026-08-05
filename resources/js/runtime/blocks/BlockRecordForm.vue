@@ -60,6 +60,13 @@ const answers = ref<Record<string, unknown>>({});
 const sending = ref(false);
 const done = ref(false);
 const answeredElsewhere = ref(false);
+/**
+ * The roster refused this person. The template branch and its four
+ * translations were already written; only this flag was missing, so the
+ * message could never render and an uninvited answerer was told the send
+ * failed instead.
+ */
+const uninvited = ref(false);
 const error = ref<string | null>(null);
 const missing = ref<string[]>([]);
 
@@ -185,6 +192,18 @@ async function submit(): Promise<void> {
         // would invite exactly the duplicate that was just refused.
         if (result.status === 409) {
             answeredElsewhere.value = true;
+
+            return;
+        }
+
+        // Refused by the roster, not by the transport: retrying would be
+        // refused identically, so the form says why instead of offering one.
+        if (
+            result.status === 403 &&
+            (result.body as { error?: string } | undefined)?.error ===
+                'not_invited'
+        ) {
+            uninvited.value = true;
 
             return;
         }

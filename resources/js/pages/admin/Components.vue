@@ -97,9 +97,11 @@ function toggleSort(key: 'name' | 'family'): void {
 /** Switching module resets the filters: a family that exists in one module
  *  usually does not in the next, and a filter you cannot see is a filter that
  *  hides rows for no visible reason. */
-function selectModule(next: string | undefined): void {
+// Tabs emits StringOrNumber: its `value` is typed for numeric tabs too, even
+// though every value here is a ModuleKey.
+function selectModule(next: string | number | undefined): void {
     if (next === undefined) return;
-    module.value = next as ModuleKey;
+    module.value = String(next) as ModuleKey;
     family.value = '';
     dataOnly.value = '';
 }

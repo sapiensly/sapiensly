@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { Eye } from '@lucide/vue';
 import { computed, inject, ref } from 'vue';
-import type { FieldDef, ObjectDef } from '../types/manifest';
+import type { FieldDef, ObjectDef, RowRef } from '../types/manifest';
 import { resolveField } from '../types/manifest';
 import { useRecordPresence, type Watcher } from '../useLiveRecords';
 import { themeTokens, useRuntimeTheme } from '../useRuntimeTheme';
@@ -29,11 +29,7 @@ const props = defineProps<{
     block: RecordDetailBlock;
     data:
         | {
-              record: {
-                  id: string;
-                  data: Record<string, unknown>;
-                  labels?: Record<string, unknown>;
-              } | null;
+              record: RowRef | null;
           }
         | undefined;
     objects: ObjectDef[];

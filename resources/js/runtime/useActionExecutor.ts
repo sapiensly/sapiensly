@@ -358,7 +358,9 @@ export function useActionExecutor() {
         const mount = mountFor(ctx);
         if (!mount.startsWith('/r/')) return;
 
-        const code = await requestScan(action.locale ?? 'en');
+        // Coerced like every other field read off a RuntimeAction, whose values
+        // are `unknown` — a bare `?? 'en'` still leaves the union unusable.
+        const code = await requestScan(String(action.locale ?? 'en'));
         if (code === null) return; // closed the sheet: not a failure
 
         const { data } = await axios

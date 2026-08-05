@@ -34,6 +34,14 @@ const form = useForm<{ driver: string; credentials: Record<string, string> }>({
     credentials: { api_key: '', url: '' },
 });
 
+/**
+ * The form's errors, keyed. Hoisted out of the template because a generic in a
+ * template expression (`as Record<string, string>`) parses as a TAG — which is
+ * what stopped Prettier from reading this file at all, and with it the whole
+ * CI lint job.
+ */
+const fieldErrors = computed(() => form.errors as Record<string, string>);
+
 // Keep the hidden driver field in sync with the row the user opened.
 watch(
     () => props.driver,
@@ -58,15 +66,16 @@ function submit() {
     if (showUrl.value && form.credentials.url) {
         credentials.url = form.credentials.url;
     }
-    form
-        .transform(() => ({ driver: props.driver, credentials }))
-        .post('/admin/ai/providers/key', {
+    form.transform(() => ({ driver: props.driver, credentials })).post(
+        '/admin/ai/providers/key',
+        {
             preserveScroll: true,
             onSuccess: () => {
                 open.value = false;
                 form.reset();
             },
-        });
+        },
+    );
 }
 
 function cancel() {
@@ -112,14 +121,16 @@ function cancel() {
                         v-model="form.credentials.api_key"
                         type="password"
                         autocomplete="off"
-                        :placeholder="t('admin.ai.providers.api_key_placeholder')"
+                        :placeholder="
+                            t('admin.ai.providers.api_key_placeholder')
+                        "
                         class="font-mono"
                     />
                     <p
-                        v-if="(form.errors as Record<string, string>)['credentials.api_key']"
+                        v-if="fieldErrors['credentials.api_key']"
                         class="text-xs text-sp-danger"
                     >
-                        {{ (form.errors as Record<string, string>)['credentials.api_key'] }}
+                        {{ fieldErrors['credentials.api_key'] }}
                     </p>
                 </div>
 
@@ -132,14 +143,16 @@ function cancel() {
                         v-model="form.credentials.url"
                         type="text"
                         autocomplete="off"
-                        :placeholder="t('admin.ai.providers.base_url_placeholder')"
+                        :placeholder="
+                            t('admin.ai.providers.base_url_placeholder')
+                        "
                         class="font-mono"
                     />
                     <p
-                        v-if="(form.errors as Record<string, string>)['credentials.url']"
+                        v-if="fieldErrors['credentials.url']"
                         class="text-xs text-sp-danger"
                     >
-                        {{ (form.errors as Record<string, string>)['credentials.url'] }}
+                        {{ fieldErrors['credentials.url'] }}
                     </p>
                 </div>
 
@@ -149,7 +162,10 @@ function cancel() {
                     </Button>
                     <Button
                         type="submit"
-                        :disabled="form.processing || form.credentials.api_key.length < 16"
+                        :disabled="
+                            form.processing ||
+                            form.credentials.api_key.length < 16
+                        "
                         class="rounded-pill bg-accent-blue text-white shadow-btn-primary hover:bg-accent-blue-hover"
                     >
                         {{ t('admin.ai.providers.save_cta') }}

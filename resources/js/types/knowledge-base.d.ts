@@ -1,4 +1,5 @@
 export type KnowledgeBaseStatus = 'pending' | 'processing' | 'ready' | 'failed';
+/** Mirrors App\Enums\DocumentType. */
 export type DocumentType =
     | 'pdf'
     | 'txt'
@@ -6,7 +7,9 @@ export type DocumentType =
     | 'md'
     | 'url'
     | 'csv'
-    | 'json';
+    | 'json'
+    | 'artifact'
+    | 'deck';
 
 export interface DocumentTypeOption {
     value: DocumentType;

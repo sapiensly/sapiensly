@@ -1,11 +1,10 @@
 <script setup lang="ts">
 import GaugeChart from '@/components/charts/GaugeChart.vue';
 import { computed } from 'vue';
-import type { ObjectDef } from '../types/manifest';
+import type { BlockBase, ObjectDef } from '../types/manifest';
 import { themeTokens, useRuntimeTheme } from '../useRuntimeTheme';
 
-interface GaugeBlock {
-    id: string;
+interface GaugeBlock extends BlockBase {
     type: 'gauge';
     label?: string;
     query: { object_id: string };

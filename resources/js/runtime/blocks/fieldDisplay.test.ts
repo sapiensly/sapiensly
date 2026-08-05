@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { FieldDef } from '../types/manifest';
+import type { FieldDef, FieldType } from '../types/manifest';
 import {
     EMPTY_MARK,
     formatFieldValue,
@@ -31,7 +31,8 @@ const field = (over: Partial<FieldDef>): FieldDef =>
     }) as FieldDef;
 
 describe('a value with nothing in it', () => {
-    it.each([
+    // Annotated: a bare array of tuples widens each type to `string`.
+    it.each<[FieldType, unknown]>([
         ['string', null],
         ['number', undefined],
         ['currency', ''],

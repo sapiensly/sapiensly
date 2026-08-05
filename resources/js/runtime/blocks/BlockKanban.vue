@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, inject, reactive, ref } from 'vue';
-import type { FieldDef, ObjectDef } from '../types/manifest';
+import type { FieldDef, ObjectDef, RowRef } from '../types/manifest';
 import { useActionExecutor } from '../useActionExecutor';
 import { themeTokens, useRuntimeTheme } from '../useRuntimeTheme';
 import FieldValue from './FieldValue.vue';
@@ -16,15 +16,9 @@ interface KanbanBlock {
     editable?: boolean;
 }
 
-interface RowData {
-    id: string;
-    data: Record<string, unknown>;
-    labels?: Record<string, unknown>;
-}
-
 const props = defineProps<{
     block: KanbanBlock;
-    data: { rows: RowData[] } | undefined;
+    data: { rows: RowRef[] } | undefined;
     objects: ObjectDef[];
     locale: string;
     defaultCurrency: string;
@@ -67,7 +61,7 @@ const lineMetas = computed<FieldDef[]>(() =>
     ),
 );
 
-function contextFor(row: RowData): DisplayContext {
+function contextFor(row: RowRef): DisplayContext {
     return {
         locale: props.locale,
         defaultCurrency: props.defaultCurrency,
@@ -78,7 +72,7 @@ function contextFor(row: RowData): DisplayContext {
 }
 
 /** Whether this row has any chip worth a row of its own. */
-function hasChips(row: RowData): boolean {
+function hasChips(row: RowRef): boolean {
     return chipMetas.value.some((f) => valueChips(f, row.data[f.slug]));
 }
 
@@ -100,7 +94,7 @@ interface Column {
     value: string;
     label: string;
     color: string | null;
-    rows: RowData[];
+    rows: RowRef[];
 }
 
 const columns = computed<Column[]>(() => {
@@ -142,7 +136,7 @@ const columns = computed<Column[]>(() => {
     return Array.from(cols.values());
 });
 
-function onDragStart(row: RowData) {
+function onDragStart(row: RowRef) {
     if (!canDrag.value) return;
     draggingId.value = row.id;
 }
@@ -188,7 +182,7 @@ async function onDrop(col: Column) {
     }
 }
 
-function titleFor(row: RowData): string {
+function titleFor(row: RowRef): string {
     if (!titleField.value) return row.id;
     const v = row.data[titleField.value.slug];
     return v === null || v === undefined || v === '' ? row.id : String(v);

@@ -18,6 +18,7 @@ import type {
     BlockTable,
     FieldDef,
     ObjectDef,
+    RowRef,
     TableBlockData,
 } from '../types/manifest';
 import { resolveField } from '../types/manifest';
@@ -590,7 +591,11 @@ const page = ref(
  * A row's display context: the locale plus the server-resolved relation
  * labels, which are per-row rather than per-column.
  */
-function contextFor(row: { labels?: Record<string, unknown> }): DisplayContext {
+// Only the label maps are read, and the footer total legitimately has no row —
+// so the parameter is that slice rather than a whole row.
+function contextFor(
+    row: Pick<RowRef, 'labels' | 'labels_trashed'>,
+): DisplayContext {
     return {
         locale: props.locale,
         defaultCurrency: props.defaultCurrency,

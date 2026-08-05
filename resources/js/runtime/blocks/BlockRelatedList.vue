@@ -2,7 +2,7 @@
 import { computed, inject } from 'vue';
 import RuntimeIcon from '../RuntimeIcon.vue';
 import { confirmAction } from '../confirm';
-import type { ObjectDef } from '../types/manifest';
+import type { ObjectDef, RowRef } from '../types/manifest';
 import { resolveField } from '../types/manifest';
 import { type RuntimeAction, useActionExecutor } from '../useActionExecutor';
 import { themeTokens, useRuntimeTheme } from '../useRuntimeTheme';
@@ -46,15 +46,9 @@ interface RelatedListBlock {
     columns: Column[];
 }
 
-interface RowData {
-    id: string;
-    data: Record<string, unknown>;
-    labels?: Record<string, unknown>;
-}
-
 const props = defineProps<{
     block: RelatedListBlock;
-    data: { rows: RowData[] } | undefined;
+    data: { rows: RowRef[] } | undefined;
     objects: ObjectDef[];
     locale: string;
     defaultCurrency: string;
@@ -85,7 +79,7 @@ const columns = computed(() =>
 const appSlug = inject<string>('appSlug', '');
 const { execute } = useActionExecutor();
 
-async function runRowAction(column: ActionColumn, row: RowData): Promise<void> {
+async function runRowAction(column: ActionColumn, row: RowRef): Promise<void> {
     if (column.confirm) {
         const ok = await confirmAction({
             title: column.confirm.title,
@@ -106,9 +100,9 @@ const actionClass: Record<string, string> = {
     ghost: 'hover:bg-surface-hover',
 };
 
-const rows = computed<RowData[]>(() => props.data?.rows ?? []);
+const rows = computed<RowRef[]>(() => props.data?.rows ?? []);
 
-function contextFor(row: RowData): DisplayContext {
+function contextFor(row: RowRef): DisplayContext {
     return {
         locale: props.locale,
         defaultCurrency: props.defaultCurrency,

@@ -121,7 +121,7 @@ async function endDrag(): Promise<void> {
                 values: { [sStart]: start, [sEnd]: end },
             } as RuntimeAction,
         ],
-        { appSlug, params: {}, row: {} },
+        { appSlug, params: {} },
     );
 
     // Either way the local shift goes: on success the reloaded rows already

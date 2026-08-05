@@ -90,7 +90,7 @@ async function dropOn(iso: string): Promise<void> {
                 values: { [dateField.value!.slug]: iso },
             } as RuntimeAction,
         ],
-        { appSlug, params: {}, row: {} },
+        { appSlug, params: {} },
     );
 
     if (!result.ok) {

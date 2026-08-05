@@ -34,6 +34,17 @@ jobs:
       - name: Run Pint
         run: vendor/bin/pint
 
+      # Wayfinder's output is gitignored, so a fresh checkout has no
+      # `@/routes` or `@/actions` to resolve — the type check would report a
+      # hundred missing modules and say nothing about the code. `--with-form`
+      # matches the vite plugin's `formVariants: true`; without it the .form
+      # helpers several pages call would not be generated.
+      - name: Generate Wayfinder Files
+        run: |
+          cp -n .env.example .env
+          php artisan key:generate
+          php artisan wayfinder:generate --with-form
+
       - name: Format Frontend
         run: npm run format
 
