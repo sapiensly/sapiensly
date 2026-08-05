@@ -79,6 +79,8 @@
     "admin.ai.defaults.max_tokens_label": "Máx. tokens",
     "admin.ai.defaults.module.audio_recognition.description": "Modelo de voz a texto para transcribir audio.",
     "admin.ai.defaults.module.audio_recognition.title": "Reconocimiento de audio",
+    "admin.ai.defaults.module.build_critic.description": "La revisión de CIERRE de una app: lee la app terminada contra lo que se pidió y reporta qué FALTA y qué se INVENTÓ (construido sin pedirse y sin relación con la petición). Corre una sola vez sobre una ficha técnica compacta, así que un modelo más fuerte aquí cuesta una fracción de correr el build entero en él. Vacío = revisa con el modelo del Builder.",
+    "admin.ai.defaults.module.build_critic.title": "Crítico de construcción",
     "admin.ai.defaults.module.builder.description": "Modelo que mueve el agente del app builder.",
     "admin.ai.defaults.module.builder.title": "App Builder",
     "admin.ai.defaults.module.chat.description": "Modelo del asistente de chat.",

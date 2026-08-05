@@ -79,6 +79,8 @@
     "admin.ai.defaults.max_tokens_label": "Max tokens",
     "admin.ai.defaults.module.audio_recognition.description": "Speech-to-text model used to transcribe audio.",
     "admin.ai.defaults.module.audio_recognition.title": "Audio recognition",
+    "admin.ai.defaults.module.build_critic.description": "The CLOSING review of an app build: it reads the finished app against what was asked and reports what is MISSING and what was INVENTED (built without being asked and unrelated to the request). Runs once over a compact technical sheet, so a stronger model here costs a fraction of running the whole build on it. Empty = reviews with the Builder's model.",
+    "admin.ai.defaults.module.build_critic.title": "Build Critic",
     "admin.ai.defaults.module.builder.description": "Model that powers the app builder agent.",
     "admin.ai.defaults.module.builder.title": "App Builder",
     "admin.ai.defaults.module.chat.description": "Model for the chat assistant.",

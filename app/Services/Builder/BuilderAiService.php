@@ -9,6 +9,7 @@ use App\Ai\Tools\Builder\AddDashboardPageTool;
 use App\Ai\Tools\Builder\AddDetailPageTool;
 use App\Ai\Tools\Builder\AnalyzeDataTool;
 use App\Ai\Tools\Builder\CreateIntegrationTool;
+use App\Ai\Tools\Builder\CritiqueBuildTool;
 use App\Ai\Tools\Builder\CritiqueLandingDesignTool;
 use App\Ai\Tools\Builder\DeleteBlockByIdTool;
 use App\Ai\Tools\Builder\DiscoverIntegrationTool;
@@ -60,6 +61,7 @@ use App\Services\Ai\AiDefaults;
 use App\Services\Ai\AiSpendGuard;
 use App\Services\Ai\AiUsageRecorder;
 use App\Services\AiProviderService;
+use App\Services\Apps\BuildCritic;
 use App\Services\Builder\Integrations\IntegrationAuthoring;
 use App\Services\Connected\ConnectedObjectAuthoring;
 use App\Services\Connected\IntegrationCatalog;
@@ -1789,6 +1791,7 @@ class BuilderAiService
             new ListDashboardBlueprintsTool,
             new PlanDashboardTool,
             new CritiqueLandingDesignTool($app, $this->manifestService, app(LandingDesignCritic::class), $conversation->user, $proposeTool, $conversation->id),
+            new CritiqueBuildTool($app, app(BuildCritic::class), $conversation->user, $conversation->id),
             new ListAvailableIconsTool,
             new GeneratePaletteTool($app->organization?->brandbook()),
             new ListAvailableFieldTypesTool,

@@ -47,7 +47,13 @@ class AiDefaults
         // when set, critique_landing_design judges on it (its fallback is the
         // retry when the primary pass fails); when unset the director inherits
         // the landing_builder chain — see LandingDesignCritic::directorCandidates.
-        'chat', 'summary_short', 'summary_large', 'builder', 'landing_builder', 'landing_director', 'flows', 'chatbots',
+        // `build_critic` is the app-side counterpart of landing_director: the
+        // closing review that reads the finished app against what was asked and
+        // reports what is MISSING and what was invented. Optional — unset it and
+        // the critic inherits the builder chain. It is worth a stronger model
+        // than the builder: it runs ONCE over a compact technical sheet, so its
+        // cost is a rounding error next to running the whole build on that model.
+        'chat', 'summary_short', 'summary_large', 'builder', 'landing_builder', 'landing_director', 'build_critic', 'flows', 'chatbots',
         // Specialized capability handlers.
         'embeddings', 'coding', 'ocr_pdf', 'image_vision', 'image_generation',
         'audio_recognition', 'speech_generation', 'reranking',
@@ -77,6 +83,7 @@ class AiDefaults
         'builder' => 'chat',
         'landing_builder' => 'chat',
         'landing_director' => 'chat',
+        'build_critic' => 'chat',
         'flows' => 'chat',
         'chatbots' => 'chat',
         'embeddings' => 'embeddings',

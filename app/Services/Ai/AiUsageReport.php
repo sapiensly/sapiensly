@@ -360,6 +360,7 @@ class AiUsageReport
             'chat' => 'Chat',
             'builder', 'runtime_agent', 'workflow', 'express', 'scaffold' => 'Apps',
             'landing_director' => 'Landing Director',
+            'build_critic' => 'Build Critic',
             'agent' => 'Agents',
             'chatbot' => 'Chatbots',
             'whatsapp' => 'WhatsApp',

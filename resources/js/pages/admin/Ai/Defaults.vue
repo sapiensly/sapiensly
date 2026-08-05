@@ -15,6 +15,7 @@ import AdminLayout from '@/layouts/AdminLayout.vue';
 import {
     Bot,
     Brain,
+    Check,
     Cpu,
     Database,
     Eye,
@@ -104,6 +105,7 @@ const moduleMeta: Record<string, { icon: Component; tint?: string }> = {
     builder: { icon: Cpu, tint: 'var(--sp-accent-cyan)' },
     landing_builder: { icon: Rocket, tint: 'var(--sp-spectrum-magenta)' },
     landing_director: { icon: Eye, tint: 'var(--sp-spectrum-magenta)' },
+    build_critic: { icon: Check, tint: 'var(--sp-accent-cyan)' },
     flows: { icon: Zap, tint: 'var(--sp-spectrum-indigo)' },
     chatbots: { icon: Bot, tint: 'var(--sp-spectrum-magenta)' },
     embeddings: { icon: Database, tint: 'var(--sp-spectrum-cyan)' },
