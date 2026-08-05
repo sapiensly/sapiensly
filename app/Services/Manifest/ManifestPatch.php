@@ -2,6 +2,7 @@
 
 namespace App\Services\Manifest;
 
+use gamringer\JSONPatch\Exception as PatchException;
 use gamringer\JSONPatch\Patch;
 
 /**
@@ -48,21 +49,33 @@ final class ManifestPatch
 
         $target = json_decode(json_encode($document, JSON_THROW_ON_ERROR));
 
-        foreach ($ops as $op) {
-            if (($op['op'] ?? null) === 'append') {
-                self::applyAppend($target, $op);
+        foreach ($ops as $index => $op) {
+            // Ops are applied one at a time, so the one that fails is known
+            // here — the only place it ever is. Losing that (and the library's
+            // real cause, which it buries in `previous`) is what turns a
+            // one-character address mistake into a blind retry loop.
+            try {
+                if (($op['op'] ?? null) === 'append') {
+                    self::applyAppend($target, $op);
 
-                continue;
+                    continue;
+                }
+
+                if (self::isIndexedArrayInsert($target, $op)) {
+                    self::applyInsert($target, $op);
+
+                    continue;
+                }
+
+                $patch = Patch::fromJSON(json_encode([$op], JSON_THROW_ON_ERROR));
+                $patch->apply($target);
+            } catch (PatchException $e) {
+                // ONLY the library's opaque failure is rewritten. The deliberate
+                // rules enforced above (append refusing markup, and friends)
+                // already say exactly what is wrong and must reach the caller
+                // with their own type and wording intact.
+                throw self::describe((int) $index, is_array($op) ? $op : [], $e, $target);
             }
-
-            if (self::isIndexedArrayInsert($target, $op)) {
-                self::applyInsert($target, $op);
-
-                continue;
-            }
-
-            $patch = Patch::fromJSON(json_encode([$op], JSON_THROW_ON_ERROR));
-            $patch->apply($target);
         }
 
         return json_decode(json_encode($target, JSON_THROW_ON_ERROR), true);
@@ -284,6 +297,82 @@ final class ManifestPatch
         }
 
         return $ref;
+    }
+
+    /**
+     * Turn a library failure into something a caller can act on.
+     *
+     * @param  array<string, mixed>  $op
+     */
+    private static function describe(int $index, array $op, PatchException $e, mixed $target): ManifestPatchException
+    {
+        // The library's own message is always "An Operation failed"; the useful
+        // sentence ("Referenced value does not exist", "Target value does not
+        // match expected value") is one level down.
+        $reason = $e->getPrevious()?->getMessage() ?: $e->getMessage();
+
+        return new ManifestPatchException(
+            $index,
+            (string) ($op['op'] ?? ''),
+            (string) ($op['path'] ?? ''),
+            $reason,
+            self::locate($target, (string) ($op['path'] ?? '')),
+        );
+    }
+
+    /**
+     * Where a path stops resolving, and what is actually there.
+     *
+     * "Referenced value does not exist" leaves the author guessing which
+     * segment was wrong. Walking the pointer until it breaks turns that into
+     * the one fact they need: the deepest part that DID resolve, and — when it
+     * is a list — how many items it holds, which is almost always the answer
+     * (an index counted by eye off a truncated read).
+     */
+    private static function locate(mixed $target, string $path): ?string
+    {
+        $tokens = self::tokens($path);
+
+        if ($tokens === []) {
+            return null;
+        }
+
+        $node = $target;
+        $resolved = '';
+
+        foreach ($tokens as $token) {
+            if (is_array($node)) {
+                if ($token !== '-' && ctype_digit($token) && array_key_exists((int) $token, $node)) {
+                    $node = $node[(int) $token];
+                    $resolved .= '/'.$token;
+
+                    continue;
+                }
+
+                $where = $resolved === '' ? 'the document root' : "\"{$resolved}\"";
+
+                return "{$where} holds ".count($node)." item(s), so \"{$token}\" is out of range";
+            }
+
+            if ($node instanceof \stdClass) {
+                if (property_exists($node, $token)) {
+                    $node = $node->{$token};
+                    $resolved .= '/'.$token;
+
+                    continue;
+                }
+
+                $keys = array_keys(get_object_vars($node));
+                $where = $resolved === '' ? 'the document root' : "\"{$resolved}\"";
+
+                return "{$where} has no \"{$token}\"".
+                    ($keys === [] ? '' : ' (it has: '.implode(', ', array_slice($keys, 0, 8)).')');
+            }
+
+            return "\"{$resolved}\" is a scalar, so \"{$token}\" cannot be addressed";
+        }
+
+        return null;
     }
 
     /**

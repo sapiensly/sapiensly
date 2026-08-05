@@ -1,6 +1,7 @@
 <?php
 
 use App\Services\Manifest\ManifestPatch;
+use App\Services\Manifest\ManifestPatchException;
 
 it('appends to workflows even when the key is absent (no silent drop)', function () {
     $doc = ['objects' => [], 'pages' => []]; // brand-new app: no workflows key
@@ -233,4 +234,85 @@ it('keeps streaming custom_css, which is not markup', function () {
     ]);
 
     expect($result['settings']['custom_css'])->toBe('.a{}.b{}');
+});
+
+/**
+ * A rejected patch used to come back as "An Operation failed" and nothing else.
+ * Applied to a batch that is no information at all — not which op, not which
+ * segment, not whether an index was out of range or a `test` disagreed.
+ * Observed live: a builder turn burned ~20 rejected calls hunting a column
+ * index inside a tabs block, because every rejection read identically. The
+ * engine was right the whole time; the address was off by a few.
+ */
+it('names the op that failed and where the path stops resolving', function () {
+    $doc = ['pages' => [[
+        'id' => 'pag_x', 'slug' => 'ordenes', 'blocks' => [[
+            'id' => 'blk_tabs', 'type' => 'tabs', 'tabs' => [[
+                'id' => 'tab_lista', 'blocks' => [[
+                    'id' => 'blk_tabla', 'type' => 'table',
+                    'columns' => [['id' => 'col_a'], ['id' => 'col_b']],
+                ]],
+            ]],
+        ]],
+    ]]];
+
+    expect(fn () => ManifestPatch::apply($doc, [
+        ['op' => 'replace', 'path' => '/pages/0/blocks/0/tabs/0/blocks/0/columns/23/id', 'value' => 'x'],
+    ]))->toThrow(
+        ManifestPatchException::class,
+        'holds 2 item(s), so "23" is out of range',
+    );
+});
+
+it('points at the failing op inside a batch, not at the batch', function () {
+    $doc = ['pages' => [['id' => 'pag_x', 'slug' => 'ordenes']]];
+
+    try {
+        ManifestPatch::apply($doc, [
+            ['op' => 'replace', 'path' => '/pages/0/slug', 'value' => 'ok'],
+            ['op' => 'replace', 'path' => '/pages/9/slug', 'value' => 'x'],
+        ]);
+        expect(false)->toBeTrue('the second op should have failed');
+    } catch (ManifestPatchException $e) {
+        expect($e->opIndex)->toBe(1)
+            ->and($e->pointer())->toBe('/ops/1')
+            ->and($e->opPath)->toBe('/pages/9/slug');
+    }
+});
+
+it('lists the keys that are there when a property name is wrong', function () {
+    $doc = ['pages' => [['id' => 'pag_x', 'slug' => 'ordenes', 'blocks' => []]]];
+
+    expect(fn () => ManifestPatch::apply($doc, [
+        ['op' => 'replace', 'path' => '/pages/0/blocs/0', 'value' => 'x'],
+    ]))->toThrow(ManifestPatchException::class, 'has no "blocs"');
+});
+
+it('surfaces the real cause of a failed test op', function () {
+    // The library hides this one level down, in the exception's `previous`.
+    $doc = ['version' => 1];
+
+    expect(fn () => ManifestPatch::apply($doc, [
+        ['op' => 'test', 'path' => '/version', 'value' => 99],
+    ]))->toThrow(ManifestPatchException::class, 'does not match expected value');
+});
+
+it('still applies a correct deep path inside a tabs block', function () {
+    // The engine was never the problem — pin that, so the error work above is
+    // not mistaken for a fix to addressing.
+    $doc = ['pages' => [['blocks' => [['type' => 'tabs', 'tabs' => [[
+        'blocks' => [['type' => 'table', 'columns' => [
+            ['id' => 'col_a'],
+            ['id' => 'col_open', 'on_click' => [['type' => 'navigate', 'to' => '/ordenes_detail']]],
+        ]]],
+    ]]]]]]];
+
+    $result = ManifestPatch::apply($doc, [[
+        'op' => 'replace',
+        'path' => '/pages/0/blocks/0/tabs/0/blocks/0/columns/1/on_click/0/to',
+        'value' => '/ordenes_detail_2',
+    ]]);
+
+    expect($result['pages'][0]['blocks'][0]['tabs'][0]['blocks'][0]['columns'][1]['on_click'][0]['to'])
+        ->toBe('/ordenes_detail_2');
 });

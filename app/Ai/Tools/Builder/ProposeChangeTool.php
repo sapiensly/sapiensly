@@ -6,6 +6,7 @@ use App\Models\App;
 use App\Services\Manifest\AppManifestService;
 use App\Services\Manifest\ManifestIdFiller;
 use App\Services\Manifest\ManifestPatch;
+use App\Services\Manifest\ManifestPatchException;
 use App\Services\Manifest\ManifestSchemaCatalog;
 use App\Services\Manifest\ManifestValidator;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
@@ -185,7 +186,14 @@ DESC;
         } catch (\Throwable $e) {
             return [
                 'ok' => false,
-                'errors' => [['path' => '/ops', 'message' => 'Patch could not be applied: '.$e->getMessage(), 'code' => 'patch_apply_failed']],
+                'errors' => [[
+                    // Point at the op that failed, not the batch: with several
+                    // ops in flight, "/ops" leaves the author re-checking all
+                    // of them.
+                    'path' => $e instanceof ManifestPatchException ? $e->pointer() : '/ops',
+                    'message' => 'Patch could not be applied: '.$e->getMessage(),
+                    'code' => 'patch_apply_failed',
+                ]],
             ];
         }
 
