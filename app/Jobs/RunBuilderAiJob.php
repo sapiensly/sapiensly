@@ -191,6 +191,12 @@ class RunBuilderAiJob implements ShouldQueue
         // turn. Runs after the plan chains — it skips itself whenever another
         // turn is already queued, so it only fires on an idle conversation.
         $service->continueForLandingGate($finished, $this->modelOverride, $this->gateRemaining);
+
+        // Its non-landing counterpart: an applied turn whose conversation has
+        // never received a clean critique_build gets a platform-queued review
+        // turn. The two rails are mutually exclusive by app kind, and each
+        // skips itself while another turn is queued, so they cannot stack.
+        $service->continueForBuildCritic($finished, $this->modelOverride, $this->gateRemaining);
     }
 
     /**

@@ -20,6 +20,7 @@ class BuilderConversation extends Model
         'status',
         'build_plan',
         'landing_shipped_at',
+        'build_reviewed_at',
     ];
 
     protected function casts(): array
@@ -27,6 +28,7 @@ class BuilderConversation extends Model
         return [
             'build_plan' => 'array',
             'landing_shipped_at' => 'datetime',
+            'build_reviewed_at' => 'datetime',
         ];
     }
 

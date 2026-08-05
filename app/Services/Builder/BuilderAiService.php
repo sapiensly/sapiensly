@@ -1357,6 +1357,69 @@ class BuilderAiService
     }
 
     /**
+     * The closing-review rail. An app that applied changes while `critique_build`
+     * never came back clean is not done — and "call the critic before you report
+     * done" is prompt-only, which is exactly the kind of rule the two builds this
+     * was written from walked straight past, each closing with a summary of work
+     * it had skipped.
+     *
+     * Scoped to NON-landing apps: a landing already answers to the design gate,
+     * and two rails taking turns on one conversation would fight. Bounded by the
+     * same $gateRemaining budget, so a critic that keeps finding gaps cannot loop
+     * a build forever. First clean verdict stamps `build_reviewed_at` (see
+     * CritiqueBuildTool) and retires the rail — later tweak turns are never
+     * re-reviewed.
+     */
+    public function continueForBuildCritic(BuilderMessage $finished, ?string $modelOverride, int $gateRemaining): void
+    {
+        if ($gateRemaining <= 0) {
+            return;
+        }
+
+        $conversation = $finished->conversation;
+        $conversation->refresh();
+
+        // Only turns that actually built something. A question answered, an
+        // error, or a proposal left pending is not a finished app.
+        if ((string) $finished->status !== 'applied') {
+            return;
+        }
+
+        if ($conversation->build_reviewed_at !== null) {
+            return;
+        }
+
+        // Detener means stopped.
+        if (app(BuilderCancellation::class)->requested($conversation)) {
+            return;
+        }
+
+        $app = $conversation->app;
+        if ($app === null || $app->kind === AppKind::Landing) {
+            return;
+        }
+
+        // Another turn is already queued or streaming — this re-evaluates when
+        // THAT one finishes, so the rail only ever fires on an idle build.
+        $busy = BuilderMessage::query()
+            ->where('conversation_id', $conversation->id)
+            ->where('role', 'assistant')
+            ->where('status', 'streaming')
+            ->exists();
+        if ($busy) {
+            return;
+        }
+
+        $this->queueAutoTurn(
+            $conversation,
+            '(riel de cierre) La app tiene cambios aplicados pero critique_build no ha devuelto complete:true en esta conversación. Llámalo ahora pasando en `request` la petición ORIGINAL del usuario tal como la escribió, sin parafrasear. Corrige con propose_change todo lo que aparezca en `missing` y vuelve a llamarlo hasta complete:true. Si algo aparece en `unrequested`, quítalo o explica en una línea por qué pertenece. No hagas nada más.',
+            $modelOverride,
+            0,
+            gateRemaining: $gateRemaining - 1,
+        );
+    }
+
+    /**
      * Queue a server-driven follow-up turn: persist the synthetic user turn +
      * streaming placeholder, push them to the client (no HTTP response carries
      * them), and dispatch the job flagged autoQueued so an exhausted chain can

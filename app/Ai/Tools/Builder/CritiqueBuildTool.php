@@ -3,6 +3,7 @@
 namespace App\Ai\Tools\Builder;
 
 use App\Models\App;
+use App\Models\BuilderConversation;
 use App\Models\User;
 use App\Services\Apps\BuildCritic;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
@@ -80,6 +81,34 @@ DESC;
             $this->conversationId,
         );
 
+        $this->stampWhenClean($verdict);
+
         return json_encode($verdict, JSON_THROW_ON_ERROR);
+    }
+
+    /**
+     * A first clean verdict retires the review rail for this conversation.
+     *
+     * Only `complete` — an unrequested finding is a judgement call for a person,
+     * not something to hold the build hostage over. And only a verdict that
+     * actually RAN: 'failed' means nobody looked, which must never stamp, or the
+     * rail is defeated by the one outcome it exists to survive.
+     *
+     * @param  array<string, mixed>  $verdict
+     */
+    private function stampWhenClean(array $verdict): void
+    {
+        if (($verdict['critic'] ?? null) !== 'ok' || ($verdict['complete'] ?? false) !== true) {
+            return;
+        }
+
+        if ($this->conversationId === null) {
+            return;
+        }
+
+        BuilderConversation::query()
+            ->whereKey($this->conversationId)
+            ->whereNull('build_reviewed_at')
+            ->update(['build_reviewed_at' => now()]);
     }
 }
