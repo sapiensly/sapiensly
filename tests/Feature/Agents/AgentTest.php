@@ -231,11 +231,13 @@ describe('update', function () {
     it('updates a standalone agent', function () {
         $agent = Agent::factory()->standalone()->triage()->create(['user_id' => $this->user->id]);
 
+        $model = catalogChatModel(0, 'openai');
+
         $data = [
             'name' => 'Updated Agent Name',
             'description' => 'Updated description',
             'status' => AgentStatus::Active->value,
-            'model' => 'gpt-4o-mini',
+            'model' => $model,
             'config' => [
                 'temperature' => 0.5,
             ],
@@ -248,7 +250,7 @@ describe('update', function () {
         $agent->refresh();
         expect($agent->name)->toBe('Updated Agent Name');
         expect($agent->status)->toBe(AgentStatus::Active);
-        expect($agent->model)->toBe('gpt-4o-mini');
+        expect($agent->model)->toBe($model);
     });
 
     it('updates knowledge base associations', function () {

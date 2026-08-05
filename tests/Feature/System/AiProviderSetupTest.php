@@ -10,10 +10,12 @@ beforeEach(function () {
 });
 
 test('storing one provider with both a chat and an embeddings model creates a single provider', function () {
+    $chatModel = catalogChatModel(0, 'openai');
+
     actingAs($this->user)->post('/system/ai-providers', [
         'driver' => 'openai',
         'credentials' => ['api_key' => 'sk-test-key'],
-        'chat_model_id' => 'gpt-4o',
+        'chat_model_id' => $chatModel,
         'embeddings_model_id' => 'text-embedding-3-small',
         'make_default_chat' => true,
         'make_default_embeddings' => true,
@@ -29,7 +31,7 @@ test('storing one provider with both a chat and an embeddings model creates a si
         ->and($provider->credentials['api_key'])->toBe('sk-test-key');
 
     $modelIds = collect($provider->models)->pluck('id')->all();
-    expect($modelIds)->toContain('gpt-4o')->toContain('text-embedding-3-small');
+    expect($modelIds)->toContain($chatModel)->toContain('text-embedding-3-small');
 });
 
 test('two separate submissions create two providers', function () {
@@ -86,23 +88,28 @@ test('storing rejects a non-embeddings model as the embeddings model', function 
     actingAs($this->user)->post('/system/ai-providers', [
         'driver' => 'openai',
         'credentials' => ['api_key' => 'sk-test'],
-        'embeddings_model_id' => 'gpt-4o',
+        // A real chat model, so this rejects on CAPABILITY rather than on the
+        // id simply not being in the catalog.
+        'embeddings_model_id' => catalogChatModel(0, 'openai'),
     ])->assertSessionHasErrors(['embeddings_model_id']);
 
     expect(AiProvider::where('user_id', $this->user->id)->count())->toBe(0);
 });
 
 test('re-adding the same driver updates credentials and models instead of duplicating', function () {
+    $firstModel = catalogChatModel(0, 'openai');
+    $secondModel = catalogChatModel(1, 'openai');
+
     actingAs($this->user)->post('/system/ai-providers', [
         'driver' => 'openai',
         'credentials' => ['api_key' => 'sk-old'],
-        'chat_model_id' => 'gpt-4o',
+        'chat_model_id' => $firstModel,
     ])->assertRedirect('/system/ai-providers');
 
     actingAs($this->user)->post('/system/ai-providers', [
         'driver' => 'openai',
         'credentials' => ['api_key' => 'sk-new'],
-        'chat_model_id' => 'gpt-4o-mini',
+        'chat_model_id' => $secondModel,
         'embeddings_model_id' => 'text-embedding-3-large',
     ])->assertRedirect('/system/ai-providers');
 
@@ -113,7 +120,7 @@ test('re-adding the same driver updates credentials and models instead of duplic
     expect($provider->credentials['api_key'])->toBe('sk-new');
 
     $modelIds = collect($provider->models)->pluck('id')->all();
-    expect($modelIds)->toContain('gpt-4o-mini')
+    expect($modelIds)->toContain($secondModel)
         ->toContain('text-embedding-3-large')
-        ->not->toContain('gpt-4o');
+        ->not->toContain($firstModel);
 });
