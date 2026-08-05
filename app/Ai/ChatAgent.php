@@ -2,6 +2,7 @@
 
 namespace App\Ai;
 
+use App\Ai\Gateway\CachingOpenRouterGateway;
 use App\Services\Ai\ReasoningOptions;
 use Laravel\Ai\AnonymousAgent;
 use Laravel\Ai\Attributes\MaxTokens;
@@ -20,8 +21,10 @@ use Laravel\Ai\Enums\Lab;
  * reuse the same prefix are billed as cached input (~0.1x). Only Anthropic is
  * reachable through this SDK hook (its `system` is a top-level field the
  * providerOptions merge can replace); OpenAI and OpenRouter-to-OpenAI cache a
- * stable prefix automatically with no marker, and OpenRouter-to-Anthropic is
- * NOT reachable here (the SDK folds its system into `messages`). Anthropic also
+ * stable prefix automatically with no marker. OpenRouter-to-Anthropic caches
+ * neither way on its own — it needs the same explicit breakpoint, and since the
+ * SDK folds the system prompt into `messages` there, the marker is asked for
+ * with a flag here and applied by CachingOpenRouterGateway. Anthropic also
  * only caches prefixes above a model minimum (~1-4k tokens); below that the
  * marker is a silent no-op. The setter is opt-in (default off), so the one-shot
  * title/summary agents that reuse this class never emit cache markers.
@@ -100,6 +103,18 @@ class ChatAgent extends AnonymousAgent implements HasProviderOptions
                 'text' => $this->cacheableSystem,
                 'cache_control' => ['type' => 'ephemeral'],
             ]];
+        }
+
+        // Same prefix, same need, when Anthropic is reached through OpenRouter:
+        // its caching is explicit whoever fronts it, and the broker adds none.
+        // No `system` override here — OpenRouter carries the system prompt as a
+        // MESSAGE, and the cacheable prefix IS this agent's instructions, so
+        // CachingOpenRouterGateway marks it there.
+        if ($this->cacheableSystem !== null && trim($this->cacheableSystem) !== ''
+            && ($provider === Lab::OpenRouter || $provider === 'openrouter')
+            && $this->model !== null
+            && CachingOpenRouterGateway::isAnthropicModel($this->model)) {
+            $options[CachingOpenRouterGateway::CACHE_MESSAGES_FLAG] = true;
         }
 
         if (($provider === Lab::OpenRouter || $provider === 'openrouter') && $this->webSearch) {

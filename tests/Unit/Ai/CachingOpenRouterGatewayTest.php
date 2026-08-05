@@ -1,8 +1,11 @@
 <?php
 
 use App\Ai\BuilderAgent;
+use App\Ai\ChatAgent;
+use App\Ai\ExpressGateAgent;
 use App\Ai\Gateway\CachingAnthropicGateway;
 use App\Ai\Gateway\CachingOpenRouterGateway;
+use App\Ai\RuntimeAgent;
 use Laravel\Ai\Enums\Lab;
 
 /**
@@ -116,4 +119,53 @@ it('shares one opt-in flag across both gateways', function () {
     // turn honours it. Drift here would silently disable caching on one side.
     expect(CachingOpenRouterGateway::CACHE_MESSAGES_FLAG)
         ->toBe(CachingAnthropicGateway::CACHE_MESSAGES_FLAG);
+});
+
+/**
+ * The builder was fixed first because it was the one measured. These three
+ * carry the identical Anthropic-only condition and the identical exposure: a
+ * stable prefix (for RuntimeAgent, the whole platform tool catalogue — an MCP
+ * connection can expand into ~100 definitions) re-bought on every round trip.
+ * Each was checked separately that its cacheable text really lands in the
+ * system MESSAGE on this path, which is the only thing the gateway marks.
+ */
+it('asks for caching on the runtime agent when the broker fronts Anthropic', function () {
+    $agent = (new RuntimeAgent('sys', [], []))->withCacheableSystem('the agent instructions');
+
+    expect($agent->forModel('~anthropic/claude-haiku-latest')->providerOptions(Lab::OpenRouter))
+        ->toHaveKey(CachingOpenRouterGateway::CACHE_MESSAGES_FLAG)
+        ->and($agent->forModel('~x-ai/grok-latest')->providerOptions(Lab::OpenRouter))
+        ->not->toHaveKey(CachingOpenRouterGateway::CACHE_MESSAGES_FLAG);
+});
+
+it('asks for caching on the chat agent when the broker fronts Anthropic', function () {
+    $agent = (new ChatAgent('sys', [], []))->withCacheableSystem('the frozen chat prefix');
+
+    expect($agent->forModel('~anthropic/claude-opus-latest')->providerOptions(Lab::OpenRouter))
+        ->toHaveKey(CachingOpenRouterGateway::CACHE_MESSAGES_FLAG)
+        ->and($agent->forModel('openai/gpt-5-mini')->providerOptions(Lab::OpenRouter))
+        ->not->toHaveKey(CachingOpenRouterGateway::CACHE_MESSAGES_FLAG);
+});
+
+it('asks for caching on an express gate carrying a stable context', function () {
+    $schema = fn ($s) => [];
+
+    $withContext = new ExpressGateAgent('gate instructions', $schema, 'the ~10k tool catalog');
+    expect($withContext->forModel('~anthropic/claude-haiku-latest')->providerOptions(Lab::OpenRouter))
+        ->toHaveKey(CachingOpenRouterGateway::CACHE_MESSAGES_FLAG);
+
+    // A gate with nothing stable to cache must not pay for a cache WRITE.
+    $bare = new ExpressGateAgent('gate instructions', $schema);
+    expect($bare->forModel('~anthropic/claude-haiku-latest')->providerOptions(Lab::OpenRouter))
+        ->not->toHaveKey(CachingOpenRouterGateway::CACHE_MESSAGES_FLAG);
+});
+
+it('keeps the express gate context inside the system message it marks', function () {
+    // The Anthropic path sends two system blocks and marks the second. Here the
+    // breakpoint lands on the whole system message, so the context has to be IN
+    // it — otherwise the marker would cache the wrong prefix.
+    $agent = new ExpressGateAgent('gate instructions', fn ($s) => [], 'the tool catalog');
+
+    expect($agent->instructions())->toContain('gate instructions')
+        ->and($agent->instructions())->toContain('the tool catalog');
 });

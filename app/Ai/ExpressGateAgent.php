@@ -2,6 +2,7 @@
 
 namespace App\Ai;
 
+use App\Ai\Gateway\CachingOpenRouterGateway;
 use App\Services\Ai\ReasoningOptions;
 use Closure;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
@@ -23,9 +24,11 @@ use Laravel\Ai\Promptable;
  * ephemeral` (same mechanism as {@see ChatAgent}), so the retry and the next
  * build bill it as cached input (~0.1x) instead of re-reading it cold —
  * observed: a Haiku build re-sent 12k catalog tokens with cache_read 0. Other
- * providers get the identical text folded into the instructions (OpenAI-style
- * prefix caching needs no marker; below Anthropic's per-model minimum the
- * marker is a silent no-op).
+ * providers get the identical text folded into the instructions — which for
+ * OpenAI-style prefix caching needs no marker, but for Anthropic BROKERED BY
+ * OpenRouter still does: that path caches nothing by itself, so the same
+ * breakpoint is asked for with a flag and applied by CachingOpenRouterGateway.
+ * (Below Anthropic's per-model minimum the marker is a silent no-op.)
  */
 class ExpressGateAgent implements Agent, HasProviderOptions, HasStructuredOutput
 {
@@ -80,6 +83,19 @@ class ExpressGateAgent implements Agent, HasProviderOptions, HasStructuredOutput
                 ['type' => 'text', 'text' => $this->gateInstructions],
                 ['type' => 'text', 'text' => (string) $this->cacheableContext, 'cache_control' => ['type' => 'ephemeral']],
             ];
+        }
+
+        // Same context, same need, when Anthropic is reached through OpenRouter:
+        // its caching is explicit whoever fronts it, and the broker adds none.
+        // No `system` override here — OpenRouter carries the system prompt as a
+        // MESSAGE, and {@see self::instructions()} already concatenates the
+        // context onto the gate instructions, so marking that message covers
+        // the same prefix the two-block form does on Anthropic.
+        if ($this->hasCacheableContext()
+            && ($provider === Lab::OpenRouter || $provider === 'openrouter')
+            && $this->model !== null
+            && CachingOpenRouterGateway::isAnthropicModel($this->model)) {
+            $options[CachingOpenRouterGateway::CACHE_MESSAGES_FLAG] = true;
         }
 
         return $options;

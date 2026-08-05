@@ -2,6 +2,7 @@
 
 namespace App\Ai;
 
+use App\Ai\Gateway\CachingOpenRouterGateway;
 use App\Services\Ai\ReasoningOptions;
 use Laravel\Ai\AnonymousAgent;
 use Laravel\Ai\Contracts\HasProviderOptions;
@@ -20,6 +21,11 @@ use Laravel\Ai\Enums\Lab;
  * so the system breakpoint caches the entire tool block too. Without it, every
  * tool round-trip of an agentic turn re-bills the full prefix at 1x input
  * price (the failure mode that burned 3.5M uncached tokens in one afternoon).
+ *
+ * The same applies when Anthropic is reached through OpenRouter, which caches
+ * nothing by itself for those models. There the SDK folds the system prompt
+ * into `messages`, so instead of overriding `system` the agent raises a flag
+ * and CachingOpenRouterGateway sets the breakpoint on that message.
  */
 class RuntimeAgent extends AnonymousAgent implements HasProviderOptions
 {
@@ -77,6 +83,18 @@ class RuntimeAgent extends AnonymousAgent implements HasProviderOptions
                 'text' => $this->cacheableSystem,
                 'cache_control' => ['type' => 'ephemeral'],
             ]];
+        }
+
+        // Same prefix, same need, when Anthropic is reached through OpenRouter:
+        // its caching is explicit whoever fronts it, and the broker adds none.
+        // No `system` override here — OpenRouter carries the system prompt as a
+        // MESSAGE, and the cacheable prefix IS this agent's instructions, so
+        // CachingOpenRouterGateway marks it there.
+        if ($this->cacheableSystem !== null && trim($this->cacheableSystem) !== ''
+            && ($provider === Lab::OpenRouter || $provider === 'openrouter')
+            && $this->model !== null
+            && CachingOpenRouterGateway::isAnthropicModel($this->model)) {
+            $options[CachingOpenRouterGateway::CACHE_MESSAGES_FLAG] = true;
         }
 
         return $options;
