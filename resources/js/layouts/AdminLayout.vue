@@ -5,12 +5,17 @@ import CommandPalette from '@/components/admin/CommandPalette.vue';
 import Sidebar from '@/components/admin/Sidebar.vue';
 import Topbar from '@/components/admin/Topbar.vue';
 import ImpersonationBanner from '@/components/app-v2/ImpersonationBanner.vue';
+import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet';
+import { useIsDesktop } from '@/composables/useIsDesktop';
 import { useLocaleSync } from '@/composables/useLocale';
 import type { AppPageProps } from '@/types';
-import { usePage } from '@inertiajs/vue3';
-import { computed, ref } from 'vue';
+import { router, usePage } from '@inertiajs/vue3';
+import { computed, onUnmounted, ref, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
 
 useLocaleSync();
+
+const { t } = useI18n();
 
 interface Props {
     title: string;
@@ -36,12 +41,39 @@ function onMainScroll(event: Event) {
     scrolled.value = (event.target as HTMLElement).scrollTop > 0;
 }
 
+// Below `lg` the sidebar column is not rendered, so the same affordance has to
+// mean something else: open the off-canvas drawer instead of collapsing a
+// column that isn't there. Until this existed the toggle was inert on a phone
+// and admin had no navigation at all below 1024px.
+const isDesktop = useIsDesktop();
+const mobileNavOpen = ref(false);
+
 function toggleSidebar() {
+    if (!isDesktop.value) {
+        mobileNavOpen.value = !mobileNavOpen.value;
+        return;
+    }
+
     sidebarCollapsed.value = !sidebarCollapsed.value;
     const open = !sidebarCollapsed.value;
     // 7-day rolling cookie, path-wide so the legacy admin sees it too.
     document.cookie = `sidebar_state=${open}; path=/; max-age=${60 * 60 * 24 * 7}`;
 }
+
+// Navigating from inside the drawer must dismiss it — Inertia swaps the page
+// component without unmounting the persistent layout, so nothing else would.
+const stopNavigateListener = router.on('navigate', () => {
+    mobileNavOpen.value = false;
+});
+onUnmounted(() => stopNavigateListener());
+
+// Widening past `lg` reveals the real sidebar; leaving the drawer mounted would
+// strand its overlay over the page.
+watch(isDesktop, (desktop) => {
+    if (desktop) {
+        mobileNavOpen.value = false;
+    }
+});
 
 function openPalette() {
     if (paletteRef.value) paletteRef.value.open = true;
@@ -63,6 +95,27 @@ function openPalette() {
               toggle button (same cookie + behaviour as the legacy /admin shell).
             -->
             <Sidebar :collapsed="sidebarCollapsed" class="hidden lg:flex" />
+
+            <!--
+              Same Sidebar, off-canvas, for viewports below `lg`. Rendering the
+              one component keeps a single nav definition — a second mobile-only
+              menu would drift out of sync the first time a section is added.
+              It always renders expanded: a 64px icon rail behind an overlay
+              would be a worse target than the labels it hides.
+              (`.sp-mobile-nav` in admin.css already skinned this; only the
+              wiring was missing.)
+            -->
+            <Sheet v-model:open="mobileNavOpen">
+                <SheetContent
+                    side="left"
+                    class="sp-mobile-nav w-60 max-w-[85vw] gap-0 border-0 p-0"
+                >
+                    <SheetTitle class="sr-only">
+                        {{ t('admin.sidebar.mobile_nav_title') }}
+                    </SheetTitle>
+                    <Sidebar :collapsed="false" />
+                </SheetContent>
+            </Sheet>
 
             <!--
               Content column owns the grid overlay so the 50px lines stop at the

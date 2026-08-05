@@ -199,88 +199,93 @@ function selectModule(next: string | undefined): void {
             </div>
 
             <div class="overflow-hidden rounded-sp-sm border border-soft">
-                <table class="w-full border-collapse text-sm">
-                    <thead>
-                        <tr class="border-b border-soft bg-surface-hover">
-                            <th
-                                v-for="col in ['name', 'family'] as const"
-                                :key="col"
-                                class="px-3 py-2 text-left text-[11px] font-medium tracking-wider text-ink-muted uppercase"
-                                :class="col === 'family' ? 'w-40' : ''"
-                            >
-                                <button
-                                    type="button"
-                                    class="inline-flex items-center gap-1 uppercase transition-opacity hover:opacity-70"
-                                    @click="toggleSort(col)"
+                <div class="relative w-full overflow-auto">
+                    <table class="w-full border-collapse text-sm">
+                        <thead>
+                            <tr class="border-b border-soft bg-surface-hover">
+                                <th
+                                    v-for="col in ['name', 'family'] as const"
+                                    :key="col"
+                                    class="px-3 py-2 text-left text-[11px] font-medium tracking-wider text-ink-muted uppercase"
+                                    :class="col === 'family' ? 'w-40' : ''"
                                 >
-                                    {{ t('admin.components.sort.' + col) }}
-                                    <ArrowUp
-                                        v-if="
-                                            sortBy === col && sortDir === 'asc'
+                                    <button
+                                        type="button"
+                                        class="inline-flex items-center gap-1 uppercase transition-opacity hover:opacity-70"
+                                        @click="toggleSort(col)"
+                                    >
+                                        {{ t('admin.components.sort.' + col) }}
+                                        <ArrowUp
+                                            v-if="
+                                                sortBy === col &&
+                                                sortDir === 'asc'
+                                            "
+                                            class="size-3"
+                                        />
+                                        <ArrowDown
+                                            v-else-if="sortBy === col"
+                                            class="size-3"
+                                        />
+                                    </button>
+                                </th>
+                                <th
+                                    class="px-3 py-2 text-left text-[11px] font-medium tracking-wider text-ink-muted uppercase"
+                                >
+                                    {{ t('admin.components.description') }}
+                                </th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-soft">
+                            <tr
+                                v-for="entry in visible"
+                                :key="entry.type"
+                                class="align-top transition-colors hover:bg-surface-hover"
+                            >
+                                <td class="px-3 py-2.5">
+                                    <div class="font-medium text-ink">
+                                        {{ entry.name }}
+                                    </div>
+                                    <code class="text-[11px] text-ink-subtle">{{
+                                        entry.type
+                                    }}</code>
+                                </td>
+                                <td class="px-3 py-2.5">
+                                    <span
+                                        class="inline-flex items-center gap-1 rounded-pill bg-surface px-2 py-0.5 text-[11px] text-ink-muted"
+                                    >
+                                        {{
+                                            t(
+                                                'admin.components.family.' +
+                                                    entry.family,
+                                            )
+                                        }}
+                                    </span>
+                                    <span
+                                        v-if="entry.needs_data"
+                                        class="mt-1 inline-flex items-center gap-1 text-[11px] text-ink-subtle"
+                                        :title="
+                                            t('admin.components.needs_data')
                                         "
-                                        class="size-3"
-                                    />
-                                    <ArrowDown
-                                        v-else-if="sortBy === col"
-                                        class="size-3"
-                                    />
-                                </button>
-                            </th>
-                            <th
-                                class="px-3 py-2 text-left text-[11px] font-medium tracking-wider text-ink-muted uppercase"
-                            >
-                                {{ t('admin.components.description') }}
-                            </th>
-                        </tr>
-                    </thead>
-                    <tbody class="divide-y divide-soft">
-                        <tr
-                            v-for="entry in visible"
-                            :key="entry.type"
-                            class="align-top transition-colors hover:bg-surface-hover"
-                        >
-                            <td class="px-3 py-2.5">
-                                <div class="font-medium text-ink">
-                                    {{ entry.name }}
-                                </div>
-                                <code class="text-[11px] text-ink-subtle">{{
-                                    entry.type
-                                }}</code>
-                            </td>
-                            <td class="px-3 py-2.5">
-                                <span
-                                    class="inline-flex items-center gap-1 rounded-pill bg-surface px-2 py-0.5 text-[11px] text-ink-muted"
+                                    >
+                                        <Database class="size-3" />
+                                        {{ t('admin.components.needs_data') }}
+                                    </span>
+                                </td>
+                                <td class="px-3 py-2.5 text-xs text-ink-muted">
+                                    {{ entry.description }}
+                                </td>
+                            </tr>
+                            <tr v-if="visible.length === 0">
+                                <td
+                                    colspan="3"
+                                    class="px-3 py-6 text-center text-xs text-ink-subtle"
                                 >
-                                    {{
-                                        t(
-                                            'admin.components.family.' +
-                                                entry.family,
-                                        )
-                                    }}
-                                </span>
-                                <span
-                                    v-if="entry.needs_data"
-                                    class="mt-1 inline-flex items-center gap-1 text-[11px] text-ink-subtle"
-                                    :title="t('admin.components.needs_data')"
-                                >
-                                    <Database class="size-3" />
-                                    {{ t('admin.components.needs_data') }}
-                                </span>
-                            </td>
-                            <td class="px-3 py-2.5 text-xs text-ink-muted">
-                                {{ entry.description }}
-                            </td>
-                        </tr>
-                        <tr v-if="visible.length === 0">
-                            <td
-                                colspan="3"
-                                class="px-3 py-6 text-center text-xs text-ink-subtle"
-                            >
-                                {{ t('admin.components.none') }}
-                            </td>
-                        </tr>
-                    </tbody>
-                </table>
+                                    {{ t('admin.components.none') }}
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
             </div>
         </div>
     </AdminLayout>

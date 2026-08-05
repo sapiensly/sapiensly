@@ -71,7 +71,7 @@ function num(value: number): string {
     <AdminLayout :title="t('admin.nav.dashboard')">
         <div class="space-y-6">
             <!-- Header: title + subtitle + Export / Refresh buttons -->
-            <header class="flex items-start justify-between gap-4">
+            <header class="flex flex-wrap items-start justify-between gap-4">
                 <div class="space-y-1">
                     <h1
                         class="text-[22px] leading-tight font-semibold text-ink"

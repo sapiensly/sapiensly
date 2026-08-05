@@ -384,7 +384,7 @@ function uptime(seconds: number | null): string {
                 :description="t('admin.cloud.pgvector.description')"
             >
                 <template v-if="pgvector.enabled">
-                    <div class="grid grid-cols-3 gap-3">
+                    <div class="grid grid-cols-1 gap-3 sm:grid-cols-3">
                         <div
                             class="rounded-xs border border-soft bg-white/[0.02] p-3"
                         >

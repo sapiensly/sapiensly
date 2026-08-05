@@ -260,36 +260,46 @@ const chartSeries = computed(() => [
                 >
                     No usage yet.
                 </p>
-                <table v-else class="w-full text-sm">
-                    <thead>
-                        <tr
-                            class="border-b border-soft text-left text-xs tracking-wide text-ink-subtle uppercase"
-                        >
-                            <th class="py-2 font-medium">Model</th>
-                            <th class="py-2 text-right font-medium">Calls</th>
-                            <th class="py-2 text-right font-medium">Tokens</th>
-                            <th class="py-2 text-right font-medium">Cost</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <tr
-                            v-for="m in report.by_model"
-                            :key="m.model"
-                            class="border-b border-soft/50"
-                        >
-                            <td class="py-2 text-ink">{{ m.model }}</td>
-                            <td class="py-2 text-right text-ink-muted">
-                                {{ num(m.calls) }}
-                            </td>
-                            <td class="py-2 text-right text-ink-muted">
-                                {{ num(m.input_tokens + m.output_tokens) }}
-                            </td>
-                            <td class="py-2 text-right font-medium text-ink">
-                                {{ money(m.cost) }}
-                            </td>
-                        </tr>
-                    </tbody>
-                </table>
+                <div v-else class="relative w-full overflow-auto">
+                    <table class="w-full text-sm">
+                        <thead>
+                            <tr
+                                class="border-b border-soft text-left text-xs tracking-wide text-ink-subtle uppercase"
+                            >
+                                <th class="py-2 font-medium">Model</th>
+                                <th class="py-2 text-right font-medium">
+                                    Calls
+                                </th>
+                                <th class="py-2 text-right font-medium">
+                                    Tokens
+                                </th>
+                                <th class="py-2 text-right font-medium">
+                                    Cost
+                                </th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr
+                                v-for="m in report.by_model"
+                                :key="m.model"
+                                class="border-b border-soft/50"
+                            >
+                                <td class="py-2 text-ink">{{ m.model }}</td>
+                                <td class="py-2 text-right text-ink-muted">
+                                    {{ num(m.calls) }}
+                                </td>
+                                <td class="py-2 text-right text-ink-muted">
+                                    {{ num(m.input_tokens + m.output_tokens) }}
+                                </td>
+                                <td
+                                    class="py-2 text-right font-medium text-ink"
+                                >
+                                    {{ money(m.cost) }}
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
             </section>
         </div>
     </AdminLayout>

@@ -43,7 +43,7 @@ const modKey = computed(() =>
 <template>
     <header
         :class="[
-            'sp-topbar sticky top-0 z-10 flex h-14 items-center gap-3 px-6',
+            'sp-topbar sticky top-0 z-10 flex h-14 items-center gap-2 px-4 sm:gap-3 sm:px-6',
             scrolled && 'is-scrolled',
         ]"
     >
@@ -69,8 +69,15 @@ const modKey = computed(() =>
             aria-label="Breadcrumb"
             class="flex items-center gap-1.5 text-sm text-ink-muted"
         >
-            <span>{{ t('admin.breadcrumb.root') }}</span>
-            <span class="text-ink-faint">/</span>
+            <!--
+              The root crumb is the first thing to go below `sm`: it is the
+              same word on every admin page, so it costs width and says
+              nothing the title does not.
+            -->
+            <span class="hidden sm:inline">{{
+                t('admin.breadcrumb.root')
+            }}</span>
+            <span class="hidden text-ink-faint sm:inline">/</span>
             <span class="font-medium text-ink">{{ title }}</span>
         </nav>
 
@@ -80,18 +87,25 @@ const modKey = computed(() =>
           Search / command palette trigger — pill shape with a subtle
           accent-blue tint to match the reference. The ⌘K affordance inside
           is its own rounded pill for visual rhythm.
+
+          Below `md` it collapses to the search icon alone: a 260px minimum
+          does not fit beside the toggle and breadcrumb on a phone, and the
+          fixed width pushed the bell and half this button off-screen. The
+          placeholder and the ⌘K hint both go — there is no keyboard to press
+          on the viewport that hides them.
         -->
         <button
             type="button"
-            class="group flex h-9 min-w-[260px] items-center gap-2 rounded-pill border border-ink-muted/20 bg-surface pr-1.5 pl-3.5 text-[12px] text-ink-muted transition-colors hover:border-ink-muted/40 hover:text-ink"
+            class="group flex h-9 w-9 shrink-0 items-center justify-center gap-2 rounded-pill border border-ink-muted/20 bg-surface text-[12px] text-ink-muted transition-colors hover:border-ink-muted/40 hover:text-ink md:w-auto md:min-w-[260px] md:justify-start md:pr-1.5 md:pl-3.5"
+            :aria-label="t('admin.topbar.search_placeholder')"
             @click="emit('open-palette')"
         >
             <Search class="size-3.5 shrink-0 text-ink-muted" />
-            <span class="flex-1 text-left">
+            <span class="hidden flex-1 text-left md:block">
                 {{ t('admin.topbar.search_placeholder') }}
             </span>
             <kbd
-                class="shrink-0 rounded-pill border border-soft bg-surface-hover px-2 py-0.5 font-mono text-[10px] text-ink-subtle"
+                class="hidden shrink-0 rounded-pill border border-soft bg-surface-hover px-2 py-0.5 font-mono text-[10px] text-ink-subtle md:block"
             >
                 {{ modKey }}K
             </kbd>

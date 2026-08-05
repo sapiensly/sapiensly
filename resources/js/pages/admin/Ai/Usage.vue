@@ -278,76 +278,82 @@ const chartSeries = computed(() => [
                     >
                         No usage yet.
                     </p>
-                    <table v-else class="w-full text-sm">
-                        <thead>
-                            <tr
-                                class="border-b border-soft text-left text-xs tracking-wide text-ink-subtle uppercase"
-                            >
-                                <th class="py-2 font-medium">Organization</th>
-                                <th class="py-2 text-right font-medium">
-                                    System
-                                </th>
-                                <th class="py-2 text-right font-medium">
-                                    Total
-                                </th>
-                                <th class="py-2 text-right font-medium">
-                                    System cap
-                                </th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <tr
-                                v-for="o in report.by_org"
-                                :key="o.organization_id ?? 'personal'"
-                                class="border-b border-soft/50"
-                            >
-                                <td class="py-2 text-xs text-ink">
-                                    <Link
-                                        v-if="o.organization_id"
-                                        :href="`/admin/ai/usage/${o.organization_id}?days=${days}`"
-                                        class="text-accent-blue hover:underline"
-                                    >
-                                        {{ o.name ?? o.organization_id }}
-                                    </Link>
-                                    <span v-else class="text-ink-muted"
-                                        >— (personal)</span
-                                    >
-                                </td>
-                                <td class="py-2 text-right text-ink-muted">
-                                    {{ money(o.system_cost) }}
-                                </td>
-                                <td
-                                    class="py-2 text-right font-medium text-ink"
+                    <div v-else class="relative w-full overflow-auto">
+                        <table class="w-full text-sm">
+                            <thead>
+                                <tr
+                                    class="border-b border-soft text-left text-xs tracking-wide text-ink-subtle uppercase"
                                 >
-                                    {{ money(o.cost) }}
-                                </td>
-                                <td class="py-2 text-right">
-                                    <div
-                                        v-if="o.organization_id"
-                                        class="flex items-center justify-end gap-1"
-                                    >
-                                        <input
-                                            v-model.number="
-                                                capEdits[o.organization_id]
-                                            "
-                                            type="number"
-                                            min="0"
-                                            step="0.01"
-                                            placeholder="—"
-                                            class="w-20 rounded border border-medium bg-surface px-2 py-1 text-right text-xs text-ink"
-                                        />
-                                        <button
-                                            type="button"
-                                            class="rounded border border-medium px-2 py-1 text-[10px] text-ink-muted hover:text-ink"
-                                            @click="saveCap(o.organization_id)"
+                                    <th class="py-2 font-medium">
+                                        Organization
+                                    </th>
+                                    <th class="py-2 text-right font-medium">
+                                        System
+                                    </th>
+                                    <th class="py-2 text-right font-medium">
+                                        Total
+                                    </th>
+                                    <th class="py-2 text-right font-medium">
+                                        System cap
+                                    </th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr
+                                    v-for="o in report.by_org"
+                                    :key="o.organization_id ?? 'personal'"
+                                    class="border-b border-soft/50"
+                                >
+                                    <td class="py-2 text-xs text-ink">
+                                        <Link
+                                            v-if="o.organization_id"
+                                            :href="`/admin/ai/usage/${o.organization_id}?days=${days}`"
+                                            class="text-accent-blue hover:underline"
                                         >
-                                            Set
-                                        </button>
-                                    </div>
-                                </td>
-                            </tr>
-                        </tbody>
-                    </table>
+                                            {{ o.name ?? o.organization_id }}
+                                        </Link>
+                                        <span v-else class="text-ink-muted"
+                                            >— (personal)</span
+                                        >
+                                    </td>
+                                    <td class="py-2 text-right text-ink-muted">
+                                        {{ money(o.system_cost) }}
+                                    </td>
+                                    <td
+                                        class="py-2 text-right font-medium text-ink"
+                                    >
+                                        {{ money(o.cost) }}
+                                    </td>
+                                    <td class="py-2 text-right">
+                                        <div
+                                            v-if="o.organization_id"
+                                            class="flex items-center justify-end gap-1"
+                                        >
+                                            <input
+                                                v-model.number="
+                                                    capEdits[o.organization_id]
+                                                "
+                                                type="number"
+                                                min="0"
+                                                step="0.01"
+                                                placeholder="—"
+                                                class="w-20 rounded border border-medium bg-surface px-2 py-1 text-right text-xs text-ink"
+                                            />
+                                            <button
+                                                type="button"
+                                                class="rounded border border-medium px-2 py-1 text-[10px] text-ink-muted hover:text-ink"
+                                                @click="
+                                                    saveCap(o.organization_id)
+                                                "
+                                            >
+                                                Set
+                                            </button>
+                                        </div>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
                 </section>
 
                 <section class="rounded-sp-sm border border-soft bg-navy p-5">
@@ -360,38 +366,40 @@ const chartSeries = computed(() => [
                     >
                         No usage yet.
                     </p>
-                    <table v-else class="w-full text-sm">
-                        <thead>
-                            <tr
-                                class="border-b border-soft text-left text-xs tracking-wide text-ink-subtle uppercase"
-                            >
-                                <th class="py-2 font-medium">Model</th>
-                                <th class="py-2 text-right font-medium">
-                                    Calls
-                                </th>
-                                <th class="py-2 text-right font-medium">
-                                    Cost
-                                </th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <tr
-                                v-for="m in report.by_model"
-                                :key="m.model"
-                                class="border-b border-soft/50"
-                            >
-                                <td class="py-2 text-ink">{{ m.model }}</td>
-                                <td class="py-2 text-right text-ink-muted">
-                                    {{ num(m.calls) }}
-                                </td>
-                                <td
-                                    class="py-2 text-right font-medium text-ink"
+                    <div v-else class="relative w-full overflow-auto">
+                        <table class="w-full text-sm">
+                            <thead>
+                                <tr
+                                    class="border-b border-soft text-left text-xs tracking-wide text-ink-subtle uppercase"
                                 >
-                                    {{ money(m.cost) }}
-                                </td>
-                            </tr>
-                        </tbody>
-                    </table>
+                                    <th class="py-2 font-medium">Model</th>
+                                    <th class="py-2 text-right font-medium">
+                                        Calls
+                                    </th>
+                                    <th class="py-2 text-right font-medium">
+                                        Cost
+                                    </th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr
+                                    v-for="m in report.by_model"
+                                    :key="m.model"
+                                    class="border-b border-soft/50"
+                                >
+                                    <td class="py-2 text-ink">{{ m.model }}</td>
+                                    <td class="py-2 text-right text-ink-muted">
+                                        {{ num(m.calls) }}
+                                    </td>
+                                    <td
+                                        class="py-2 text-right font-medium text-ink"
+                                    >
+                                        {{ money(m.cost) }}
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
                 </section>
             </div>
         </div>

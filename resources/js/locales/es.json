@@ -441,6 +441,7 @@
     "admin.sidebar.back_to_app": "Volver a la app",
     "admin.sidebar.console": "Admin Console",
     "admin.sidebar.eyebrow": "ADMIN PANEL",
+    "admin.sidebar.mobile_nav_title": "Navegación",
     "admin.sidebar.section_admin": "Panel Admin",
     "admin.sidebar.sign_out": "Cerrar sesión",
     "admin.stack.description": "Cada pieza de software sobre la que se apoya esta plataforma — versiones y estado de un vistazo.",

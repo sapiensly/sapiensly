@@ -108,7 +108,7 @@ const rangeLabel = computed(() =>
     <AdminLayout :title="t('admin.nav.users')">
         <div class="space-y-5">
             <!-- Header -->
-            <header class="flex items-start justify-between gap-4">
+            <header class="flex flex-wrap items-start justify-between gap-4">
                 <div class="space-y-1">
                     <h1
                         class="text-[22px] leading-tight font-semibold text-ink"
@@ -240,7 +240,7 @@ const rangeLabel = computed(() =>
 
             <!-- Pagination: "Showing X users" — Prev | Page n of m | Next -->
             <nav
-                class="flex items-center justify-between pt-2 text-xs text-ink-muted"
+                class="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 pt-2 text-xs text-ink-muted"
             >
                 <span>
                     {{
