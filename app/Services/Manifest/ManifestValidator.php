@@ -744,7 +744,11 @@ class ManifestValidator
      */
     private function warnAboutFlatCaptureTypes(array $object, int $oi, SemanticLexicon $lex, array &$warnings): void
     {
-        $flat = ['string', 'long_text'];
+        // `url` counts as flat for this rule: a signature or a photo reachable
+        // only as a link cannot be captured, which is the same dead end the
+        // rule exists to name. An actual link field is excluded by NAME below,
+        // not by type.
+        $flat = ['string', 'long_text', 'url'];
         $latitude = null;
         $longitude = null;
 
@@ -765,7 +769,7 @@ class ManifestValidator
                 continue;
             }
 
-            if ($lex->matches('signature', ...$words)) {
+            if ($lex->matches('signature', ...$words) && ! $lex->matches('weblink', ...$words)) {
                 $warnings[] = new ManifestValidationError(
                     $at,
                     "'{$slug}' is a signature held as text, which cannot store one. Use type `file` with `capture: \"signature\"` — it gives the person a pad to sign on and stores the result as a PNG.",

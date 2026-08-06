@@ -1267,7 +1267,12 @@ class AppScaffolder
      */
     private function typeForCapture(array $field, string $lang): array
     {
-        if (! in_array((string) ($field['type'] ?? ''), ['string', 'long_text'], true)) {
+        // `url` belongs here beside the text types: a photo typed as a link
+        // cannot be taken on the spot either, and the model reaches for `url`
+        // on a field called «Foto de evidencia» about as often as it reaches
+        // for `string`. The weblink exclusion below is what keeps an actual
+        // link field — «Foto URL» — a url.
+        if (! in_array((string) ($field['type'] ?? ''), ['string', 'long_text', 'url'], true)) {
             return $field;
         }
 

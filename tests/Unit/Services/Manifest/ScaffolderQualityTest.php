@@ -2298,15 +2298,34 @@ it('types a photo, a signature and a location from their names', function () {
         ->and($fields['folio']['type'])->toBe('string');
 });
 
+it('types a photo the model reached for `url` on', function () {
+    // Found by scaffolding a live probe: the model typed «Foto de evidencia»
+    // as `url`, which slipped past both this rule and R11 — both only looked
+    // at the text types. A photo reachable only as a link cannot be taken on
+    // the spot, which is the same dead end the rule exists to name.
+    $fields = collect(capturedScaffold([
+        ['name' => 'Folio', 'type' => 'string'],
+        ['name' => 'Foto de evidencia', 'type' => 'url'],
+        ['name' => 'Firma del responsable', 'type' => 'url'],
+    ]))->keyBy('slug');
+
+    expect($fields['foto_de_evidencia']['type'])->toBe('file')
+        ->and($fields['foto_de_evidencia']['capture'])->toBe('camera')
+        ->and($fields['firma_del_responsable']['type'])->toBe('file')
+        ->and($fields['firma_del_responsable']['capture'])->toBe('signature');
+});
+
 it('leaves a link to an image as text', function () {
     // `foto_url` points AT an image, it does not hold one — the same exclusion
     // R11 makes.
     $fields = collect(capturedScaffold([
         ['name' => 'Folio', 'type' => 'string'],
         ['name' => 'Foto URL', 'type' => 'string'],
+        ['name' => 'Enlace de la foto', 'type' => 'url'],
     ]))->keyBy('slug');
 
-    expect($fields['foto_url']['type'])->toBe('string');
+    expect($fields['foto_url']['type'])->toBe('string')
+        ->and($fields['enlace_de_la_foto']['type'])->toBe('url');
 });
 
 it('raises no design warning on a scaffold that carries captures', function () {
