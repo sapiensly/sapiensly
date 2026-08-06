@@ -1,4 +1,5 @@
 import { onMounted, onUnmounted, ref } from 'vue';
+import { runtimeWord } from './words';
 
 /**
  * Whether there is a signal, and how old what you are looking at is.
@@ -94,6 +95,11 @@ export function useOfflineStatus() {
  *
  * Coarse on purpose: "hace 2 h" is actionable and "hace 127 minutos" is not,
  * and a precise number invites a trust the number does not deserve.
+ *
+ * The words come from the runtime's own dictionary rather than a pair of
+ * ternaries, because an app is read by ITS users in ITS language — the same
+ * reason `words.ts` exists at all. Shipped with an es/en ternary and corrected
+ * here; four languages was always the number.
  */
 export function describeAge(at: Date | null, locale: string): string | null {
     if (!at) {
@@ -101,21 +107,18 @@ export function describeAge(at: Date | null, locale: string): string | null {
     }
 
     const minutes = Math.max(0, Math.round((Date.now() - at.getTime()) / 60_000));
-    const es = locale.startsWith('es');
 
     if (minutes < 1) {
-        return es ? 'hace un momento' : 'just now';
+        return runtimeWord(locale, 'offline_just_now');
     }
     if (minutes < 60) {
-        return es ? `hace ${minutes} min` : `${minutes} min ago`;
+        return runtimeWord(locale, 'offline_minutes', { n: minutes });
     }
 
     const hours = Math.round(minutes / 60);
     if (hours < 24) {
-        return es ? `hace ${hours} h` : `${hours} h ago`;
+        return runtimeWord(locale, 'offline_hours', { n: hours });
     }
 
-    const days = Math.round(hours / 24);
-
-    return es ? `hace ${days} d` : `${days} d ago`;
+    return runtimeWord(locale, 'offline_days', { n: Math.round(hours / 24) });
 }

@@ -22,6 +22,7 @@ use App\Http\Controllers\AppVersionsController;
 use App\Http\Controllers\AppWebManifestController;
 use App\Http\Controllers\AppWorkflowController;
 use App\Http\Middleware\BindAppEnvironment;
+use App\Http\Middleware\IdempotentRuntimeWrite;
 use Illuminate\Support\Facades\Route;
 
 Route::middleware([
@@ -203,9 +204,11 @@ Route::middleware([
 
     // The environment binds here too, or a form submitted from the sandbox
     // would write its record into production.
+    // Idempotency sits here and only here: this is the one endpoint the offline
+    // queue replays, and a replayed create must not produce a second record.
     Route::post('/r/{app_slug}/actions', AppActionController::class)
         ->where('app_slug', '[a-z][a-z0-9_]*')
-        ->middleware(['throttle:runtime-actions', BindAppEnvironment::class])
+        ->middleware(['throttle:runtime-actions', BindAppEnvironment::class, IdempotentRuntimeWrite::class])
         ->name('apps.runtime.actions');
 
     // Runtime agent (power #3): end-users converse with the app's embedded

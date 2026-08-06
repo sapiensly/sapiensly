@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { enqueue } from './offlineQueue';
 
 /**
  * What every record mutation answers with, whoever asked.
@@ -20,6 +21,15 @@ export interface WriteResult<T = unknown> {
     headers?: Record<string, string>;
     /** The parsed error body, when the server sent one. */
     body?: unknown;
+    /**
+     * The write is held on this device and will be sent when there is a signal.
+     *
+     * It is deliberately NOT `ok`. A caller that treats this as success shows a
+     * green toast for something no server has agreed to yet — the exact
+     * dishonesty the offline queue exists to avoid. A caller that wants to say
+     * "saved here" has to look at this field and say those words.
+     */
+    queued?: boolean;
 }
 
 /**
@@ -47,7 +57,23 @@ export function useRuntimeWrite() {
     async function write<T = unknown>(
         path: string,
         payload: unknown,
-        options: { timeoutMs?: number } = {},
+        options: {
+            timeoutMs?: number;
+            /**
+             * Hold this write when the request never reaches a server, instead
+             * of failing.
+             *
+             * OPT-IN, and off by default, because most of what goes through
+             * this seam must NOT be held. `/extract` is a model call whose
+             * answer is wanted now; `/bulk` acts on a selection that is stale
+             * by the time the signal returns; a form submit has its own
+             * one-shot guard. Only a manifest action sequence — the app's own
+             * create/update/delete — is the same request an hour later.
+             */
+            queueOffline?: boolean;
+            /** Shown in the "could not be saved" list. Required to queue. */
+            label?: string;
+        } = {},
     ): Promise<WriteResult<T>> {
         try {
             const { data } = await axios.post<T>(path, payload, {
@@ -63,6 +89,16 @@ export function useRuntimeWrite() {
                     data?: unknown;
                 };
             };
+
+            // No status means it never reached a server. That — and only that —
+            // is what the queue is for: a 422 held for an hour is still a 422.
+            if (err.response?.status === undefined && options.queueOffline) {
+                const entry = await enqueue(path, payload, options.label ?? path);
+
+                if (entry !== null) {
+                    return { ok: false, queued: true };
+                }
+            }
 
             return {
                 ok: false,

@@ -6,6 +6,7 @@ import {
     DropdownMenuLabel,
     DropdownMenuSeparator,
 } from '@/components/ui/dropdown-menu';
+import { purgeOfflineStorage } from '@/lib/offlineStorage';
 import { logout } from '@/routes';
 import { edit } from '@/routes/profile';
 import type { User } from '@/types';
@@ -33,6 +34,11 @@ const auth = computed(() => page.props.auth);
 
 const handleLogout = () => {
     router.flushAll();
+    // Inertia's own caches are not the only thing this person leaves behind:
+    // the runtime's offline stores hold rows they were allowed to see and
+    // writes they had not sent. The next person at this device is not
+    // necessarily them. Fire-and-forget — the navigation must not wait on it.
+    void purgeOfflineStorage();
 };
 
 const switchAccount = (organizationId: string | null) => {

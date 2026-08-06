@@ -4,6 +4,7 @@ import { inject } from 'vue';
 import { toast } from 'vue-sonner';
 import { requestScan } from './scanner';
 import { useRuntimeWrite } from './useRuntimeWrite';
+import { runtimeWord } from './words';
 
 export type RuntimeAction = Record<string, unknown> & { type: string };
 
@@ -199,6 +200,30 @@ function interpolateTemplate(raw: unknown, ctx: ExecutionContext): unknown {
 }
 
 /**
+ * Whether this sequence is still the right thing to do an hour from now.
+ *
+ * The app's own create/update/delete are: a work order closed in a basement is
+ * closed whenever the close lands. Two things are not, and both are refused
+ * rather than queued.
+ *
+ * `run_workflow` reaches OUTWARD — an email, a webhook, a message to a
+ * customer. Held for six hours it arrives about a visit that already ended,
+ * and unlike a record write there is no undo on the other side of it.
+ *
+ * The demo environment is refused because a queued write carries no
+ * environment binding of its own: the flush is a plain POST, and the server
+ * would land it wherever the session then points. Sandbox work quietly written
+ * into production is a worse outcome than a sandbox that needs a signal.
+ */
+export function mayWaitForASignal(actions: RuntimeAction[], environment: string | null): boolean {
+    if (environment) {
+        return false;
+    }
+
+    return actions.every((a) => a.type !== 'run_workflow');
+}
+
+/**
  * Execute a manifest action_sequence. Server-side actions (create/update/
  * delete_record) are POSTed in one batch to /r/{slug}/actions; the response
  * carries `client_actions` that we then run locally (navigate, refresh, toast,
@@ -206,6 +231,7 @@ function interpolateTemplate(raw: unknown, ctx: ExecutionContext): unknown {
  */
 export function useActionExecutor() {
     const environment = inject<string | null>('runtimeEnvironment', null);
+    const locale = inject<string>('runtimeLocale', 'en');
     // Every record mutation in the runtime goes out through here — see
     // useRuntimeWrite for why that matters before offline exists.
     const { write } = useRuntimeWrite();
@@ -256,7 +282,20 @@ export function useActionExecutor() {
                 row: ctx.row ?? {},
                 page: ctx.page ?? currentPageSlug(),
             },
+            {
+                queueOffline: mayWaitForASignal(actions, environment),
+                label: actions.map((a) => a.type).join(' + '),
+            },
         );
+
+        // Held on this device. Said in those words — a queued write has not
+        // been agreed to by any server, and a green toast here would be the
+        // one lie this feature must not tell.
+        if (result.queued) {
+            toast.success(runtimeWord(locale, 'offline_saved_here'));
+
+            return { ok: false };
+        }
 
         if (result.ok) {
             const data = (result.data ?? {}) as Record<string, unknown>;
@@ -331,8 +370,11 @@ export function useActionExecutor() {
             }
         }
         if (toastMessages.length === 0 && result.status === undefined) {
-            // No structured body at all — network error / timeout.
-            toastMessages.push('The request failed. Please try again.');
+            // Never reached a server, and it was not queued — either this
+            // sequence may not wait (a workflow, the sandbox) or the device
+            // cannot hold it. Say that nothing was saved, because the form the
+            // person is looking at still has their work in it.
+            toastMessages.push(runtimeWord(locale, 'offline_not_queued'));
         }
         toastMessages.forEach((message) => toast.error(message));
 

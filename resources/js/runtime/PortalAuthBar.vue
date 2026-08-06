@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { purgeOfflineStorage } from '@/lib/offlineStorage';
 import { LogIn, LogOut, Mail } from '@lucide/vue';
 import axios from 'axios';
 import { ref } from 'vue';
@@ -41,6 +42,11 @@ async function requestLink() {
 }
 
 function logout() {
+    // The portal is the surface most likely to be a shared device — a tablet at
+    // a counter, a phone passed around a crew. Forget the cached rows and the
+    // unsent writes before handing it to whoever is next.
+    void purgeOfflineStorage();
+
     const form = document.createElement('form');
     form.method = 'POST';
     form.action = `${props.mount}/auth/logout`;

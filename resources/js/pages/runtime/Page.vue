@@ -6,6 +6,7 @@ import ConfirmDialog from '@/runtime/ConfirmDialog.vue';
 import EnvironmentBar from '@/runtime/EnvironmentBar.vue';
 import { manifestFontHrefs } from '@/runtime/fonts';
 import OfflineBar from '@/runtime/OfflineBar.vue';
+import { startOfflineQueue } from '@/runtime/offlineQueue';
 import LandingChatbotBubble from '@/runtime/LandingChatbotBubble.vue';
 import RolePreviewBar from '@/runtime/RolePreviewBar.vue';
 import RuntimeChatPanel from '@/runtime/RuntimeChatPanel.vue';
@@ -349,6 +350,11 @@ function raiseWhenSettled(): void {
 watch(blockDataPending, raiseWhenSettled);
 
 onMounted(() => {
+    // Sends anything queued while there was no signal. Safe to call on every
+    // mount: it reads the counts, and flushes only when there is a connection
+    // and no flush already running.
+    startOfflineQueue();
+
     const settle = () => {
         fontsSettled = true;
         raiseWhenSettled();
