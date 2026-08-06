@@ -274,7 +274,203 @@ class ManifestValidator
             $this->lintBlockDesign($manifest, $blocks, "/pages/{$pi}/blocks", $warnings);
         }
 
+        $this->lintDeadNavigation($manifest, $warnings);
+        $this->lintUnopenableObjects($manifest, $warnings);
         $this->lintObjectShape($manifest, $warnings);
+    }
+
+    /**
+     * R12 — a control that navigates to a page nothing serves.
+     *
+     * A page can be removed; the buttons pointing at it cannot follow it out.
+     * Observed on a live build: a review turn deleted twelve pages by index and
+     * left four «Abrir» columns aimed at `/clientes_detail_2`,
+     * `/tecnicos_detail_2`, `/activos_detail_2` and `/lineas_refaccion_detail`.
+     * The manifest stayed schema-valid, `audit_app` answered "ok, 0 errors, 0
+     * warnings", and the app shipped with four buttons that go nowhere.
+     *
+     * Nothing here needs a judgement call: either a page serves the path or it
+     * does not.
+     *
+     * @param  array<string, mixed>  $manifest
+     * @param  list<ManifestValidationError>  $warnings
+     */
+    private function lintDeadNavigation(array $manifest, array &$warnings): void
+    {
+        $served = [];
+        foreach ($manifest['pages'] ?? [] as $page) {
+            $path = self::normalizeNavPath((string) ($page['path'] ?? ''));
+            if ($path !== '') {
+                $served[$path] = true;
+            }
+        }
+
+        // No pages declare a path (a manifest mid-build): nothing to check
+        // against, and every link would look broken.
+        if ($served === []) {
+            return;
+        }
+
+        foreach ($manifest['pages'] ?? [] as $pi => $page) {
+            $this->eachNavigation($page, "/pages/{$pi}", '', function (string $to, string $pointer, string $label) use ($served, &$warnings): void {
+                $path = self::normalizeNavPath($to);
+
+                // External links, and paths built at click time out of a
+                // template, are not ours to resolve.
+                if ($path === '' || str_contains($path, '{{')) {
+                    return;
+                }
+
+                if (! isset($served[$path])) {
+                    $named = $label === '' ? 'a control' : "'{$label}'";
+                    $warnings[] = new ManifestValidationError(
+                        $pointer,
+                        "{$named} navigates to '{$path}', which no page serves — pressing it goes nowhere. Point it at an existing page, or remove the control.",
+                        'design_smell',
+                    );
+                }
+            });
+        }
+    }
+
+    /**
+     * The path part of a navigation target, comparable to a page's `path`.
+     */
+    private static function normalizeNavPath(string $to): string
+    {
+        $path = trim(explode('#', explode('?', trim($to), 2)[0], 2)[0]);
+
+        foreach (['http://', 'https://', '//', 'mailto:', 'tel:'] as $external) {
+            if (str_starts_with($path, $external)) {
+                return '';
+            }
+        }
+
+        if ($path === '' || $path === '/') {
+            return $path;
+        }
+
+        return '/'.trim($path, '/');
+    }
+
+    /**
+     * Every `navigate` action anywhere under a node, with its JSON pointer and
+     * the nearest label above it.
+     *
+     * Walks generically rather than visiting the places navigations are known
+     * to live (a button's `on_click`, a table column's, a form's `on_submit`,
+     * a tier's cta, …) — that list is exactly the kind of thing that goes
+     * stale, and a navigation the walk misses is a broken link nobody reports.
+     *
+     * @param  callable(string, string, string): void  $emit
+     */
+    private function eachNavigation(mixed $node, string $pointer, string $label, callable $emit): void
+    {
+        if (! is_array($node)) {
+            return;
+        }
+
+        foreach (['label', 'title'] as $key) {
+            if (is_string($node[$key] ?? null) && trim($node[$key]) !== '') {
+                $label = trim($node[$key]);
+                break;
+            }
+        }
+
+        if (($node['type'] ?? null) === 'navigate' && is_string($node['to'] ?? null)) {
+            $emit($node['to'], $pointer, $label);
+        }
+
+        foreach ($node as $key => $child) {
+            if (is_array($child)) {
+                $this->eachNavigation($child, $pointer.'/'.$key, $label, $emit);
+            }
+        }
+    }
+
+    /**
+     * R13 — an object you can list but never open.
+     *
+     * Fires ONLY when the app already uses detail pages for something else. An
+     * app with no detail pages at all is a design choice (a dashboard, a data
+     * entry console); an app with detail pages for four objects out of six is
+     * an oversight, and the two left out are the ones a row click dead-ends on.
+     *
+     * That was the shape of the live failure: `ordenes` — the app's central
+     * object, with five views built over it — ended up with no detail page,
+     * while clientes, técnicos, activos and refacciones each kept theirs.
+     *
+     * @param  array<string, mixed>  $manifest
+     * @param  list<ManifestValidationError>  $warnings
+     */
+    private function lintUnopenableObjects(array $manifest, array &$warnings): void
+    {
+        /** A block that shows MANY records of an object — the thing you open from. */
+        $listTypes = ['table', 'kanban', 'calendar', 'gantt', 'map', 'card_grid', 'data_grid'];
+
+        $detailed = [];
+        $listedOn = [];
+
+        foreach ($manifest['pages'] ?? [] as $page) {
+            $this->eachBlockOf($page['blocks'] ?? [], function (array $block) use ($page, $listTypes, &$detailed, &$listedOn): void {
+                $objectId = $block['object_id'] ?? ($block['data_source']['object_id'] ?? null);
+                if (! is_string($objectId)) {
+                    return;
+                }
+
+                if (($block['type'] ?? '') === 'record_detail') {
+                    $detailed[$objectId] = true;
+                } elseif (in_array($block['type'] ?? '', $listTypes, true)) {
+                    $listedOn[$objectId] ??= (string) ($page['slug'] ?? '');
+                }
+            });
+        }
+
+        if ($detailed === []) {
+            return;
+        }
+
+        foreach ($manifest['objects'] ?? [] as $oi => $object) {
+            $id = (string) ($object['id'] ?? '');
+            if ($id === '' || isset($detailed[$id]) || ! isset($listedOn[$id])) {
+                continue;
+            }
+
+            $name = (string) ($object['slug'] ?? $oi);
+            $warnings[] = new ManifestValidationError(
+                "/objects/{$oi}",
+                "'{$name}' is listed on '{$listedOn[$id]}' but no page shows one of them — every other listed object here has a detail page. Add one with a record_detail block, or say why this object is list-only.",
+                'design_smell',
+            );
+        }
+    }
+
+    /**
+     * Visit every node under a tree, however deeply nested.
+     *
+     * Generic on purpose: descending only `blocks` misses a table inside
+     * `tabs[i].blocks`, which is where the central object's list lives on every
+     * app the builder scaffolds with views. The first cut of this walk did
+     * exactly that and reported the small child object while staying silent
+     * about the one the whole app is built around.
+     *
+     * @param  callable(array<string, mixed>): void  $visit
+     */
+    private function eachBlockOf(mixed $node, callable $visit): void
+    {
+        if (! is_array($node)) {
+            return;
+        }
+
+        if (isset($node['type']) && is_string($node['type'])) {
+            $visit($node);
+        }
+
+        foreach ($node as $child) {
+            if (is_array($child)) {
+                $this->eachBlockOf($child, $visit);
+            }
+        }
     }
 
     /**

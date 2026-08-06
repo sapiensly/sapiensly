@@ -3992,3 +3992,128 @@ it('design-lint R11: leaves a lone latitude alone', function () {
 
     expect(designWarnings($r)->pluck('message')->implode(' '))->not->toContain('splits a point');
 });
+
+/**
+ * A manifest for the two rules about getting FROM a list TO a record.
+ *
+ * Both were written from one live build. A review turn deleted twelve pages by
+ * index; the manifest stayed schema-valid, `audit_app` answered "ok, 0 errors,
+ * 0 warnings", and the app shipped with five «Abrir» buttons pointing at pages
+ * that no longer existed and no way at all to open an order — the object the
+ * whole app was built around.
+ */
+function listAndDetailManifest(bool $withDetailPage = true, string $openTo = '/clientes_detail'): array
+{
+    $m = baseManifest();
+    $objectId = $m['objects'][0]['id'];
+    $fieldId = $m['objects'][0]['fields'][0]['id'];
+
+    $pages = [[
+        'id' => id('pag'), 'slug' => 'clientes', 'name' => 'Clientes', 'path' => '/clientes',
+        'blocks' => [[
+            'id' => id('blk'), 'type' => 'table',
+            'data_source' => ['object_id' => $objectId],
+            'columns' => [
+                ['id' => id('col'), 'field_id' => $fieldId],
+                ['id' => id('col'), 'type' => 'action', 'label' => 'Abrir', 'on_click' => [
+                    ['type' => 'navigate', 'to' => $openTo.'?id={{row.id}}'],
+                ]],
+            ],
+        ]],
+    ]];
+
+    if ($withDetailPage) {
+        $pages[] = [
+            'id' => id('pag'), 'slug' => 'clientes_detail', 'name' => 'Cliente', 'path' => '/clientes_detail',
+            'blocks' => [[
+                'id' => id('blk'), 'type' => 'record_detail',
+                'object_id' => $objectId, 'record_id_expression' => '{{params.id}}',
+                'fields' => [['field_id' => $fieldId]],
+            ]],
+        ];
+    }
+
+    $m['pages'] = $pages;
+
+    return $m;
+}
+
+it('design-lint R12: warns when a control navigates to a page nothing serves', function () {
+    $r = (new ManifestValidator)->validate(listAndDetailManifest(openTo: '/clientes_detail_2'));
+    $warning = designWarnings($r)->firstWhere(fn ($w) => str_contains($w->message, 'no page serves'));
+
+    expect($warning)->not->toBeNull()
+        ->and($warning->message)->toContain('/clientes_detail_2')
+        // Named, so the author knows which button to look at.
+        ->and($warning->message)->toContain("'Abrir'")
+        // Pointed at the action itself, not at the page.
+        ->and($warning->path)->toContain('/on_click/');
+});
+
+it('design-lint R12: says nothing when the target exists', function () {
+    $r = (new ManifestValidator)->validate(listAndDetailManifest());
+
+    expect(designWarnings($r)->pluck('message')->implode(' '))->not->toContain('no page serves');
+});
+
+it('design-lint R12: finds a link buried inside tabs', function () {
+    // The central object's list lives in `tabs[i].blocks` on every app the
+    // builder scaffolds with views. A walk that only descends `blocks` misses
+    // exactly the one that matters — the first cut of this rule did.
+    $m = listAndDetailManifest();
+    $table = $m['pages'][0]['blocks'][0];
+    $m['pages'][0]['blocks'][0] = [
+        'id' => id('blk'), 'type' => 'tabs',
+        'tabs' => [['id' => id('tab'), 'label' => 'Lista', 'blocks' => [
+            array_replace_recursive($table, ['columns' => [1 => ['on_click' => [['to' => '/nowhere']]]]]),
+        ]]],
+    ];
+
+    $r = (new ManifestValidator)->validate($m);
+    expect(designWarnings($r)->pluck('message')->implode(' '))->toContain('/nowhere');
+});
+
+it('design-lint R12: leaves external links and click-time templates alone', function () {
+    foreach (['https://example.test/x', 'mailto:a@b.test', '/{{row.slug}}'] as $target) {
+        $r = (new ManifestValidator)->validate(listAndDetailManifest(openTo: $target));
+
+        expect(designWarnings($r)->pluck('message')->implode(' '))
+            ->not->toContain('no page serves');
+    }
+});
+
+it('design-lint R13: warns about an object you can list but never open', function () {
+    $m = listAndDetailManifest();
+    $objectId = $m['objects'][0]['id'];
+
+    // A second object, listed alongside the first but with no detail page.
+    $m['objects'][] = [
+        'id' => id('obj'), 'slug' => 'ordenes', 'name' => 'Orden',
+        'fields' => [['id' => id('fld'), 'slug' => 'folio', 'name' => 'Folio', 'type' => 'string']],
+    ];
+    $orders = $m['objects'][1];
+    $m['pages'][] = [
+        'id' => id('pag'), 'slug' => 'ordenes', 'name' => 'Órdenes', 'path' => '/ordenes',
+        'blocks' => [[
+            'id' => id('blk'), 'type' => 'table',
+            'data_source' => ['object_id' => $orders['id']],
+            'columns' => [['id' => id('col'), 'field_id' => $orders['fields'][0]['id']]],
+        ]],
+    ];
+
+    $r = (new ManifestValidator)->validate($m);
+    $messages = designWarnings($r)->pluck('message')->implode(' ');
+
+    expect($messages)->toContain("'ordenes' is listed on 'ordenes'")
+        // The object that HAS a detail page is not mentioned.
+        ->and($messages)->not->toContain("'clientes' is listed");
+    expect($objectId)->not->toBeEmpty();
+});
+
+it('design-lint R13: stays quiet in an app that uses no detail pages at all', function () {
+    // No detail page anywhere is a design choice — a dashboard, a data-entry
+    // console. Detail pages for four objects out of six is an oversight.
+    $r = (new ManifestValidator)->validate(listAndDetailManifest(withDetailPage: false, openTo: '/clientes'));
+
+    expect(designWarnings($r)->pluck('message')->implode(' '))->not->toContain('but no page shows one of them');
+});
