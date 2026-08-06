@@ -1014,8 +1014,16 @@ class AppScaffolder
 
         // Pass 5: a POS-style screen (product grid + live cart) for each triad.
         $posPages = [];
-        foreach ($posSpecs as $spec) {
-            $posPages[] = $this->buildPosPage($spec, $lang, $usedSlugs);
+        // NOT `$spec` — that is the caller's spec, still needed thirty lines
+        // below for the summary fallback. Shadowing it here crashed every
+        // scaffold where the POS module fired AND the fallback was reached
+        // (a long brief with no model-written summary) with an unhelpful
+        // "Undefined array key objects". Found from the outside: three
+        // shop-flavoured briefs failed through `scaffold_app` in a row while a
+        // field-service one went through, because the latter builds no POS
+        // pages and so never reached the shadowing.
+        foreach ($posSpecs as $posSpec) {
+            $posPages[] = $this->buildPosPage($posSpec, $lang, $usedSlugs);
             $usedSlugs[] = end($posPages)['slug'];
         }
 

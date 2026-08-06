@@ -2224,3 +2224,32 @@ it('leaves a spec with no request text exactly as it was', function () {
     // they must keep the behaviour they had.
     expect(posPageSlugs(posSpec()))->toContain('pos');
 });
+
+it('survives building a POS page when the summary fallback is needed', function () {
+    // The two conditions together: the POS module produces pages (so the loop
+    // runs) AND the app description is long enough with no model-written
+    // summary that the mechanical fallback is reached. The loop variable used
+    // to shadow the caller's spec, so the fallback read the last POS spec and
+    // died on "Undefined array key objects". Three shop briefs failed through
+    // `scaffold_app` in a row before this was found.
+    $spec = posSpec('Punto de venta en el mostrador: el cajero cobra al cliente con un carrito.');
+    $coercions = [];
+
+    $base = [
+        'schema_version' => '1.0.0', 'id' => 'app_pos2', 'slug' => 'pos_probe2', 'name' => 'Probe', 'version' => 1,
+        'objects' => [], 'pages' => [],
+        // Longer than MAX_SUMMARY_LENGTH, which is what sends the code down the
+        // fallback branch that touched the shadowed variable.
+        'description' => str_repeat('Una descripción larga del negocio. ', 20),
+        'settings' => ['default_locale' => 'es-MX', 'default_currency' => 'MXN'],
+        'permissions' => ['roles' => [['id' => 'rol_admin000', 'slug' => 'admin', 'name' => 'Admin']]],
+    ];
+
+    $assembled = app(AppScaffolder::class)->assemble(
+        $base,
+        app(AppScaffolder::class)->normalizeSpec($spec, $coercions) + array_intersect_key($spec, ['request' => true]),
+    );
+
+    expect(collect($assembled['pages'])->pluck('slug'))->toContain('pos')
+        ->and($assembled['objects'])->not->toBeEmpty();
+});
