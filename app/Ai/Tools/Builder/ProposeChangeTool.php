@@ -3,6 +3,8 @@
 namespace App\Ai\Tools\Builder;
 
 use App\Models\App;
+use App\Models\BuildFinding;
+use App\Services\Builder\BuildFindingLedger;
 use App\Services\Manifest\AppManifestService;
 use App\Services\Manifest\ManifestIdFiller;
 use App\Services\Manifest\ManifestPatch;
@@ -60,11 +62,31 @@ class ProposeChangeTool implements Tool
         $this->onProgress = $callback;
     }
 
+    /** Who to blame in the failure ledger. Unset until the turn names a model. */
+    private ?string $conversationId = null;
+
+    private ?string $ledgerModel = null;
+
+    /** Warning keys already logged this turn, so one smell counts once. */
+    private array $loggedWarnings = [];
+
     public function __construct(
         private App $appModel,
         private AppManifestService $manifestService,
         private ManifestValidator $validator,
     ) {}
+
+    /**
+     * Attribute this turn's rejections and warnings to a conversation and the
+     * model driving it, so the ledger can answer "which model gets this wrong
+     * most often?". Called once the builder has resolved its model — until
+     * then the findings are still recorded, just unattributed.
+     */
+    public function attribute(?string $conversationId, ?string $model): void
+    {
+        $this->conversationId = $conversationId;
+        $this->ledgerModel = $model;
+    }
 
     public function name(): string
     {
@@ -184,17 +206,18 @@ DESC;
         try {
             $draft = $this->applyPatch($base, $ops);
         } catch (\Throwable $e) {
-            return [
-                'ok' => false,
-                'errors' => [[
-                    // Point at the op that failed, not the batch: with several
-                    // ops in flight, "/ops" leaves the author re-checking all
-                    // of them.
-                    'path' => $e instanceof ManifestPatchException ? $e->pointer() : '/ops',
-                    'message' => 'Patch could not be applied: '.$e->getMessage(),
-                    'code' => 'patch_apply_failed',
-                ]],
-            ];
+            $errors = [[
+                // Point at the op that failed, not the batch: with several
+                // ops in flight, "/ops" leaves the author re-checking all
+                // of them.
+                'path' => $e instanceof ManifestPatchException ? $e->pointer() : '/ops',
+                'message' => 'Patch could not be applied: '.$e->getMessage(),
+                'code' => 'patch_apply_failed',
+            ]];
+
+            $this->logFindings(BuildFinding::SIGNAL_PATCH_REJECTED, $errors);
+
+            return ['ok' => false, 'errors' => $errors];
         }
 
         // The app goes in so owner-scoped rules (a chatbot binding that names
@@ -202,10 +225,10 @@ DESC;
         // rather than at createVersion.
         $validation = $this->validator->validate($draft, $this->appModel);
         if (! $validation->valid) {
-            return [
-                'ok' => false,
-                'errors' => $this->withSchemaHints($validation->errorsArray(), $draft),
-            ];
+            $errors = $this->withSchemaHints($validation->errorsArray(), $draft);
+            $this->logFindings(BuildFinding::SIGNAL_PATCH_REJECTED, $errors);
+
+            return ['ok' => false, 'errors' => $errors];
         }
 
         $this->runningDraft = $draft;
@@ -243,11 +266,67 @@ DESC;
         // them, or tell the user plainly what could not be completed and why.
         $warnings = $validation->warningsArray();
         if ($warnings !== []) {
+            $this->logFindings(BuildFinding::SIGNAL_DESIGN_SMELL, $warnings);
             $response['warnings'] = $warnings;
             $response['message'] .= ' WARNING: some controls have no effect (see `warnings`). Do NOT report success until each is fixed or you have told the user exactly what you could not complete.';
         }
 
         return $response;
+    }
+
+    /**
+     * Post a batch of validator output to the build-failure ledger.
+     *
+     * Two of the three signals it collects originate here: a rejected patch is
+     * the model believing something untrue about the manifest, and a design
+     * warning is a patch that applied but was built wrong. Both are already
+     * classified with a code and a path — the ledger just keeps them instead of
+     * letting the turn consume them and move on.
+     *
+     * Warnings are deduplicated across the turn. They are recomputed over the
+     * WHOLE draft on every propose_change call, so a single unfixed smell would
+     * otherwise be counted once per call and swamp the rankings. Rejections are
+     * NOT deduplicated: the same patch refused twice is two attempts, and that
+     * repetition is exactly the pattern worth seeing.
+     *
+     * @param  list<array<string, mixed>>  $items
+     */
+    private function logFindings(string $signal, array $items): void
+    {
+        $dedupe = $signal === BuildFinding::SIGNAL_DESIGN_SMELL;
+
+        $findings = [];
+        foreach ($items as $item) {
+            $code = isset($item['code']) ? (string) $item['code'] : null;
+            $path = isset($item['path']) ? (string) $item['path'] : null;
+
+            if ($dedupe) {
+                $key = $signal.'|'.$code.'|'.$path;
+                if (isset($this->loggedWarnings[$key])) {
+                    continue;
+                }
+                $this->loggedWarnings[$key] = true;
+            }
+
+            $findings[] = [
+                'code' => $code,
+                'path' => $path,
+                'at' => isset($item['at']) ? (string) $item['at'] : null,
+                'detail' => (string) ($item['message'] ?? ''),
+            ];
+        }
+
+        if ($findings === []) {
+            return;
+        }
+
+        app(BuildFindingLedger::class)->record(
+            $this->appModel->id,
+            $signal,
+            $findings,
+            $this->conversationId,
+            $this->ledgerModel,
+        );
     }
 
     /**

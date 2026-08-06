@@ -55,6 +55,7 @@ use App\Models\App;
 use App\Models\AppVersion;
 use App\Models\BuilderConversation;
 use App\Models\BuilderMessage;
+use App\Models\BuildFinding;
 use App\Models\User;
 use App\Services\Ai\AiDefaults;
 use App\Services\Ai\AiSpendGuard;
@@ -340,7 +341,7 @@ class BuilderAiService
             // Resolve the builder's primary model (module-aware: landing work
             // runs the landing_builder default when one is configured); on an
             // LLM/provider error, withFallback re-runs with the next candidate.
-            $response = $this->aiDefaults->withFallback(self::moduleFor($app, self::conversationIntentText($conversation)), function (string $model) use ($sdkAgent, $promptText, $user, $conversation) {
+            $response = $this->aiDefaults->withFallback(self::moduleFor($app, self::conversationIntentText($conversation)), function (string $model) use ($sdkAgent, $promptText, $user, $conversation, $proposeTool) {
                 $provider = $user !== null
                     ? ($this->providers->resolveProviderForCatalogModel($model, $user) ?? Lab::Anthropic)
                     : Lab::Anthropic;
@@ -352,6 +353,10 @@ class BuilderAiService
                 ]);
 
                 $sdkAgent->forModel($model);
+
+                // Re-attributed per candidate: with a fallback chain, the model
+                // that produced a rejection is the one that was actually running.
+                $proposeTool->attribute($conversation->id, $model);
 
                 return $sdkAgent->prompt($promptText, provider: $provider, model: $model, timeout: (int) config('ai.request_timeout', 180));
             });
@@ -550,6 +555,10 @@ class BuilderAiService
             $modelOverride,
         );
         $sdkAgent->forModel($resolvedModel);
+
+        // Now that the model is known, rejections and design warnings from this
+        // turn can be attributed in the failure ledger.
+        $proposeTool->attribute($conversation->id, $resolvedModel);
 
         try {
             $user = $conversation->user;
@@ -1434,6 +1443,17 @@ class BuilderAiService
         $missing = array_values(array_filter((array) ($verdict['missing'] ?? []), 'is_string'));
         $unrequested = array_values(array_filter((array) ($verdict['unrequested'] ?? []), 'is_string'));
 
+        // Attributed to the BUILDER's model, not the critic's: the question the
+        // ledger answers is which builder leaves more behind. The critic's own
+        // spend is already in ai_usage_events under the build_critic module.
+        $this->logCritique(
+            $app->id,
+            $conversation->id,
+            $this->aiDefaults->model(self::moduleFor($app, $request), $modelOverride),
+            $missing,
+            $unrequested,
+        );
+
         if (($verdict['complete'] ?? false) === true && $unrequested === []) {
             $conversation->forceFill(['build_reviewed_at' => now()])->save();
 
@@ -1453,6 +1473,37 @@ class BuilderAiService
             $modelOverride,
             0,
             gateRemaining: $gateRemaining - 1,
+        );
+    }
+
+    /**
+     * Post the closing review's verdict to the build-failure ledger.
+     *
+     * This is the third signal, and the only one that judges the app against
+     * what was ASKED rather than against the schema — which makes it the one
+     * worth counting. A clean verdict writes nothing: the ledger records
+     * failures, not runs.
+     *
+     * @param  list<string>  $missing
+     * @param  list<string>  $unrequested
+     */
+    private function logCritique(string $appId, string $conversationId, ?string $model, array $missing, array $unrequested): void
+    {
+        $findings = [
+            ...array_map(fn (string $m): array => ['code' => BuildFinding::CODE_MISSING, 'detail' => $m], $missing),
+            ...array_map(fn (string $u): array => ['code' => BuildFinding::CODE_UNREQUESTED, 'detail' => $u], $unrequested),
+        ];
+
+        if ($findings === []) {
+            return;
+        }
+
+        app(BuildFindingLedger::class)->record(
+            $appId,
+            BuildFinding::SIGNAL_CRITIC,
+            $findings,
+            $conversationId,
+            $model,
         );
     }
 

@@ -3,6 +3,7 @@
 use App\Models\App;
 use App\Models\BuilderConversation;
 use App\Models\BuilderMessage;
+use App\Models\BuildFinding;
 use App\Models\User;
 use App\Services\Ai\AiDefaults;
 use App\Services\AiProviderService;
@@ -174,6 +175,46 @@ it('respects Detener', function () {
     runRail($conv);
 
     expect(queuedRailTurn($conv))->toBeNull();
+});
+
+it('keeps the verdict in the failure ledger, coded by direction', function () {
+    Queue::fake();
+    [$conv, , $app] = reviewRailSetup();
+    fakeCritic([
+        'critic' => 'ok', 'complete' => false,
+        'missing' => ['la firma es un campo de texto, no una captura'],
+        'unrequested' => ['una página «Punto de venta»'],
+        'summary' => 'Incompleta.',
+    ]);
+
+    runRail($conv);
+
+    // The critic is the only signal that judges the app against what was ASKED
+    // rather than against the schema, which is what makes it worth counting.
+    $findings = BuildFinding::where('app_id', $app->id)->get();
+
+    expect($findings)->toHaveCount(2)
+        ->and($findings->pluck('signal')->unique()->all())->toBe([BuildFinding::SIGNAL_CRITIC])
+        ->and($findings->firstWhere('code', BuildFinding::CODE_MISSING)?->detail)
+        ->toContain('la firma es un campo de texto')
+        ->and($findings->firstWhere('code', BuildFinding::CODE_UNREQUESTED)?->detail)
+        ->toContain('Punto de venta')
+        ->and($findings->first()->conversation_id)->toBe($conv->id)
+        // The BUILDER's model, not the critic's: the ledger answers which
+        // builder leaves more behind, and the critic's spend is already in
+        // ai_usage_events.
+        ->and($findings->first()->model)->not->toBeNull();
+});
+
+it('records nothing when the review comes back clean', function () {
+    Queue::fake();
+    [$conv] = reviewRailSetup();
+    fakeCritic(['critic' => 'ok', 'complete' => true, 'missing' => [], 'unrequested' => [], 'summary' => 'Bien.']);
+
+    runRail($conv);
+
+    // A ledger of failures, not of runs.
+    expect(BuildFinding::count())->toBe(0);
 });
 
 it('runs out of budget rather than looping a build forever', function () {

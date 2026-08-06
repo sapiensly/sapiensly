@@ -189,6 +189,7 @@ class SapiensServer extends Server
         Tools\Build\ListBuilderConversationsTool::class,
         Tools\Build\GetBuilderConversationTool::class,
         Tools\Build\GetBuildCostTool::class,
+        Tools\Build\GetBuildQualityTool::class,
         Tools\Build\ContinueBuilderConversationTool::class,
         Tools\Build\BuildExpressDashboardTool::class,
         Tools\Build\AddObjectTool::class,
