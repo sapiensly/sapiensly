@@ -107,7 +107,7 @@ class AnalyzeAppDataTool extends SapiensTool
             'app_slug' => $schema->string()
                 ->description('The app whose data to analyse.')
                 ->required(),
-            'exclude' => $schema->array()
+            'exclude' => $schema->array()->items($schema->string())
                 ->description('semantic_key values the surface already shows, so they are not proposed again (each finding returns its own semantic_key).'),
             'max' => $schema->integer()
                 ->description('How many findings to return (default 5, max 20).'),

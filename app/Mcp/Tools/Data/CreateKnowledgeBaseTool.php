@@ -61,7 +61,7 @@ class CreateKnowledgeBaseTool extends SapiensTool
         return [
             'name' => $schema->string()->description('The knowledge base name.')->required(),
             'description' => $schema->string()->description('What this corpus contains.'),
-            'keywords' => $schema->array()->description('Optional tags for search/categorization.'),
+            'keywords' => $schema->array()->items($schema->string())->description('Optional tags for search/categorization.'),
             'config' => $schema->object()->description('Optional chunking: { chunk_size (100-4000, default 1000), chunk_overlap (0-500, default 200) }.'),
         ];
     }

@@ -85,8 +85,8 @@ class QueryRecordsTool extends SapiensTool
             'object_id' => $schema->string()->description('The object id to query records of.')->required(),
             'filter' => $schema->object()->description('Optional filter block: {op, ...}. Leaf ops: eq/neq/gt/gte/lt/lte/in/not_in/contains/starts_with/ends_with/between/is_null/is_not_null referencing field_ids. Logical: and/or/not. Relation traversal: {op: related, field_id: <relation field>, condition: <filter on the related object>} (belongs_to and has_many; nestable).'),
             'search' => $schema->string()->description('Optional free-text search across the object\'s text fields (case-insensitive; terms ANDed).'),
-            'sort' => $schema->array()->description('Optional [{field_id, direction: asc|desc}].'),
-            'expand' => $schema->array()->description('Optional list of relation field ids to resolve inline. Each record gains expanded[field_id]: belongs_to → { id, data } | null; has_many → { items: [{ id, data }], count, truncated } (items capped per parent). Access-respecting.'),
+            'sort' => $schema->array()->items($schema->object())->description('Optional [{field_id, direction: asc|desc}].'),
+            'expand' => $schema->array()->items($schema->string())->description('Optional list of relation field ids to resolve inline. Each record gains expanded[field_id]: belongs_to → { id, data } | null; has_many → { items: [{ id, data }], count, truncated } (items capped per parent). Access-respecting.'),
             'limit' => $schema->integer()->description('Max records to return (default 50, max 200).'),
             'offset' => $schema->integer()->description('Rows to skip, for paging (default 0).'),
         ];

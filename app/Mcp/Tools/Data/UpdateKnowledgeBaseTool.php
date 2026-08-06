@@ -70,7 +70,7 @@ class UpdateKnowledgeBaseTool extends SapiensTool
             'knowledge_base_id' => $schema->string()->description('The id of the knowledge base to update.')->required(),
             'name' => $schema->string()->description('New name.'),
             'description' => $schema->string()->description('New description.'),
-            'keywords' => $schema->array()->description('Replace the keyword list.'),
+            'keywords' => $schema->array()->items($schema->string())->description('Replace the keyword list.'),
             'config' => $schema->object()->description('Replace chunking: { chunk_size, chunk_overlap }.'),
         ];
     }

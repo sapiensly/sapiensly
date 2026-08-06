@@ -82,7 +82,7 @@ class UpdatePresentationTool extends SapiensTool
             'document_id' => $schema->string()->description('The presentation document id (doc_…).')->required(),
             'name' => $schema->string()->description('Optional new deck title.'),
             'theme' => $schema->string()->enum(DeckValidator::THEMES)->description('Optional new theme.'),
-            'operations' => $schema->array()->description('Slide operations applied in order, each {op, index, slide?, to?}: replace/insert take a full `slide` object ({layout, ...fields}); insert places BEFORE index (index = slide_count appends); move takes `to`. Indexes are 0-based against the deck state AFTER the previous operation.'),
+            'operations' => $schema->array()->items($schema->object())->description('Slide operations applied in order, each {op, index, slide?, to?}: replace/insert take a full `slide` object ({layout, ...fields}); insert places BEFORE index (index = slide_count appends); move takes `to`. Indexes are 0-based against the deck state AFTER the previous operation.'),
         ];
     }
 }

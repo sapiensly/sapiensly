@@ -81,7 +81,7 @@ class CreateToolTool extends SapiensTool
             'name' => $schema->string()->description('The tool name.')->required(),
             'description' => $schema->string()->description('What the operation does (helps agents pick it).'),
             'config' => $schema->object()->description('Type-specific config (e.g. rest_api: { base_url, method, auth_type } or { integration_id, method, path }; database: { driver, database, query_template }). See get_tool / tools_reference.'),
-            'tool_ids' => $schema->array()->description('For type=group: the member tool ids, in order.'),
+            'tool_ids' => $schema->array()->items($schema->string())->description('For type=group: the member tool ids, in order.'),
         ];
     }
 }

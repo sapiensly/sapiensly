@@ -45,7 +45,7 @@ class EstimateRetrievalCostTool extends SapiensTool
     {
         return [
             'query' => $schema->string()->description('The natural-language query to estimate retrieval cost for.')->required(),
-            'knowledge_base_ids' => $schema->array()->description('Optional subset of knowledge base ids; defaults to all you can access.'),
+            'knowledge_base_ids' => $schema->array()->items($schema->string())->description('Optional subset of knowledge base ids; defaults to all you can access.'),
             'top_k' => $schema->integer()->description('Number of chunks the query would return (default 5).'),
         ];
     }

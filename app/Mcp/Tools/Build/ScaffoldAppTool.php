@@ -387,7 +387,7 @@ class ScaffoldAppTool extends SapiensTool
             'color' => $schema->string()->description('Optional hex accent color (#RRGGBB).'),
             'visibility' => $schema->string()->enum(array_column(Visibility::cases(), 'value'))->description('private (default), organization, global, or public.'),
             'idempotency_key' => $schema->string()->description('Optional. A unique client token; retrying with the same key replays the original result instead of scaffolding a second app (safe retry after a timeout — and avoids a duplicate LLM call).'),
-            'seed_records' => $schema->array()->description('Optional initial data, inserted right after the app is generated — use it so a plan/tracker app opens populated instead of empty. Array of {object, records}: `object` names one of the entities from your description (its name or snake_case slug); `records` is up to 100 rows, each a {field: value} map keyed by the field names/slugs from your description. Dates in ISO (YYYY-MM-DD), selects by option label or value, booleans as true/false. Rows that fail validation are reported back without blocking the app.'),
+            'seed_records' => $schema->array()->items($schema->object())->description('Optional initial data, inserted right after the app is generated — use it so a plan/tracker app opens populated instead of empty. Array of {object, records}: `object` names one of the entities from your description (its name or snake_case slug); `records` is up to 100 rows, each a {field: value} map keyed by the field names/slugs from your description. Dates in ISO (YYYY-MM-DD), selects by option label or value, booleans as true/false. Rows that fail validation are reported back without blocking the app.'),
         ];
     }
 }

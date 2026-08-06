@@ -124,7 +124,7 @@ class UpdateToolTool extends SapiensTool
             'description' => $schema->string()->description('New description.'),
             'status' => $schema->string()->enum(array_column(AgentStatus::cases(), 'value'))->description('draft, active, or inactive.'),
             'config' => $schema->object()->description('Complete replacement config for the tool type (empty secret fields keep their stored value).'),
-            'tool_ids' => $schema->array()->description('For type=group: replace the member tool ids, in order.'),
+            'tool_ids' => $schema->array()->items($schema->string())->description('For type=group: replace the member tool ids, in order.'),
         ];
     }
 }

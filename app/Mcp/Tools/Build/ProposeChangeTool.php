@@ -122,7 +122,7 @@ class ProposeChangeTool extends SapiensTool
             'app_slug' => $schema->string()
                 ->description('The slug of the app to modify.')
                 ->required(),
-            'ops' => $schema->array()
+            'ops' => $schema->array()->items($schema->object())
                 ->description('RFC 6902 JSON Patch operations to apply to the active manifest.')
                 ->required(),
             'change_summary' => $schema->string()

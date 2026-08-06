@@ -130,8 +130,8 @@ class SetAccessPolicyTool extends SysadminTool
             'email_verification_required' => $schema->boolean()->description('Require a verified address before sign-in.'),
             'two_factor_required' => $schema->boolean()->description('Require an authenticator for every account.'),
             'ip_allowlist_enabled' => $schema->boolean()->description('Whether the IP allowlist is enforced at all.'),
-            'ip_allowlist' => $schema->array()->description('Full replacement list of allowed IPs/ranges. Empty means no restriction.'),
-            'domain_allowlist' => $schema->array()->description('Full replacement list of email domains allowed to register. Empty means any.'),
+            'ip_allowlist' => $schema->array()->items($schema->string())->description('Full replacement list of allowed IPs/ranges. Empty means no restriction.'),
+            'domain_allowlist' => $schema->array()->items($schema->string())->description('Full replacement list of email domains allowed to register. Empty means any.'),
             'session_lifetime_minutes' => $schema->integer()->description('Idle session lifetime, 15-10080 minutes.'),
             'concurrent_sessions_max' => $schema->integer()->description('Max simultaneous sessions per account; null for unlimited.'),
         ];

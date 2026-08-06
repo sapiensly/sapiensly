@@ -27,7 +27,7 @@ class PlanDashboardTool extends BuilderCatalogTool
     {
         return [
             'purpose' => $schema->string()->description('Audience + the questions the dashboard answers, and why the top rows are the most important.')->required(),
-            'rows' => $schema->array()->description('The layout, top→bottom, most important first. Each row: {section?: string, blocks: [{type: string, chart_type?: string, col_span?: int 1-12}]}. A row\'s blocks render side by side at equal height.')->required(),
+            'rows' => $schema->array()->items($schema->object())->description('The layout, top→bottom, most important first. Each row: {section?: string, blocks: [{type: string, chart_type?: string, col_span?: int 1-12}]}. A row\'s blocks render side by side at equal height.')->required(),
         ];
     }
 }

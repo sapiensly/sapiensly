@@ -91,14 +91,14 @@ class UpdateAgentTool extends SapiensTool
             'agent_id' => $schema->string()->description('The id of the agent to update.')->required(),
             'name' => $schema->string()->description('New agent name.'),
             'description' => $schema->string()->description('New description.'),
-            'keywords' => $schema->array()->description('Replace the keyword list.'),
+            'keywords' => $schema->array()->items($schema->string())->description('Replace the keyword list.'),
             'status' => $schema->string()->enum(array_column(AgentStatus::cases(), 'value'))->description('draft, active, or inactive.'),
             'prompt_template' => $schema->string()->description('Replace the system prompt / instructions.'),
             'model' => $schema->string()->description('A model id from list_agent_models.'),
             'web_search' => $schema->boolean()->description('Enable or disable web search.'),
             'reasoning' => $schema->string()->enum(['default', 'off', 'low', 'medium', 'high'])->description('Reasoning/thinking effort: off (platform default), default (model\'s own), or low/medium/high. Applies to OpenRouter and OpenAI models.'),
-            'knowledge_base_ids' => $schema->array()->description('Replace the attached knowledge bases (empty array detaches all).'),
-            'tool_ids' => $schema->array()->description('Replace the attached tools (empty array detaches all).'),
+            'knowledge_base_ids' => $schema->array()->items($schema->string())->description('Replace the attached knowledge bases (empty array detaches all).'),
+            'tool_ids' => $schema->array()->items($schema->string())->description('Replace the attached tools (empty array detaches all).'),
             'config' => $schema->object()->description('Replace tuning: { temperature, rag_params, tool_execution }.'),
         ];
     }

@@ -64,7 +64,7 @@ class GenerateDemoDataTool extends SapiensTool
         return [
             'app_slug' => $schema->string()->description('The slug of the app to seed.')->required(),
             'count' => $schema->integer()->description('How many records per object (default 5, max 25).'),
-            'objects' => $schema->array()->description('Optional list of object slugs to seed; omit to seed every object.'),
+            'objects' => $schema->array()->items($schema->string())->description('Optional list of object slugs to seed; omit to seed every object.'),
         ];
     }
 }

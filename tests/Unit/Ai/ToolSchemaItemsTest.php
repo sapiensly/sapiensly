@@ -79,44 +79,10 @@ it('every agent tool schema declares items on its arrays', function () {
  * including this platform's own agents, which reach external MCP servers
  * through `McpServerTool`.
  *
- * The list below is a RATCHET, not a snapshot: every entry is a bug nobody has
- * got to yet, and the only legal edit is to delete one. A new untyped array
- * fails this test.
+ * This started as a ratchet over 31 known-untyped properties, on the theory
+ * that visible debt beats a chat message. They were all typed the same day, so
+ * the list is gone and the rule is simply the rule.
  */
-const MCP_ARRAYS_STILL_UNTYPED = [
-    'Account\SetOrganizationContextTool.properties.geographies',
-    'Account\SetOrganizationContextTool.properties.glossary',
-    'Account\SetOrganizationContextTool.properties.links',
-    'Account\SetOrganizationContextTool.properties.never',
-    'Account\SetOrganizationContextTool.properties.offerings',
-    'Agents\CreateAgentTool.properties.keywords',
-    'Agents\CreateAgentTool.properties.knowledge_base_ids',
-    'Agents\CreateAgentTool.properties.tool_ids',
-    'Agents\UpdateAgentTool.properties.keywords',
-    'Agents\UpdateAgentTool.properties.knowledge_base_ids',
-    'Agents\UpdateAgentTool.properties.tool_ids',
-    'Build\PlanDashboardTool.properties.rows',
-    'Build\ProposeChangeTool.properties.ops',
-    'Build\ScaffoldAppTool.properties.seed_records',
-    'Build\ValidateManifestTool.properties.ops',
-    'Chatbots\CreateChatbotTool.properties.allowed_origins',
-    'Chatbots\UpdateChatbotTool.properties.allowed_origins',
-    'Data\AnalyzeAppDataTool.properties.exclude',
-    'Data\CreateKnowledgeBaseTool.properties.keywords',
-    'Data\EstimateRetrievalCostTool.properties.knowledge_base_ids',
-    'Data\GenerateDemoDataTool.properties.objects',
-    'Data\QueryRecordsTool.properties.expand',
-    'Data\QueryRecordsTool.properties.sort',
-    'Data\SearchKnowledgeTool.properties.knowledge_base_ids',
-    'Data\UpdateKnowledgeBaseTool.properties.keywords',
-    'Integrations\CreateToolTool.properties.tool_ids',
-    'Integrations\UpdateToolTool.properties.tool_ids',
-    'Platform\SetAccessPolicyTool.properties.domain_allowlist',
-    'Platform\SetAccessPolicyTool.properties.ip_allowlist',
-    'Slides\CreatePresentationTool.properties.slides',
-    'Slides\UpdatePresentationTool.properties.operations',
-];
-
 it('every MCP tool schema declares items on its arrays', function () {
     $base = dirname(__DIR__, 3).DIRECTORY_SEPARATOR.'app'.DIRECTORY_SEPARATOR.'Mcp'.DIRECTORY_SEPARATOR.'Tools';
     $classes = [];
@@ -153,8 +119,6 @@ it('every MCP tool schema declares items on its arrays', function () {
         collectUntypedArrays($compiled, str_replace('App\\Mcp\\Tools\\', '', $class), $violations);
     }
 
-    sort($violations);
-
     expect($checked)->toBeGreaterThanOrEqual(40)
-        ->and($violations)->toBe(MCP_ARRAYS_STILL_UNTYPED);
+        ->and($violations)->toBe([]);
 });

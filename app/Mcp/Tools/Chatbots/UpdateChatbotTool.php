@@ -74,7 +74,7 @@ class UpdateChatbotTool extends ChatbotTool
             'status' => $schema->string()->enum(array_column(ChatbotStatus::cases(), 'value'))->description('draft, active, or inactive (active publishes the widget).'),
             'visibility' => $schema->string()->enum(array_column(Visibility::cases(), 'value'))->description('private, organization, global, or public.'),
             'config' => $schema->object()->description('Replace widget config: { appearance, behavior, advanced }.'),
-            'allowed_origins' => $schema->array()->description('Replace the embed origin allowlist (max 20 URLs).'),
+            'allowed_origins' => $schema->array()->items($schema->string())->description('Replace the embed origin allowlist (max 20 URLs).'),
         ];
     }
 }

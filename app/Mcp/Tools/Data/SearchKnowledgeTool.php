@@ -65,7 +65,7 @@ class SearchKnowledgeTool extends SapiensTool
     {
         return [
             'query' => $schema->string()->description('The natural-language query to search for.')->required(),
-            'knowledge_base_ids' => $schema->array()->description('Optional subset of knowledge base ids to search; defaults to all you can access.'),
+            'knowledge_base_ids' => $schema->array()->items($schema->string())->description('Optional subset of knowledge base ids to search; defaults to all you can access.'),
             'top_k' => $schema->integer()->description('Number of chunks to return (default 5).'),
         ];
     }

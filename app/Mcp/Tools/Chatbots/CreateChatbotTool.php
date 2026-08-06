@@ -86,7 +86,7 @@ class CreateChatbotTool extends ChatbotTool
             'name' => $schema->string()->description('The chatbot name.')->required(),
             'description' => $schema->string()->description('What the chatbot does.'),
             'config' => $schema->object()->description('Optional widget config: { appearance: { primary_color, position, welcome_message, widget_title, ... }, behavior: { auto_open_delay, collect_email, ... }, advanced: { custom_css, custom_font_family } }.'),
-            'allowed_origins' => $schema->array()->description('Optional list of origin URLs allowed to embed the widget (max 20).'),
+            'allowed_origins' => $schema->array()->items($schema->string())->description('Optional list of origin URLs allowed to embed the widget (max 20).'),
         ];
     }
 }

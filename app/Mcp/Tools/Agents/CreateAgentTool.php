@@ -85,12 +85,12 @@ class CreateAgentTool extends SapiensTool
             'name' => $schema->string()->description('The agent name.')->required(),
             'model' => $schema->string()->description('A model id from list_agent_models (e.g. "deepseek/deepseek-v4-pro").')->required(),
             'description' => $schema->string()->description('Short description of what the agent does.'),
-            'keywords' => $schema->array()->description('Optional keywords for search/categorization.'),
+            'keywords' => $schema->array()->items($schema->string())->description('Optional keywords for search/categorization.'),
             'prompt_template' => $schema->string()->description('The system prompt / instructions for the agent.'),
             'web_search' => $schema->boolean()->description('Whether the agent may use web search (default false).'),
             'reasoning' => $schema->string()->enum(['default', 'off', 'low', 'medium', 'high'])->description('Reasoning/thinking effort. Platform default is off (reasoning-capable models otherwise think before every reply, costing tokens and latency). "default" leaves the model\'s own; low/medium/high raise effort. Applies to OpenRouter and OpenAI models.'),
-            'knowledge_base_ids' => $schema->array()->description('Knowledge base ids to attach (from list_knowledge_bases).'),
-            'tool_ids' => $schema->array()->description('Tool ids to attach (from list_tools).'),
+            'knowledge_base_ids' => $schema->array()->items($schema->string())->description('Knowledge base ids to attach (from list_knowledge_bases).'),
+            'tool_ids' => $schema->array()->items($schema->string())->description('Tool ids to attach (from list_tools).'),
             'config' => $schema->object()->description('Optional tuning: { temperature, rag_params: { chunk_size, top_k, similarity_threshold }, tool_execution: { timeout, retry_count }, web_search: { max_results } (1-10; applies when web_search is enabled) }.'),
         ];
     }

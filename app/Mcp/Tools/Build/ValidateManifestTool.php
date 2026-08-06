@@ -78,7 +78,7 @@ class ValidateManifestTool extends SapiensTool
         return [
             'manifest' => $schema->object()->description('A full draft manifest to validate. Omit when using app_slug + ops.'),
             'app_slug' => $schema->string()->description('App whose live manifest the `ops` are validated against (patch mode).'),
-            'ops' => $schema->array()->description('RFC 6902 JSON Patch operations to dry-run against the app\'s live manifest.'),
+            'ops' => $schema->array()->items($schema->object())->description('RFC 6902 JSON Patch operations to dry-run against the app\'s live manifest.'),
         ];
     }
 }
