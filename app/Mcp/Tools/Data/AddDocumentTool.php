@@ -78,7 +78,7 @@ class AddDocumentTool extends SapiensTool
             'name' => $schema->string()->description('The document name.')->required(),
             'body' => $schema->string()->description('The raw text content to ingest.')->required(),
             'type' => $schema->string()->enum(['txt', 'md', 'artifact'])->description('Inline content type (default txt).'),
-            'keywords' => $schema->array()->description('Optional tags.'),
+            'keywords' => $schema->array()->items($schema->string())->description('Optional tags.'),
             'knowledge_base_id' => $schema->string()->description('Optional KB to attach to — triggers embedding so the text becomes searchable via search_knowledge.'),
         ];
     }

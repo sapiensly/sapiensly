@@ -73,7 +73,10 @@ class AddObjectTool extends SapiensTool
             'app_slug' => $schema->string()->description('The slug of the app to add the object to.')->required(),
             'name' => $schema->string()->description('Human name of the object, e.g. "Comments".')->required(),
             'slug' => $schema->string()->description('Optional snake_case slug; derived from the name when omitted.'),
-            'fields' => $schema->array()->description('The object\'s fields. Each item: {name (required), slug? (snake_case, derived if omitted), type (one of: string, long_text, number, currency, boolean, date, datetime, single_select, multi_select, rating; defaults to string), options? (REQUIRED only for single_select/multi_select: an array of {value, label})}. Put a short title/name field first.')->required(),
+            // Bare object items: an array schema with no `items` is rejected
+            // outright by Gemini's function-calling validator, so the shape
+            // lives in the description.
+            'fields' => $schema->array()->items($schema->object())->description('The object\'s fields. Each item: {name (required), slug? (snake_case, derived if omitted), type (one of: string, long_text, number, currency, boolean, date, datetime, single_select, multi_select, rating; defaults to string), options? (REQUIRED only for single_select/multi_select: an array of {value, label})}. Put a short title/name field first.')->required(),
             'with_page' => $schema->boolean()->description('Also generate a list+create page for the object (default true).'),
         ];
     }

@@ -85,7 +85,10 @@ class AddFieldTool extends SapiensTool
                 'single_select', 'multi_select', 'rating', 'slider', 'date_range', 'file',
                 'rich_text', 'relation', 'formula', 'lookup', 'rollup',
             ])->description('Field type (default string). email/url/phone validate their format on write and render the matching input. For belongs-to links prefer add_relation (it builds the inverse + a count). Computed types (formula/lookup/rollup) are made read-only automatically.'),
-            'options' => $schema->array()->description('REQUIRED only for single_select/multi_select: an array of {value, label}. Ignored for other types.'),
+            // Bare object items: an array schema with no `items` is rejected
+            // outright by Gemini's function-calling validator, so the shape
+            // lives in the description.
+            'options' => $schema->array()->items($schema->object())->description('REQUIRED only for single_select/multi_select: an array of {value, label}. Ignored for other types.'),
             'config' => $schema->object()->description('Type-specific props for the advanced types — call list_available_field_types for the exact `params` and an `example` per type. e.g. formula → {expression, return_type}; rollup → {via_relation_field_id, aggregator, target_field_id?}; lookup → {via_relation_field_id, target_field_id}; relation → {target_object_id, cardinality, on_delete?, inverse_field_id?}; slider → {min, max, step?}; file → {max_size_mb?, mime_types?, capture?:"camera" for a photo taken on the spot, "signature" for a hand-signed PNG}; rich_text → {max_length?}; string → {capture?:"barcode" to scan it with the camera or a scanner gun}; geo → no config (stores {lat,lng}; shows coordinate boxes plus a "use my location" button). Also accepts common base props: required, unique, indexed, hidden, help_text, description.'),
             'add_to_page' => $schema->boolean()->description('Also add the field to the object\'s table + create form (default true). Computed fields skip the form.'),
         ];
