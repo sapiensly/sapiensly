@@ -362,6 +362,9 @@ class AppManifestService
 
         $patched = $this->applyJsonPatch($current, $jsonPatchOps);
 
+        // Slugs written where ids are expected become ids before validation.
+        $patched = ManifestRefResolver::resolve($patched);
+
         return $this->createVersion($app, $patched, $user, $summary, $preserveFineTune);
     }
 

@@ -9,6 +9,7 @@ use App\Services\Manifest\AppManifestService;
 use App\Services\Manifest\ManifestIdFiller;
 use App\Services\Manifest\ManifestPatch;
 use App\Services\Manifest\ManifestPatchException;
+use App\Services\Manifest\ManifestRefResolver;
 use App\Services\Manifest\ManifestSchemaCatalog;
 use App\Services\Manifest\ManifestValidator;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
@@ -105,6 +106,14 @@ are validated as if call #1 had already been applied. This means you can split a
 big change across logical steps — e.g. first add a field, then reference it from
 a form — without one cancelling the other. The final audit summary joins the
 change_summary strings of every successful call with " · ".
+
+WHEREVER AN ID IS EXPECTED YOU MAY WRITE THE SLUG INSTEAD, and it is resolved
+for you: `"object_id":"refacciones"`, `"field_id":"sku"`, `"role_id":"tecnico"`,
+`"page_id":"ordenes"`. A field is resolved against the object its block queries,
+so the same `"sku"` means the right thing on any page. Real ids still work and
+always win. Prefer the slug: ids inside one app differ only in their last few
+characters, and a mistyped one is the most common reason a patch is refused.
+A name that matches nothing is NOT guessed at — it is rejected as before.
 
 `ops` must be an array of patch operations, each one of:
   - {"op":"add","path":"/objects/-","value":{...}}
@@ -513,6 +522,9 @@ DESC;
      */
     private function applyPatch(array $document, array $ops): array
     {
-        return ManifestPatch::apply($document, $ops);
+        // Slugs written where ids are expected become ids here, before the draft
+        // is validated — see ManifestRefResolver for why an id is the one thing
+        // this model reliably gets wrong.
+        return ManifestRefResolver::resolve(ManifestPatch::apply($document, $ops));
     }
 }
