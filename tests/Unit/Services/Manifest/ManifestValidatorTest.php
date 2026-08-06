@@ -4117,3 +4117,114 @@ it('design-lint R13: stays quiet in an app that uses no detail pages at all', fu
 
     expect(designWarnings($r)->pluck('message')->implode(' '))->not->toContain('but no page shows one of them');
 });
+
+/**
+ * R14 — two overview pages, the second showing nothing the first doesn't.
+ *
+ * The shape `serviciocampo_v7` shipped: `/` charting five objects, and a
+ * `/dashboard_2` charting only `ordenes` — which `/` already charted — on a
+ * brief that asked for one dashboard. The closing critic read that manifest
+ * and let it pass, correctly: a second view of the app's own orders is not
+ * invented subject matter. "The same thing twice" is not a judgement call.
+ *
+ * @param  list<string>  $objectSlugs  which objects each overview page charts
+ */
+function overviewPagesManifest(array $objectSlugs): array
+{
+    $m = baseManifest();
+
+    // One object per distinct slug named across the pages, so each overview
+    // can chart something real. Every chart groups by its own object's field:
+    // a chart with no axis is a validation ERROR, and an invalid manifest
+    // produces no design warnings at all — which would pass the negative
+    // cases below without ever reaching the rule.
+    $ids = [];
+    $axis = [];
+    foreach (array_unique(array_merge(...array_values($objectSlugs))) as $slug) {
+        if ($slug === 'clientes') {
+            $ids[$slug] = $m['objects'][0]['id'];
+            $axis[$slug] = $m['objects'][0]['fields'][0]['id'];
+
+            continue;
+        }
+        $fld = id('fld');
+        $obj = ['id' => id('obj'), 'slug' => $slug, 'name' => ucfirst($slug), 'primary_display_field_id' => $fld,
+            'fields' => [['id' => $fld, 'slug' => 'nombre', 'name' => 'Nombre', 'type' => 'string']]];
+        $m['objects'][] = $obj;
+        $ids[$slug] = $obj['id'];
+        $axis[$slug] = $fld;
+    }
+
+    foreach ($objectSlugs as $slug => $charts) {
+        $m['pages'][] = [
+            'id' => id('pag'), 'slug' => $slug, 'name' => ucfirst($slug), 'path' => '/'.$slug,
+            'blocks' => array_map(fn (string $o): array => [
+                'id' => id('blk'), 'type' => 'chart', 'label' => 'Por estado',
+                'chart_type' => 'bar', 'aggregation' => 'count',
+                'group_by_field_id' => $axis[$o],
+                'data_source' => ['object_id' => $ids[$o]],
+            ], $charts),
+        ];
+    }
+
+    return $m;
+}
+
+it('design-lint R14: warns about a second dashboard over data the first already covers', function () {
+    // The v7 shape, exactly: five objects on `/`, one of them again on `/dashboard_2`.
+    $r = (new ManifestValidator)->validate(overviewPagesManifest([
+        'dashboard' => ['clientes', 'tecnicos', 'activos', 'refacciones', 'ordenes'],
+        'dashboard_2' => ['ordenes'],
+    ]));
+
+    $warning = designWarnings($r)->firstWhere(fn ($w) => str_contains($w->message, 'second overview'));
+
+    expect($warning)->not->toBeNull()
+        ->and($warning->message)->toContain("'dashboard_2'")
+        // Names the page it duplicates, so the author knows which two to compare.
+        ->and($warning->message)->toContain("'dashboard'")
+        // Pointed at the duplicate, never at the original.
+        ->and($warning->path)->toBe('/pages/1');
+});
+
+it('design-lint R14: leaves two dashboards with data of their own alone', function () {
+    // «Ventas» next to «Operaciones» is a design, not a duplicate — even when
+    // they share a customers chart.
+    $r = (new ManifestValidator)->validate(overviewPagesManifest([
+        'ventas' => ['clientes', 'pedidos'],
+        'operaciones' => ['clientes', 'ordenes'],
+    ]));
+
+    // Assert the manifest is VALID too: a schema-invalid fixture produces no
+    // warnings at all, and would pass this test without exercising the rule.
+    expect($r->valid)->toBeTrue()
+        ->and(designWarnings($r)->pluck('message')->implode(' '))->not->toContain('second overview');
+});
+
+it('design-lint R14: says nothing about one dashboard', function () {
+    $r = (new ManifestValidator)->validate(overviewPagesManifest([
+        'dashboard' => ['clientes', 'ordenes'],
+    ]));
+
+    expect($r->valid)->toBeTrue()
+        ->and(designWarnings($r)->pluck('message')->implode(' '))->not->toContain('second overview');
+});
+
+it('design-lint R14: a page you can work in is not an overview', function () {
+    // A list page carries the same charts plus a form. It is where the work
+    // happens, so it never duplicates the dashboard however much it echoes it.
+    $m = overviewPagesManifest([
+        'dashboard' => ['clientes', 'ordenes'],
+        'ordenes' => ['ordenes'],
+    ]);
+    $objectId = $m['pages'][1]['blocks'][0]['data_source']['object_id'];
+    $fieldId = collect($m['objects'])->firstWhere('id', $objectId)['fields'][0]['id'];
+    $m['pages'][1]['blocks'][] = [
+        'id' => id('blk'), 'type' => 'form', 'object_id' => $objectId, 'mode' => 'create',
+        'fields' => [['field_id' => $fieldId]],
+    ];
+
+    $r = (new ManifestValidator)->validate($m);
+    expect($r->valid)->toBeTrue()
+        ->and(designWarnings($r)->pluck('message')->implode(' '))->not->toContain('second overview');
+});

@@ -7,13 +7,14 @@ use App\Models\User;
 use App\Services\Manifest\AppManifestService;
 use App\Services\Manifest\InvalidManifestException;
 use App\Services\Manifest\ManifestPatch;
+use App\Services\Manifest\ManifestValidator;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Laravel\Mcp\Request;
 use Laravel\Mcp\Response;
 use Laravel\Mcp\Server\Attributes\Description;
 
-#[Description('Apply a set of RFC 6902 JSON Patch operations to an app\'s manifest. The patch is validated and, if valid, saved as a new (reversible) app version. Read the manifest first to target the right paths. On success returns {applied:true, version_number, changed_paths:[{op, path, from?}]} — array appends ("/-") are resolved to the concrete index they landed at, so you can target follow-up patches without re-reading. If rejected, returns {applied:false, valid:false, errors:[{path, message, code, expected?, value?}], warnings} — the same structured detail as validate_manifest — so you can fix every error and retry.')]
+#[Description('Apply a set of RFC 6902 JSON Patch operations to an app\'s manifest. The patch is validated and, if valid, saved as a new (reversible) app version. Read the manifest first to target the right paths. On success returns {applied:true, version_number, changed_paths:[{op, path, from?}]} — array appends ("/-") are resolved to the concrete index they landed at, so you can target follow-up patches without re-reading — plus {warnings} when the patch applied but built something that will do nothing (a button aimed at no page, a list you cannot open from); fix those or say what you could not complete before reporting success. If rejected, returns {applied:false, valid:false, errors:[{path, message, code, expected?, value?}], warnings} — the same structured detail as validate_manifest — so you can fix every error and retry.')]
 class ProposeChangeTool extends SapiensTool
 {
     protected const ABILITY = 'apps:build';
@@ -89,6 +90,24 @@ class ProposeChangeTool extends SapiensTool
             // index — so you can target follow-up patches without re-reading.
             'changed_paths' => ManifestPatch::changedPaths($validated['ops'], $before),
         ];
+
+        // The design lint, on the path an EXTERNAL agent builds through.
+        //
+        // The builder's own propose_change has returned these since the rules
+        // were written; this one returned them only when the patch was
+        // REJECTED, so a patch that applied with warnings came back as a bare
+        // success. Measured: an app built here whose «Abrir» button pointed at
+        // a page that does not exist, and whose central object could be listed
+        // but never opened, was answered `{"applied":true}` and nothing else —
+        // both warnings sat waiting in `audit_app` for a caller with no reason
+        // to suspect it needed to ask. Same validator, same codes, same
+        // instruction not to claim success on top of them.
+        $warnings = app(ManifestValidator::class)->validate($version->manifest)->warningsArray();
+        if ($warnings !== []) {
+            $payload['warnings'] = $warnings;
+            $payload['message'] = 'Applied, but some things are wired to do nothing (see `warnings`). Do NOT report success until each is fixed or you have told the user exactly what you could not complete.';
+        }
+
         $this->rememberIdempotent($user, $validated['idempotency_key'] ?? null, $payload);
 
         return Response::json($payload);

@@ -276,6 +276,7 @@ class ManifestValidator
 
         $this->lintDeadNavigation($manifest, $warnings);
         $this->lintUnopenableObjects($manifest, $warnings);
+        $this->lintDuplicateOverviews($manifest, $warnings);
         $this->lintObjectShape($manifest, $warnings);
     }
 
@@ -442,6 +443,90 @@ class ManifestValidator
                 "'{$name}' is listed on '{$listedOn[$id]}' but no page shows one of them — every other listed object here has a detail page. Add one with a record_detail block, or say why this object is list-only.",
                 'design_smell',
             );
+        }
+    }
+
+    /**
+     * R14 — a second overview page that shows nothing the first one doesn't.
+     *
+     * Written from the failure the closing critic could not see. `serviciocampo_v7`
+     * shipped with two dashboards — `/` charting five objects and `/dashboard_2`
+     * charting `ordenes`, which `/` already charted — against a brief that asked
+     * for one. The critic READ that manifest (it flagged an invented «Punto de
+     * venta» page in the same pass) and let both dashboards through, correctly:
+     * its `unrequested` direction hunts invented SUBJECT MATTER, and a second
+     * view of the app's own orders is not some other product. The category it
+     * would need is "the same thing twice", which is not a judgement call at all.
+     *
+     * So it is decided here instead. An OVERVIEW page aggregates and never
+     * touches one record: charts, metrics and sparklines, with no form,
+     * record_detail, related_list or record_activity anywhere on it. Two of
+     * those are only a duplicate when the later one's objects are a SUBSET of
+     * an earlier one's — a genuine second dashboard brings data the first does
+     * not have, and «Ventas» next to «Operaciones» must stay silent.
+     *
+     * @param  array<string, mixed>  $manifest
+     * @param  list<ManifestValidationError>  $warnings
+     */
+    private function lintDuplicateOverviews(array $manifest, array &$warnings): void
+    {
+        /** Blocks that summarise MANY records — what an overview is made of. */
+        $aggregate = ['chart', 'metric_grid', 'sparkline', 'funnel', 'insight', 'stat', 'metric', 'gauge'];
+
+        /** Blocks that touch ONE record — their presence means it is a working page. */
+        $perRecord = ['form', 'record_detail', 'related_list', 'record_activity'];
+
+        $overviews = [];
+
+        foreach ($manifest['pages'] ?? [] as $pi => $page) {
+            $types = [];
+            $this->eachBlockOf($page['blocks'] ?? [], function (array $block) use (&$types): void {
+                if (is_string($block['type'] ?? null)) {
+                    $types[$block['type']] = true;
+                }
+            });
+
+            if (array_intersect_key($types, array_flip($perRecord)) !== []) {
+                continue;
+            }
+            if (array_intersect_key($types, array_flip($aggregate)) === []) {
+                continue;
+            }
+
+            $objects = [];
+            $this->collectObjectIdRefs($page['blocks'] ?? [], $objects);
+
+            // An overview that reads nothing is a subset of everything, and
+            // would accuse the first real dashboard it met.
+            if ($objects === []) {
+                continue;
+            }
+
+            $overviews[$pi] = ['page' => $page, 'objects' => $objects];
+        }
+
+        foreach ($overviews as $pi => $later) {
+            foreach ($overviews as $pj => $earlier) {
+                if ($pj >= $pi) {
+                    break;
+                }
+
+                // Subset, not overlap: two dashboards that merely share a
+                // customers table are two dashboards.
+                if (array_diff_key($later['objects'], $earlier['objects']) !== []) {
+                    continue;
+                }
+
+                $name = (string) ($later['page']['slug'] ?? $pi);
+                $first = (string) ($earlier['page']['slug'] ?? $pj);
+                $warnings[] = new ManifestValidationError(
+                    "/pages/{$pi}",
+                    "page '{$name}' is a second overview over data '{$first}' already covers — it charts nothing '{$first}' does not. Merge them, give this one data of its own, or remove it.",
+                    'design_smell',
+                );
+
+                break;
+            }
         }
     }
 
