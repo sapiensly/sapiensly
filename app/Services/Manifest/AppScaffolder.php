@@ -750,6 +750,16 @@ class AppScaffolder
                 }
             }
 
+            // This path is deliberately the BASIC type subset, so a `config`
+            // bag reaches it only by mistake — and dropping one in silence is
+            // how an app ends up with a plain `sku` when a scannable one was
+            // asked for. Every run of one field-service brief ended with the
+            // closing critic reporting exactly that.
+            if (is_array($field['config'] ?? null) && $field['config'] !== []) {
+                $coercions[] = "field \"{$name}\": settings like ".implode('/', array_slice(array_keys($field['config']), 0, 3))
+                    .' are not applied when an object is created — add the field, then use add_field to set them.';
+            }
+
             $usedSlugs[] = $slug;
             $fields[] = ['name' => $name, 'slug' => $slug, 'type' => $type, 'options' => $options];
         }

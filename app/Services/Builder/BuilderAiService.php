@@ -7,6 +7,9 @@ use App\Ai\Tools\Builder\AddConnectedObjectTool;
 use App\Ai\Tools\Builder\AddCrudPageTool;
 use App\Ai\Tools\Builder\AddDashboardPageTool;
 use App\Ai\Tools\Builder\AddDetailPageTool;
+use App\Ai\Tools\Builder\AddFieldTool;
+use App\Ai\Tools\Builder\AddObjectTool;
+use App\Ai\Tools\Builder\AddRelationTool;
 use App\Ai\Tools\Builder\AnalyzeDataTool;
 use App\Ai\Tools\Builder\CreateIntegrationTool;
 use App\Ai\Tools\Builder\CritiqueLandingDesignTool;
@@ -73,6 +76,7 @@ use App\Services\Integrations\IntegrationCaller;
 use App\Services\Landing\LandingDesignCritic;
 use App\Services\Manifest\AppManifestService;
 use App\Services\Manifest\AppScaffolder;
+use App\Services\Manifest\ManifestEditor;
 use App\Services\Manifest\ManifestValidator;
 use App\Services\Records\RecordQueryService;
 use App\Services\Records\RecordWriteService;
@@ -1996,6 +2000,14 @@ class BuilderAiService
             $proposeTool,
             $planTool,
             new ScaffoldAppTool($app, $this->manifestService, $proposeTool, app(AppScaffolder::class), $intentText),
+            // The typed data-model edits, on the side that writes them most.
+            // These were on the MCP server from the day they were written and
+            // not here, so the builder hand-enumerated every field_id into every
+            // form and table — the enumeration that produced the largest class
+            // of rejected patches in the ledger.
+            new AddObjectTool($proposeTool, app(ManifestEditor::class)),
+            new AddFieldTool($proposeTool, app(ManifestEditor::class)),
+            new AddRelationTool($proposeTool, app(ManifestEditor::class)),
             new AddCrudPageTool($app, $this->manifestService, $proposeTool, app(AppScaffolder::class)),
             new AddDetailPageTool($app, $this->manifestService, $proposeTool, app(AppScaffolder::class)),
             new AddDashboardPageTool($app, $this->manifestService, $proposeTool, app(AppScaffolder::class), $conversation->user),

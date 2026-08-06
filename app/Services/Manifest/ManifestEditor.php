@@ -31,7 +31,26 @@ class ManifestEditor
      */
     public function addObject(App $app, string $name, ?string $slug, array $rawFields, bool $withPage = true, ?User $user = null, array &$coercions = []): AppVersion
     {
-        $manifest = $this->activeManifest($app);
+        $manifest = $this->applyAddObject($this->activeManifest($app), $name, $slug, $rawFields, $withPage, $coercions);
+
+        return $this->manifests->createVersion($app, $manifest, $user, "Added object \"{$name}\"");
+    }
+
+    /**
+     * The same edit as addObject, as a pure manifest -> manifest function.
+     *
+     * The builder does not persist a version per edit: it stacks ops onto the
+     * running draft of its turn. Splitting the computation from the write is
+     * what lets both callers share one implementation instead of a copy that
+     * drifts.
+     *
+     * @param  array<string, mixed>  $manifest
+     * @param  array<int, array<string, mixed>>  $rawFields
+     * @param  array<int, mixed>  $coercions
+     * @return array<string, mixed>
+     */
+    public function applyAddObject(array $manifest, string $name, ?string $slug, array $rawFields, bool $withPage = true, array &$coercions = []): array
+    {
         $currency = (string) ($manifest['settings']['default_currency'] ?? 'MXN');
 
         $objectSlug = $this->uniqueSlug($slug ?? $name, array_column($manifest['objects'] ?? [], 'slug'), 'object');
@@ -63,7 +82,7 @@ class ManifestEditor
             );
         }
 
-        return $this->manifests->createVersion($app, $manifest, $user, "Added object \"{$name}\"");
+        return $manifest;
     }
 
     /**
@@ -74,8 +93,22 @@ class ManifestEditor
      */
     public function addField(App $app, string $objectSlug, array $rawField, bool $addToPage = true, ?User $user = null, array &$coercions = []): AppVersion
     {
-        $manifest = $this->activeManifest($app);
+        $name = (string) ($rawField['name'] ?? '');
+        $manifest = $this->applyAddField($this->activeManifest($app), $objectSlug, $rawField, $addToPage, $coercions);
 
+        return $this->manifests->createVersion($app, $manifest, $user, "Added field \"{$name}\" to \"{$objectSlug}\"");
+    }
+
+    /**
+     * The same edit as addField, as a pure manifest -> manifest function.
+     *
+     * @param  array<string, mixed>  $manifest
+     * @param  array<string, mixed>  $rawField
+     * @param  array<int, mixed>  $coercions
+     * @return array<string, mixed>
+     */
+    public function applyAddField(array $manifest, string $objectSlug, array $rawField, bool $addToPage = true, array &$coercions = []): array
+    {
         $objectIndex = $this->findObjectIndex($manifest, $objectSlug);
         $object = $manifest['objects'][$objectIndex];
         $currency = (string) ($manifest['settings']['default_currency'] ?? 'MXN');
@@ -100,7 +133,7 @@ class ManifestEditor
             unset($page);
         }
 
-        return $this->manifests->createVersion($app, $manifest, $user, "Added field \"{$field['name']}\" to \"{$objectSlug}\"");
+        return $manifest;
     }
 
     /**
@@ -110,8 +143,22 @@ class ManifestEditor
      */
     public function addRelation(App $app, string $fromSlug, string $toSlug, ?string $name = null, bool $addToPage = true, ?User $user = null, string $kind = 'belongs_to'): AppVersion
     {
-        $manifest = $this->activeManifest($app);
+        $manifest = $this->applyAddRelation($this->activeManifest($app), $fromSlug, $toSlug, $name, $addToPage, $kind);
+        $summary = $kind === 'many_to_many'
+            ? "Linked \"{$fromSlug}\" and \"{$toSlug}\" (many-to-many)"
+            : "Linked \"{$fromSlug}\" to \"{$toSlug}\"";
 
+        return $this->manifests->createVersion($app, $manifest, $user, $summary);
+    }
+
+    /**
+     * The same edit as addRelation, as a pure manifest -> manifest function.
+     *
+     * @param  array<string, mixed>  $manifest
+     * @return array<string, mixed>
+     */
+    public function applyAddRelation(array $manifest, string $fromSlug, string $toSlug, ?string $name = null, bool $addToPage = true, string $kind = 'belongs_to'): array
+    {
         if ($fromSlug === $toSlug) {
             throw new \InvalidArgumentException('A relation needs two different objects.');
         }
@@ -144,7 +191,7 @@ class ManifestEditor
                 unset($page);
             }
 
-            return $this->manifests->createVersion($app, $manifest, $user, "Linked \"{$fromSlug}\" and \"{$toSlug}\" (many-to-many)");
+            return $manifest;
         }
 
         $pair = $this->scaffolder->buildRelation(
@@ -179,7 +226,7 @@ class ManifestEditor
             unset($page);
         }
 
-        return $this->manifests->createVersion($app, $manifest, $user, "Linked \"{$fromSlug}\" to \"{$toSlug}\"");
+        return $manifest;
     }
 
     /**
