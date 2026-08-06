@@ -110,6 +110,12 @@ class SemanticLexicon
             'price' => ['price', '\brate\b', 'pvp', 'amount', 'subtotal', 'total'],
             'not_price' => ['budget', 'cost', 'salary', 'wage', 'estimate', 'funding', '\bspend\b', 'expens'],
             'commerce' => ['order', '\bsale\b', 'invoice', '\bcart\b', 'checkout', 'ticket', 'receipt', 'purchase', '\bpos\b', '\bbill\b', 'product', 'item', '\bsku\b', 'catalog', 'menu', '\bdish\b', 'service', '\bline\b'],
+            // Words that appear only when somebody is actually SELLING at a
+            // counter. Deliberately far narrower than `commerce`, which covers
+            // order/line/service/ticket and so matches almost any operations
+            // app — that breadth is why a field-service brief kept being handed
+            // a point-of-sale module it never asked for.
+            'pos_intent' => ['point of sale', '\bpos\b', 'checkout', '\bcart\b', '\btill\b', 'cashier', 'cash register', '\bsell\b', 'selling', 'storefront'],
             'temporal' => ['label', 'bucket', 'period', 'week'],
             // A field that names where a record IS in its life.
             'status' => ['status', '\bstate\b', 'stage', 'phase', 'progress'],
@@ -140,6 +146,7 @@ class SemanticLexicon
             'price' => ['precio', 'tarifa', 'importe', 'pvp', 'subtotal', 'total'],
             'not_price' => ['presupuest', 'costo', 'coste', 'salar', 'sueldo', 'estimad', 'fondo', 'gasto'],
             'commerce' => ['pedido', 'venta', 'factura', 'comanda', 'carrito', 'ticket', 'recibo', 'compra', 'cuenta', 'producto', 'articulo', 'platillo', 'plato', 'menu', 'servicio', 'renglon', 'linea', 'partida', 'detalle'],
+            'pos_intent' => ['punto de venta', '\bcaja\b', 'cobro', 'cobrar', 'vender', '\bventa', 'carrito', 'mostrador', 'cajero', 'facturar'],
             'temporal' => ['label', 'bucket', 'period', 'semana'],
             'status' => ['estado', 'estatus', 'etapa', 'fase', 'situacion', 'avance'],
             'not_status' => ['tipo', 'categoria', 'clase', 'especialidad', 'segmento', 'nivel', 'plan', 'marca', 'modelo', 'origen', 'canal', 'metodo', 'moneda', 'pais', 'region', 'idioma', '\brol\b', 'puesto', 'area', 'departamento', 'giro'],
@@ -157,6 +164,7 @@ class SemanticLexicon
             'price' => ['preco', 'tarifa', 'valor', 'subtotal', 'total'],
             'not_price' => ['orcamento', 'custo', 'salario', 'estimativa', 'fundo', 'gasto', 'despesa'],
             'commerce' => ['pedido', 'venda', 'fatura', 'comanda', 'carrinho', 'ticket', 'recibo', 'compra', 'conta', 'produto', 'artigo', 'prato', 'cardapio', 'servico', 'linha', 'item'],
+            'pos_intent' => ['ponto de venda', '\bcaixa\b', 'cobranca', 'cobrar', 'vender', '\bvenda', 'carrinho', 'balcao'],
             'temporal' => ['label', 'bucket', 'period', 'semana'],
             'status' => ['estado', 'situacao', 'etapa', 'fase', 'andamento'],
             'not_status' => ['tipo', 'categoria', 'classe', 'especialidade', 'segmento', 'nivel', 'plano', 'marca', 'modelo', 'origem', 'canal', 'metodo', 'moeda', 'pais', 'regiao', 'idioma', 'papel', 'cargo', 'area', 'departamento'],
@@ -174,6 +182,7 @@ class SemanticLexicon
             'price' => ['prix', 'tarif', 'montant', 'total'],
             'not_price' => ['budget', 'cout', 'salaire', 'estimation', 'depense', 'financement'],
             'commerce' => ['commande', 'vente', 'facture', 'panier', 'ticket', 'recu', 'achat', 'produit', 'article', '\bplat', 'menu', 'service', 'ligne', 'addition'],
+            'pos_intent' => ['point de vente', '\bcaisse\b', 'encaissement', 'vendre', '\bvente', 'panier', 'comptoir'],
             'temporal' => ['label', 'bucket', 'period', 'semaine'],
             'status' => ['statut', '\betat\b', 'etape', 'phase', 'avancement'],
             'not_status' => ['type', 'categorie', 'classe', 'specialite', 'segment', 'niveau', 'plan', 'marque', 'modele', 'origine', 'canal', 'methode', 'devise', 'pays', 'region', 'langue', 'role', 'poste', 'service', 'departement'],

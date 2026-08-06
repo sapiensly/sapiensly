@@ -2142,3 +2142,85 @@ it('refuses to build an app out of nothing', function () {
     expect($manifest['objects'])->toBe([])
         ->and(collect($manifest['pages'])->pluck('slug'))->not->toContain('dashboard');
 });
+
+/**
+ * The point-of-sale module is the largest thing the scaffolder invents on its
+ * own, and inventing it wrongly costs a critic finding and a review turn on
+ * every build. One field-service brief was handed one in four separate runs:
+ * the structural shape (order <- line -> product) matched, and so did the
+ * `commerce` vocabulary, which covers order/line/service/ticket.
+ */
+function posSpec(string $request = ''): array
+{
+    $spec = [
+        'objects' => [
+            ['name' => 'Ordenes', 'slug' => 'ordenes', 'fields' => [
+                ['name' => 'Numero', 'slug' => 'numero', 'type' => 'string', 'options' => null],
+                ['name' => 'Estado', 'slug' => 'estado', 'type' => 'single_select', 'options' => [
+                    ['value' => 'abierta', 'label' => 'Abierta'],
+                    ['value' => 'cerrada', 'label' => 'Cerrada'],
+                ]],
+            ]],
+            ['name' => 'Refacciones', 'slug' => 'refacciones', 'fields' => [
+                ['name' => 'SKU', 'slug' => 'sku', 'type' => 'string', 'options' => null],
+                ['name' => 'Precio', 'slug' => 'precio', 'type' => 'currency', 'options' => null],
+            ]],
+            ['name' => 'Lineas', 'slug' => 'lineas', 'fields' => [
+                ['name' => 'Cantidad', 'slug' => 'cantidad', 'type' => 'number', 'options' => null],
+            ]],
+        ],
+        'links' => [
+            ['from' => 'lineas', 'to' => 'ordenes'],
+            ['from' => 'lineas', 'to' => 'refacciones'],
+        ],
+    ];
+
+    if ($request !== '') {
+        $spec['request'] = $request;
+    }
+
+    return $spec;
+}
+
+function posPageSlugs(array $spec): array
+{
+    $base = [
+        'schema_version' => '1.0.0', 'id' => 'app_pos', 'slug' => 'pos_probe', 'name' => 'Probe', 'version' => 1,
+        'objects' => [], 'pages' => [],
+        'settings' => ['default_locale' => 'es-MX', 'default_currency' => 'MXN'],
+        'permissions' => ['roles' => [['id' => 'rol_admin000', 'slug' => 'admin', 'name' => 'Admin']]],
+    ];
+    $coercions = [];
+
+    $assembled = app(AppScaffolder::class)->assemble(
+        $base,
+        app(AppScaffolder::class)->normalizeSpec($spec, $coercions) + array_intersect_key($spec, ['request' => true]),
+    );
+
+    return collect($assembled['pages'])->pluck('slug')->all();
+}
+
+it('does not invent a point of sale for a brief that never asks to sell', function () {
+    // The verbatim shape of the field-service brief: parts with a SKU and a
+    // price, billed onto a work order. Nothing here is a shop.
+    $slugs = posPageSlugs(posSpec(
+        'Construye una app de operación de servicio en campo para mantenimiento industrial. '
+        .'Refacciones con SKU y precio, órdenes de trabajo y líneas de refacción por orden.'
+    ));
+
+    expect($slugs)->not->toContain('pos');
+});
+
+it('still builds one when the brief asks to sell', function () {
+    $slugs = posPageSlugs(posSpec(
+        'Sistema para una tienda: punto de venta en mostrador, con carrito y cobro al cliente.'
+    ));
+
+    expect($slugs)->toContain('pos');
+});
+
+it('leaves a spec with no request text exactly as it was', function () {
+    // Templates, hand-assembled specs and the older tests carry no request —
+    // they must keep the behaviour they had.
+    expect(posPageSlugs(posSpec()))->toContain('pos');
+});

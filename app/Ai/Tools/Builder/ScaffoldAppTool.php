@@ -283,6 +283,10 @@ DESC;
             'links' => is_array($links) ? $links : [],
         ], $coercions);
 
+        // What the person actually asked for, so the scaffolder's speculative
+        // modules can be held to it rather than to the shape of the data.
+        $spec['request'] = (string) $this->intentText;
+
         if (($spec['objects'] ?? []) === []) {
             return $this->fail('Every object spec was missing a name.');
         }

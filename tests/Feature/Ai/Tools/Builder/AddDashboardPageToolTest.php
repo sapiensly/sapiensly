@@ -1002,3 +1002,86 @@ it('does not turn a source with no rows into an accusation', function () {
 
     expect(json_decode($tool->handle(new ToolRequest($spec)), true)['ok'])->toBeTrue();
 });
+
+/**
+ * The platform used to create the defect its own rule then reported.
+ *
+ * `add_dashboard_page` appended unconditionally and let uniqueSlug name the
+ * collision, so an app whose scaffold already carried `/dashboard` shipped with
+ * `/dashboard_2` beside it — observed in four separate builds of one brief that
+ * asked for ONE dashboard. R14 flagged it, a review turn deleted it, and the
+ * next build did it again.
+ */
+function adp_seedOverview(object $test, array $objectIds = ['obj_ticketsobj'], string $groupField = 'fld_statefield'): void
+{
+    $manifest = app(AppManifestService::class)->getActiveManifest($test->testApp->fresh());
+    $manifest['pages'][] = [
+        'id' => 'pag_existingdash',
+        'slug' => 'dashboard',
+        'name' => 'Resumen',
+        'path' => '/',
+        'blocks' => array_map(fn (string $id): array => [
+            'id' => adp_id('blk'), 'type' => 'chart', 'label' => 'Por estado',
+            'chart_type' => 'bar', 'aggregation' => 'count',
+            'group_by_field_id' => $groupField,
+            'data_source' => ['object_id' => $id],
+        ], $objectIds),
+    ];
+    app(AppManifestService::class)->createVersion($test->testApp->fresh(), $manifest, $test->user, 'seed dashboard');
+}
+
+it('writes over an existing overview instead of adding a second dashboard', function () {
+    adp_seedOverview($this);
+    [$tool, $propose] = adp_tool($this);
+
+    $result = json_decode($tool->handle(new ToolRequest(adp_spec())), true);
+
+    expect($result['ok'])->toBeTrue()
+        ->and($result['replaced'])->toBeTrue();
+
+    $pages = $propose->runningDraft()['pages'];
+    $overviews = app(ManifestValidator::class)->overviewPages($propose->runningDraft());
+
+    // One dashboard, not two — and it kept the identity every existing link
+    // already points at.
+    expect($overviews)->toHaveCount(1)
+        ->and(collect($pages)->pluck('slug'))->not->toContain('dashboard_2')
+        ->and(collect($pages)->firstWhere('slug', 'dashboard')['path'])->toBe('/')
+        ->and(collect($pages)->firstWhere('slug', 'dashboard')['id'])->toBe('pag_existingdash');
+});
+
+it('still adds a second dashboard when asked for one outright', function () {
+    adp_seedOverview($this);
+    [$tool, $propose] = adp_tool($this);
+
+    $result = json_decode($tool->handle(new ToolRequest(adp_spec() + ['as_new_page' => true])), true);
+
+    expect($result['ok'])->toBeTrue()
+        ->and($result['replaced'])->toBeFalse()
+        ->and(app(ManifestValidator::class)->overviewPages($propose->runningDraft()))->toHaveCount(2);
+});
+
+it('leaves a dashboard over different data alone', function () {
+    // «Ventas» beside «Operaciones» is a design, not a duplicate: the existing
+    // overview reads an object this one never touches.
+    $manifest = app(AppManifestService::class)->getActiveManifest($this->testApp->fresh());
+    $manifest['objects'][] = [
+        'id' => 'obj_ventasobj', 'slug' => 'ventas', 'name' => 'Venta',
+        'fields' => [
+            ['id' => 'fld_ventamonto', 'slug' => 'monto', 'name' => 'Monto', 'type' => 'currency'],
+            ['id' => 'fld_ventacanal', 'slug' => 'canal', 'name' => 'Canal', 'type' => 'single_select', 'options' => [
+                ['id' => adp_id('opt'), 'value' => 'web', 'label' => 'Web'],
+                ['id' => adp_id('opt'), 'value' => 'tienda', 'label' => 'Tienda'],
+            ]],
+        ],
+    ];
+    app(AppManifestService::class)->createVersion($this->testApp->fresh(), $manifest, $this->user, 'seed ventas');
+    adp_seedOverview($this, ['obj_ventasobj'], 'fld_ventacanal');
+
+    [$tool, $propose] = adp_tool($this);
+    $result = json_decode($tool->handle(new ToolRequest(adp_spec())), true);
+
+    expect($result['ok'])->toBeTrue()
+        ->and($result['replaced'])->toBeFalse()
+        ->and(app(ManifestValidator::class)->overviewPages($propose->runningDraft()))->toHaveCount(2);
+});

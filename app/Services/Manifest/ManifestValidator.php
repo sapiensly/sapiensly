@@ -537,6 +537,52 @@ class ManifestValidator
      */
     private function lintDuplicateOverviews(array $manifest, array &$warnings): void
     {
+        $overviews = $this->overviewPages($manifest);
+
+        foreach ($overviews as $pi => $later) {
+            foreach ($overviews as $pj => $earlier) {
+                if ($pj >= $pi) {
+                    break;
+                }
+
+                // Subset, not overlap: two dashboards that merely share a
+                // customers table are two dashboards.
+                if (array_diff_key($later['objects'], $earlier['objects']) !== []) {
+                    continue;
+                }
+
+                $name = (string) ($later['page']['slug'] ?? $pi);
+                $first = (string) ($earlier['page']['slug'] ?? $pj);
+                $warnings[] = new ManifestValidationError(
+                    "/pages/{$pi}",
+                    "page '{$name}' is a second overview over data '{$first}' already covers — it charts nothing '{$first}' does not. Merge them, give this one data of its own, or remove it.",
+                    'design_smell',
+                );
+
+                break;
+            }
+        }
+    }
+
+    /**
+     * The pages that are OVERVIEWS, with the objects each one reads.
+     *
+     * An overview aggregates and never touches one record: charts, metrics and
+     * sparklines, with no form, record_detail, related_list or record_activity
+     * anywhere on it.
+     *
+     * Public because the GENERATOR needs it too. `add_dashboard_page` used to
+     * append unconditionally and lean on uniqueSlug for the name, which is how
+     * an app asked for one dashboard ended up with `/dashboard` and
+     * `/dashboard_2` in four separate builds — the platform creating the defect
+     * that R14 then reported. A generator that consults the rule it will be
+     * judged by cannot produce that.
+     *
+     * @param  array<string, mixed>  $manifest
+     * @return array<int, array{page: array<string, mixed>, objects: array<string, true>}>
+     */
+    public function overviewPages(array $manifest): array
+    {
         /** Blocks that summarise MANY records — what an overview is made of. */
         $aggregate = ['chart', 'metric_grid', 'sparkline', 'funnel', 'insight', 'stat', 'metric', 'gauge'];
 
@@ -546,6 +592,10 @@ class ManifestValidator
         $overviews = [];
 
         foreach ($manifest['pages'] ?? [] as $pi => $page) {
+            if (! is_array($page)) {
+                continue;
+            }
+
             $types = [];
             $this->eachBlockOf($page['blocks'] ?? [], function (array $block) use (&$types): void {
                 if (is_string($block['type'] ?? null)) {
@@ -572,29 +622,7 @@ class ManifestValidator
             $overviews[$pi] = ['page' => $page, 'objects' => $objects];
         }
 
-        foreach ($overviews as $pi => $later) {
-            foreach ($overviews as $pj => $earlier) {
-                if ($pj >= $pi) {
-                    break;
-                }
-
-                // Subset, not overlap: two dashboards that merely share a
-                // customers table are two dashboards.
-                if (array_diff_key($later['objects'], $earlier['objects']) !== []) {
-                    continue;
-                }
-
-                $name = (string) ($later['page']['slug'] ?? $pi);
-                $first = (string) ($earlier['page']['slug'] ?? $pj);
-                $warnings[] = new ManifestValidationError(
-                    "/pages/{$pi}",
-                    "page '{$name}' is a second overview over data '{$first}' already covers — it charts nothing '{$first}' does not. Merge them, give this one data of its own, or remove it.",
-                    'design_smell',
-                );
-
-                break;
-            }
-        }
+        return $overviews;
     }
 
     /**

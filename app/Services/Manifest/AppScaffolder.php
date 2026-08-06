@@ -225,6 +225,7 @@ class AppScaffolder
     {
         $appId = ($id = (string) ($baseManifest['id'] ?? '')) !== '' ? $id : null;
         $spec = $this->extractSpec($description, $user, $coercions, $appId);
+        $spec['request'] = $description;
 
         return $this->assemble($baseManifest, $spec);
     }
@@ -940,7 +941,7 @@ class AppScaffolder
         // Pass 2.5: detect a POS-shaped triad (an order ← line → priced product)
         // and synthesise the line economics (unit price lookup, subtotal formula)
         // + the order total rollup so a generated POS screen actually computes.
-        $posSpecs = $this->detectAndBuildPosEconomics($built, $relationsByChild, $currency, $lang);
+        $posSpecs = $this->detectAndBuildPosEconomics($built, $relationsByChild, $currency, $lang, (string) ($spec['request'] ?? ''));
 
         // Pass 2.6: the same arithmetic, for lines that are not a sale. A part
         // used on a work order has a quantity and a unit cost, so its line total
@@ -3920,8 +3921,25 @@ class AppScaffolder
      * @param  array<int, array<int, array{targetIndex: int, childFieldId: string, childFieldSlug: string, parentFieldId: string}>>  $relationsByChild
      * @return array<int, array<string, mixed>>
      */
-    private function detectAndBuildPosEconomics(array &$built, array $relationsByChild, string $currency, string $lang): array
+    private function detectAndBuildPosEconomics(array &$built, array $relationsByChild, string $currency, string $lang, string $request = ''): array
     {
+        // A whole point-of-sale module is the largest thing this scaffolder
+        // invents on its own, and inventing it wrongly is not free: the closing
+        // critic reports the page as unrequested and a review turn deletes it,
+        // on every build. Measured on one field-service brief, that happened in
+        // four separate runs.
+        //
+        // The structural shape (order <- line -> product) is not evidence of a
+        // shop; neither is the `commerce` vocabulary, which covers order, line,
+        // service and ticket and therefore matches most operations apps — the
+        // existing triad guard reads that vocabulary and passed all four times.
+        // So the REQUEST has to actually ask to sell. When there is no request
+        // text (a template, a hand-assembled spec, the older tests) nothing
+        // changes.
+        if ($request !== '' && ! SemanticLexicon::for($lang)->matches('pos_intent', $request)) {
+            return [];
+        }
+
         $labels = $this->posLabels($lang);
         $specs = [];
 

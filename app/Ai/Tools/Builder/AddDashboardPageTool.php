@@ -8,6 +8,7 @@ use App\Services\Analyst\GroundTruth;
 use App\Services\Manifest\AppManifestService;
 use App\Services\Manifest\AppScaffolder;
 use App\Services\Manifest\DashboardSpecSuggester;
+use App\Services\Manifest\ManifestValidator;
 use App\Services\Records\ObjectRowSource;
 use App\Support\Ai\FactGuard;
 use App\Support\Branding\ColorPalette;
@@ -104,6 +105,8 @@ DESC;
                 ->description('Open with a compact left-aligned brand hero (default true).'),
             'include_date_filter' => $schema->boolean()
                 ->description('Add the Hoy/7d/30d/90d/Año/Todo range filter wired into every block (default true).'),
+            'as_new_page' => $schema->boolean()
+                ->description('Force a SECOND dashboard page. By default, building a dashboard whose data an existing overview already covers rewrites that page instead of adding a duplicate.'),
         ];
     }
 
@@ -188,18 +191,84 @@ DESC;
         }
 
         $page = $built['page'];
+
+        // Asking for "the dashboard" when one already exists means REPLACE it,
+        // not add a second — this tool used to append unconditionally and let
+        // uniqueSlug name the collision, which is exactly how an app asked for
+        // one dashboard shipped with `/dashboard` and `/dashboard_2` in four
+        // separate builds. The platform created the defect; R14 then reported
+        // it; a review turn deleted it. So the generator now consults the rule
+        // it will be judged by.
+        //
+        // Nested EITHER WAY counts as the same dashboard: R14 only looks at a
+        // later page against earlier ones, so a richer second dashboard that
+        // swallows the scaffolded one slips past it and leaves the redundant
+        // page behind. The tool knows the intent and can see both directions.
+        $existing = $this->existingOverviewToReplace($base, $page, ($args['as_new_page'] ?? false) === true);
+
+        if ($existing !== null) {
+            // Keep the page's identity — its id, slug and path — so every link
+            // already pointing at the dashboard still arrives somewhere.
+            $page['id'] = $existing['page']['id'] ?? $page['id'];
+            $page['slug'] = $existing['page']['slug'] ?? $page['slug'];
+            $page['path'] = $existing['page']['path'] ?? $page['path'];
+        }
+
         $result = $this->proposeTool->recordProposal(
-            [['op' => 'add', 'path' => '/pages/-', 'value' => $page]],
-            "Agregué el dashboard «{$page['name']}»",
+            $existing === null
+                ? [['op' => 'add', 'path' => '/pages/-', 'value' => $page]]
+                : [['op' => 'replace', 'path' => '/pages/'.$existing['index'], 'value' => $page]],
+            $existing === null
+                ? "Agregué el dashboard «{$page['name']}»"
+                : "Rehice el dashboard «{$page['name']}»",
         );
 
         if (($result['ok'] ?? false) === true) {
             $result['page'] = ['slug' => $page['slug'], 'path' => $page['path']];
             $result['hints'] = $lint['hints'];
-            $result['message'] = "Dashboard «{$page['name']}» compiled and added at {$page['path']} — KPI band, balanced chart rows, insights and the date-range filter included.";
+            $result['replaced'] = $existing !== null;
+            $result['message'] = $existing === null
+                ? "Dashboard «{$page['name']}» compiled and added at {$page['path']} — KPI band, balanced chart rows, insights and the date-range filter included."
+                : "Dashboard «{$page['name']}» compiled and written OVER the existing overview at {$page['path']} (it covered the same data). Pass as_new_page:true if you meant a second, separate dashboard.";
         }
 
         return json_encode($result, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE);
+    }
+
+    /**
+     * The existing overview page this dashboard should be written over, if any.
+     *
+     * Two overviews are the same dashboard when one's objects are nested inside
+     * the other's — in either direction. Genuinely different boards («Ventas»
+     * beside «Operaciones») each bring data the other lacks and are left alone.
+     *
+     * @param  array<string, mixed>  $manifest
+     * @param  array<string, mixed>  $page
+     * @return array{index: int, page: array<string, mixed>}|null
+     */
+    private function existingOverviewToReplace(array $manifest, array $page, bool $forceNew): ?array
+    {
+        if ($forceNew) {
+            return null;
+        }
+
+        $validator = app(ManifestValidator::class);
+        $fresh = $validator->overviewPages(['pages' => [$page]]);
+        $objects = $fresh[0]['objects'] ?? [];
+        if ($objects === []) {
+            return null;
+        }
+
+        foreach ($validator->overviewPages($manifest) as $index => $overview) {
+            $nested = array_diff_key($objects, $overview['objects']) === []
+                || array_diff_key($overview['objects'], $objects) === [];
+
+            if ($nested) {
+                return ['index' => $index, 'page' => $overview['page']];
+            }
+        }
+
+        return null;
     }
 
     /**
