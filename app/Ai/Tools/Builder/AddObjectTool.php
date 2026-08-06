@@ -59,6 +59,9 @@ DESC;
             'slug' => $schema->string()
                 ->description('Optional explicit slug (^[a-z][a-z0-9_]*$). Derived from the name when omitted.'),
             'fields' => $schema->array()
+                // Bare object items: Gemini rejects an array schema with no
+                // `items` outright, so the shape lives in the description.
+                ->items($schema->object())
                 ->description('Field specs: [{name, type?, slug?, options?, config?}]. Defaults to a single «Name» string when empty.'),
             'with_page' => $schema->boolean()
                 ->description('Also add a list+create page for it (default true).'),

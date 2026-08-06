@@ -5,6 +5,7 @@ import BlockBreadcrumb from '@/runtime/blocks/BlockBreadcrumb.vue';
 import ConfirmDialog from '@/runtime/ConfirmDialog.vue';
 import EnvironmentBar from '@/runtime/EnvironmentBar.vue';
 import { manifestFontHrefs } from '@/runtime/fonts';
+import OfflineBar from '@/runtime/OfflineBar.vue';
 import LandingChatbotBubble from '@/runtime/LandingChatbotBubble.vue';
 import RolePreviewBar from '@/runtime/RolePreviewBar.vue';
 import RuntimeChatPanel from '@/runtime/RuntimeChatPanel.vue';
@@ -162,6 +163,11 @@ if (liveObjectIds.value.length > 0) {
 }
 
 const isLanding = computed(() => props.app.kind === 'landing');
+
+/** The colour the OS paints the window chrome with once installed. */
+const themeColor = computed(
+    () => props.app.color || settings.value.accent || '#0059ff',
+);
 
 /**
  * This render is going onto paper.
@@ -360,6 +366,19 @@ onMounted(() => {
 
 <template>
     <Head :title="headTitle">
+        <!--
+            Installable, per app. `use-credentials` because the manifest lives
+            behind the same session the app does — without it the browser
+            fetches it anonymously, gets the login redirect, and silently offers
+            no install.
+        -->
+        <link
+            v-if="!isLanding"
+            rel="manifest"
+            crossorigin="use-credentials"
+            :href="`/r/${props.app.slug}/manifest.webmanifest`"
+        />
+        <meta v-if="!isLanding" name="theme-color" :content="themeColor" />
         <meta
             v-if="seo.description"
             name="description"
@@ -508,6 +527,7 @@ onMounted(() => {
                     <!-- The sidebar layout has no header bar to hang this on,
                          and an app in the sandbox with no sign of it is the
                          accident this whole feature exists to prevent. -->
+                    <OfflineBar :locale="locale" />
                     <EnvironmentBar
                         v-if="props.environment"
                         :current="props.environment.current"
@@ -534,6 +554,7 @@ onMounted(() => {
         <!-- Top-header layout (default). -->
         <div v-else class="flex min-h-screen flex-col bg-navy-deep">
             <div class="px-5">
+                <OfflineBar :locale="locale" />
                 <EnvironmentBar
                     v-if="props.environment"
                     :current="props.environment.current"

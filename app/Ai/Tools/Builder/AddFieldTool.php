@@ -69,6 +69,9 @@ DESC;
             'type' => $schema->string()
                 ->description('Field type (default string). Call list_available_field_types for the catalog.'),
             'options' => $schema->array()
+                // Bare object items: Gemini rejects an array schema with no
+                // `items` outright, so the shape lives in the description.
+                ->items($schema->object())
                 ->description('For single_select/multi_select: the choices, as [{"value":"abierta","label":"Abierta"}].'),
             'config' => $schema->object()
                 ->description('Type-specific props — see the description. Related fields may be named by slug.'),

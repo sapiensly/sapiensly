@@ -8,6 +8,7 @@ import { Toaster } from 'vue-sonner';
 import { initializeTheme } from './composables/useAppearance';
 import { createI18nInstance } from './i18n';
 import { initScrollbars } from './lib/scrollbars';
+import { registerServiceWorker } from './lib/serviceWorker';
 
 const appName = import.meta.env.VITE_APP_NAME || 'Sapiensly';
 
@@ -43,3 +44,7 @@ initializeTheme();
 
 // Reveal scrollbars only while scrolling (fade out when idle)...
 initScrollbars();
+
+// Let a built app open without a signal. Registers after `load`, only in a
+// production build, and only ever serves /r and /a — see public/sw.js.
+registerServiceWorker();

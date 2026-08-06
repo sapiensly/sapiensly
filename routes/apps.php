@@ -19,6 +19,7 @@ use App\Http\Controllers\AppRecordTrailController;
 use App\Http\Controllers\AppRuntimeAgentController;
 use App\Http\Controllers\AppRuntimeController;
 use App\Http\Controllers\AppVersionsController;
+use App\Http\Controllers\AppWebManifestController;
 use App\Http\Controllers\AppWorkflowController;
 use App\Http\Middleware\BindAppEnvironment;
 use Illuminate\Support\Facades\Route;
@@ -182,6 +183,15 @@ Route::middleware([
     Route::get('/apps/builder/messages/{message}/attachment', [AppBuilderController::class, 'messageAttachment'])
         ->where('message', 'bmsg_[a-z0-9]+')
         ->name('apps.builder.message.attachment');
+
+    // The install manifest for ONE app, so a phone's home screen gets that
+    // app's name and icon rather than the platform's. Registered before the
+    // runtime catch-all: the page_slug pattern excludes the dot in
+    // `manifest.webmanifest`, but relying on that is a trap for the next
+    // person who widens it.
+    Route::get('/r/{app_slug}/manifest.webmanifest', AppWebManifestController::class)
+        ->where('app_slug', '[a-z][a-z0-9_]*')
+        ->name('apps.runtime.webmanifest');
 
     // Runtime: /r/{app_slug}/{page_slug?} — what end-users of the App see.
     // Lives under /r to keep it cleanly separated from the admin /apps URLs.
