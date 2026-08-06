@@ -1365,11 +1365,12 @@ class BuilderAiService
     }
 
     /**
-     * The closing-review rail. An app that applied changes while `critique_build`
-     * never came back clean is not done — and "call the critic before you report
+     * The closing-review rail. An app that applied changes while the critic has
+     * never come back clean is not done — and "call the critic before you report
      * done" is prompt-only, which is exactly the kind of rule the two builds this
      * was written from walked straight past, each closing with a summary of work
-     * it had skipped.
+     * it had skipped. The critic runs HERE rather than as a tool the model can
+     * call, so the count is one pass per applied turn by construction.
      *
      * Scoped to NON-landing apps: a landing already answers to the design gate,
      * and two rails taking turns on one conversation would fight. Bounded by the
