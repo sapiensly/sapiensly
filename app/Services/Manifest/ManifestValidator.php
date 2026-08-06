@@ -88,10 +88,74 @@ class ManifestValidator
         );
 
         if ($semanticErrors !== []) {
-            return ManifestValidationResult::fail($semanticErrors, $warnings);
+            return ManifestValidationResult::fail($this->withSlugHint($semanticErrors, $manifest), $warnings);
         }
 
         return ManifestValidationResult::ok($warnings);
+    }
+
+    /**
+     * Tell a stuck author, at the moment it is stuck, that it can write the name.
+     *
+     * `ManifestRefResolver` lets any reference be written as a slug, and both
+     * tool descriptions say so — but the first measured build after it shipped
+     * used it exactly zero times, and produced six `unresolved_ref` rejections
+     * carrying invented ULIDs, one of them repeated across five pointers in a
+     * single call. The affordance was there and undiscovered.
+     *
+     * This is where discovery actually happens. The model is already re-reading
+     * this message and retrying: in that build it retried the same fabricated id
+     * five times against an error that told it only that the id was wrong, never
+     * that a name would do. Naming the object's real field slugs turns the retry
+     * from a guess into a lookup.
+     *
+     * @param  list<ManifestValidationError>  $errors
+     * @param  array<string, mixed>  $manifest
+     * @return list<ManifestValidationError>
+     */
+    private function withSlugHint(array $errors, array $manifest): array
+    {
+        $slugsByObject = [];
+        foreach ($manifest['objects'] ?? [] as $object) {
+            $id = (string) ($object['id'] ?? '');
+            if ($id === '') {
+                continue;
+            }
+            $slugs = [];
+            foreach ($object['fields'] ?? [] as $field) {
+                $slug = (string) ($field['slug'] ?? '');
+                if ($slug !== '') {
+                    $slugs[] = $slug;
+                }
+            }
+            $slugsByObject[$id] = $slugs;
+        }
+
+        foreach ($errors as $i => $error) {
+            if ($error->code !== 'unresolved_ref') {
+                continue;
+            }
+
+            $hint = ' Write the SLUG instead of an id — it is resolved against the object in scope.';
+
+            // The object is named in the message at every site that knows it.
+            if (preg_match("/'(obj_[a-z0-9_]+)'/", $error->message, $m)) {
+                $slugs = $slugsByObject[$m[1]] ?? [];
+                if ($slugs !== []) {
+                    $hint .= ' That object\'s fields are: '.implode(', ', array_slice($slugs, 0, 20)).'.';
+                }
+            }
+
+            $errors[$i] = new ManifestValidationError(
+                $error->path,
+                $error->message.$hint,
+                $error->code,
+                $error->expected,
+                $error->value,
+            );
+        }
+
+        return $errors;
     }
 
     /**

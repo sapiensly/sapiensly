@@ -316,3 +316,27 @@ it('still applies a correct deep path inside a tabs block', function () {
     expect($result['pages'][0]['blocks'][0]['tabs'][0]['blocks'][0]['columns'][1]['on_click'][0]['to'])
         ->toBe('/ordenes_detail_2');
 });
+
+it('treats a replace on a property the node lacks as an add', function () {
+    // Five of one build's rejections were this, and one of them was
+    // `replace /objects/N/fields/0/capture` — the op that would have made the
+    // asset code scannable. It was refused, capture was never set, and the
+    // closing critic then reported the scannable code as MISSING.
+    $document = ['objects' => [['id' => 'obj_a', 'fields' => [['id' => 'fld_a', 'slug' => 'codigo', 'type' => 'string']]]]];
+
+    $out = ManifestPatch::apply($document, [
+        ['op' => 'replace', 'path' => '/objects/0/fields/0/capture', 'value' => 'barcode'],
+    ]);
+
+    expect($out['objects'][0]['fields'][0]['capture'])->toBe('barcode');
+});
+
+it('still refuses a replace at an array index that does not exist', function () {
+    // "/pages/17" on a 17-page app is a real mistake about where something
+    // lives; appending would land it somewhere nobody asked for.
+    $document = ['pages' => [['id' => 'pag_a']]];
+
+    expect(fn () => ManifestPatch::apply($document, [
+        ['op' => 'replace', 'path' => '/pages/5', 'value' => ['id' => 'pag_b']],
+    ]))->toThrow(ManifestPatchException::class);
+});

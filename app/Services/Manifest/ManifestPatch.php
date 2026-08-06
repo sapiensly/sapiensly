@@ -67,6 +67,27 @@ final class ManifestPatch
                     continue;
                 }
 
+                // A `replace` that means `add`. RFC 6902 requires a replace
+                // target to already exist, and the builder writes `replace`
+                // whenever it is SETTING a property — five of one build's
+                // rejections were this, every one of them a `replace` on a
+                // property the node simply did not carry yet.
+                //
+                // It is not a cosmetic failure. One of the five was
+                // `replace /objects/2/fields/0/capture`, the op that would have
+                // made the asset code scannable; it was refused, `capture` was
+                // never set, and the closing critic then reported the scannable
+                // code as MISSING — a review turn bought by a distinction the
+                // author never intended to draw.
+                //
+                // Only a MAP member is coerced. An out-of-range array index
+                // stays an error: "/pages/17" on a 17-page app is a real
+                // mistake about where something lives, and silently appending
+                // would land it somewhere nobody asked for.
+                if (self::isReplaceOfAbsentProperty($target, $op)) {
+                    $op['op'] = 'add';
+                }
+
                 $patch = Patch::fromJSON(json_encode([$op], JSON_THROW_ON_ERROR));
                 $patch->apply($target);
             } catch (PatchException $e) {
@@ -125,6 +146,31 @@ final class ManifestPatch
         }
 
         return $changed;
+    }
+
+    /**
+     * True when a `replace` addresses a property its (object) parent does not
+     * have yet — the shape that means `add`.
+     *
+     * @param  array<string, mixed>  $op
+     */
+    private static function isReplaceOfAbsentProperty(mixed $target, array $op): bool
+    {
+        if (($op['op'] ?? null) !== 'replace' || ! array_key_exists('value', $op)) {
+            return false;
+        }
+
+        $tokens = self::tokens((string) ($op['path'] ?? ''));
+        if ($tokens === []) {
+            return false;
+        }
+
+        $key = array_pop($tokens);
+        $parent = self::resolve($target, $tokens);
+
+        // json_decode without assoc gives maps as objects and lists as arrays,
+        // so this distinguishes the two without guessing.
+        return is_object($parent) && ! property_exists($parent, $key);
     }
 
     /**

@@ -1,6 +1,7 @@
 <?php
 
 use App\Services\Manifest\ManifestRefResolver;
+use App\Services\Manifest\ManifestValidator;
 
 /**
  * The resolver exists because `unresolved_ref` was 18 of 30 rejected patches in
@@ -179,4 +180,27 @@ it('leaves a manifest with nothing to resolve against untouched', function () {
     $empty = ['schema_version' => '1.0.0', 'id' => 'app_x00000000000000000000', 'slug' => 'x', 'name' => 'X', 'version' => 1];
 
     expect(ManifestRefResolver::resolve($empty))->toBe($empty);
+});
+
+it('names the object\'s real fields when a reference will not resolve', function () {
+    // The affordance existed and went unused: the first measured build after
+    // the resolver shipped wrote zero slugs and six invented ULIDs, one of them
+    // repeated across five pointers in one call. The model was already reading
+    // this error and retrying — it just was never told a name would do.
+    $m = refManifest();
+    $m['pages'][0]['blocks'] = [[
+        'id' => 'blk_tabla000000000000000000',
+        'type' => 'table',
+        'data_source' => ['object_id' => 'obj_refacciones00000000000'],
+        'columns' => [['id' => 'col_1000000000000000000000', 'field_id' => 'fld_inventado0000000000000']],
+    ]];
+
+    $r = (new ManifestValidator)->validate($m);
+    $error = collect($r->errorsArray())->firstWhere('code', 'unresolved_ref');
+
+    expect($error)->not->toBeNull()
+        ->and($error['message'])->toContain('Write the SLUG instead of an id')
+        // The candidates, so the retry is a lookup rather than another guess.
+        ->and($error['message'])->toContain('sku')
+        ->and($error['message'])->toContain('precio');
 });
