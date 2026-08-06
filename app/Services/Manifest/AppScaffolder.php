@@ -1159,7 +1159,7 @@ class AppScaffolder
         $fieldIndex = [];
 
         foreach ($object['fields'] as $field) {
-            [$definition, $indexEntry] = $this->buildField($field, $currency);
+            [$definition, $indexEntry] = $this->buildField($this->typeForCapture($field, $lang), $currency);
             $fields[] = $definition;
             $fieldIndex[] = $indexEntry;
         }
@@ -1248,6 +1248,50 @@ class AppScaffolder
      * @param  array{name: string, slug: string, type: string, options?: array<int, array{value: string, label: string}>|null}  $field
      * @return array{0: array<string, mixed>, 1: array{id: string, slug: string, type: string, name: string, option_labels: list<string>}}
      */
+    /**
+     * Type a capture from what it is CALLED, before anything renders it.
+     *
+     * R11 already knows that a field named `firma`, `foto` or `ubicacion` held
+     * in a string cannot store what its name promises — it says so, in those
+     * words, as a design warning. But the scaffolder types fields on the basic
+     * subset and had no way to emit `file` + capture, so it produced exactly the
+     * defect its own linter then reported: measured on the benchmark suite, one
+     * app in nine came back with a photo held as text.
+     *
+     * Same lexicon, same three categories, one step earlier. The rule that
+     * judges the field now decides its type, so the warning has nothing left to
+     * fire on.
+     *
+     * @param  array<string, mixed>  $field
+     * @return array<string, mixed>
+     */
+    private function typeForCapture(array $field, string $lang): array
+    {
+        if (! in_array((string) ($field['type'] ?? ''), ['string', 'long_text'], true)) {
+            return $field;
+        }
+
+        $lex = SemanticLexicon::for($lang);
+        $words = [(string) ($field['name'] ?? ''), (string) ($field['slug'] ?? '')];
+
+        if ($lex->matches('signature', ...$words)) {
+            return ['type' => 'file', 'config' => ['capture' => 'signature']] + $field;
+        }
+
+        // `foto_url` is a LINK to an image, not a capture — the same exclusion
+        // R11 makes, and for the same reason: in Spanish the `image` category
+        // contains 'foto', so excluding on it would swallow the rule whole.
+        if ($lex->matches('snapshot', ...$words) && ! $lex->matches('weblink', ...$words)) {
+            return ['type' => 'file', 'config' => ['capture' => 'camera']] + $field;
+        }
+
+        if ($lex->matches('geopoint', ...$words)) {
+            return ['type' => 'geo'] + $field;
+        }
+
+        return $field;
+    }
+
     public function buildField(array $field, string $currency): array
     {
         $fieldId = $this->id('fld');

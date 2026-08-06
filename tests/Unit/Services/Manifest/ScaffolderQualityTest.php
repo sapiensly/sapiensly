@@ -2253,3 +2253,80 @@ it('survives building a POS page when the summary fallback is needed', function 
     expect(collect($assembled['pages'])->pluck('slug'))->toContain('pos')
         ->and($assembled['objects'])->not->toBeEmpty();
 });
+
+/**
+ * The two defects the benchmark suite found on its first baseline run: a photo
+ * held as text (1 of 9 builds) and a hand-typed total beside the rollup that
+ * computes it (2 of 9). Both were produced by the scaffolder and reported by
+ * rules the platform already had.
+ */
+function capturedScaffold(array $fields): array
+{
+    $coercions = [];
+    $spec = ['objects' => [['name' => 'Órdenes', 'slug' => 'ordenes', 'fields' => $fields]], 'links' => []];
+
+    $assembled = app(AppScaffolder::class)->assemble([
+        'schema_version' => '1.0.0', 'id' => 'app_cap', 'slug' => 'cap_probe', 'name' => 'Probe', 'version' => 1,
+        'objects' => [], 'pages' => [],
+        'settings' => ['default_locale' => 'es-MX', 'default_currency' => 'MXN'],
+        'permissions' => ['roles' => [['id' => 'rol_admin000', 'slug' => 'admin', 'name' => 'Admin']]],
+    ], app(AppScaffolder::class)->normalizeSpec($spec, $coercions));
+
+    return collect($assembled['objects'])->firstWhere('slug', 'ordenes')['fields'];
+}
+
+it('types a photo, a signature and a location from their names', function () {
+    $fields = collect(capturedScaffold([
+        ['name' => 'Folio', 'type' => 'string'],
+        ['name' => 'Foto de evidencia', 'type' => 'string'],
+        ['name' => 'Firma del cliente', 'type' => 'string'],
+        ['name' => 'Geolocalización de llegada', 'type' => 'string'],
+        ['name' => 'Ubicación', 'type' => 'string'],
+    ]))->keyBy('slug');
+
+    // R11's own three categories, decided one step earlier — so the warning it
+    // used to raise has nothing left to fire on.
+    expect($fields['foto_de_evidencia']['type'])->toBe('file')
+        ->and($fields['foto_de_evidencia']['capture'])->toBe('camera')
+        ->and($fields['firma_del_cliente']['type'])->toBe('file')
+        ->and($fields['firma_del_cliente']['capture'])->toBe('signature')
+        ->and($fields['geolocalizacion_de_llegada']['type'])->toBe('geo')
+        // `geopoint` is deliberately narrow, and right to be: «Ubicación» is
+        // usually an address or a place name («Bodega 3»), not a lat/lng point.
+        ->and($fields['ubicacion']['type'])->toBe('string')
+        // An ordinary string is still an ordinary string.
+        ->and($fields['folio']['type'])->toBe('string');
+});
+
+it('leaves a link to an image as text', function () {
+    // `foto_url` points AT an image, it does not hold one — the same exclusion
+    // R11 makes.
+    $fields = collect(capturedScaffold([
+        ['name' => 'Folio', 'type' => 'string'],
+        ['name' => 'Foto URL', 'type' => 'string'],
+    ]))->keyBy('slug');
+
+    expect($fields['foto_url']['type'])->toBe('string');
+});
+
+it('raises no design warning on a scaffold that carries captures', function () {
+    $coercions = [];
+    $spec = ['objects' => [['name' => 'Órdenes', 'slug' => 'ordenes', 'fields' => [
+        ['name' => 'Folio', 'type' => 'string'],
+        ['name' => 'Foto de evidencia', 'type' => 'string'],
+        ['name' => 'Firma del cliente', 'type' => 'string'],
+    ]]], 'links' => []];
+
+    $assembled = app(AppScaffolder::class)->assemble([
+        'schema_version' => '1.0.0', 'id' => 'app_cap2', 'slug' => 'cap_probe2', 'name' => 'Probe', 'version' => 1,
+        'objects' => [], 'pages' => [],
+        'settings' => ['default_locale' => 'es-MX', 'default_currency' => 'MXN'],
+        'permissions' => ['roles' => [['id' => 'rol_admin000', 'slug' => 'admin', 'name' => 'Admin']]],
+    ], app(AppScaffolder::class)->normalizeSpec($spec, $coercions));
+
+    $r = (new ManifestValidator)->validate($assembled);
+    $messages = collect($r->warningsArray())->pluck('message')->implode(' ');
+
+    expect($r->valid)->toBeTrue()
+        ->and($messages)->not->toContain('held as text');
+});
