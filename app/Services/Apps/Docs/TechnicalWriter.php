@@ -2,6 +2,8 @@
 
 namespace App\Services\Apps\Docs;
 
+use Illuminate\Support\Str;
+
 /**
  * The technical sheet: what this app is made of, with the ids.
  *
@@ -186,24 +188,107 @@ final class TechnicalWriter
             return implode(' ', array_filter($parts));
         }
 
-        // A computed field keeps its wiring at the TOP level (`aggregator`,
-        // `via_relation_field_id`, `target_field_id`), not under `config`.
+        // Everything else the field carries, whatever it is called. A computed
+        // field keeps its wiring at the TOP level (`aggregator`,
+        // `via_relation_field_id`, `target_field_id`) and other properties sit
+        // under `config`, so both are swept.
+        return implode(' · ', $this->extras($field, self::FIELD_STRUCTURE));
+    }
+
+    /**
+     * The properties already spoken for by a column, a heading or a dedicated
+     * branch above — everything NOT listed here is a feature nobody has taught
+     * this sheet about yet, and gets printed as-is.
+     */
+    private const FIELD_STRUCTURE = [
+        'id', 'name', 'slug', 'type', 'required', 'options', 'config',
+        'target_object_id', 'cardinality', 'on_delete', 'inverse_field_id',
+    ];
+
+    /**
+     * Block properties that are structure, not capability: the tree, the label
+     * and the wiring printed elsewhere in this document.
+     */
+    private const BLOCK_STRUCTURE = [
+        'id', 'type', 'blocks', 'columns', 'items', 'label', 'title', 'content',
+        'on_click', 'on_submit', 'data_source', 'style', 'class', 'fields',
+        'group_by_field_id', 'date_field_id', 'card_title_field_id', 'via_relation_field_id',
+        'record_id_expression', 'tabs', 'steps', 'options',
+        // The subject, printed above with its id already resolved to a slug —
+        // repeating the raw `obj_01k…` costs a line per block and says less.
+        'object_id',
+        // A label and a styling choice; both families are excluded above.
+        'submit_label', 'variant',
+    ];
+
+    /**
+     * Print whatever a node carries beyond its structure — the generic rule,
+     * rather than a list of properties somebody has to remember to extend.
+     *
+     * It exists because the previous list did not have `capture` in it. The
+     * closing critic reads this sheet, so a signature field held as
+     * `file + capture:"signature"` looked to it exactly like a plain file
+     * upload, and a barcode-scanning string looked like a plain string. It
+     * reported both as MISSING on an app that had them — twice, in the two
+     * builds that were graded on precisely those features. A whitelist of
+     * "interesting" properties is a list of features the reviewer is blind to,
+     * and it goes stale the day the next capture mode ships.
+     *
+     * @param  array<string, mixed>  $node
+     * @param  list<string>  $structure
+     * @return list<string>
+     */
+    private function extras(array $node, array $structure): array
+    {
         $parts = [];
-        $describes = ['aggregator', 'via_relation_field_id', 'target_field_id', 'expression', 'source_field_id', 'relation_field_id'];
+        $node = $this->wiringFirst($node);
 
-        foreach ($describes as $key) {
-            $value = $field[$key] ?? ($field['config'][$key] ?? null);
-            if (! is_scalar($value)) {
-                continue;
+        foreach ([$node, is_array($node['config'] ?? null) ? $node['config'] : []] as $source) {
+            foreach ($source as $key => $value) {
+                if (in_array($key, $structure, true) || ! is_scalar($value) || $value === '' || $value === false) {
+                    continue;
+                }
+
+                // A flag says what it is by being set: `live=1` reads worse
+                // than `live`.
+                if ($value === true) {
+                    $parts[] = (string) $key;
+
+                    continue;
+                }
+
+                // Resolve the ids: `geo_field_id=fld_01k…` says nothing.
+                $parts[] = str_ends_with((string) $key, '_field_id')
+                    ? str_replace('_field_id', '', (string) $key).'='.$this->m->fieldName((string) $value, (string) $value)
+                    : $key.'='.Str::limit((string) $value, 60);
             }
-
-            // Resolve the ids: `via_relation_field_id=fld_01k…` says nothing.
-            $parts[] = str_ends_with($key, '_field_id')
-                ? str_replace('_field_id', '', $key).'='.$this->m->fieldName((string) $value, (string) $value)
-                : $key.'='.$value;
         }
 
-        return implode(' · ', $parts);
+        return array_values(array_unique($parts));
+    }
+
+    /**
+     * Lead with the properties that say what a computed field IS, then
+     * everything else in the order the manifest wrote it.
+     *
+     * Reading order only — the sweep above prints whatever it finds either way.
+     * Without this a rollup reads "readonly · aggregator=sum · target=Monto",
+     * burying the wiring behind a flag, and the line reshuffles whenever the
+     * author's key order does.
+     *
+     * @param  array<string, mixed>  $node
+     * @return array<string, mixed>
+     */
+    private function wiringFirst(array $node): array
+    {
+        $lead = [];
+        foreach (['aggregator', 'via_relation_field_id', 'target_field_id', 'expression', 'source_field_id', 'relation_field_id'] as $key) {
+            if (array_key_exists($key, $node)) {
+                $lead[$key] = $node[$key];
+            }
+        }
+
+        return $lead + $node;
     }
 
     /**
@@ -324,6 +409,14 @@ final class TechnicalWriter
         }
         if (isset($block['record_id_expression'])) {
             $parts[] = (string) $block['record_id_expression'];
+        }
+
+        // And whatever else it turns on — `live`, `ask`, `presence`,
+        // `editable`, `fill_from_voice`, the map's `geo_field_id`. These are
+        // features somebody asked for; a reviewer that cannot see them cannot
+        // tell whether they were built.
+        foreach ($this->extras($block, self::BLOCK_STRUCTURE) as $extra) {
+            $parts[] = $extra;
         }
 
         $label = trim((string) ($block['label'] ?? $block['title'] ?? ''));
@@ -517,9 +610,92 @@ final class TechnicalWriter
         if ($rows !== []) {
             $body[] = ['type' => 'table', 'head' => $head, 'rows' => $rows];
         }
+
+        $restrictions = $this->policyRestrictions($policies, $roles);
+        if ($restrictions !== []) {
+            $body[] = [
+                'type' => 'table',
+                'head' => [
+                    $this->w->get('col_object'),
+                    $this->w->get('col_role'),
+                    $this->w->get('perm_rows_seen'),
+                    $this->w->get('perm_fields_hidden'),
+                ],
+                'rows' => $restrictions,
+            ];
+        }
+
         $body[] = ['type' => 'note', 'text' => $this->w->get('perm_note')];
 
         return $body;
+    }
+
+    /**
+     * The half of a policy that the CRUD letters cannot say: which ROWS a role
+     * sees, and which FIELDS are kept from it.
+     *
+     * "R" on orders is the same four letters whether the technician sees every
+     * order in the company or only their own, and whether the cost column is
+     * visible or not. Both were asked for by name in a live build, both were
+     * implemented, and the reviewer — reading only the letters — reported both
+     * as missing and sent the builder back to redo work that was already done.
+     *
+     * @param  list<array<string, mixed>>  $policies
+     * @param  list<array<string, mixed>>  $roles
+     * @return list<list<string>>
+     */
+    private function policyRestrictions(array $policies, array $roles): array
+    {
+        $roleName = [];
+        foreach ($roles as $role) {
+            $roleName[(string) ($role['id'] ?? '')] = (string) ($role['name'] ?? '');
+        }
+
+        $rows = [];
+        foreach ($policies as $policy) {
+            $filter = $this->describeFilter($policy['row_filter'] ?? null);
+            $hidden = array_map(
+                fn ($id): string => $this->m->fieldName((string) $id, (string) $id),
+                array_filter((array) ($policy['field_restrictions']['hidden'] ?? []), 'is_scalar'),
+            );
+
+            if ($filter === '' && $hidden === []) {
+                continue;
+            }
+
+            $object = $this->m->object($policy['object_id'] ?? null);
+
+            $rows[] = [
+                (string) ($object['slug'] ?? ''),
+                $roleName[(string) ($policy['role_id'] ?? '')] ?? '',
+                $filter === '' ? $this->w->get('perm_all_rows') : $filter,
+                $hidden === [] ? '—' : implode(', ', $hidden),
+            ];
+        }
+
+        return $rows;
+    }
+
+    /**
+     * A row filter as a readable condition. Nested `and`/`or` groups are
+     * flattened one level, which covers every filter the builder writes.
+     */
+    private function describeFilter(mixed $filter): string
+    {
+        if (! is_array($filter) || $filter === []) {
+            return '';
+        }
+
+        if (isset($filter['conditions']) && is_array($filter['conditions'])) {
+            $inner = array_filter(array_map($this->describeFilter(...), $filter['conditions']));
+
+            return implode(' '.((string) ($filter['op'] ?? 'and')).' ', $inner);
+        }
+
+        $field = $this->m->fieldName($filter['field_id'] ?? null, (string) ($filter['field_id'] ?? ''));
+        $value = $filter['value_expression'] ?? $filter['value'] ?? null;
+
+        return trim($field.' '.((string) ($filter['op'] ?? '=')).' '.(is_scalar($value) ? (string) $value : ''));
     }
 
     /**

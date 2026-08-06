@@ -334,3 +334,84 @@ it('can leave the CRUD wiring and the runtime blurb out of the sheet', function 
         ->and($trimmed)->toContain('Contratos')
         ->and($trimmed)->toContain('leases');
 });
+
+/**
+ * The sheet has to show a FEATURE, not just a shape.
+ *
+ * The closing critic judges an app against what was asked by reading this
+ * document, so anything the document leaves out is something the critic cannot
+ * verify and will report as missing. It happened on two live builds graded on
+ * exactly these properties: a signature pad (`file` + `capture:"signature"`)
+ * read as a plain file upload, a barcode-scanning field read as a plain string,
+ * and a technician's policy — row-filtered to their own orders with the cost
+ * columns hidden — read as four undifferentiated CRUD letters. All three were
+ * built. All three came back as FALTA, and the review turn that "fixed" them
+ * deleted a page instead.
+ *
+ * The rule is now generic: whatever a node carries beyond its structure gets
+ * printed. These tests hold that line for the specific properties the failure
+ * was measured on.
+ */
+describe('what the sheet exposes', function () {
+    function featureManifest(): array
+    {
+        return docsManifest([
+            'objects' => [
+                0 => ['fields' => [
+                    0 => ['capture' => 'barcode'],
+                    1 => ['capture' => 'signature', 'type' => 'file'],
+                ]],
+            ],
+            'pages' => [
+                0 => ['blocks' => [
+                    2 => ['live' => true, 'ask' => true],
+                ]],
+            ],
+            'permissions' => [
+                'object_policies' => [
+                    1 => [
+                        'row_filter' => ['op' => 'eq', 'field_id' => 'fld_folio', 'value_expression' => '{{current_user.id}}'],
+                        'field_restrictions' => ['hidden' => ['fld_rent']],
+                    ],
+                ],
+            ],
+        ]);
+    }
+
+    it('shows a capture mode, which is the whole difference between a string and a scanner', function () {
+        $sheet = (new AppDocs)->technical(featureManifest())->toMarkdown();
+
+        expect($sheet)->toContain('capture=barcode')
+            ->and($sheet)->toContain('capture=signature');
+    });
+
+    it('shows what a block turns on', function () {
+        $sheet = (new AppDocs)->technical(featureManifest())->toMarkdown();
+
+        // Bare, not `live=1`: a flag says what it is by being set.
+        expect($sheet)->toContain('live')
+            ->and($sheet)->toContain('ask');
+    });
+
+    it('shows which rows a role sees and which fields are kept from it', function () {
+        $sheet = (new AppDocs)->technical(featureManifest())->toMarkdown();
+
+        // "R" is the same four letters whether the user sees every row or one.
+        expect($sheet)->toContain('Folio eq {{current_user.id}}')
+            ->and($sheet)->toContain('Renta mensual');
+    });
+
+    it('says plainly when a policy restricts nothing', function () {
+        $sheet = (new AppDocs)->technical(docsManifest([
+            'permissions' => ['object_policies' => [1 => ['field_restrictions' => ['hidden' => ['fld_rent']]]]],
+        ]))->toMarkdown();
+
+        expect($sheet)->toContain('todas');
+    });
+
+    it('leaves the restrictions table out when no policy has any', function () {
+        $sheet = (new AppDocs)->technical(docsManifest())->toMarkdown();
+
+        expect($sheet)->not->toContain('Filas que ve');
+    });
+});

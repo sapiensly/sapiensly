@@ -13,11 +13,18 @@ namespace App\Services\Manifest;
  */
 class ManifestDiffService
 {
-    /** Field properties whose change is a meaningful modification worth surfacing. */
-    private const FIELD_KEYS = [
-        'name', 'slug', 'type', 'cardinality', 'target_object_id',
-        'target_field_id', 'via_relation_field_id', 'aggregator', 'readonly', 'currency_code',
-    ];
+    /**
+     * Field properties handled elsewhere: the id it is matched on, and the
+     * options list, which gets its own added/removed treatment below.
+     *
+     * Everything else is compared, whatever it is called. This was a whitelist
+     * of "meaningful" properties and `capture` was not on it, so turning a
+     * plain string into a barcode-scanning one — or a file into a signature
+     * pad — was a change this diff reported as nothing at all. A whitelist here
+     * is a list of features the diff is blind to, and it goes stale the day the
+     * next one ships.
+     */
+    private const FIELD_STRUCTURE = ['id', 'options'];
 
     /**
      * @param  array<string, mixed>  $from
@@ -127,10 +134,17 @@ class ManifestDiffService
     private function fieldChanges(array $a, array $b): array
     {
         $changes = [];
-        foreach (self::FIELD_KEYS as $key) {
+        foreach (array_keys($a + $b) as $key) {
+            if (in_array($key, self::FIELD_STRUCTURE, true)) {
+                continue;
+            }
+
             $av = $a[$key] ?? null;
             $bv = $b[$key] ?? null;
-            if ($av !== $bv) {
+            // Only scalars: a nested structure that moved is reported by the
+            // add/remove passes, and diffing one here would print a wall of
+            // JSON where a reader wants one line.
+            if ($av !== $bv && (is_scalar($av) || $av === null) && (is_scalar($bv) || $bv === null)) {
                 $changes[$key] = ['from' => $av, 'to' => $bv];
             }
         }

@@ -207,6 +207,9 @@ class DocWords
             'col_steps' => 'Steps',
 
             // Technical — permissions
+            'perm_rows_seen' => 'Rows seen',
+            'perm_fields_hidden' => 'Fields hidden',
+            'perm_all_rows' => 'all',
             'perm_note' => 'An object with no policy is open within the app\'s visibility; a policy narrows it.',
             'col_object' => 'Object',
 
@@ -383,6 +386,9 @@ class DocWords
             'col_only_if' => 'Solo si',
             'col_steps' => 'Pasos',
 
+            'perm_rows_seen' => 'Filas que ve',
+            'perm_fields_hidden' => 'Campos ocultos',
+            'perm_all_rows' => 'todas',
             'perm_note' => 'Un objeto sin política queda abierto dentro de la visibilidad de la app; una política lo restringe.',
             'col_object' => 'Objeto',
 
@@ -558,6 +564,9 @@ class DocWords
             'col_only_if' => 'Só se',
             'col_steps' => 'Passos',
 
+            'perm_rows_seen' => 'Linhas que vê',
+            'perm_fields_hidden' => 'Campos ocultos',
+            'perm_all_rows' => 'todas',
             'perm_note' => 'Um objeto sem política fica aberto dentro da visibilidade do app; uma política o restringe.',
             'col_object' => 'Objeto',
 
@@ -733,6 +742,9 @@ class DocWords
             'col_only_if' => 'Seulement si',
             'col_steps' => 'Étapes',
 
+            'perm_rows_seen' => 'Lignes visibles',
+            'perm_fields_hidden' => 'Champs masqués',
+            'perm_all_rows' => 'toutes',
             'perm_note' => 'Un objet sans politique reste ouvert dans la visibilité de l’application ; une politique le restreint.',
             'col_object' => 'Objet',
 

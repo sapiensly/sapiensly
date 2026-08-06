@@ -102,3 +102,34 @@ it('returns an empty diff for identical manifests', function () {
     expect($diff['pages'])->toBe([]);
     expect($diff['settings'])->toBe([]);
 });
+
+/**
+ * A property nobody listed is a change nobody sees.
+ *
+ * The field comparison was a whitelist of "meaningful" properties, and
+ * `capture` was not on it — so turning a plain string into one that scans a
+ * barcode, or a file upload into a signature pad, diffed as literally nothing.
+ * That is the same blindness the technical sheet had, and both were read by
+ * someone trying to answer "did this turn build what was asked?".
+ */
+it('reports a capture mode turning a plain field into a scanner', function () {
+    $to = manifestV1();
+    $to['objects'][0]['fields'][0]['capture'] = 'barcode';
+
+    $diff = app(ManifestDiffService::class)->diff(manifestV1(), $to);
+    $changes = $diff['objects']['modified'][0]['fields']['modified'][0]['changes'];
+
+    expect($changes)->toHaveKey('capture')
+        ->and($changes['capture'])->toBe(['from' => null, 'to' => 'barcode']);
+});
+
+it('leaves a nested structure to the add/remove passes rather than dumping json', function () {
+    $to = manifestV1();
+    // A whole options list moved — already reported as added/removed values.
+    $to['objects'][0]['fields'][1]['options'][] = ['value' => 'c', 'label' => 'C'];
+
+    $diff = app(ManifestDiffService::class)->diff(manifestV1(), $to);
+    $changes = $diff['objects']['modified'][0]['fields']['modified'][0]['changes'];
+
+    expect($changes['options'])->toBe(['added' => ['c']]);
+});
