@@ -199,7 +199,8 @@ it('names the object\'s real fields when a reference will not resolve', function
     $error = collect($r->errorsArray())->firstWhere('code', 'unresolved_ref');
 
     expect($error)->not->toBeNull()
-        ->and($error['message'])->toContain('Write the SLUG instead of an id')
+        // Separated from the message it follows, not run on from the id.
+        ->and($error['message'])->toContain("'. Write the SLUG instead of an id")
         // The candidates, so the retry is a lookup rather than another guess.
         ->and($error['message'])->toContain('sku')
         ->and($error['message'])->toContain('precio');

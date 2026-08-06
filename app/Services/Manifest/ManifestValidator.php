@@ -136,7 +136,10 @@ class ManifestValidator
                 continue;
             }
 
-            $hint = ' Write the SLUG instead of an id — it is resolved against the object in scope.';
+            // The sites word their messages differently and few end in a full
+            // stop; without this the hint runs straight on from the id.
+            $tail = str_ends_with($error->message, '.') ? ' ' : '. ';
+            $hint = $tail.'Write the SLUG instead of an id — it is resolved against the object in scope.';
 
             // The object is named in the message at every site that knows it.
             if (preg_match("/'(obj_[a-z0-9_]+)'/", $error->message, $m)) {
