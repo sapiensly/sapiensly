@@ -226,6 +226,19 @@ describe('the technical sheet', function () {
         expect($doc)->toContain('| Objeto | Admin | User |')
             ->and($doc)->toContain('| leases | CRUD | R |');
     });
+
+    it('says a cell with no policy is OPEN, not blank', function () {
+        // `payments` carries no policy for either role, which means both roles
+        // see all of it. Rendered as an em-dash it reads as a gap, and the
+        // closing critic read it that way twice on the same brief — reporting
+        // «los roles no están realmente diferenciados» as MISSING on an app
+        // whose unrestricted roles were correct. The note under the table
+        // always said so; the table is what gets scanned.
+        $doc = (new AppDocs)->technical(docsManifest())->toMarkdown();
+
+        expect($doc)->toContain('| payments | abierto | abierto |')
+            ->and($doc)->not->toContain('| payments | — | — |');
+    });
 });
 
 describe('an app with nothing in it', function () {

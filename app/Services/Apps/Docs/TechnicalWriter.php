@@ -600,7 +600,17 @@ final class TechnicalWriter
                         );
                     }
                 }
-                $row[] = $actions === [] ? '—' : implode('', $actions);
+                // No policy means OPEN, not absent — say so in the cell.
+                //
+                // An em-dash in every column reads as a gap, and the closing
+                // critic read it that way twice on the same brief: "los roles
+                // no están realmente diferenciados", reported as MISSING on an
+                // app where admin and supervisor were correctly unrestricted.
+                // The note under the table already said it; the table is what
+                // gets scanned. The review turns that finding bought went on to
+                // rewrite `/permissions` — where a fifth of all this build's
+                // rejected patches landed.
+                $row[] = $actions === [] ? $this->w->get('perm_open') : implode('', $actions);
             }
 
             $rows[] = $row;

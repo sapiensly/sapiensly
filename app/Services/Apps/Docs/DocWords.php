@@ -211,6 +211,7 @@ class DocWords
             'perm_fields_hidden' => 'Fields hidden',
             'perm_all_rows' => 'all',
             'perm_note' => 'An object with no policy is open within the app\'s visibility; a policy narrows it.',
+            'perm_open' => 'open',
             'col_object' => 'Object',
 
             // Technical — runtime
@@ -390,6 +391,7 @@ class DocWords
             'perm_fields_hidden' => 'Campos ocultos',
             'perm_all_rows' => 'todas',
             'perm_note' => 'Un objeto sin política queda abierto dentro de la visibilidad de la app; una política lo restringe.',
+            'perm_open' => 'abierto',
             'col_object' => 'Objeto',
 
             'rt_url' => 'La app corre en {url}. Cada página es esa dirección más la ruta de la página.',
@@ -568,6 +570,7 @@ class DocWords
             'perm_fields_hidden' => 'Campos ocultos',
             'perm_all_rows' => 'todas',
             'perm_note' => 'Um objeto sem política fica aberto dentro da visibilidade do app; uma política o restringe.',
+            'perm_open' => 'aberto',
             'col_object' => 'Objeto',
 
             'rt_url' => 'O app roda em {url}. Cada página é esse endereço mais a rota da página.',
@@ -746,6 +749,7 @@ class DocWords
             'perm_fields_hidden' => 'Champs masqués',
             'perm_all_rows' => 'toutes',
             'perm_note' => 'Un objet sans politique reste ouvert dans la visibilité de l’application ; une politique le restreint.',
+            'perm_open' => 'ouvert',
             'col_object' => 'Objet',
 
             'rt_url' => 'L’application tourne à {url}. Chaque page est cette adresse plus le chemin de la page.',

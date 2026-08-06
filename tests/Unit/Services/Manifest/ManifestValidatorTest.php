@@ -4228,3 +4228,49 @@ it('design-lint R14: a page you can work in is not an overview', function () {
     expect($r->valid)->toBeTrue()
         ->and(designWarnings($r)->pluck('message')->implode(' '))->not->toContain('second overview');
 });
+
+it('design-lint R14: several views over one object are not a second overview', function () {
+    // The standing field-service brief asks for exactly this, in these words:
+    // «en órdenes quiero varias vistas sobre el mismo dato: lista, tablero por
+    // estado, calendario y mapa». Read carelessly that IS a duplicate page —
+    // several views of data the dashboard already charts. It is not, and a rule
+    // that fires here is worse than no rule: it would accuse every build of the
+    // one thing the brief asks for by name.
+    //
+    // What saves it is the definition, not a special case: those pages carry
+    // LIST blocks, and an overview is made of aggregate ones.
+    $m = overviewPagesManifest(['dashboard' => ['clientes', 'ordenes']]);
+    $ordenes = collect($m['objects'])->firstWhere('slug', 'ordenes');
+    $titleId = $ordenes['fields'][0]['id'];
+
+    $fecha = id('fld');
+    $m['objects'] = collect($m['objects'])->map(function (array $o) use ($fecha): array {
+        if ($o['slug'] === 'ordenes') {
+            $o['fields'][] = ['id' => $fecha, 'slug' => 'fecha', 'name' => 'Fecha', 'type' => 'datetime'];
+        }
+
+        return $o;
+    })->all();
+
+    $m['pages'][] = [
+        'id' => id('pag'), 'slug' => 'ordenes_lista', 'name' => 'Órdenes', 'path' => '/ordenes_lista',
+        'blocks' => [[
+            'id' => id('blk'), 'type' => 'table',
+            'data_source' => ['object_id' => $ordenes['id']],
+            'columns' => [['id' => id('col'), 'field_id' => $titleId]],
+        ]],
+    ];
+    $m['pages'][] = [
+        'id' => id('pag'), 'slug' => 'ordenes_calendario', 'name' => 'Calendario', 'path' => '/ordenes_calendario',
+        'blocks' => [[
+            'id' => id('blk'), 'type' => 'calendar',
+            'data_source' => ['object_id' => $ordenes['id']],
+            'date_field_id' => $fecha, 'title_field_id' => $titleId,
+        ]],
+    ];
+
+    $r = (new ManifestValidator)->validate($m);
+
+    expect($r->valid)->toBeTrue()
+        ->and(designWarnings($r)->pluck('message')->implode(' '))->not->toContain('second overview');
+});
