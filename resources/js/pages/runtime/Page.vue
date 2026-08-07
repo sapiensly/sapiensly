@@ -5,9 +5,9 @@ import BlockBreadcrumb from '@/runtime/blocks/BlockBreadcrumb.vue';
 import ConfirmDialog from '@/runtime/ConfirmDialog.vue';
 import EnvironmentBar from '@/runtime/EnvironmentBar.vue';
 import { manifestFontHrefs } from '@/runtime/fonts';
+import LandingChatbotBubble from '@/runtime/LandingChatbotBubble.vue';
 import OfflineBar from '@/runtime/OfflineBar.vue';
 import { startOfflineQueue } from '@/runtime/offlineQueue';
-import LandingChatbotBubble from '@/runtime/LandingChatbotBubble.vue';
 import RolePreviewBar from '@/runtime/RolePreviewBar.vue';
 import RuntimeChatPanel from '@/runtime/RuntimeChatPanel.vue';
 import { runtimeSettingsStyle } from '@/runtime/runtimeStyle';
@@ -309,7 +309,8 @@ provide('runtimeLocale', locale.value);
  * between is how one of them ends up not getting it.
  */
 const offline = computed(
-    () => props.offline ?? { enabled: true, excluded_object_ids: [] as string[] },
+    () =>
+        props.offline ?? { enabled: true, excluded_object_ids: [] as string[] },
 );
 provide('offlinePolicy', offline);
 
@@ -496,7 +497,18 @@ onMounted(() => {
         </div>
 
         <!-- Sidebar layout: left rail + scrolling content. -->
-        <div v-else-if="useSidebar" class="flex min-h-screen bg-navy-deep">
+        <!-- overflow-x-clip, like the landing surface above: a block that
+             outgrows the screen must scroll inside ITSELF, never widen the
+             document. Once the page scrolls sideways every `position: fixed`
+             element is laid out against a viewport that no longer matches what
+             you can see, so one wide table takes the modals with it. `clip`
+             rather than `hidden` because it does not create a scroll container
+             — the sticky table header and the sticky form actions still work.
+             -->
+        <div
+            v-else-if="useSidebar"
+            class="flex min-h-screen overflow-x-clip bg-navy-deep"
+        >
             <SiteSidebar
                 :brand="brand"
                 :nav-items="navItems"
@@ -577,7 +589,18 @@ onMounted(() => {
         </div>
 
         <!-- Top-header layout (default). -->
-        <div v-else class="flex min-h-screen flex-col bg-navy-deep">
+        <!-- overflow-x-clip, like the landing surface above: a block that
+             outgrows the screen must scroll inside ITSELF, never widen the
+             document. Once the page scrolls sideways every `position: fixed`
+             element is laid out against a viewport that no longer matches what
+             you can see, so one wide table takes the modals with it. `clip`
+             rather than `hidden` because it does not create a scroll container
+             — the sticky table header and the sticky form actions still work.
+             -->
+        <div
+            v-else
+            class="flex min-h-screen flex-col overflow-x-clip bg-navy-deep"
+        >
             <div class="px-5">
                 <OfflineBar :locale="locale" />
                 <EnvironmentBar

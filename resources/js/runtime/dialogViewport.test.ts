@@ -16,7 +16,8 @@ import { describe, expect, it } from 'vitest';
  * jsdom has no layout, so mounting it would prove nothing about height. This is
  * a lock on the fix, and it is the honest kind: it says exactly what it checks.
  */
-const read = (path: string) => readFileSync(resolve(process.cwd(), path), 'utf8');
+const read = (path: string) =>
+    readFileSync(resolve(process.cwd(), path), 'utf8');
 
 const BASES = [
     'resources/js/components/ui/dialog/DialogContent.vue',
@@ -25,18 +26,23 @@ const BASES = [
 ];
 
 describe('every dialog the product centres on the viewport', () => {
-    it.each(BASES)('bounds its height against the visible viewport — %s', (path) => {
-        const source = read(path);
+    it.each(BASES)(
+        'bounds its height against the visible viewport — %s',
+        (path) => {
+            const source = read(path);
 
-        expect(source).toMatch(/max-h-\[calc\(100dvh/);
-    });
+            expect(source).toMatch(/max-h-\[calc\(100dvh/);
+        },
+    );
 
     it('takes the whole screen on a phone, and only becomes a card from sm up', () => {
         // A dialog holding a twelve-field form has nothing to gain from a
         // gutter and a shadow: every pixel spent on framing is a pixel not
         // spent on the question, and a card that ends before the fold makes it
         // look as though the form does too.
-        const source = read('resources/js/components/ui/dialog/DialogContent.vue');
+        const source = read(
+            'resources/js/components/ui/dialog/DialogContent.vue',
+        );
 
         expect(source).toContain('fixed inset-0');
         expect(source).toContain('h-full');
@@ -53,10 +59,52 @@ describe('every dialog the product centres on the viewport', () => {
         expect(read(path)).toContain('overflow-y-auto');
     });
 
-    it.each(BASES)('does not let the page behind it scroll instead — %s', (path) => {
-        // Reaching the end of a scrolling modal and having the page underneath
-        // start moving is the other half of "it does not scroll properly".
-        expect(read(path)).toContain('overscroll-contain');
+    it.each(BASES)(
+        'does not let the page behind it scroll instead — %s',
+        (path) => {
+            // Reaching the end of a scrolling modal and having the page underneath
+            // start moving is the other half of "it does not scroll properly".
+            expect(read(path)).toContain('overscroll-contain');
+        },
+    );
+});
+
+/**
+ * A page that scrolls sideways takes every dialog on it down.
+ *
+ * A `position: fixed` element is laid out against the viewport — but once the
+ * DOCUMENT is wider than the screen, that viewport is no longer what you can
+ * see, and a full-width dialog ends up with its right edge, and the close
+ * button pinned to it, past the visible area. A row of five tabs on a phone was
+ * enough to do it.
+ *
+ * So the rule is one level up from the dialog: a block that outgrows the screen
+ * scrolls inside ITSELF and never widens the document.
+ */
+describe('nothing in the runtime widens the page', () => {
+    it('slides a row of tabs instead of letting it push the page out', () => {
+        const source = read('resources/js/components/ui/tabs/TabsList.vue');
+
+        expect(source).toContain('max-w-full');
+        expect(source).toContain('overflow-x-auto');
+        // Centred inside a box narrower than itself, a flex row overflows in
+        // both directions and its first tab cannot be scrolled back to.
+        expect(source).toContain('justify-start');
+        expect(source).not.toContain('justify-center');
+    });
+
+    it('clips what still gets past that, on every runtime layout', () => {
+        // `clip` rather than `hidden`: it does not create a scroll container,
+        // so the sticky table header and the sticky form actions still work.
+        // Counted in the class attributes, not in the prose around them: the
+        // three layout roots are the landing surface, the sidebar layout and
+        // the top-header one, and a fourth would need this too.
+        const source = read('resources/js/pages/runtime/Page.vue');
+        const applied =
+            source.match(/class="[^"]*overflow-x-clip[^"]*"/g) ?? [];
+
+        expect(applied).toHaveLength(3);
+        expect(applied.every((c) => c.includes('min-h-screen'))).toBe(true);
     });
 });
 
