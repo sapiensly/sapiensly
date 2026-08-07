@@ -5,6 +5,7 @@ use App\Http\Middleware\EnsureUserIsSysAdmin;
 use App\Http\Middleware\HandleAppearance;
 use App\Http\Middleware\HandleInertiaRequests;
 use App\Http\Middleware\InjectAiProviderConfig;
+use App\Http\Middleware\NoStoreWhenOfflineIsRefused;
 use App\Http\Middleware\RejectBlockedUsers;
 use App\Http\Middleware\ResolveTenantConnection;
 use App\Http\Middleware\SetLocale;
@@ -55,6 +56,7 @@ return Application::configure(basePath: dirname(__DIR__))
         // including Inertia's, which replaces Vary outright on the way out.
         $middleware->web(prepend: [
             VaryOnNegotiatedLanguage::class,
+            NoStoreWhenOfflineIsRefused::class,
         ]);
 
         $middleware->web(append: [

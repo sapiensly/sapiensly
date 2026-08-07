@@ -46,8 +46,12 @@ export function useFileUpload(
          * through here is an attachment. `BlockForm` uploads a document to
          * have a MODEL read it, and bytes held for a reading that will never
          * happen are a photo the person thinks they attached to nothing.
+         *
+         * A getter rather than a boolean: the answer depends on the app's
+         * offline policy, which arrives by injection and is read where it is
+         * needed rather than frozen at the moment this composable was called.
          */
-        holdOffline?: boolean;
+        holdOffline?: () => boolean;
     } = {},
 ) {
     const locale = options.locale ?? 'en';
@@ -117,7 +121,7 @@ export function useFileUpload(
             // customer's signature on it — so keep them and hand back
             // something the field can use. The queue uploads them for real
             // just before it sends the write that refers to them.
-            if (err.response?.status === undefined && options.holdOffline) {
+            if (err.response?.status === undefined && options.holdOffline?.()) {
                 const held = await holdFile(
                     blob,
                     filename ?? (blob instanceof File ? blob.name : 'upload'),

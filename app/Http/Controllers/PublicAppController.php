@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Middleware\NoStoreWhenOfflineIsRefused;
 use App\Models\App;
 use App\Services\Apps\AppAccessResolver;
 use App\Services\Apps\BlockVisibilityFilter;
@@ -11,6 +12,7 @@ use App\Support\Branding\ColorPalette;
 use App\Support\Branding\OrganizationBrand;
 use App\Support\Css\ScopedAppCss;
 use App\Support\Manifest\PageNavigation;
+use App\Support\Offline\OfflinePolicy;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -112,6 +114,14 @@ class PublicAppController extends Controller
             (string) ($settings['palette_mode'] ?? 'brand'),
         );
 
+        // The portal is the surface most likely to be a shared device — a tablet
+        // at a counter, a phone passed around a crew — so the same rule applies
+        // here, enforced the same way.
+        $offline = OfflinePolicy::for($manifest);
+        if (! $offline->mayCachePage($page)) {
+            $request->attributes->set(NoStoreWhenOfflineIsRefused::ATTRIBUTE, true);
+        }
+
         return Inertia::render('runtime/Page', [
             'app' => [
                 'id' => $app->id,
@@ -155,6 +165,7 @@ class PublicAppController extends Controller
                     'name' => $portalUser->name,
                 ],
             ],
+            'offline' => $offline->toClient(),
         ]);
     }
 

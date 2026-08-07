@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { Camera, Map, MapPin, ScanLine } from '@lucide/vue';
-import { computed, defineAsyncComponent, ref, watch } from 'vue';
+import { computed, defineAsyncComponent, inject, ref, watch } from 'vue';
 import { requestScan } from '../scanner';
 import type { FieldDef } from '../types/manifest';
+import type { OfflinePolicy } from '../useActionExecutor';
 import { useFileUpload, type UploadedFile } from '../useFileUpload';
 import { themeTokens, useRuntimeTheme } from '../useRuntimeTheme';
 import { runtimeWord } from '../words';
@@ -39,7 +40,37 @@ const props = defineProps<{
     appSlug: string;
     /** The app's locale, for the words the inputs say on their own behalf. */
     locale?: string;
+    /**
+     * The object this field belongs to, when the form writes a record.
+     *
+     * Only used to decide whether an attachment may be HELD on the device when
+     * there is no signal. Absent means no — the questionnaire form posts to a
+     * one-shot endpoint that is never queued, so bytes held for it would be a
+     * photo attached to a write that is never going to be replayed.
+     */
+    objectId?: string;
 }>();
+
+/** What this app may leave on the device. Provided by the runtime page. */
+const offlinePolicy = inject<{ value: OfflinePolicy } | null>('offlinePolicy', null);
+
+/**
+ * Whether a photo taken here may wait on the device.
+ *
+ * Two conditions, and the default when either is unknown is NO. An attachment
+ * held for a write that cannot be queued is bytes nobody will ever send, and
+ * one held for an object the owner keeps off devices is the exact leak
+ * `settings.offline` exists to prevent.
+ */
+const mayHoldOffline = computed(() => {
+    const policy = offlinePolicy?.value;
+
+    if (props.objectId === undefined || policy === undefined || !policy.enabled) {
+        return false;
+    }
+
+    return !policy.excluded_object_ids.includes(props.objectId);
+});
 
 const emit = defineEmits<{
     (e: 'update:modelValue', value: unknown): void;
@@ -322,8 +353,8 @@ const {
 } = useFileUpload(props.appSlug, {
     locale: props.locale,
     // The attachment IS the record: a work order closes with the photo of the
-    // meter and the customer's signature on it.
-    holdOffline: true,
+    // meter and the customer's signature on it. Unless this app says otherwise.
+    holdOffline: () => mayHoldOffline.value,
 });
 
 async function onFileSelected(ev: Event) {

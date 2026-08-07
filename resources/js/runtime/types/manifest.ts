@@ -387,6 +387,16 @@ export interface RuntimePageProps {
     /** Author CSS, already compiled + scoped to `.sp-app-surface` (may be ''). */
     customCss?: string;
     /**
+     * What this app may leave on the device.
+     *
+     * The SERVER already refuses to let a page be cached, with `no-store` on the
+     * response — that is the enforcement point a stale service worker cannot
+     * bypass. This is for the two decisions only the client can make: whether to
+     * HOLD a write that could not be sent, and whether to hold the photo
+     * attached to one. The server never sees the request that was not made.
+     */
+    offline?: { enabled: boolean; excluded_object_ids: string[] };
+    /**
      * URL prefix this app is served under, so nav links and action POSTs stay
      * on the surface the visitor is on. Defaults to `/r/{app.slug}` (the
      * authenticated runtime); a public portal passes `/a/{public_slug}`.

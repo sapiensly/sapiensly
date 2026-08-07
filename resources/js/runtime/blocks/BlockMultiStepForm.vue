@@ -428,6 +428,7 @@ async function cancel() {
                         v-model="formData[rf.slug]"
                         :app-slug="appSlug"
                         :locale="locale"
+                        :object-id="object?.id"
                     />
                 </div>
 

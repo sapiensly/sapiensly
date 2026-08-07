@@ -37,3 +37,36 @@ describe('deciding what may wait for a signal', () => {
         expect(mayWaitForASignal([], null)).toBe(true);
     });
 });
+
+describe('an app that says what it may leave on a device', () => {
+    const create = (objectId: string) => [{ type: 'create_record', object_id: objectId }];
+
+    it('holds nothing at all when the owner turned offline off', () => {
+        expect(mayWaitForASignal(create('obj_ordenes'), null, { enabled: false, excluded_object_ids: [] })).toBe(false);
+    });
+
+    it('refuses only the writes that touch an excluded object', () => {
+        // Per object, so the field app keeps working in the basement and the
+        // payroll screen does not follow the technician home.
+        const policy = { enabled: true, excluded_object_ids: ['obj_nominas'] };
+
+        expect(mayWaitForASignal(create('obj_ordenes'), null, policy)).toBe(true);
+        expect(mayWaitForASignal(create('obj_nominas'), null, policy)).toBe(false);
+    });
+
+    it('finds the object however deeply an action buries it', () => {
+        // The list of places an object_id can appear is exactly the list that
+        // goes stale, so nothing enumerates it. The server walks the page the
+        // same way for the same reason.
+        const policy = { enabled: true, excluded_object_ids: ['obj_nominas'] };
+        const nested = [{ type: 'create_record', values: { lines: [{ object_id: 'obj_nominas' }] } }];
+
+        expect(mayWaitForASignal(nested, null, policy)).toBe(false);
+    });
+
+    it('allows everything when no policy reached the client', () => {
+        // The builder preview mounts blocks with no runtime page around them.
+        // The default is what every surface did before this existed.
+        expect(mayWaitForASignal(create('obj_ordenes'), null)).toBe(true);
+    });
+});

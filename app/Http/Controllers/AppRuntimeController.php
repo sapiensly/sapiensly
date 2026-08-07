@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Enums\AppKind;
+use App\Http\Middleware\NoStoreWhenOfflineIsRefused;
 use App\Http\Middleware\VaryOnNegotiatedLanguage;
 use App\Models\App;
 use App\Services\Apps\AppAccessResolver;
@@ -15,6 +16,7 @@ use App\Support\Branding\OrganizationBrand;
 use App\Support\Css\ScopedAppCss;
 use App\Support\Landing\LandingLanguages;
 use App\Support\Manifest\PageNavigation;
+use App\Support\Offline\OfflinePolicy;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -175,6 +177,15 @@ class AppRuntimeController extends Controller
             $request->attributes->set(VaryOnNegotiatedLanguage::ATTRIBUTE, true);
         }
 
+        // What this app may leave on the device. A page reading an object the
+        // owner keeps off devices is marked here and gets `no-store` on the way
+        // out — the service worker already refuses to store that, so the rule
+        // lands on the ONE enforcement point a stale client cannot bypass.
+        $offline = OfflinePolicy::for($manifest);
+        if (! $offline->mayCachePage($page)) {
+            $request->attributes->set(NoStoreWhenOfflineIsRefused::ATTRIBUTE, true);
+        }
+
         return Inertia::render('runtime/Page', [
             'app' => [
                 'id' => $app->id,
@@ -244,6 +255,10 @@ class AppRuntimeController extends Controller
             'params' => (object) $params,
             // Author CSS, compiled + scoped to the app surface (never leaks out).
             'customCss' => ScopedAppCss::compile($settings['custom_css'] ?? null),
+            // Only the client can decide whether to HOLD a write, or the photo
+            // attached to one — the server never sees the request that was not
+            // made. So it gets the same policy the header above enforces.
+            'offline' => $offline->toClient(),
         ]);
     }
 

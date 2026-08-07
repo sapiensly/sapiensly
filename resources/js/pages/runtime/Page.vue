@@ -300,6 +300,19 @@ provide(
 provide('runtimeLocale', locale.value);
 // Public-surface flags for the lead_form block: live submits happen only on
 // the published /l page; the preview/authenticated runtime render it disabled.
+/**
+ * What this app may leave on the device.
+ *
+ * Provided rather than passed down: the two components that need it — the form
+ * field that holds a photo and the executor that holds a write — are nowhere
+ * near each other in the tree, and threading a policy through every block in
+ * between is how one of them ends up not getting it.
+ */
+const offline = computed(
+    () => props.offline ?? { enabled: true, excluded_object_ids: [] as string[] },
+);
+provide('offlinePolicy', offline);
+
 provide('publicSurface', props.publicSurface ?? false);
 provide('turnstileSiteKey', props.turnstileSiteKey ?? null);
 // Chart components that resolve CSS-var palettes to hex re-read on this signal
@@ -353,7 +366,13 @@ onMounted(() => {
     // Sends anything queued while there was no signal. Safe to call on every
     // mount: it reads the counts, and flushes only when there is a connection
     // and no flush already running.
-    startOfflineQueue();
+    //
+    // Not started at all for an app whose owner turned offline off — there is
+    // nothing to flush, and starting it would leave a listener watching for a
+    // signal on behalf of a feature this app does not have.
+    if (offline.value.enabled) {
+        startOfflineQueue();
+    }
 
     const settle = () => {
         fontsSettled = true;

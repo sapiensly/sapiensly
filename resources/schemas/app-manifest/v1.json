@@ -6716,6 +6716,27 @@
                     "type": "string",
                     "default": "America/Mexico_City"
                 },
+                "offline": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "description": "What this app may leave on a device. A built app works without a signal by default — pages it has seen are cached, and writes made offline (with their photos and signatures) are held until the signal returns. The cost is that tenant rows sit on a phone's disk in the clear. For a work order that is the right trade; for a payroll run it is not. Set enabled:false to turn it off for this app, or list objects under exclude_objects to keep just those off the device. Omit this entirely unless the app handles data that must not leave the server.",
+                    "properties": {
+                        "enabled": {
+                            "type": "boolean",
+                            "default": true,
+                            "description": "Whether this app may be cached and used offline at all. Default true."
+                        },
+                        "exclude_objects": {
+                            "type": "array",
+                            "maxItems": 50,
+                            "description": "Object SLUGS whose data must never be written to a device. A page is served no-store and never cached if ANYTHING on it reads one of them, and a write touching one is refused rather than queued — the person is told it needs a connection instead of being told it was saved.",
+                            "items": {
+                                "type": "string",
+                                "pattern": "^[a-z][a-z0-9_]*$"
+                            }
+                        }
+                    }
+                },
                 "default_currency": {
                     "type": "string",
                     "pattern": "^[A-Z]{3}$",

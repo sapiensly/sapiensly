@@ -215,12 +215,50 @@ function interpolateTemplate(raw: unknown, ctx: ExecutionContext): unknown {
  * would land it wherever the session then points. Sandbox work quietly written
  * into production is a worse outcome than a sandbox that needs a signal.
  */
-export function mayWaitForASignal(actions: RuntimeAction[], environment: string | null): boolean {
-    if (environment) {
+export function mayWaitForASignal(
+    actions: RuntimeAction[],
+    environment: string | null,
+    policy: OfflinePolicy = { enabled: true, excluded_object_ids: [] },
+): boolean {
+    if (environment || !policy.enabled) {
+        return false;
+    }
+
+    if (actions.some((a) => objectIdsIn(a).some((id) => policy.excluded_object_ids.includes(id)))) {
         return false;
     }
 
     return actions.every((a) => a.type !== 'run_workflow');
+}
+
+/** What this app may leave on the device. Mirrors `App\Support\Offline\OfflinePolicy`. */
+export interface OfflinePolicy {
+    enabled: boolean;
+    excluded_object_ids: string[];
+}
+
+/**
+ * Every object id anywhere under a node.
+ *
+ * Generic rather than reading `action.object_id`, because an action carries one
+ * at more than one depth and the list of places is exactly the list that goes
+ * stale. The server walks the page the same way for the same reason.
+ */
+function objectIdsIn(node: unknown): string[] {
+    if (node === null || typeof node !== 'object') {
+        return [];
+    }
+
+    const found: string[] = [];
+    for (const [key, value] of Object.entries(node as Record<string, unknown>)) {
+        if (key === 'object_id' && typeof value === 'string') {
+            found.push(value);
+        } else if (typeof value === 'object') {
+            found.push(...objectIdsIn(value));
+        }
+    }
+
+    return found;
 }
 
 /**
@@ -232,6 +270,10 @@ export function mayWaitForASignal(actions: RuntimeAction[], environment: string 
 export function useActionExecutor() {
     const environment = inject<string | null>('runtimeEnvironment', null);
     const locale = inject<string>('runtimeLocale', 'en');
+    // What this app may leave on the device. Absent outside a runtime page
+    // (the builder preview mounts blocks directly), where the default — offline
+    // allowed — is the behaviour every surface had before this existed.
+    const offlinePolicy = inject<{ value: OfflinePolicy } | null>('offlinePolicy', null);
     // Every record mutation in the runtime goes out through here — see
     // useRuntimeWrite for why that matters before offline exists.
     const { write } = useRuntimeWrite();
@@ -283,7 +325,11 @@ export function useActionExecutor() {
                 page: ctx.page ?? currentPageSlug(),
             },
             {
-                queueOffline: mayWaitForASignal(actions, environment),
+                queueOffline: mayWaitForASignal(
+                    actions,
+                    environment,
+                    offlinePolicy?.value ?? { enabled: true, excluded_object_ids: [] },
+                ),
                 label: actions.map((a) => a.type).join(' + '),
             },
         );

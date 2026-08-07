@@ -306,6 +306,15 @@ TELLING A PERSON SOMETHING HAPPENED (`notify.send`):
 - During `verify_workflow` nothing is sent (the output carries `simulated: true`) but recipients still resolve, so verification tells you who WOULD be reached.
 TXT,
 
+        'offline' => <<<'TXT'
+WORKING WITHOUT A SIGNAL (`settings.offline`):
+- Every built app already works offline and you do NOT have to ask for it: pages a person has opened are cached and reopen with no network, writes made offline are held on the device and sent when the signal returns, and photos and signatures taken offline go up with them. Nothing in the manifest turns this on.
+- THE COST is that tenant rows sit on the device's disk in the clear, and an unsent write sits there too. For a work order that is exactly the trade you want. For payroll, medical notes, a disciplinary file or anything the organization would not put on a technician's phone, it is not.
+- SO SAY SO when the brief does: `settings.offline = {"enabled": false}` turns the whole thing off for this app, and `{"exclude_objects": ["nominas", "expedientes"]}` (object SLUGS) keeps just those off the device while the rest of the app keeps working offline. Prefer the exclusion — turning it all off to protect one screen costs the field app the reason it exists.
+- WHAT THE EXCLUSION DOES, so you can explain it: a page is never cached if ANYTHING on it reads an excluded object (derived from the blocks — you do not mark pages), and a write touching one is refused rather than held, so the person is told it needs a connection instead of being told it was saved.
+- DO NOT set this speculatively. An app that silently stops working in the basement it was built for is a worse failure than the one this guards against. Set it when the brief names data that must not leave the server, and say in your reply which objects you excluded and why.
+TXT,
+
         'api' => <<<'TXT'
 THE APP'S REST DATA API (external systems reading and writing records):
 - Every app can expose its records over HTTP at `/api/apps/v1/…`, authenticated by an API key. Reach for this when the user asks to "conectar X con esto", "que mi sistema mande los pedidos", "sacar los datos a otro lado" — the app becomes the system of record for something else.
