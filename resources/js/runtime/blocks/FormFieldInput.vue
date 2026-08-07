@@ -1,9 +1,25 @@
 <script setup lang="ts">
-import { Camera, Map, MapPin, ScanLine } from '@lucide/vue';
+import {
+    Camera,
+    Contact,
+    Map,
+    MapPin,
+    Mic,
+    Nfc,
+    ScanLine,
+    ScreenShare,
+} from '@lucide/vue';
 import { computed, defineAsyncComponent, inject, ref, watch } from 'vue';
+import {
+    canCaptureScreen,
+    canPickContact,
+    captureScreen,
+    pickContact,
+} from '../device';
 import { requestScan } from '../scanner';
 import type { FieldDef } from '../types/manifest';
 import type { OfflinePolicy } from '../useActionExecutor';
+import { useDictation } from '../useDictation';
 import { useFileUpload, type UploadedFile } from '../useFileUpload';
 import { themeTokens, useRuntimeTheme } from '../useRuntimeTheme';
 import { runtimeWord } from '../words';
@@ -26,6 +42,12 @@ const GeoPicker = defineAsyncComponent(() => import('./GeoPicker.vue'));
 const RichTextEditor = defineAsyncComponent(
     () => import('./RichTextEditor.vue'),
 );
+/**
+ * Both are whole-screen sheets that only ever open on the device that has the
+ * hardware, so neither belongs in the bundle every form downloads.
+ */
+const NfcReader = defineAsyncComponent(() => import('./NfcReader.vue'));
+const CameraCapture = defineAsyncComponent(() => import('./CameraCapture.vue'));
 
 import RelationPicker from './RelationPicker.vue';
 
@@ -52,7 +74,10 @@ const props = defineProps<{
 }>();
 
 /** What this app may leave on the device. Provided by the runtime page. */
-const offlinePolicy = inject<{ value: OfflinePolicy } | null>('offlinePolicy', null);
+const offlinePolicy = inject<{ value: OfflinePolicy } | null>(
+    'offlinePolicy',
+    null,
+);
 
 /**
  * Whether a photo taken here may wait on the device.
@@ -65,7 +90,11 @@ const offlinePolicy = inject<{ value: OfflinePolicy } | null>('offlinePolicy', n
 const mayHoldOffline = computed(() => {
     const policy = offlinePolicy?.value;
 
-    if (props.objectId === undefined || policy === undefined || !policy.enabled) {
+    if (
+        props.objectId === undefined ||
+        policy === undefined ||
+        !policy.enabled
+    ) {
         return false;
     }
 
@@ -163,6 +192,73 @@ const gunScanned = ref(false);
 async function openScanner(): Promise<void> {
     const value = await requestScan(props.locale ?? 'en');
     if (value !== null) update(value);
+}
+
+/**
+ * A tag held against the phone, for the things a printed label cannot survive:
+ * a card in a wallet, an asset tag glued to a machine that lives outdoors.
+ */
+const wantsNfc = computed(() => props.field.capture === 'nfc');
+const readingNfc = ref(false);
+
+function onNfcRead(value: string): void {
+    readingNfc.value = false;
+    update(value);
+}
+
+/**
+ * Details somebody already has in their phone.
+ *
+ * Offered only where there is a picker (Chrome on Android) — this is the one
+ * capture whose absence cannot be papered over, and a button that opens nothing
+ * is worse than no button. What comes back depends on what this field IS: a
+ * name for a string, an address for an email, a number for a phone.
+ */
+const wantsContact = computed(
+    () => props.field.capture === 'contact' && canPickContact(),
+);
+
+async function fromContacts(): Promise<void> {
+    const contact = await pickContact();
+    if (contact === null) return;
+
+    const value =
+        props.field.type === 'email'
+            ? contact.email
+            : props.field.type === 'phone'
+              ? contact.tel
+              : contact.name;
+
+    if (value !== undefined && value !== '') update(value);
+}
+
+/**
+ * The microphone that types.
+ *
+ * The browser's own recogniser, not a model: it answers immediately, costs
+ * nothing and uploads nothing, which is what the field somebody fills in
+ * standing next to a machine needs. Spoken text is APPENDED — a note is
+ * dictated in pieces, and replacing the box on every phrase would delete the
+ * first half of what they said.
+ */
+const dictation = useDictation(() => props.locale ?? 'en');
+const wantsDictation = computed(
+    () => props.field.capture === 'dictation' && dictation.supported,
+);
+
+function appendSpoken(text: string): void {
+    const current = String(props.modelValue ?? '').trim();
+    update(current === '' ? text : `${current} ${text}`);
+}
+
+function toggleDictation(): void {
+    if (dictation.listening.value) {
+        dictation.stop();
+
+        return;
+    }
+
+    dictation.start(appendSpoken);
 }
 
 /**
@@ -331,6 +427,45 @@ async function locate(): Promise<void> {
 const wantsSignature = computed(() => props.field.capture === 'signature');
 
 /**
+ * A photo that has to prove when and where, not just what.
+ *
+ * The ordinary camera field hands over to the phone's camera app, which focuses
+ * and exposes better than anything we would build — and gives back a finished
+ * JPEG with no moment in which anything could be written into it. So a stamped
+ * photo is taken in the page instead. Authored per field, because most photos
+ * are attachments and only some are evidence.
+ */
+const wantsStampedCamera = computed(
+    () => wantsCamera.value && props.field.stamp === true,
+);
+const capturing = ref(false);
+
+async function onCaptured(blob: Blob): Promise<void> {
+    capturing.value = false;
+    const uploaded = await upload(blob, 'foto.jpg');
+    if (uploaded !== null) update(uploaded);
+}
+
+/**
+ * A picture of what somebody is looking at, for the ticket where the screen IS
+ * the report. Desktop only — the browser has to have a window to offer.
+ */
+const wantsScreenshot = computed(
+    () => props.field.capture === 'screenshot' && canCaptureScreen(),
+);
+const grabbing = ref(false);
+
+async function grabScreen(): Promise<void> {
+    grabbing.value = true;
+    const blob = await captureScreen();
+    grabbing.value = false;
+    if (blob === null) return;
+
+    const uploaded = await upload(blob, 'captura.png');
+    if (uploaded !== null) update(uploaded);
+}
+
+/**
  * A camera field is asking for a photo, so it says so — unless the author was
  * more specific, in which case they meant it.
  */
@@ -413,17 +548,53 @@ function isInMulti(value: string): boolean {
 
 <template>
     <template v-if="field.type === 'long_text'">
-        <textarea
-            :id="inputId"
-            :value="(modelValue as string) ?? ''"
-            @input="onInput"
-            rows="3"
-            :class="[
-                'w-full rounded-md border px-3 py-2 text-sm',
-                t.surfaceMuted,
-                t.text,
-            ]"
-        />
+        <div class="space-y-1">
+            <textarea
+                :id="inputId"
+                :value="(modelValue as string) ?? ''"
+                @input="onInput"
+                rows="3"
+                :class="[
+                    'w-full rounded-md border px-3 py-2 text-sm',
+                    t.surfaceMuted,
+                    t.text,
+                ]"
+            />
+            <!-- The findings field, filled in standing next to the machine
+                 being described. Spoken text is appended, because a note is
+                 dictated in pieces. -->
+            <div v-if="wantsDictation" class="flex items-center gap-2">
+                <button
+                    type="button"
+                    data-sp-dictate
+                    :aria-pressed="dictation.listening.value"
+                    :class="[
+                        'inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md border px-2.5 text-xs transition-colors hover:bg-surface-hover',
+                        dictation.listening.value
+                            ? 'border-red-400/40 text-red-400'
+                            : `${t.surfaceMuted} ${t.textMuted}`,
+                    ]"
+                    @click="toggleDictation"
+                >
+                    <Mic class="size-3.5" />
+                    {{
+                        runtimeWord(
+                            locale ?? 'en',
+                            dictation.listening.value
+                                ? 'dictate_listening'
+                                : 'dictate_button',
+                        )
+                    }}
+                </button>
+                <span
+                    v-if="dictation.interim.value"
+                    data-sp-dictate-interim
+                    :class="['truncate text-[10px] italic', t.textSubtle]"
+                >
+                    {{ dictation.interim.value }}
+                </span>
+            </div>
+        </div>
     </template>
 
     <template v-else-if="field.type === 'number' || field.type === 'currency'">
@@ -674,6 +845,72 @@ function isInMulti(value: string): boolean {
                 :busy="uploadProgress > 0 && uploadProgress < 100"
                 @signed="onSigned"
             />
+            <!-- Held by the page rather than the phone's camera app, because
+                 the date and the place have to go INTO the image and the OS
+                 hands back a finished one. -->
+            <button
+                v-else-if="wantsStampedCamera && !modelValue"
+                type="button"
+                data-sp-camera-open
+                :disabled="uploadProgress > 0 && uploadProgress < 100"
+                :class="[
+                    'flex h-20 w-full cursor-pointer flex-col items-center justify-center gap-1 rounded-md border-2 border-dashed text-xs transition-colors disabled:opacity-50',
+                    t.surfaceMuted,
+                    t.textMuted,
+                    'hover:border-accent-blue/40 hover:text-ink',
+                ]"
+                @click="capturing = true"
+            >
+                <span
+                    v-if="uploadProgress > 0 && uploadProgress < 100"
+                    class="text-xs"
+                >
+                    {{
+                        runtimeWord(locale ?? 'en', 'file_uploading', {
+                            n: uploadProgress,
+                        })
+                    }}
+                </span>
+                <template v-else>
+                    <span class="inline-flex items-center gap-1.5">
+                        <Camera class="size-3.5" />
+                        {{ runtimeWord(locale ?? 'en', 'file_take_photo') }}
+                    </span>
+                    <span class="text-[10px] opacity-60">
+                        {{ runtimeWord(locale ?? 'en', 'camera_stamp_hint') }}
+                    </span>
+                </template>
+            </button>
+            <!-- A window, not a camera. The browser asks which one and shows
+                 that it is doing so. -->
+            <button
+                v-else-if="wantsScreenshot && !modelValue"
+                type="button"
+                data-sp-screenshot
+                :disabled="
+                    grabbing || (uploadProgress > 0 && uploadProgress < 100)
+                "
+                :class="[
+                    'flex h-20 w-full cursor-pointer flex-col items-center justify-center gap-1 rounded-md border-2 border-dashed text-xs transition-colors disabled:opacity-50',
+                    t.surfaceMuted,
+                    t.textMuted,
+                    'hover:border-accent-blue/40 hover:text-ink',
+                ]"
+                @click="grabScreen"
+            >
+                <span class="inline-flex items-center gap-1.5">
+                    <ScreenShare class="size-3.5" />
+                    {{
+                        runtimeWord(
+                            locale ?? 'en',
+                            grabbing ? 'screenshot_waiting' : 'screenshot_take',
+                        )
+                    }}
+                </span>
+                <span class="text-[10px] opacity-60">
+                    {{ runtimeWord(locale ?? 'en', 'screenshot_hint') }}
+                </span>
+            </button>
             <template v-else-if="!modelValue">
                 <label
                     :for="inputId"
@@ -786,7 +1023,12 @@ function isInMulti(value: string): boolean {
                             v-if="(modelValue as UploadedFile).pending"
                             class="text-[10px] text-amber-400"
                         >
-                            {{ runtimeWord(props.locale ?? 'en', 'offline_file_held') }}
+                            {{
+                                runtimeWord(
+                                    props.locale ?? 'en',
+                                    'offline_file_held',
+                                )
+                            }}
                         </p>
                     </div>
                     <button
@@ -806,6 +1048,14 @@ function isInMulti(value: string): boolean {
             <p v-if="uploadError" class="text-[11px] text-red-400">
                 {{ uploadError }}
             </p>
+
+            <CameraCapture
+                v-if="capturing"
+                :locale="locale ?? 'en'"
+                :stamp="true"
+                @captured="onCaptured"
+                @close="capturing = false"
+            />
         </div>
     </template>
 
@@ -961,6 +1211,57 @@ function isInMulti(value: string): boolean {
                 <ScanLine class="size-3.5" />
                 {{ runtimeWord(locale ?? 'en', 'scan_button') }}
             </button>
+            <button
+                v-if="wantsNfc"
+                type="button"
+                data-sp-nfc-open
+                :class="[
+                    'inline-flex h-9 shrink-0 items-center gap-1.5 rounded-md border px-2.5 text-xs transition-colors hover:bg-surface-hover',
+                    t.surfaceMuted,
+                    t.textMuted,
+                ]"
+                @click="readingNfc = true"
+            >
+                <Nfc class="size-3.5" />
+                {{ runtimeWord(locale ?? 'en', 'nfc_button') }}
+            </button>
+            <button
+                v-if="wantsContact"
+                type="button"
+                data-sp-contact-pick
+                :class="[
+                    'inline-flex h-9 shrink-0 items-center gap-1.5 rounded-md border px-2.5 text-xs transition-colors hover:bg-surface-hover',
+                    t.surfaceMuted,
+                    t.textMuted,
+                ]"
+                @click="fromContacts"
+            >
+                <Contact class="size-3.5" />
+                {{ runtimeWord(locale ?? 'en', 'contact_button') }}
+            </button>
+            <button
+                v-if="wantsDictation"
+                type="button"
+                data-sp-dictate
+                :aria-pressed="dictation.listening.value"
+                :class="[
+                    'inline-flex h-9 shrink-0 items-center gap-1.5 rounded-md border px-2.5 text-xs transition-colors hover:bg-surface-hover',
+                    dictation.listening.value
+                        ? 'border-red-400/40 text-red-400'
+                        : `${t.surfaceMuted} ${t.textMuted}`,
+                ]"
+                @click="toggleDictation"
+            >
+                <Mic class="size-3.5" />
+                {{
+                    runtimeWord(
+                        locale ?? 'en',
+                        dictation.listening.value
+                            ? 'dictate_listening'
+                            : 'dictate_button',
+                    )
+                }}
+            </button>
         </div>
 
         <p
@@ -970,5 +1271,23 @@ function isInMulti(value: string): boolean {
         >
             {{ runtimeWord(locale ?? 'en', 'scan_captured') }}
         </p>
+
+        <!-- What is being heard, before it settles. Shown so somebody can see
+             the microphone is working; never stored — only the settled phrases
+             reach the box. -->
+        <p
+            v-if="dictation.interim.value"
+            data-sp-dictate-interim
+            :class="['mt-1 text-[10px] italic', t.textSubtle]"
+        >
+            {{ dictation.interim.value }}
+        </p>
+
+        <NfcReader
+            v-if="readingNfc"
+            :locale="locale ?? 'en'"
+            @read="onNfcRead"
+            @close="readingNfc = false"
+        />
     </template>
 </template>

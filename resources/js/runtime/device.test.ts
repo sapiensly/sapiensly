@@ -1,5 +1,12 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { copyText, haptic, shareContent, speak } from './device';
+import {
+    canPickContact,
+    copyText,
+    haptic,
+    pickContact,
+    shareContent,
+    speak,
+} from './device';
 
 /**
  * The device seam.
@@ -15,6 +22,7 @@ const original = {
     share: (navigator as { share?: unknown }).share,
     canShare: (navigator as { canShare?: unknown }).canShare,
     vibrate: navigator.vibrate,
+    contacts: (navigator as { contacts?: unknown }).contacts,
 };
 
 function stub(name: string, value: unknown): void {
@@ -30,6 +38,7 @@ afterEach(() => {
     stub('share', original.share);
     stub('canShare', original.canShare);
     stub('vibrate', original.vibrate);
+    stub('contacts', original.contacts);
 });
 
 describe('copying text', () => {
@@ -181,6 +190,46 @@ describe('speaking', () => {
         });
 
         expect(speak('hola')).toBe(false);
+    });
+});
+
+describe('the contact picker', () => {
+    it('asks only for properties this device has', async () => {
+        // Requesting one it does not support throws, and the throw is
+        // indistinguishable from the person closing the picker.
+        const select = vi
+            .fn()
+            .mockResolvedValue([
+                { name: ['Ana Ruiz'], tel: ['+52 55 1234 5678'] },
+            ]);
+        stub('contacts', {
+            getProperties: vi.fn().mockResolvedValue(['name', 'tel']),
+            select,
+        });
+
+        expect(await pickContact()).toEqual({
+            name: 'Ana Ruiz',
+            tel: '+52 55 1234 5678',
+        });
+        expect(select).toHaveBeenCalledWith(['name', 'tel'], {
+            multiple: false,
+        });
+    });
+
+    it('is absent where there is no picker', async () => {
+        stub('contacts', undefined);
+
+        expect(canPickContact()).toBe(false);
+        expect(await pickContact()).toBeNull();
+    });
+
+    it('answers with nothing when the picker is closed', async () => {
+        stub('contacts', {
+            getProperties: vi.fn().mockResolvedValue(['name']),
+            select: vi.fn().mockResolvedValue([]),
+        });
+
+        expect(await pickContact()).toBeNull();
     });
 });
 

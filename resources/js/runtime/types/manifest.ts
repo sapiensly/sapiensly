@@ -51,7 +51,16 @@ export interface FieldDef {
     max_size_mb?: number;
     mime_types?: string[];
     /** Where a value comes from when not the keyboard or the disk. */
-    capture?: 'camera' | 'signature' | 'barcode';
+    capture?:
+        | 'camera'
+        | 'signature'
+        | 'barcode'
+        | 'screenshot'
+        | 'nfc'
+        | 'contact'
+        | 'dictation';
+    /** camera only: burn the date, time and place into the photo. */
+    stamp?: boolean;
     /** Derived fields (rollup/lookup/formula): what they draw from and return. */
     target_field_id?: string;
     aggregator?: string;

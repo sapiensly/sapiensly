@@ -528,8 +528,8 @@
                             "type": "string"
                         },
                         "capture": {
-                            "enum": ["barcode"],
-                            "description": "Where the value comes FROM. Omit for an ordinary text box. `barcode` adds a Scan button that reads a barcode or QR with the camera, and makes the field recognise a handheld scanner gun (which types the code and sends Enter) so the operator never touches the screen. The box still accepts a typed code — on a desktop, with no camera, or with a damaged label — so the field is never a dead end. The VALUE is a plain string either way, so filters, tables and exports need no special handling. Use it for SKUs, asset tags, tracking numbers, batch and serial numbers."
+                            "enum": ["barcode", "nfc", "contact", "dictation"],
+                            "description": "Where the value comes FROM. Omit for an ordinary text box. Every one of these is an EXTRA way in — the box still accepts a typed value, on a desktop, with the hardware missing or with permission refused, so the field is never a dead end, and the VALUE is a plain string either way so filters, tables and exports need no special handling. `barcode` adds a Scan button that reads a barcode or QR with the camera, and makes the field recognise a handheld scanner gun (which types the code and sends Enter) so the operator never touches the screen — SKUs, asset tags, tracking numbers, batch and serial numbers. `nfc` reads a tag held against the phone (Chrome on Android only): its text or url payload, or failing that the tag's own serial number — access cards, asset tags glued to a machine, anything with no room for a printed label. `contact` opens the phone's contact picker and takes the person's name — use it on the email and phone types too, where it takes their address and number instead. `dictation` adds a microphone that types what is said into the box, using the browser's own recogniser rather than a model, so it costs nothing and works while the person's hands are full."
                         }
                     },
                     "required": ["type"]
@@ -565,6 +565,10 @@
                             "type": "integer",
                             "minimum": 1,
                             "maximum": 5000
+                        },
+                        "capture": {
+                            "enum": ["contact"],
+                            "description": "`contact` adds a button that opens the phone's own contact picker and fills in the address it finds. Chrome on Android only; everywhere else the box is a box. Use it wherever somebody is typing in details they already have in their phone."
                         }
                     },
                     "required": ["type"],
@@ -637,6 +641,10 @@
                             "type": "integer",
                             "minimum": 1,
                             "maximum": 5000
+                        },
+                        "capture": {
+                            "enum": ["contact"],
+                            "description": "`contact` adds a button that opens the phone's own contact picker and fills in the number it finds. Chrome on Android only; everywhere else the box is a box. Use it wherever somebody is typing in a number they already have in their phone."
                         }
                     },
                     "required": ["type"],
@@ -673,6 +681,10 @@
                             "type": "integer",
                             "minimum": 1,
                             "maximum": 100000
+                        },
+                        "capture": {
+                            "enum": ["dictation"],
+                            "description": "`dictation` adds a microphone that types what is said into the box, appending to whatever is already there. The browser's own recogniser, not a model — it costs nothing per use and needs no upload. Use it for the field somebody fills in standing next to the machine they are describing: findings, notes, what was done. The box stays a box, so a browser without a recogniser (Firefox, most of Safari) is simply a browser somebody types into."
                         }
                     },
                     "required": ["type"]
@@ -1328,8 +1340,12 @@
                             "description": "Optional MIME allowlist. Accepts wildcards like image/*. When omitted, any MIME is allowed (subject to the global size limit)."
                         },
                         "capture": {
-                            "enum": ["camera", "signature"],
-                            "description": "Where the file comes FROM. Omit for the ordinary file picker. `camera` asks the device for a photo: on a phone or tablet it opens the camera directly, and on a desktop it falls back to the picker, so the field always works; implies an image/* accept unless mime_types says otherwise. Use it for damage reports, proof of delivery, meter readings and site inspections. `signature` replaces the picker with a pad the person signs on with a finger, a stylus or the mouse, and stores the result as a PNG — use it for delivery notes, consent, handover and inspection sign-off. Both store the SAME value as any file field, so tables, detail pages and exports need no special handling."
+                            "enum": ["camera", "signature", "screenshot"],
+                            "description": "Where the file comes FROM. Omit for the ordinary file picker. `camera` asks the device for a photo: on a phone or tablet it opens the camera directly, and on a desktop it falls back to the picker, so the field always works; implies an image/* accept unless mime_types says otherwise. Use it for damage reports, proof of delivery, meter readings and site inspections. `signature` replaces the picker with a pad the person signs on with a finger, a stylus or the mouse, and stores the result as a PNG — use it for delivery notes, consent, handover and inspection sign-off. `screenshot` asks the desktop for a picture of a window or a screen and stores that — for support tickets and bug reports, where what somebody is looking at IS the report and describing it in words is the step that loses the detail. All three store the SAME value as any file field, so tables, detail pages and exports need no special handling."
+                        },
+                        "stamp": {
+                            "type": "boolean",
+                            "description": "Only with capture:\"camera\". Takes the photo INSIDE the page instead of handing over to the phone's camera app, and burns the date, the time and the coordinates into the corner of the image before it is uploaded. Use it when the photo is EVIDENCE — a meter reading, damage on arrival, proof that somebody was where they say they were — because a plain photo proves what was in front of a lens and not when or where. The person is told what is being written, and refusing the location writes the time alone rather than failing. Costs the OS camera's focus and exposure, so leave it off for photos that are simply attachments."
                         }
                     },
                     "required": ["type"]

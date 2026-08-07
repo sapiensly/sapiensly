@@ -206,6 +206,12 @@ final class TechnicalWriter
     ];
 
     /**
+     * Page properties already printed on the line above, or belonging to the
+     * block tree below. Everything else is a capability and gets printed.
+     */
+    private const PAGE_STRUCTURE = ['id', 'name', 'slug', 'path', 'blocks', 'params', 'icon'];
+
+    /**
      * Block properties that are structure, not capability: the tree, the label
      * and the wiring printed elsewhere in this document.
      */
@@ -352,12 +358,23 @@ final class TechnicalWriter
             $entries = $this->m->blocksOf($page);
 
             $body[] = ['type' => 'h', 'text' => (string) ($page['name'] ?? '')];
-            $body[] = ['type' => 'kv', 'items' => [
+            $items = [
                 ['k' => $this->w->get('page_path'), 'v' => (string) ($page['path'] ?? '')],
                 ['k' => $this->w->get('col_slug'), 'v' => (string) ($page['slug'] ?? '')],
                 ['k' => $this->w->get('col_id'), 'v' => (string) ($page['id'] ?? '')],
                 ['k' => $this->w->get('page_blocks', ['n' => count($entries)]), 'v' => '/pages/'.$index],
-            ]];
+            ];
+
+            // Whatever else this page carries — `keep_awake`, a layout, a
+            // visibility rule. Generic for the same reason the field line is:
+            // anything this sheet leaves out is something the reviewer cannot
+            // verify and will report as missing.
+            $extras = $this->extras($page, self::PAGE_STRUCTURE);
+            if ($extras !== []) {
+                $items[] = ['k' => $this->w->get('page_also'), 'v' => implode(' · ', $extras)];
+            }
+
+            $body[] = ['type' => 'kv', 'items' => $items];
 
             if ($entries === []) {
                 continue;

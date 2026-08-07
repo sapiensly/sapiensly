@@ -177,6 +177,126 @@ export function canKeepAwake(): boolean {
     return typeof navigator !== 'undefined' && 'wakeLock' in navigator;
 }
 
+/** What the phone's contact picker gave back. Every part is optional. */
+export interface PickedContact {
+    name?: string;
+    email?: string;
+    tel?: string;
+}
+
+/** Whether this browser has a contact picker at all (Chrome on Android). */
+export function canPickContact(): boolean {
+    return (
+        typeof navigator !== 'undefined' &&
+        (navigator as unknown as { contacts?: unknown }).contacts !== undefined
+    );
+}
+
+/**
+ * A name, a number and an address, out of the phone's own address book.
+ *
+ * The picker is the OS's — this page never sees the contact list, only the one
+ * entry somebody chose, which is the whole reason the API is shaped this way
+ * and worth saying out loud in a product that also stores customer data.
+ *
+ * Properties are asked for by NAME after checking what this device supports:
+ * requesting one it does not have throws, and the throw would be
+ * indistinguishable from the person closing the picker.
+ */
+export async function pickContact(): Promise<PickedContact | null> {
+    const contacts = (
+        navigator as unknown as {
+            contacts?: {
+                getProperties: () => Promise<string[]>;
+                select: (
+                    props: string[],
+                    options?: { multiple?: boolean },
+                ) => Promise<
+                    Array<{ name?: string[]; email?: string[]; tel?: string[] }>
+                >;
+            };
+        }
+    ).contacts;
+
+    if (contacts === undefined) return null;
+
+    try {
+        const supported = await contacts.getProperties();
+        const wanted = ['name', 'email', 'tel'].filter((p) =>
+            supported.includes(p),
+        );
+        if (wanted.length === 0) return null;
+
+        const [picked] = await contacts.select(wanted, { multiple: false });
+        if (picked === undefined) return null;
+
+        return {
+            ...(picked.name?.[0] !== undefined ? { name: picked.name[0] } : {}),
+            ...(picked.email?.[0] !== undefined
+                ? { email: picked.email[0] }
+                : {}),
+            ...(picked.tel?.[0] !== undefined ? { tel: picked.tel[0] } : {}),
+        };
+    } catch {
+        // Closed the picker, or refused. Either way the box beside the button
+        // is still a box.
+        return null;
+    }
+}
+
+/** Whether a screen or a window can be captured here (desktop browsers). */
+export function canCaptureScreen(): boolean {
+    return (
+        typeof navigator !== 'undefined' &&
+        navigator.mediaDevices?.getDisplayMedia !== undefined
+    );
+}
+
+/**
+ * A picture of what somebody is looking at.
+ *
+ * For the support ticket where the screen IS the report: describing a dialog in
+ * words is the step that loses the detail somebody needed. The browser asks
+ * which window to share and shows it doing so — this cannot take a picture of
+ * anything unattended.
+ *
+ * One frame, then the track is stopped immediately. A capture stream left open
+ * is a screen still being read, and the browser's own indicator would keep
+ * saying so long after the photo was taken.
+ */
+export async function captureScreen(): Promise<Blob | null> {
+    if (!canCaptureScreen()) return null;
+
+    let stream: MediaStream | null = null;
+
+    try {
+        stream = await navigator.mediaDevices.getDisplayMedia({ video: true });
+
+        const video = document.createElement('video');
+        video.srcObject = stream;
+        video.muted = true;
+        await video.play();
+
+        // One rendered frame: `play()` resolves before the first one is
+        // painted, and a canvas drawn a moment too early is a black rectangle.
+        await new Promise((resolve) => requestAnimationFrame(resolve));
+
+        const canvas = document.createElement('canvas');
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        if (canvas.width === 0 || canvas.height === 0) return null;
+        canvas.getContext('2d')?.drawImage(video, 0, 0);
+
+        return await new Promise<Blob | null>((resolve) => {
+            canvas.toBlob((blob) => resolve(blob), 'image/png');
+        });
+    } catch {
+        return null;
+    } finally {
+        stream?.getTracks().forEach((track) => track.stop());
+    }
+}
+
 /**
  * Full screen, or back out of it.
  *

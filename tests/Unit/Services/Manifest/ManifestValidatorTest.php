@@ -1239,6 +1239,42 @@ it('does not warn when a button scans a code or hands over a PDF', function () {
         ->and(collect($result->warnings)->pluck('code'))->not->toContain('no_effect');
 });
 
+it('accepts every capture the catalog offers', function () {
+    // The catalog and the schema have to agree, or a model writes the field it
+    // was told about, is told the patch succeeded, and the app fails to save.
+    $manifest = baseManifest();
+    $manifest['objects'][0]['fields'] = [
+        // The object's primary display field stays: removing it would fail the
+        // manifest for a reason that has nothing to do with captures.
+        $manifest['objects'][0]['fields'][0],
+        ['id' => id('fld'), 'slug' => 'sku', 'name' => 'SKU', 'type' => 'string', 'capture' => 'barcode'],
+        ['id' => id('fld'), 'slug' => 'etiqueta', 'name' => 'Etiqueta', 'type' => 'string', 'capture' => 'nfc'],
+        ['id' => id('fld'), 'slug' => 'contacto', 'name' => 'Contacto', 'type' => 'string', 'capture' => 'contact'],
+        ['id' => id('fld'), 'slug' => 'correo', 'name' => 'Correo', 'type' => 'email', 'capture' => 'contact'],
+        ['id' => id('fld'), 'slug' => 'telefono', 'name' => 'Teléfono', 'type' => 'phone', 'capture' => 'contact'],
+        ['id' => id('fld'), 'slug' => 'hallazgos', 'name' => 'Hallazgos', 'type' => 'long_text', 'capture' => 'dictation'],
+        ['id' => id('fld'), 'slug' => 'evidencia', 'name' => 'Evidencia', 'type' => 'file', 'capture' => 'camera', 'stamp' => true],
+        ['id' => id('fld'), 'slug' => 'pantalla', 'name' => 'Pantalla', 'type' => 'file', 'capture' => 'screenshot'],
+        ['id' => id('fld'), 'slug' => 'firma', 'name' => 'Firma', 'type' => 'file', 'capture' => 'signature'],
+    ];
+
+    $result = (new ManifestValidator)->validate($manifest);
+
+    expect($result->valid)->toBeTrue(json_encode(collect($result->errors)->pluck('message')));
+});
+
+it('refuses a capture on a type that cannot do it', function () {
+    // `stamp` is a camera's business and a signature pad has no location. A
+    // model that guesses at the combination should be told, not quietly given
+    // a field that ignores half of what it asked for.
+    $manifest = baseManifest();
+    $manifest['objects'][0]['fields'][] = [
+        'id' => id('fld'), 'slug' => 'url_foto', 'name' => 'Foto', 'type' => 'url', 'capture' => 'contact',
+    ];
+
+    expect((new ManifestValidator)->validate($manifest)->valid)->toBeFalse();
+});
+
 it('accepts the device actions on a button', function () {
     // Written by a model that was told these exist. If the schema rejected any
     // of them the model would be told the patch succeeded and the app would

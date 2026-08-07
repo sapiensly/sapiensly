@@ -121,13 +121,14 @@ class AppScaffolder
         // RFC 6902 patch could. A build asked to make a SKU scannable therefore
         // got a plain text box and reported success.
         'string' => ['min_length', 'max_length', 'pattern', 'default', 'capture'],
-        'long_text' => ['max_length', 'default'],
+        'long_text' => ['max_length', 'default', 'capture'],
         // These four had no entry at all, so they carried base props only — the
         // catalog offers each of them a default, and the text-like three a
-        // max_length.
-        'email' => ['default', 'max_length'],
+        // max_length. The contact picker is a capture on both of the two that
+        // hold something a phone's address book already knows.
+        'email' => ['default', 'max_length', 'capture'],
         'url' => ['default', 'max_length'],
-        'phone' => ['default', 'max_length'],
+        'phone' => ['default', 'max_length', 'capture'],
         'color' => ['default'],
         // `display` is a real rendering switch the runtime reads (a boolean as a
         // toggle, a select as a radio group), advertised in the catalog and
@@ -142,7 +143,7 @@ class AppScaffolder
         'rating' => ['max', 'default', 'icon'],
         'slider' => ['min', 'max', 'step', 'default', 'format', 'currency_code'],
         'date_range' => ['include_time', 'default'],
-        'file' => ['max_size_mb', 'mime_types', 'capture'],
+        'file' => ['max_size_mb', 'mime_types', 'capture', 'stamp'],
         'rich_text' => ['default', 'max_length'],
         'relation' => ['target_object_id', 'cardinality', 'on_delete', 'inverse_field_id'],
         'formula' => ['expression', 'return_type', 'currency_code'],

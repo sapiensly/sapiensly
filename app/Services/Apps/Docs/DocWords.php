@@ -190,6 +190,7 @@ class DocWords
             // Technical — pages
             'page_path' => 'Path',
             'page_blocks' => '{n} blocks',
+            'page_also' => 'Also',
 
             // Technical — actions
             'act_none' => 'No block on this app triggers an action.',
@@ -373,6 +374,7 @@ class DocWords
 
             'page_path' => 'Ruta',
             'page_blocks' => '{n} bloques',
+            'page_also' => 'Además',
 
             'act_none' => 'Ningún bloque de esta app dispara una acción.',
             'col_where' => 'Dónde',
@@ -552,6 +554,7 @@ class DocWords
 
             'page_path' => 'Rota',
             'page_blocks' => '{n} blocos',
+            'page_also' => 'Também',
 
             'act_none' => 'Nenhum bloco deste app dispara uma ação.',
             'col_where' => 'Onde',
@@ -731,6 +734,7 @@ class DocWords
 
             'page_path' => 'Chemin',
             'page_blocks' => '{n} blocs',
+            'page_also' => 'Aussi',
 
             'act_none' => 'Aucun bloc de cette application ne déclenche d’action.',
             'col_where' => 'Où',
