@@ -118,6 +118,8 @@ const WORDS: Record<string, Dict> = {
         copy_failed: 'Could not copy. Select the text and copy it by hand.',
         scan_torch: 'Light',
         scale_button: 'Weigh',
+        identity_refused:
+            'This needs to be confirmed on your device. Nothing was saved.',
         scale_reading: 'Reading…',
         scale_failed: 'No reading from the scale. Type the number instead.',
         geo_auto_note: 'Location taken when this form opened.',
@@ -307,6 +309,8 @@ const WORDS: Record<string, Dict> = {
         scan_torch: 'Luz',
         scale_button: 'Pesar',
         scale_reading: 'Leyendo…',
+        identity_refused:
+            'Esto se tiene que confirmar en tu dispositivo. No se guardó nada.',
         scale_failed: 'La báscula no dio lectura. Escribe el número a mano.',
         geo_auto_note: 'Se tomó la ubicación al abrir este formulario.',
         nfc_button: 'Leer etiqueta',
@@ -496,6 +500,8 @@ const WORDS: Record<string, Dict> = {
         scan_torch: 'Luz',
         scale_button: 'Pesar',
         scale_reading: 'Lendo…',
+        identity_refused:
+            'Isto precisa ser confirmado no seu aparelho. Nada foi salvo.',
         scale_failed: 'A balança não deu leitura. Digite o número à mão.',
         geo_auto_note: 'A localização foi obtida ao abrir este formulário.',
         nfc_button: 'Ler etiqueta',
@@ -684,6 +690,8 @@ const WORDS: Record<string, Dict> = {
             'Impossible de copier. Sélectionnez le texte et copiez-le à la main.',
         scan_torch: 'Lumière',
         scale_button: 'Peser',
+        identity_refused:
+            'Ceci doit être confirmé sur votre appareil. Rien n’a été enregistré.',
         scale_reading: 'Lecture…',
         scale_failed: 'Aucune lecture de la balance. Saisissez le nombre.',
         geo_auto_note: 'Position relevée à l’ouverture de ce formulaire.',

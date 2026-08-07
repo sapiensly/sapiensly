@@ -3,6 +3,7 @@ import axios from 'axios';
 import { inject } from 'vue';
 import { toast } from 'vue-sonner';
 import { copyText, shareContent, speak, toggleFullscreen } from './device';
+import { confirmIdentity, type IdentityProof } from './identity';
 import { requestScan } from './scanner';
 import { useRuntimeWrite } from './useRuntimeWrite';
 import { runtimeWord } from './words';
@@ -235,7 +236,13 @@ export function mayWaitForASignal(
         return false;
     }
 
-    return actions.every((a) => a.type !== 'run_workflow');
+    // `require_identity` is the second thing that must not wait. An approval is
+    // a statement about a moment — who was there, and when — and replaying one
+    // six hours later against whatever the record has become is the failure the
+    // gate exists to prevent.
+    return actions.every(
+        (a) => a.type !== 'run_workflow' && a.type !== 'require_identity',
+    );
 }
 
 /** What this app may leave on the device. Mirrors `App\Support\Offline\OfflinePolicy`. */
@@ -369,10 +376,26 @@ export function useActionExecutor() {
             return { ok: true };
         }
 
+        // Who is holding the device, asked BEFORE anything is sent. A sequence
+        // gated this way is never queued either — `require_identity` is not on
+        // the offline list, so a refund cannot be approved by a phone with no
+        // signal and posted six hours later.
+        let identity: IdentityProof | null = null;
+        if (actions.some((a) => a.type === 'require_identity')) {
+            identity = await confirmIdentity(ctx.appSlug);
+
+            if (identity === null) {
+                toast.error(runtimeWord(locale, 'identity_refused'));
+
+                return { ok: false };
+            }
+        }
+
         const result = await write<ExecutionResult & Record<string, unknown>>(
             `${mountFor(ctx)}/actions`,
             {
                 actions,
+                ...(identity !== null ? { identity } : {}),
                 params: ctx.params ?? {},
                 // Only ever 'demo', and only from a surface that provides it
                 // (the builder preview). The server narrows on this and never

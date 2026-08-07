@@ -1164,6 +1164,10 @@ class ManifestValidator
         $effectful = $requirePersist
             ? ['create_record', 'update_record', 'delete_record', 'run_workflow']
             : ['create_record', 'update_record', 'delete_record', 'run_workflow', 'navigate', 'open_modal', 'close_modal', 'scan_to_find', 'download_pdf', 'share', 'copy', 'speak', 'toggle_fullscreen'];
+        // `require_identity` is deliberately NOT here. It gates a sequence and
+        // does nothing on its own: a button carrying only that asks somebody
+        // for a fingerprint and then does nothing with it, which is exactly the
+        // dead end this warning is for.
 
         foreach ($actions as $action) {
             if (in_array($action['type'] ?? '', $effectful, true)) {

@@ -75,8 +75,10 @@ final class Schemas
         'builder_conversations',
         'builder_messages',
         'build_findings',
-        // Where to reach one person's phone when the app is closed
+        // Where to reach one person's phone when the app is closed, and the key
+        // that device holds for saying who is using it
         'push_subscriptions',
+        'device_credentials',
         'pipeline_runs',
         'workflow_runs',
         'workflow_step_runs',

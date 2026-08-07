@@ -9,6 +9,7 @@ use App\Http\Controllers\AppDocsController;
 use App\Http\Controllers\AppEnvironmentController;
 use App\Http\Controllers\AppExportController;
 use App\Http\Controllers\AppFileController;
+use App\Http\Controllers\AppIdentityController;
 use App\Http\Controllers\AppNotificationController;
 use App\Http\Controllers\AppPrintController;
 use App\Http\Controllers\AppPushSubscriptionController;
@@ -229,6 +230,17 @@ Route::middleware([
         ->where('app_slug', '[a-z][a-z0-9_]*')
         ->middleware('throttle:runtime-actions')
         ->name('apps.runtime.push.store');
+
+    // Who is holding the device, for the actions somebody should have to mean.
+    Route::get('/r/{app_slug}/identity/challenge', [AppIdentityController::class, 'challenge'])
+        ->where('app_slug', '[a-z][a-z0-9_]*')
+        ->middleware('throttle:runtime-actions')
+        ->name('apps.runtime.identity.challenge');
+
+    Route::post('/r/{app_slug}/identity/credentials', [AppIdentityController::class, 'store'])
+        ->where('app_slug', '[a-z][a-z0-9_]*')
+        ->middleware('throttle:runtime-actions')
+        ->name('apps.runtime.identity.store');
 
     Route::delete('/r/{app_slug}/push', [AppPushSubscriptionController::class, 'destroy'])
         ->where('app_slug', '[a-z][a-z0-9_]*')

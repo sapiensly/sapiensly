@@ -5421,7 +5421,7 @@
             }
         },
         "action": {
-            "description": "A single step inside an action_sequence (button.on_click, form.on_submit/on_cancel, table action column). Its `type` must be one of: navigate, open_modal, close_modal, create_record, update_record, delete_record, show_toast, refresh, run_workflow, scan_to_find, download_pdf, share, copy, speak, toggle_fullscreen. If this failed, the action `type` is unknown or it is missing a required arg for that type — call list_available_actions for each action's required props and the canonical patterns.",
+            "description": "A single step inside an action_sequence (button.on_click, form.on_submit/on_cancel, table action column). Its `type` must be one of: navigate, open_modal, close_modal, create_record, update_record, delete_record, show_toast, refresh, run_workflow, scan_to_find, download_pdf, share, copy, speak, toggle_fullscreen, require_identity. If this failed, the action `type` is unknown or it is missing a required arg for that type — call list_available_actions for each action's required props and the canonical patterns.",
             "oneOf": [
                 {
                     "type": "object",
@@ -5565,6 +5565,17 @@
                         "lang": {
                             "type": "string",
                             "maxLength": 20
+                        }
+                    }
+                },
+                {
+                    "type": "object",
+                    "required": ["type"],
+                    "additionalProperties": false,
+                    "description": "Ask the device WHO is holding it — the fingerprint, the face or the PIN it already knows — before the rest of the sequence runs. For the action somebody should have to mean: a refund, a write-off, a price override, a deletion that cannot be undone. A confirm dialog asks whether you meant it; this asks who you are. Put it FIRST in the sequence; it is checked server-side against a challenge this server minted, and nothing else in the sequence runs if it fails. Never queued offline — an approval is a statement about a moment, and replaying one six hours later against whatever the record has become is the failure it exists to prevent. A device with no sensor, or a refused prompt, stops the sequence and says so, so do not gate an action people must be able to take on any machine.",
+                    "properties": {
+                        "type": {
+                            "const": "require_identity"
                         }
                     }
                 },

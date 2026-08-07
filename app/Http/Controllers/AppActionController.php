@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\App;
 use App\Services\Apps\AppAccessResolver;
 use App\Services\Apps\BlockVisibilityFilter;
+use App\Services\Apps\IdentityConfirmation;
 use App\Services\Manifest\AppManifestService;
 use App\Services\Records\AppActionExecutor;
 use App\Services\Records\BlockDataResolver;
@@ -53,6 +54,7 @@ class AppActionController extends Controller
         private ExpressionResolver $expressions,
         private BlockDataResolver $blockData,
         private BlockVisibilityFilter $visibility,
+        private IdentityConfirmation $identity,
     ) {}
 
     public function __invoke(Request $request, string $appSlug): JsonResponse
@@ -106,6 +108,30 @@ class AppActionController extends Controller
             '__access' => $access,
         ];
 
+        // The identity gate, checked BEFORE anything runs rather than in the
+        // loop. A sequence that deletes and then asks who you are has already
+        // deleted, and half of an approved action is the one outcome an
+        // approval exists to prevent.
+        if (collect($actions)->contains(fn (array $a): bool => ($a['type'] ?? '') === 'require_identity')) {
+            $confirmed = $this->identity->confirm(
+                $app,
+                $user,
+                (array) $request->input('identity', []),
+                $request->getSchemeAndHttpHost(),
+                (string) $request->getHost(),
+            );
+
+            if (! $confirmed) {
+                return response()->json([
+                    'ok' => false,
+                    'errors' => [0 => [
+                        'type' => 'identity',
+                        'message' => 'This action needs to be confirmed on your device.',
+                    ]],
+                ], 403);
+            }
+        }
+
         $results = [];
         $clientActions = [];
         $errors = [];
@@ -113,6 +139,14 @@ class AppActionController extends Controller
 
         foreach ($actions as $i => $action) {
             $type = $action['type'];
+
+            // Already spent above. Nothing left to do but account for it, or
+            // the loop would report it unknown.
+            if ($type === 'require_identity') {
+                $results[] = ['index' => $i, 'type' => $type, 'ok' => true];
+
+                continue;
+            }
 
             if (in_array($type, self::CLIENT_SIDE, true)) {
                 // Resolve the client action's expression-bearing fields server-side
