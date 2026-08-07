@@ -14,6 +14,14 @@
  * missing it is asymmetric. What changed is the SIZE of the reminder, not
  * whether there is one.
  *
+ * IT RENDERS NOTHING WHEN NOTHING IS PRETENDING. It used to keep a quiet idle
+ * row offering the two ways IN — open the demo, view as a role — which spent a
+ * line of every screen, on a phone about a tenth of it, telling an
+ * administrator that everything was normal. Those two live in the user menu
+ * now (`RuntimeUserMenu`): entering a pretence is a thing you do as yourself,
+ * and that is where the other things you do as yourself already are. This
+ * component is only the warning.
+ *
  * THE COLOUR IS THE OTHER HALF. It used to be `text-amber-300` on
  * `bg-amber-500/10` — a pair chosen for the dark theme, printed on a light app
  * at about 1.5:1, which is not "hard to read" but "not legible". The palette
@@ -32,6 +40,7 @@ import {
     Sparkles,
 } from '@lucide/vue';
 import { computed, onUnmounted, ref } from 'vue';
+import { switchTo } from './previewSwitch';
 import { runtimeWord } from './words';
 
 const props = defineProps<{
@@ -107,17 +116,6 @@ function reset(): void {
     );
 }
 
-/** Both switches are the same move: set a query parameter and reload. */
-function go(param: string, value: string | null): void {
-    const url = new URL(window.location.href);
-    if (value === null || value === '') {
-        url.searchParams.delete(param);
-    } else {
-        url.searchParams.set(param, value);
-    }
-    window.location.href = url.toString();
-}
-
 function onDocumentClick(): void {
     menuOpen.value = false;
     confirming.value = false;
@@ -188,7 +186,7 @@ const warn =
                 type="button"
                 data-sp-environment-switch="production"
                 class="rounded-pill border border-current/40 px-2.5 py-0.5 font-medium transition-colors hover:bg-amber-500/20"
-                @click="go('env', 'production')"
+                @click="switchTo('env', 'production')"
             >
                 {{ word('demo_leave') }}
             </button>
@@ -197,7 +195,7 @@ const warn =
                 type="button"
                 data-sp-role-exit
                 class="rounded-pill border border-current/40 px-2.5 py-0.5 font-medium transition-colors hover:bg-amber-500/20"
-                @click="go('as_role', null)"
+                @click="switchTo('as_role', null)"
             >
                 {{ word('preview_role_exit') }}
             </button>
@@ -258,7 +256,7 @@ const warn =
                             class="w-full rounded-md border border-medium bg-surface px-2 py-1 text-xs text-ink"
                             :value="role ?? ''"
                             @change="
-                                go(
+                                switchTo(
                                     'as_role',
                                     ($event.target as HTMLSelectElement).value,
                                 )
@@ -279,62 +277,5 @@ const warn =
                 </div>
             </div>
         </span>
-    </div>
-
-    <!--
-        IDLE: the ways IN, and nothing else.
-
-        A quiet right-aligned line rather than a bar, because there is nothing
-        to warn about — the old role bar rendered its whole row, select and all,
-        even with no preview running, which is how «Ver la app como… / Sin
-        restricciones (tú)» came to occupy a tenth of a phone screen saying that
-        everything was normal.
-    -->
-    <div
-        v-else-if="canSwitchEnvironment || canPreviewRoles"
-        data-sp-preview-bar="off"
-        data-sp-environment="production"
-        class="relative mb-2 flex items-center justify-end gap-3 text-[11px] text-ink-subtle"
-    >
-        <button
-            v-if="canPreviewRoles"
-            type="button"
-            data-sp-role-open
-            class="inline-flex items-center gap-1.5 transition-opacity hover:opacity-100"
-            @click.stop="toggleMenu"
-        >
-            <Eye class="size-3" />
-            {{ word('preview_role_pick') }}
-        </button>
-        <button
-            v-if="canSwitchEnvironment"
-            type="button"
-            data-sp-environment-switch="demo"
-            class="inline-flex items-center gap-1.5 transition-opacity hover:opacity-100"
-            @click="go('env', 'demo')"
-        >
-            <FlaskConical class="size-3" />
-            {{ word('demo_enter') }}
-        </button>
-
-        <div
-            v-if="menuOpen && canPreviewRoles"
-            role="menu"
-            class="absolute right-[var(--sp-bleed,1.25rem)] z-40 mt-6 w-56 rounded-md border border-soft bg-navy p-2 text-ink shadow-lg"
-            @click.stop
-        >
-            <select
-                class="w-full rounded-md border border-medium bg-surface px-2 py-1 text-xs text-ink"
-                :value="role ?? ''"
-                @change="
-                    go('as_role', ($event.target as HTMLSelectElement).value)
-                "
-            >
-                <option value="">{{ word('preview_role_none') }}</option>
-                <option v-for="r in roles" :key="r.slug" :value="r.slug">
-                    {{ r.name }}
-                </option>
-            </select>
-        </div>
     </div>
 </template>

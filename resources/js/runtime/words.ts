@@ -172,6 +172,7 @@ const WORDS: Record<string, Dict> = {
         preview_role_none: 'No restrictions (you)',
         preview_role_exit: 'Back to my view',
         preview_more: 'More options',
+        exit_to_platform: 'Exit to Sapiensly',
     },
     es: {
         columns: 'Columnas',
@@ -328,6 +329,7 @@ const WORDS: Record<string, Dict> = {
         preview_role_none: 'Sin restricciones (tú)',
         preview_role_exit: 'Volver a mi vista',
         preview_more: 'Más opciones',
+        exit_to_platform: 'Salir a Sapiensly',
     },
     pt: {
         columns: 'Colunas',
@@ -482,6 +484,7 @@ const WORDS: Record<string, Dict> = {
         preview_role_none: 'Sem restrições (você)',
         preview_role_exit: 'Voltar à minha vista',
         preview_more: 'Mais opções',
+        exit_to_platform: 'Sair para o Sapiensly',
     },
     fr: {
         columns: 'Colonnes',
@@ -639,6 +642,7 @@ const WORDS: Record<string, Dict> = {
         preview_role_none: 'Sans restrictions (vous)',
         preview_role_exit: 'Revenir à ma vue',
         preview_more: 'Plus d’options',
+        exit_to_platform: 'Quitter vers Sapiensly',
     },
 };
 

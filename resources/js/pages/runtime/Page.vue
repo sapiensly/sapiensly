@@ -313,6 +313,24 @@ const offline = computed(
 );
 provide('offlinePolicy', offline);
 
+/**
+ * The two ways to look at the app as something other than yourself.
+ *
+ * Provided rather than passed: the user menu that offers them is mounted by
+ * SiteHeader and by SiteSidebar, and threading environment and roles through
+ * both to reach a dropdown is four props that exist only to be forwarded.
+ *
+ * They used to live in a row of their own above the header, which spent a line
+ * of every screen — on a phone, a tenth of it — telling an administrator that
+ * nothing was wrong. They belong where the other things you do AS YOURSELF are.
+ */
+provide('previewOptions', {
+    environment: props.environment?.current ?? 'production',
+    canSwitchEnvironment: props.environment?.can_switch ?? false,
+    role: props.rolePreview?.current ?? null,
+    roles: props.rolePreview?.roles ?? [],
+});
+
 provide('publicSurface', props.publicSurface ?? false);
 provide('turnstileSiteKey', props.turnstileSiteKey ?? null);
 // Chart components that resolve CSS-var palettes to hex re-read on this signal

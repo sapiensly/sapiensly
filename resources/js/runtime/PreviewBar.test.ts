@@ -105,23 +105,21 @@ describe('when the page is pretending', () => {
 });
 
 describe('when nothing is pretending', () => {
-    it('offers the ways in and warns about nothing', () => {
-        // The old role bar rendered its whole row — label, select and all —
-        // even with no preview running, which is how a tenth of a phone screen
-        // came to be spent saying everything was normal.
+    it('takes no height at all', () => {
+        // Not even from an administrator who could enter both pretences. The
+        // bar kept a quiet idle row offering the ways IN — «Ver la app como… /
+        // Abrir la demo» — which is how a line of every screen came to be spent
+        // saying that everything was normal. Entering a pretence is a thing you
+        // do as yourself, so it lives in the user menu; this component is only
+        // the warning, and there is nothing to warn about.
         const w = bar();
 
         expect(on(w).exists()).toBe(false);
-        expect(w.find('[data-sp-preview-bar="off"]').exists()).toBe(true);
-        expect(w.find('[data-sp-environment-switch="demo"]').exists()).toBe(
-            true,
-        );
-    });
-
-    it('shows nothing at all to somebody who can do neither', () => {
-        const w = bar({ canSwitchEnvironment: false, roles: [] });
-
         expect(w.find('[data-sp-preview-bar]').exists()).toBe(false);
+        expect(w.find('[data-sp-environment-switch="demo"]').exists()).toBe(
+            false,
+        );
+        expect(w.text()).toBe('');
     });
 });
 
@@ -129,9 +127,10 @@ describe('the words it says', () => {
     it('speaks the app language rather than the one it was written in', () => {
         // The role bar was hardcoded Spanish — «Ver la app como…» — so an
         // English app said it in Spanish to its English users.
-        const w = bar({ locale: 'en-GB' });
+        const w = bar({ locale: 'en-GB', role: 'tecnico' });
 
-        expect(w.text()).toContain('View as…');
-        expect(w.text()).not.toContain('Ver la app como');
+        expect(w.text()).toContain('Viewing as «Técnico»');
+        expect(w.text()).toContain('Back to my view');
+        expect(w.text()).not.toContain('Volver a mi vista');
     });
 });
