@@ -328,6 +328,7 @@ DEVICE ACTIONS (in any on_click / on_submit; `list_available_actions` has the pr
 - `copy` — a folio, a reference, a tracking number onto the clipboard.
 - `speak` — reads text out loud, for work done with both hands full (the next address, the quantity to pick).
 - `toggle_fullscreen` — for a tablet bolted to a counter, where the browser chrome is an escape hatch into the rest of the internet.
+- `require_identity` — FIRST in the sequence, in front of what somebody should have to mean: a refund, a write-off, a price override, an irreversible delete. It asks the device WHO is holding it (fingerprint/face/PIN) and nothing after it runs unless that answers. Do NOT gate an action people must be able to take on any machine: a device with no sensor stops the sequence and says so.
 
 A PAGE THAT MUST NOT SLEEP: `keep_awake: true` on the page (not the app) holds the screen on while it is open — a scanning station, a till, an inspection form filled in over twenty minutes with gloves on. Never set it app-wide: the app also has a list somebody leaves open on a desk.
 
