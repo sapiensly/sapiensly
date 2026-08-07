@@ -9,12 +9,12 @@ use App\Models\Record;
 use App\Models\User;
 use App\Services\Workflows\WorkflowTriggerDispatcher;
 use App\Support\Apps\EnvironmentContext;
+use App\Support\Broadcasting\SafeBroadcast;
 use DateTimeImmutable;
 use DateTimeZone;
 use Exception;
 use InvalidArgumentException;
 use RuntimeException;
-use Throwable;
 
 /**
  * Validates and persists Record CRUD operations using the App's manifest as
@@ -176,18 +176,19 @@ class RecordWriteService
             return;
         }
 
-        try {
-            RecordChanged::dispatch(
-                $app->id,
-                (string) $record->object_definition_id,
-                (string) $record->id,
-                $verb,
-                (string) ($record->environment ?? EnvironmentContext::PRODUCTION),
-                $user?->id,
-            );
-        } catch (Throwable $e) {
-            report($e);
-        }
+        // Through SafeBroadcast because this is the path EVERY record write
+        // takes. Catching the error was never enough: a refused connection to
+        // Reverb costs ~30s, so a bulk action over fifty rows spent twenty-five
+        // minutes announcing writes that had already happened. Seeding three
+        // demo records measured 90.1s — three announcements, nothing else.
+        SafeBroadcast::dispatch(fn () => RecordChanged::dispatch(
+            $app->id,
+            (string) $record->object_definition_id,
+            (string) $record->id,
+            $verb,
+            (string) ($record->environment ?? EnvironmentContext::PRODUCTION),
+            $user?->id,
+        ));
     }
 
     private function trail(): RecordTrail

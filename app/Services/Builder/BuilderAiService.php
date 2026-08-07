@@ -85,6 +85,7 @@ use App\Services\Tools\McpClient;
 use App\Services\Workflows\WorkflowAssertionEvaluator;
 use App\Services\Workflows\WorkflowEngine;
 use App\Support\Branding\OrganizationBrand;
+use App\Support\Broadcasting\SafeBroadcast;
 use App\Support\CurrentDateTime;
 use App\Support\Landing\LandingIntent;
 use Illuminate\Http\Client\RequestException;
@@ -114,12 +115,6 @@ use RuntimeException;
  */
 class BuilderAiService
 {
-    /**
-     * Live updates gave up for this turn — see safeBroadcast. Reset at the
-     * start of every turn, never sticky across them.
-     */
-    private bool $broadcastsDisabled = false;
-
     /**
      * Model used specifically for "Pedir revisión visual" turns. Sonnet 4.5
      * follows scope instructions much more reliably than Haiku — relevant
@@ -462,10 +457,6 @@ class BuilderAiService
 
         $conversation = $placeholder->conversation;
         $app = $conversation->app;
-
-        // Fresh per turn: a worker serves many, and a broadcaster that was
-        // down for the last one may be up for this.
-        $this->broadcastsDisabled = false;
 
         Log::info('Builder AI streamMessage starting', [
             'conversation_id' => $conversation->id,
@@ -1007,21 +998,7 @@ class BuilderAiService
      */
     private function safeBroadcast(\Closure $dispatch): void
     {
-        if ($this->broadcastsDisabled) {
-            return;
-        }
-
-        try {
-            $dispatch();
-        } catch (\Throwable $e) {
-            // Per turn rather than per process: a worker handles many turns,
-            // and Reverb coming back must not stay punished by an earlier one.
-            $this->broadcastsDisabled = true;
-
-            Log::warning('Builder AI broadcast failed; live updates off for this turn', [
-                'error' => $e->getMessage(),
-            ]);
-        }
+        SafeBroadcast::dispatch($dispatch);
     }
 
     /**
