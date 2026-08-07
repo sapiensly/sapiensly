@@ -24,7 +24,7 @@ const field = (n: number, help?: string) => ({
     ...(help === undefined ? {} : { help_text: help }),
 });
 
-function form(fields: ReturnType<typeof field>[]) {
+function form(fields: ReturnType<typeof field>[], insideModal = false) {
     return mount(BlockForm, {
         props: {
             block: {
@@ -37,8 +37,13 @@ function form(fields: ReturnType<typeof field>[]) {
             locale: 'es-MX',
             defaultCurrency: 'MXN',
         },
+        global: { provide: { insideModal } },
     });
 }
+
+/** The row holding Save and Cancel. */
+const actions = (wrapper: ReturnType<typeof form>) =>
+    wrapper.find('button[type="submit"]').element.parentElement!;
 
 /** The one line under a field: `text-[11px] leading-tight`. */
 const notes = (wrapper: ReturnType<typeof form>) =>
@@ -66,5 +71,22 @@ describe('the line under a field', () => {
         fields.push(field(10, 'Con ayuda.'));
 
         expect(notes(form(fields))).toHaveLength(1);
+    });
+});
+
+describe('where Save is on a form that fills the screen', () => {
+    const many = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map((n) => field(n));
+
+    it('stays in view while the fields scroll under it, inside a modal', () => {
+        // On a phone the dialog is now the whole screen. A form of a dozen
+        // fields put Save at the end of a scroll nobody was told about: the
+        // reader fills the last field they can see and has nowhere to go.
+        expect(actions(form(many, true)).className).toContain('sticky');
+    });
+
+    it('is an ordinary row on a page, where there is no dialog to stick to', () => {
+        // Sticky here would pin it to the bottom of the window instead, which
+        // is a different thing and not one anybody asked for.
+        expect(actions(form(many, false)).className).not.toContain('sticky');
     });
 });

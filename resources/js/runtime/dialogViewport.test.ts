@@ -31,6 +31,24 @@ describe('every dialog the product centres on the viewport', () => {
         expect(source).toMatch(/max-h-\[calc\(100dvh/);
     });
 
+    it('takes the whole screen on a phone, and only becomes a card from sm up', () => {
+        // A dialog holding a twelve-field form has nothing to gain from a
+        // gutter and a shadow: every pixel spent on framing is a pixel not
+        // spent on the question, and a card that ends before the fold makes it
+        // look as though the form does too.
+        const source = read('resources/js/components/ui/dialog/DialogContent.vue');
+
+        expect(source).toContain('fixed inset-0');
+        expect(source).toContain('h-full');
+        expect(source).toContain('max-w-none');
+        // The centring — and everything that only makes sense on a card — is
+        // behind the breakpoint.
+        expect(source).toContain('sm:translate-x-[-50%]');
+        expect(source).toContain('sm:rounded-lg');
+        // The zoom too: full-screen it reads as the page lurching.
+        expect(source).not.toMatch(/(?<!sm:)data-\[state=open\]:zoom-in-95/);
+    });
+
     it.each(BASES)('scrolls what does not fit — %s', (path) => {
         expect(read(path)).toContain('overflow-y-auto');
     });

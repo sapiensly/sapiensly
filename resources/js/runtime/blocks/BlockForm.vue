@@ -312,7 +312,10 @@ const fieldErrors = ref<Record<string, string[]>>({});
  * at once — and so the line does not change height when validation fails on a
  * field that already had something to say.
  */
-function fieldNote(rf: { slug: string; field: { help_text?: string } }): string {
+function fieldNote(rf: {
+    slug: string;
+    field: { help_text?: string };
+}): string {
     return (fieldErrors.value[rf.slug] ?? [])[0] ?? rf.field.help_text ?? '';
 }
 const submitting = ref(false);
@@ -567,7 +570,30 @@ async function cancel() {
             </div>
         </div>
 
-        <div class="flex justify-end gap-2 pt-2">
+        <!--
+            Inside a modal the actions stay put while the fields scroll under
+            them. On a phone that dialog is now the whole screen, and a form of
+            a dozen fields put Save at the end of a scroll nobody was told about
+            — the reader fills the last field they can see and has nowhere
+            obvious to go.
+
+            Sticky rather than a fixed footer: it sticks to the dialog's own
+            scroll port, so it needs no knowledge of the box around it, and on a
+            short form it simply sits where it always did. The background is
+            what keeps a field from showing through it, and the negative margin
+            lets that background reach the dialog's padding edge.
+        -->
+        <div
+            class="flex justify-end gap-2 pt-2"
+            :class="
+                insideModal
+                    ? [
+                          'sticky bottom-0 -mx-4 -mb-4 px-4 pt-3 pb-4 sm:-mx-6 sm:-mb-6 sm:px-6 sm:pb-6',
+                          t.surface,
+                      ]
+                    : ''
+            "
+        >
             <button
                 v-if="block.on_cancel && block.on_cancel.length > 0"
                 type="button"
