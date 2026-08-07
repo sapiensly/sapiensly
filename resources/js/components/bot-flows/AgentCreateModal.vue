@@ -179,7 +179,7 @@ async function submit() {
 
 <template>
     <Dialog :open="open" @update:open="emit('update:open', $event)">
-        <DialogContent class="max-h-[90vh] max-w-3xl overflow-y-auto">
+        <DialogContent class="max-h-[90dvh] max-w-3xl overflow-y-auto">
             <DialogHeader>
                 <DialogTitle>{{
                     t('botFlows.modal.create_title', { type: typeLabels[type] })

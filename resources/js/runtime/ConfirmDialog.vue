@@ -53,9 +53,19 @@ onUnmounted(() => document.removeEventListener('keydown', onKeydown));
                 @click="answerConfirm(false)"
             />
 
+            <!--
+                Bounded and scrollable, for the reason DialogContent is: this is
+                centred, so a message taller than the screen would go off the
+                top as well as the bottom, with nothing to scroll. The one that
+                grows is exactly the one that matters — a bulk delete naming
+                what it is about to leave without a parent.
+
+                `dvh` rather than `vh`: on a phone `vh` is the viewport with the
+                browser chrome hidden, so it measures more than you can see.
+            -->
             <div
                 :class="[
-                    'relative w-full max-w-sm rounded-lg border p-5 shadow-xl',
+                    'relative max-h-[calc(100dvh-2rem)] w-full max-w-sm overflow-y-auto overscroll-contain rounded-lg border p-5 shadow-xl',
                     t.surface,
                     t.text,
                 ]"

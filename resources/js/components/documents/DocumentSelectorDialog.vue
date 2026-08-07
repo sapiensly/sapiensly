@@ -136,7 +136,7 @@ const typeColors: Record<string, string> = {
 
 <template>
     <Dialog v-model:open="open">
-        <DialogContent class="flex h-[700px] flex-col sm:max-w-5xl">
+        <DialogContent class="flex h-[min(700px,85dvh)] flex-col sm:max-w-5xl">
             <DialogHeader>
                 <DialogTitle>Select Documents</DialogTitle>
                 <DialogDescription>

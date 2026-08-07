@@ -215,7 +215,7 @@ watch(
 <template>
     <Dialog v-model:open="open">
         <DialogContent
-            class="flex h-[95vh] w-[98vw] max-w-[98vw] flex-col gap-3 p-4 sm:max-w-[98vw]"
+            class="flex h-[95dvh] w-[98vw] max-w-[98vw] flex-col gap-3 p-4 sm:max-w-[98vw]"
         >
             <DialogHeader class="shrink-0">
                 <DialogTitle>{{

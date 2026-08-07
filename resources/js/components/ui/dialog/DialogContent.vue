@@ -34,7 +34,21 @@ const forwarded = useForwardPropsEmits(delegatedProps, emits)
       v-bind="{ ...$attrs, ...forwarded }"
       :class="
         cn(
-          'bg-background data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 fixed top-[50%] left-[50%] z-50 grid w-full max-w-[calc(100%-2rem)] translate-x-[-50%] translate-y-[-50%] gap-4 rounded-lg border p-6 shadow-lg duration-200 sm:max-w-lg',
+          'bg-background data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 fixed top-[50%] left-[50%] z-50 grid w-full translate-x-[-50%] translate-y-[-50%] gap-4 overflow-y-auto overscroll-contain rounded-lg border shadow-lg duration-200',
+          // A dialog is centred on the viewport, so content taller than the
+          // viewport overflowed in BOTH directions: the bottom went past the
+          // fold and the top went ABOVE it, unreachable, with nothing to
+          // scroll. Bounding the height and scrolling inside is what makes a
+          // tall form usable at all.
+          //
+          // `dvh`, not `vh`: on a phone `vh` is the viewport with the browser
+          // chrome hidden, which is taller than what you can actually see while
+          // the address bar is up — the exact reason a modal ends up half off
+          // the screen on the device where it matters most.
+          'max-h-[calc(100dvh-1rem)] sm:max-h-[calc(100dvh-4rem)]',
+          // Near-full width on a phone (a 1rem gutter reads as an inset, not as
+          // a wasted margin) and the familiar centred card from sm up.
+          'max-w-[calc(100%-1rem)] p-4 sm:max-w-lg sm:p-6',
           props.class,
         )"
     >

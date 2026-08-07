@@ -496,7 +496,7 @@ const booleanFilters = [
 <template>
     <Dialog v-model:open="open">
         <DialogContent
-            class="flex h-[85vh] flex-col gap-4 rounded-sp-sm border-medium bg-navy sm:max-w-6xl"
+            class="flex h-[85dvh] flex-col gap-4 rounded-sp-sm border-medium bg-navy sm:max-w-6xl"
         >
             <DialogHeader>
                 <DialogTitle class="text-ink">

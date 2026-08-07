@@ -107,7 +107,7 @@ onMounted(load);
         @click.self="emit('close')"
     >
         <div
-            class="flex max-h-[85vh] w-full max-w-2xl flex-col overflow-hidden rounded-xl border border-medium bg-surface shadow-xl"
+            class="flex max-h-[85dvh] w-full max-w-2xl flex-col overflow-hidden rounded-xl border border-medium bg-surface shadow-xl"
         >
             <header
                 class="flex items-center justify-between border-b border-medium px-5 py-3"

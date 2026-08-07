@@ -97,7 +97,7 @@ function badgeVariant(
 
 <template>
     <Dialog :open="open" @update:open="emit('update:open', $event)">
-        <DialogContent class="flex max-h-[80vh] max-w-3xl flex-col">
+        <DialogContent class="flex max-h-[80dvh] max-w-3xl flex-col">
             <DialogHeader>
                 <DialogTitle class="flex items-center gap-2">
                     <component :is="icon" class="h-5 w-5" />
