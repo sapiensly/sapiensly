@@ -134,14 +134,35 @@ const menuLabel = computed(
         <div
             class="mx-auto flex w-full max-w-[1360px] items-center justify-between gap-4 px-[var(--sp-bleed,1.25rem)] py-3.5"
         >
+            <!--
+                On a phone the logo carries the name.
+
+                «Servicio Campo v11» beside a logo wrapped onto three lines and
+                ran under the menu: the brand block had nothing stopping it from
+                growing, and the row it shares is the one holding every control.
+                The name is the first thing to go, because it is the only thing
+                in that row already said by something else.
+
+                Without a logo it stays — then it is the ONLY thing identifying
+                the app, and a header with no identity is worse than a long one.
+                Truncated either way, so a long name can never do this again.
+            -->
             <a
-                class="flex items-center gap-2 font-semibold"
+                class="flex min-w-0 items-center gap-2 font-semibold"
                 :href="hrefFor ? hrefFor(menuPages[0]?.slug ?? '') : '#'"
             >
-                <img v-if="logoSrc" :src="logoSrc" alt="" class="h-7 w-auto" />
-                <span v-if="brand?.name" class="text-base tracking-tight">{{
-                    brand.name
-                }}</span>
+                <img
+                    v-if="logoSrc"
+                    :src="logoSrc"
+                    alt=""
+                    class="h-7 w-auto shrink-0"
+                />
+                <span
+                    v-if="brand?.name"
+                    class="min-w-0 truncate text-base tracking-tight"
+                    :class="logoSrc ? 'hidden sm:block' : ''"
+                    >{{ brand.name }}</span
+                >
             </a>
 
             <nav

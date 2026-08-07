@@ -101,3 +101,36 @@ describe('the app bar', () => {
         expect(bar.html()).not.toContain('Menú');
     });
 });
+
+describe('the brand block on a narrow screen', () => {
+    /** The element carrying the app's name, or null when it is not rendered. */
+    const name = (bar: ReturnType<typeof header>) =>
+        bar.findAll('span').find((s) => s.text() === 'Mi App') ?? null;
+
+    it('drops the name on a phone when a logo already says it', () => {
+        // «Servicio Campo v11» beside a logo wrapped onto three lines and ran
+        // under the menu. The name is the first thing to go, because it is the
+        // only thing in that row already said by something else.
+        const bar = header({ brand: { name: 'Mi App', logo: '/logo.svg' } });
+
+        expect(name(bar)!.classes()).toContain('hidden');
+        expect(name(bar)!.classes()).toContain('sm:block');
+    });
+
+    it('keeps it when there is no logo to carry it', () => {
+        // Then it is the ONLY thing identifying the app, and a header with no
+        // identity is worse than a long one.
+        const bar = header({ brand: { name: 'Mi App' } });
+
+        expect(name(bar)!.classes()).not.toContain('hidden');
+    });
+
+    it('truncates it either way, so a long name cannot do this again', () => {
+        for (const brand of [
+            { name: 'Mi App' },
+            { name: 'Mi App', logo: '/logo.svg' },
+        ]) {
+            expect(name(header({ brand }))!.classes()).toContain('truncate');
+        }
+    });
+});
