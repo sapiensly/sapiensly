@@ -1,10 +1,12 @@
 <?php
 
 use App\Facades\TenantCache;
+use App\Http\Middleware\IdempotentRuntimeWrite;
 use App\Models\App;
 use App\Models\Record;
 use App\Models\User;
 use App\Services\Manifest\AppManifestService;
+use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Str;
 use Illuminate\Testing\TestResponse;
 
@@ -134,9 +136,33 @@ it('refuses a second copy while the first is still running', function () {
     TenantCache::forOwner($this->user->organization_id, $this->user->id)
         ->put('idem:'.hash('sha256', 'r/campo/actions|key-race'), '__in_flight__', 60);
 
-    irw_create('OT-1', 'key-race')->assertStatus(409);
+    $response = irw_create('OT-1', 'key-race')->assertStatus(409);
 
-    expect(irw_records())->toBe(0);
+    // Labelled, because to the offline queue a bare 409 is a considered
+    // refusal — it would retire a write that in fact just needs asking again.
+    expect($response->headers->get('Idempotent-Retry'))->toBe('true')
+        ->and(irw_records())->toBe(0);
+});
+
+it('guards every write surface the offline queue can replay', function () {
+    // The queue holds a write on whatever mount produced it and uploads its
+    // attachments to that mount's /uploads. All four are replayable, so all
+    // four need the guard — the behaviour above is exercised on /r/…/actions
+    // because the other three need object storage or a published portal, but
+    // being WIRED is the part that silently goes missing.
+    $guarded = collect(Route::getRoutes()->getRoutes())
+        ->filter(fn ($route) => in_array(IdempotentRuntimeWrite::class, $route->gatherMiddleware(), true))
+        ->map(fn ($route) => $route->uri())
+        ->sort()
+        ->values()
+        ->all();
+
+    expect($guarded)->toBe([
+        'a/{public_slug}/actions',
+        'a/{public_slug}/uploads',
+        'r/{app_slug}/actions',
+        'r/{app_slug}/uploads',
+    ]);
 });
 
 it('scopes the key to the tenant', function () {

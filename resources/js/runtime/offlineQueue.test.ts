@@ -9,6 +9,7 @@ vi.mock('axios', () => ({
 const fake = installFakeIndexedDb();
 
 const { classify, discardRejected, enqueue, flush, refresh, purgeQueue, useOfflineQueue } = await import('./offlineQueue');
+const { holdFile } = await import('./offlineFiles');
 
 const post = vi.mocked(axios.post);
 
@@ -24,6 +25,7 @@ const unreachable = () => new Error('Network Error');
 beforeEach(async () => {
     fake.reset();
     post.mockReset();
+    globalThis.URL.createObjectURL = vi.fn(() => 'blob:fake');
     await refresh();
 });
 
@@ -46,6 +48,15 @@ describe('classifying a failed attempt', () => {
         for (const status of [400, 403, 404, 409, 422]) {
             expect(classify(status)).toBe('refused');
         }
+    });
+
+    it('comes back for our own in-flight 409', () => {
+        // The dedupe middleware answers 409 while an identical attempt is
+        // still running. Read as an ordinary conflict it would RETIRE a write
+        // that in fact just needs asking again in a moment — so the middleware
+        // labels it, and only the labelled one is retryable.
+        expect(classify(409, { 'idempotent-retry': 'true' })).toBe('unreachable');
+        expect(classify(409, {})).toBe('refused');
     });
 });
 
@@ -152,6 +163,68 @@ describe('sending what was held', () => {
         await Promise.all([flush(), flush()]);
 
         expect(post).toHaveBeenCalledTimes(1);
+    });
+});
+
+describe('a write that carries a photo taken offline', () => {
+    it('uploads the bytes first, then sends the write with the real id', async () => {
+        const held = await holdFile(new Blob([new Uint8Array(4)], { type: 'image/png' }), 'medidor.png');
+        await enqueue('/r/campo/actions', { values: { foto: held } }, 'close_order');
+
+        post.mockImplementation(async (url: string) =>
+            url.endsWith('/uploads') ? { data: { file_id: 'fil_real', url: '/r/campo/files/fil_real' } } : { data: {} },
+        );
+
+        await flush();
+
+        const [uploadCall, writeCall] = post.mock.calls;
+        expect(uploadCall[0]).toBe('/r/campo/uploads');
+        // The bytes go up on the write's own mount — a portal form posting to
+        // /r/ would 401 on every attachment.
+        expect(writeCall[0]).toBe('/r/campo/actions');
+        expect(JSON.stringify(writeCall[1])).toContain('fil_real');
+        expect(useOfflineQueue().pendingCount.value).toBe(0);
+    });
+
+    it('does not send the write when the photo cannot be uploaded yet', async () => {
+        // A record pointing at a photo that failed to upload is worse than one
+        // not written: it is written, it looks complete, and the photo is gone.
+        const held = await holdFile(new Blob([new Uint8Array(4)], { type: 'image/png' }), 'medidor.png');
+        await enqueue('/r/campo/actions', { values: { foto: held } }, 'close_order');
+
+        post.mockRejectedValue(unreachable());
+
+        await flush();
+
+        expect(post).toHaveBeenCalledTimes(1);
+        expect(post.mock.calls[0][0]).toBe('/r/campo/uploads');
+        expect(useOfflineQueue().pendingCount.value).toBe(1);
+    });
+
+    it('rejects the write when the server refuses the photo', async () => {
+        const held = await holdFile(new Blob([new Uint8Array(4)], { type: 'image/png' }), 'medidor.png');
+        await enqueue('/r/campo/actions', { values: { foto: held } }, 'close_order');
+
+        post.mockRejectedValue(refusedWith(413, 'File too large.'));
+
+        await flush();
+
+        const { pendingCount, rejected } = useOfflineQueue();
+        expect(pendingCount.value).toBe(0);
+        expect(rejected.value[0].reason).toBe('File too large.');
+    });
+
+    it('sends the idempotency key the file was held under', async () => {
+        // Stable across retries by construction, so a half-delivered upload is
+        // deduped rather than orphaning bytes in tenant storage.
+        const held = await holdFile(new Blob([new Uint8Array(4)], { type: 'image/png' }), 'medidor.png');
+        await enqueue('/r/campo/actions', { values: { foto: held } }, 'close_order');
+
+        post.mockResolvedValue({ data: {} });
+
+        await flush();
+
+        expect(post.mock.calls[0][2]?.headers?.['Idempotency-Key']).toBe(held!.file_id);
     });
 });
 

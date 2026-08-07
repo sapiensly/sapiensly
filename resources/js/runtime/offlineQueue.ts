@@ -1,5 +1,7 @@
 import axios from 'axios';
 import { computed, ref } from 'vue';
+import { newKey, offlineDbSupported, PENDING, REJECTED, run } from './offlineDb';
+import { collectHeldIds, purgeFiles, releaseFiles, resolveHeldFiles, type UploadAttempt } from './offlineFiles';
 
 /**
  * Writes made without a signal, held until there is one.
@@ -26,20 +28,9 @@ import { computed, ref } from 'vue';
  *     see it, because the only thing worse than a write that fails is a write
  *     that disappears.
  *
- * IndexedDB rather than localStorage: this must survive a reload and a crash,
- * and a queue that quietly hits a 5 MB string cap is a queue that loses work.
- * Written by hand for the same reason `public/sw.js` is — three object-store
- * calls do not earn a dependency.
+ * Attachments captured offline live beside the queue and are resolved into the
+ * payload just before it is sent — see `offlineFiles.ts`.
  */
-
-const DB_NAME = 'sapiensly-offline';
-const DB_VERSION = 1;
-
-/** Waiting to be sent. FIFO by `queuedAt`. */
-const PENDING = 'pending';
-
-/** Sent, and refused by the server. Waiting for a person, not for a signal. */
-const REJECTED = 'rejected';
 
 export interface QueuedWrite {
     id: string;
@@ -80,55 +71,7 @@ export function useOfflineQueue() {
 }
 
 export function offlineQueueSupported(): boolean {
-    return typeof indexedDB !== 'undefined';
-}
-
-function open(): Promise<IDBDatabase> {
-    return new Promise((resolve, reject) => {
-        const request = indexedDB.open(DB_NAME, DB_VERSION);
-
-        request.onupgradeneeded = () => {
-            const db = request.result;
-            if (!db.objectStoreNames.contains(PENDING)) {
-                db.createObjectStore(PENDING, { keyPath: 'id' });
-            }
-            if (!db.objectStoreNames.contains(REJECTED)) {
-                db.createObjectStore(REJECTED, { keyPath: 'id' });
-            }
-        };
-
-        request.onsuccess = () => resolve(request.result);
-        request.onerror = () => reject(request.error);
-    });
-}
-
-function run<T>(store: string, mode: IDBTransactionMode, work: (s: IDBObjectStore) => IDBRequest<T>): Promise<T> {
-    return open().then(
-        (db) =>
-            new Promise<T>((resolve, reject) => {
-                const tx = db.transaction(store, mode);
-                const request = work(tx.objectStore(store));
-                request.onsuccess = () => resolve(request.result);
-                request.onerror = () => reject(request.error);
-                tx.oncomplete = () => db.close();
-            }),
-    );
-}
-
-/**
- * A key that is unique per queued write and stable across every retry of it.
- *
- * `crypto.randomUUID` where it exists; a time-plus-randomness fallback where it
- * does not (older Safari, and any non-secure context). The fallback is weaker
- * than a UUID and that is acceptable: the key only has to be unique within one
- * device's queue and one server-side dedupe window.
- */
-function newKey(): string {
-    if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
-        return crypto.randomUUID();
-    }
-
-    return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`;
+    return offlineDbSupported();
 }
 
 /**
@@ -237,9 +180,18 @@ export type Outcome = 'sent' | 'refused' | 'unreachable';
  * deleted in the meantime, a permission revoked). Retrying forever would be a
  * queue that never drains, so it leaves for the rejected list where a person
  * can see it.
+ *
+ * `Idempotent-Retry` is the one case a 4xx is retryable, and it is OUR 409:
+ * the dedupe middleware saying an identical attempt is still in flight. Read
+ * from a header rather than by widening the status rule, because a real 409
+ * from the app IS a considered refusal and must stay one.
  */
-export function classify(status: number | undefined): Outcome {
+export function classify(status: number | undefined, headers: Record<string, unknown> = {}): Outcome {
     if (status === undefined || status >= 500 || status === 429) {
+        return 'unreachable';
+    }
+
+    if (status === 409 && String(headers['idempotent-retry'] ?? '') === 'true') {
         return 'unreachable';
     }
 
@@ -247,31 +199,94 @@ export function classify(status: number | undefined): Outcome {
 }
 
 async function send(entry: QueuedWrite): Promise<Outcome> {
+    // Attachments first, and the write only if they ALL land. A record that
+    // points at a photo which failed to upload is worse than one not written
+    // yet: it is written, it looks complete, and the photo is gone.
+    const held = collectHeldIds(entry.payload);
+    const attachments = await resolveHeldFiles(entry.payload, (blob, filename, key) =>
+        uploadHeld(entry.url, blob, filename, key),
+    );
+
+    if (attachments.outcome === 'unreachable') {
+        return 'unreachable';
+    }
+
+    if (attachments.outcome === 'refused') {
+        await reject(entry, undefined, attachments.reason ?? 'An attachment could not be uploaded.');
+
+        return 'refused';
+    }
+
     try {
-        await axios.post(entry.url, entry.payload, {
+        await axios.post(entry.url, attachments.payload, {
             headers: { 'Idempotency-Key': entry.key },
             timeout: 30_000,
         });
 
+        // Only once the write itself landed. Released earlier, a retry of the
+        // write would find its own attachments gone.
+        await releaseFiles(held);
+
         return 'sent';
     } catch (e) {
-        const status = (e as { response?: { status?: number; data?: unknown } }).response?.status;
+        const response = (e as { response?: { status?: number; headers?: Record<string, unknown> } }).response;
+        const status = response?.status;
 
-        if (classify(status) === 'unreachable') {
+        if (classify(status, response?.headers) === 'unreachable') {
             return 'unreachable';
         }
 
         const body = (e as { response?: { data?: { message?: string } } }).response?.data;
 
-        await run(REJECTED, 'readwrite', (s) =>
-            s.put({
-                ...entry,
-                status,
-                reason: typeof body?.message === 'string' && body.message !== '' ? body.message : `HTTP ${status}`,
-            } satisfies RejectedWrite),
+        await reject(
+            entry,
+            status,
+            typeof body?.message === 'string' && body.message !== '' ? body.message : `HTTP ${status}`,
         );
 
         return 'refused';
+    }
+}
+
+async function reject(entry: QueuedWrite, status: number | undefined, reason: string): Promise<void> {
+    await run(REJECTED, 'readwrite', (s) => s.put({ ...entry, status, reason } satisfies RejectedWrite));
+
+    // The bytes go with it. Kept, they would sit in the budget forever backing
+    // a write that is never going to be sent.
+    await releaseFiles(collectHeldIds(entry.payload));
+}
+
+/**
+ * Send one held attachment, on the mount its write belongs to.
+ *
+ * The idempotency key is the held file's own id: stable across every retry by
+ * construction, so a half-delivered upload is deduped server-side rather than
+ * leaving an orphan blob in tenant storage behind a record nobody points at.
+ */
+async function uploadHeld(writeUrl: string, blob: Blob, filename: string, key: string): Promise<UploadAttempt> {
+    const form = new FormData();
+    form.append('file', blob, filename);
+
+    try {
+        const { data } = await axios.post(writeUrl.replace(/\/actions$/, '/uploads'), form, {
+            headers: { 'Content-Type': 'multipart/form-data', 'Idempotency-Key': key },
+            timeout: 120_000,
+        });
+
+        return { outcome: 'ok', file: data as Record<string, unknown> };
+    } catch (e) {
+        const response = (e as {
+            response?: { status?: number; headers?: Record<string, unknown>; data?: { message?: string } };
+        }).response;
+
+        if (classify(response?.status, response?.headers) === 'unreachable') {
+            return { outcome: 'unreachable' };
+        }
+
+        return {
+            outcome: 'refused',
+            reason: response?.data?.message ?? `Upload refused (HTTP ${response?.status}).`,
+        };
     }
 }
 
@@ -301,6 +316,9 @@ export async function purgeQueue(): Promise<void> {
     try {
         await run(PENDING, 'readwrite', (s) => s.clear());
         await run(REJECTED, 'readwrite', (s) => s.clear());
+        // A photo of somebody's meter and their signature on it are exactly
+        // what must not survive on a device the next person picks up.
+        await purgeFiles();
     } finally {
         await refresh();
     }

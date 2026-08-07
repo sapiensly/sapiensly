@@ -57,6 +57,10 @@ class FakeObjectStore {
         return this.settle(() => this.rows.size);
     }
 
+    get(id: string) {
+        return this.settle(() => this.rows.get(id));
+    }
+
     getAll() {
         return this.settle(() => [...this.rows.values()]);
     }

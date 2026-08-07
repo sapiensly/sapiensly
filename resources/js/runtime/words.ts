@@ -162,6 +162,8 @@ const WORDS: Record<string, Dict> = {
         offline_rejected_show: 'See what',
         offline_rejected_hide: 'Hide',
         offline_rejected_discard: 'Discard',
+        offline_file_held: 'On this device — sent with the form.',
+        offline_no_room: 'No room to keep more files on this device.',
     },
     es: {
         columns: 'Columnas',
@@ -307,6 +309,8 @@ const WORDS: Record<string, Dict> = {
         offline_rejected_show: 'Ver cuáles',
         offline_rejected_hide: 'Ocultar',
         offline_rejected_discard: 'Descartar',
+        offline_file_held: 'En este dispositivo — se envía con el formulario.',
+        offline_no_room: 'No hay espacio para guardar más archivos en este dispositivo.',
     },
     pt: {
         columns: 'Colunas',
@@ -450,6 +454,8 @@ const WORDS: Record<string, Dict> = {
         offline_rejected_show: 'Ver quais',
         offline_rejected_hide: 'Ocultar',
         offline_rejected_discard: 'Descartar',
+        offline_file_held: 'Neste dispositivo — enviado com o formulário.',
+        offline_no_room: 'Não há espaço para guardar mais ficheiros neste dispositivo.',
     },
     fr: {
         columns: 'Colonnes',
@@ -594,6 +600,8 @@ const WORDS: Record<string, Dict> = {
         offline_rejected_show: 'Voir lesquelles',
         offline_rejected_hide: 'Masquer',
         offline_rejected_discard: 'Écarter',
+        offline_file_held: 'Sur cet appareil — envoyé avec le formulaire.',
+        offline_no_room: 'Plus de place pour garder des fichiers sur cet appareil.',
     },
 };
 

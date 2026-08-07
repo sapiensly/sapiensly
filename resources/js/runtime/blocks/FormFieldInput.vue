@@ -319,7 +319,12 @@ const {
     error: uploadError,
     upload,
     reset: resetUpload,
-} = useFileUpload(props.appSlug);
+} = useFileUpload(props.appSlug, {
+    locale: props.locale,
+    // The attachment IS the record: a work order closes with the photo of the
+    // meter and the customer's signature on it.
+    holdOffline: true,
+});
 
 async function onFileSelected(ev: Event) {
     const input = ev.target as HTMLInputElement;
@@ -741,6 +746,16 @@ function isInMulti(value: string): boolean {
                                 )
                             }}
                             · {{ (modelValue as UploadedFile).mime }}
+                        </p>
+                        <!-- The bytes are on this device and nowhere else. A
+                             preview that looked identical to an uploaded file
+                             would have somebody drive away believing the photo
+                             is in the record. -->
+                        <p
+                            v-if="(modelValue as UploadedFile).pending"
+                            class="text-[10px] text-amber-400"
+                        >
+                            {{ runtimeWord(props.locale ?? 'en', 'offline_file_held') }}
                         </p>
                     </div>
                     <button

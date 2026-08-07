@@ -1,5 +1,7 @@
 import axios from 'axios';
 import { ref } from 'vue';
+import { holdFile } from './offlineFiles';
+import { runtimeWord } from './words';
 
 /** What the server hands back once the bytes are stored. */
 export interface UploadedFile {
@@ -8,6 +10,14 @@ export interface UploadedFile {
     mime: string;
     size_bytes: number;
     url: string;
+    /**
+     * The bytes are on this device and nowhere else.
+     *
+     * Absent on every real upload, so nothing has to know about offline to
+     * behave correctly — but the field that renders a preview MUST read it and
+     * say so, or a person sees their photo and believes it is in the record.
+     */
+    pending?: true;
 }
 
 /**
@@ -23,7 +33,24 @@ export interface UploadedFile {
  * video frame — those have nothing in common but their result, so each keeps
  * its own way of producing a Blob and hands it over.
  */
-export function useFileUpload(appSlug: string) {
+export function useFileUpload(
+    appSlug: string,
+    options: {
+        /** The app's locale, for what this says on its own behalf. */
+        locale?: string;
+        /**
+         * Keep the bytes when they cannot be uploaded, and hand back a
+         * stand-in the form can use.
+         *
+         * OPT-IN, for the same reason queueing a write is: not every upload
+         * through here is an attachment. `BlockForm` uploads a document to
+         * have a MODEL read it, and bytes held for a reading that will never
+         * happen are a photo the person thinks they attached to nothing.
+         */
+        holdOffline?: boolean;
+    } = {},
+) {
+    const locale = options.locale ?? 'en';
     const progress = ref(0);
     const error = ref<string | null>(null);
 
@@ -81,9 +108,35 @@ export function useFileUpload(appSlug: string) {
             return data;
         } catch (e) {
             const err = e as {
-                response?: { data?: { message?: string } };
+                response?: { status?: number; data?: { message?: string } };
                 message?: string;
             };
+
+            // Never reached a server. The bytes are the whole point of the
+            // form — a work order closes with the photo of the meter and the
+            // customer's signature on it — so keep them and hand back
+            // something the field can use. The queue uploads them for real
+            // just before it sends the write that refers to them.
+            if (err.response?.status === undefined && options.holdOffline) {
+                const held = await holdFile(
+                    blob,
+                    filename ?? (blob instanceof File ? blob.name : 'upload'),
+                );
+
+                if (held !== null) {
+                    progress.value = 100;
+
+                    return held;
+                }
+
+                // Nowhere to put it: no IndexedDB, or the device is already
+                // holding all it may. Say which, because "upload failed" sends
+                // somebody to retry a thing that will fail the same way.
+                error.value = runtimeWord(locale, 'offline_no_room');
+
+                return null;
+            }
+
             error.value =
                 err.response?.data?.message ?? err.message ?? 'Upload failed.';
 

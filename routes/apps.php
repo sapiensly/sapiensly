@@ -240,8 +240,13 @@ Route::middleware([
     // File upload + serve for file fields in BlockForm. Uploads go via POST
     // and return a {file_id, url, ...} JSON; the GET endpoint streams the
     // bytes back after re-checking that the user can still see the App.
+    // Idempotent for the same reason /actions is: the offline queue uploads a
+    // held photo just before sending the write that refers to it, and a
+    // half-delivered upload retried would leave an orphan blob in tenant
+    // storage that no record points at.
     Route::post('/r/{app_slug}/uploads', [AppFileController::class, 'upload'])
         ->where('app_slug', '[a-z][a-z0-9_]*')
+        ->middleware(IdempotentRuntimeWrite::class)
         ->name('apps.runtime.uploads');
 
     // A printable copy of a page: the record the reader is looking at, as a

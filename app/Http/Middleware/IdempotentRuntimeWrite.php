@@ -17,6 +17,11 @@ use Symfony\Component\HttpFoundation\Response;
  * order, or not retry and risk losing the first. Both are wrong. With one it
  * retries freely, because the second attempt is the SAME write.
  *
+ * On `/r/{slug}/uploads` as well as `/r/{slug}/actions`, because the queue
+ * uploads a held photo just before sending the write that refers to it — and a
+ * retried upload would otherwise leave an orphan blob in tenant storage behind
+ * a record that points at the other copy.
+ *
  * Scoped to the tenant through `TenantCache`, which namespaces by the active
  * organization or user and fails closed with no scope — one shared Redis
  * keyspace and a client-chosen key would otherwise let one tenant's key
@@ -58,11 +63,13 @@ class IdempotentRuntimeWrite
             $stored = TenantCache::get($cacheKey);
 
             if ($stored === self::IN_FLIGHT) {
-                // The first attempt has not finished. Not an error — the queue
-                // stops on this and tries the whole flush again.
+                // The first attempt has not finished. Not an error, and the
+                // header says so: to the offline queue an ordinary 409 is a
+                // considered refusal, which would retire a write that in fact
+                // just needs asking again in a moment.
                 return response()->json([
                     'message' => 'This request is already being processed.',
-                ], 409);
+                ], 409)->header('Idempotent-Retry', 'true');
             }
 
             return $this->replay($stored);
@@ -100,9 +107,10 @@ class IdempotentRuntimeWrite
     {
         if (! is_array($stored) || ! isset($stored['status'], $stored['body'])) {
             // A malformed entry is a bug in this class, not a reason to serve
-            // something wrong. Let the request through: at worst it repeats a
-            // write, which is what we had before any of this existed.
-            return response()->json(['message' => 'Replay unavailable.'], 409);
+            // something wrong. Retryable, so a caller comes back rather than
+            // retiring work over our own bookkeeping.
+            return response()->json(['message' => 'Replay unavailable.'], 409)
+                ->header('Idempotent-Retry', 'true');
         }
 
         return response(

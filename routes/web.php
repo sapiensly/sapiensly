@@ -14,6 +14,7 @@ use App\Http\Controllers\Tools\ToolOAuth2Controller;
 use App\Http\Controllers\WidgetAssetController;
 use App\Http\Middleware\BindPublicAppContext;
 use App\Http\Middleware\BindPublicLandingContext;
+use App\Http\Middleware\IdempotentRuntimeWrite;
 use App\Services\Landing\CustomDomainService;
 use App\Support\Tenancy\TenantContext;
 use Illuminate\Http\Request;
@@ -82,9 +83,11 @@ Route::get('a/{public_slug}/{page_slug?}', PublicAppController::class)
 // The portal's write path. Same publish gate; tighter throttle (it writes), and
 // permissions.public.allow_writes + the visitor role's per-object grants +
 // honeypot/Turnstile inside the controller.
+// Idempotent like its /r sibling: the portal is the surface most likely to be
+// used on a bad signal, and the offline queue replays whatever it held.
 Route::post('a/{public_slug}/actions', PublicAppActionController::class)
     ->where('public_slug', '[a-z0-9][a-z0-9_-]*')
-    ->middleware([BindPublicAppContext::class, 'throttle:20,1'])
+    ->middleware([BindPublicAppContext::class, 'throttle:20,1', IdempotentRuntimeWrite::class])
     ->name('portal.public.actions');
 
 // Portal sign-in. The request endpoint answers identically whatever happened —
@@ -111,7 +114,7 @@ Route::post('a/{public_slug}/auth/logout', [PortalAuthController::class, 'logout
 // 10MB, an extension allowlist, and everything downloads rather than renders.
 Route::post('a/{public_slug}/uploads', [PublicAppFileController::class, 'upload'])
     ->where('public_slug', '[a-z0-9][a-z0-9_-]*')
-    ->middleware([BindPublicAppContext::class, 'throttle:10,1'])
+    ->middleware([BindPublicAppContext::class, 'throttle:10,1', IdempotentRuntimeWrite::class])
     ->name('portal.public.uploads');
 
 Route::get('a/{public_slug}/files/{file_id}', [PublicAppFileController::class, 'show'])
