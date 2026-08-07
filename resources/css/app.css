@@ -655,3 +655,83 @@ select:not([multiple]):not([size]):not(.appearance-none) {
     background-size: 1.05em;
     padding-right: 2.4em;
 }
+
+/*
+ * A field whose value is MARKUP, rendered.
+ *
+ * A `rich_text` field stores HTML and a `long_text` one collects the line
+ * breaks and the odd list people type into a textarea. Printed as text they
+ * came out as «<p>Nada.</p>» and as one run-on paragraph respectively — the
+ * value described rather than shown.
+ *
+ * Deliberately small: paragraphs, lists, emphasis, links and rules. This is a
+ * field inside a record, not an article, so it inherits the surface's own type
+ * and colour instead of bringing its own — a note must not out-shout the label
+ * above it. The landing surface has `.prose` for the other job.
+ */
+.sp-rich > :first-child {
+    margin-top: 0;
+}
+.sp-rich > :last-child {
+    margin-bottom: 0;
+}
+.sp-rich p,
+.sp-rich ul,
+.sp-rich ol,
+.sp-rich blockquote {
+    margin: 0.4em 0;
+}
+.sp-rich ul,
+.sp-rich ol {
+    padding-left: 1.25em;
+}
+.sp-rich ul {
+    list-style: disc;
+}
+.sp-rich ol {
+    list-style: decimal;
+}
+.sp-rich li {
+    margin: 0.1em 0;
+}
+.sp-rich strong {
+    font-weight: 600;
+}
+.sp-rich em {
+    font-style: italic;
+}
+.sp-rich a {
+    color: var(--sp-accent-blue, #3b82f6);
+    text-decoration: underline;
+    text-underline-offset: 2px;
+}
+.sp-rich blockquote {
+    border-left: 2px solid currentColor;
+    padding-left: 0.7em;
+    opacity: 0.75;
+}
+.sp-rich code {
+    font-family: ui-monospace, SFMono-Regular, monospace;
+    font-size: 0.9em;
+}
+/* Headings inside a record note are emphasis, not document structure — the
+   field's own label is the heading here, so these stay in the body scale. */
+.sp-rich h1,
+.sp-rich h2,
+.sp-rich h3,
+.sp-rich h4 {
+    font-size: 1em;
+    font-weight: 600;
+    margin: 0.6em 0 0.2em;
+}
+.sp-rich hr {
+    border: 0;
+    border-top: 1px solid currentColor;
+    opacity: 0.25;
+    margin: 0.7em 0;
+}
+.sp-rich img {
+    max-width: 100%;
+    height: auto;
+    border-radius: 4px;
+}

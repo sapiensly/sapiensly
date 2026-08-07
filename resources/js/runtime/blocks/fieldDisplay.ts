@@ -243,7 +243,99 @@ export function formatFieldValue(
         return (value as { original_name?: string }).original_name ?? 'file';
     }
 
+    // A rich_text field stores MARKUP. In a cell there is no room to render it,
+    // but printing it raw is worse than either — «<p>Nada.</p>» is what a
+    // record detail showed for a note whose whole content was the word Nada.
+    if (field.type === 'rich_text') {
+        return stripMarkup(String(value));
+    }
+
     return String(value);
+}
+
+/**
+ * The words out of some markup, for the places that can only take words.
+ *
+ * A table cell and a kanban card have one line and no room to render anything;
+ * `FieldValue` renders the real thing where there IS room. Written with a
+ * regex rather than a DOM parse because it runs once per cell per render, and
+ * the input is the app's own stored content, not a security boundary — what
+ * reaches `v-html` goes through DOMPurify.
+ */
+export function stripMarkup(html: string): string {
+    return html
+        .replace(/<br\s*\/?>/gi, ' ')
+        .replace(/<\/(p|div|li|h[1-6])>/gi, ' ')
+        .replace(/<[^>]*>/g, '')
+        .replace(/&nbsp;/gi, ' ')
+        .replace(/&amp;/gi, '&')
+        .replace(/&lt;/gi, '<')
+        .replace(/&gt;/gi, '>')
+        .replace(/\s+/g, ' ')
+        .trim();
+}
+
+/** A point on the earth, when the stored value really is one. */
+export function geoPoint(value: unknown): { lat: number; lng: number } | null {
+    const point = value as { lat?: number; lng?: number } | null;
+
+    return typeof point?.lat === 'number' && typeof point?.lng === 'number'
+        ? { lat: point.lat, lng: point.lng }
+        : null;
+}
+
+/**
+ * Where to send somebody who wants to SEE a point rather than read it.
+ *
+ * The device's own map, not one embedded here. A technician looking at a
+ * recorded location wants to drive to it, and the map app on their phone is
+ * the thing that can do that — it has their traffic, their car, their voice.
+ * This URL form opens the native app on a phone and the web map on a desktop,
+ * so one link serves both without asking which we are on.
+ */
+export function mapHref(point: { lat: number; lng: number }): string {
+    return `https://www.google.com/maps/search/?api=1&query=${point.lat},${point.lng}`;
+}
+
+/** An uploaded file, when the stored value really is one. */
+export interface StoredFile {
+    url: string;
+    name: string;
+    mime: string;
+    /** Held on this device, not yet uploaded — see offlineFiles.ts. */
+    pending: boolean;
+}
+
+export function storedFile(value: unknown): StoredFile | null {
+    if (value === null || typeof value !== 'object') return null;
+
+    const file = value as {
+        url?: unknown;
+        original_name?: unknown;
+        mime?: unknown;
+        pending?: unknown;
+    };
+
+    return typeof file.url === 'string' && file.url !== ''
+        ? {
+              url: file.url,
+              name:
+                  typeof file.original_name === 'string'
+                      ? file.original_name
+                      : 'file',
+              mime: typeof file.mime === 'string' ? file.mime : '',
+              pending: file.pending === true,
+          }
+        : null;
+}
+
+/**
+ * Whether a stored file is a picture — which is to say, whether showing it
+ * beats naming it. A photo of a meter and a signature are both images, and
+ * «1786121027607827959633554434497113.jpg» tells the reader nothing at all.
+ */
+export function isImageFile(file: StoredFile): boolean {
+    return file.mime.startsWith('image/');
 }
 
 /**

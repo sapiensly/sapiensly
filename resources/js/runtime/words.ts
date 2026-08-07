@@ -154,7 +154,8 @@ const WORDS: Record<string, Dict> = {
         offline_queued_one: '1 change waiting to be sent',
         offline_queued_many: '{n} changes waiting to be sent',
         offline_sending: 'Sending what was pending…',
-        offline_saved_here: 'Saved on this device. It will be sent when the signal comes back.',
+        offline_saved_here:
+            'Saved on this device. It will be sent when the signal comes back.',
         offline_not_queued: 'This needs a connection. Nothing was saved.',
         offline_rejected_one: '1 change could not be saved',
         offline_rejected_many: '{n} changes could not be saved',
@@ -164,6 +165,7 @@ const WORDS: Record<string, Dict> = {
         offline_rejected_discard: 'Discard',
         offline_file_held: 'On this device — sent with the form.',
         offline_no_room: 'No room to keep more files on this device.',
+        geo_view_on_map: 'See on the map',
     },
     es: {
         columns: 'Columnas',
@@ -301,7 +303,8 @@ const WORDS: Record<string, Dict> = {
         offline_queued_one: '1 cambio pendiente de enviar',
         offline_queued_many: '{n} cambios pendientes de enviar',
         offline_sending: 'Enviando lo pendiente…',
-        offline_saved_here: 'Guardado en este dispositivo. Se enviará cuando vuelva la señal.',
+        offline_saved_here:
+            'Guardado en este dispositivo. Se enviará cuando vuelva la señal.',
         offline_not_queued: 'Esto necesita conexión. No se guardó nada.',
         offline_rejected_one: '1 cambio no se pudo guardar',
         offline_rejected_many: '{n} cambios no se pudieron guardar',
@@ -310,7 +313,9 @@ const WORDS: Record<string, Dict> = {
         offline_rejected_hide: 'Ocultar',
         offline_rejected_discard: 'Descartar',
         offline_file_held: 'En este dispositivo — se envía con el formulario.',
-        offline_no_room: 'No hay espacio para guardar más archivos en este dispositivo.',
+        offline_no_room:
+            'No hay espacio para guardar más archivos en este dispositivo.',
+        geo_view_on_map: 'Ver en el mapa',
     },
     pt: {
         columns: 'Colunas',
@@ -446,7 +451,8 @@ const WORDS: Record<string, Dict> = {
         offline_queued_one: '1 alteração à espera de ser enviada',
         offline_queued_many: '{n} alterações à espera de serem enviadas',
         offline_sending: 'A enviar o que estava pendente…',
-        offline_saved_here: 'Guardado neste dispositivo. Será enviado quando houver sinal.',
+        offline_saved_here:
+            'Guardado neste dispositivo. Será enviado quando houver sinal.',
         offline_not_queued: 'Isto precisa de ligação. Nada foi guardado.',
         offline_rejected_one: '1 alteração não pôde ser guardada',
         offline_rejected_many: '{n} alterações não puderam ser guardadas',
@@ -455,7 +461,9 @@ const WORDS: Record<string, Dict> = {
         offline_rejected_hide: 'Ocultar',
         offline_rejected_discard: 'Descartar',
         offline_file_held: 'Neste dispositivo — enviado com o formulário.',
-        offline_no_room: 'Não há espaço para guardar mais ficheiros neste dispositivo.',
+        offline_no_room:
+            'Não há espaço para guardar mais ficheiros neste dispositivo.',
+        geo_view_on_map: 'Ver no mapa',
     },
     fr: {
         columns: 'Colonnes',
@@ -592,16 +600,21 @@ const WORDS: Record<string, Dict> = {
         offline_queued_one: '1 modification en attente d’envoi',
         offline_queued_many: '{n} modifications en attente d’envoi',
         offline_sending: 'Envoi de ce qui était en attente…',
-        offline_saved_here: 'Enregistré sur cet appareil. Sera envoyé au retour du réseau.',
-        offline_not_queued: 'Ceci exige une connexion. Rien n’a été enregistré.',
+        offline_saved_here:
+            'Enregistré sur cet appareil. Sera envoyé au retour du réseau.',
+        offline_not_queued:
+            'Ceci exige une connexion. Rien n’a été enregistré.',
         offline_rejected_one: '1 modification n’a pas pu être enregistrée',
-        offline_rejected_many: '{n} modifications n’ont pas pu être enregistrées',
+        offline_rejected_many:
+            '{n} modifications n’ont pas pu être enregistrées',
         offline_rejected_detail: 'Le serveur l’a refusée. Rien n’a été écrit.',
         offline_rejected_show: 'Voir lesquelles',
         offline_rejected_hide: 'Masquer',
         offline_rejected_discard: 'Écarter',
         offline_file_held: 'Sur cet appareil — envoyé avec le formulaire.',
-        offline_no_room: 'Plus de place pour garder des fichiers sur cet appareil.',
+        offline_no_room:
+            'Plus de place pour garder des fichiers sur cet appareil.',
+        geo_view_on_map: 'Voir sur la carte',
     },
 };
 
