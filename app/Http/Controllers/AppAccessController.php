@@ -32,7 +32,7 @@ class AppAccessController extends Controller
     {
         $manifest = $this->assertCanManage($request, $app);
 
-        return response()->json($this->assignments->roster($app, $manifest));
+        return response()->json($this->roster($app, $manifest));
     }
 
     public function store(Request $request, App $app): JsonResponse
@@ -52,7 +52,7 @@ class AppAccessController extends Controller
             $data['role_slug'],
         );
 
-        return response()->json($this->assignments->roster($app, $manifest));
+        return response()->json($this->roster($app, $manifest));
     }
 
     public function destroy(Request $request, App $app, string $assignment): JsonResponse
@@ -61,7 +61,7 @@ class AppAccessController extends Controller
 
         $this->assignments->revoke($app, $assignment);
 
-        return response()->json($this->assignments->roster($app, $manifest));
+        return response()->json($this->roster($app, $manifest));
     }
 
     /**
@@ -94,7 +94,127 @@ class AppAccessController extends Controller
         // locked model, so reload $app before reading back the active manifest.
         $manifest = $this->manifestService->getActiveManifest($app->refresh());
 
-        return response()->json($this->assignments->roster($app, $manifest ?? []));
+        return response()->json($this->roster($app, $manifest ?? []));
+    }
+
+    /**
+     * Set what this app may leave on a device (`settings.offline`).
+     *
+     * It lives beside the access mode because it is the same kind of statement:
+     * the mode says who may open the app, this says which of its data may sit
+     * on a phone's disk after they close it. An owner who thinks "who can see
+     * the salaries?" is already on this screen.
+     */
+    public function updateOffline(Request $request, App $app): JsonResponse
+    {
+        $manifest = $this->assertCanManage($request, $app);
+
+        $slugs = collect($manifest['objects'] ?? [])->pluck('slug')->filter()->values();
+
+        $data = $request->validate([
+            'enabled' => ['required', 'boolean'],
+            'exclude_objects' => ['array', 'max:50'],
+            // Checked against the app's OWN objects: an exclusion naming
+            // something that does not exist protects nothing and would sit in
+            // the manifest looking as though it did.
+            'exclude_objects.*' => ['string', Rule::in($slugs)],
+        ]);
+
+        $enabled = (bool) $data['enabled'];
+        $exclude = array_values(array_unique($data['exclude_objects'] ?? []));
+
+        // The default is offline ON with nothing excluded, and absent MEANS the
+        // default. Storing a no-op would make every app's manifest carry a
+        // setting nobody chose, and "unset" would stop being readable as "we
+        // never asked".
+        $isDefault = $enabled && $exclude === [];
+
+        $ops = $this->offlineOps($manifest, $isDefault, $enabled, $exclude);
+
+        // Setting the default on an app that never said otherwise changes
+        // nothing, and a version whose diff is empty is noise in a history
+        // people read to find out what happened.
+        if ($ops === []) {
+            return response()->json($this->roster($app, $manifest));
+        }
+
+        try {
+            $this->manifestService->applyPatch($app, $ops, $request->user(), 'Offline policy changed from the builder.');
+        } catch (InvalidManifestException $e) {
+            return response()->json([
+                'error' => 'invalid_manifest',
+                'message' => 'The offline change did not pass validation.',
+                'errors' => $e->result->errorsArray(),
+            ], 422);
+        }
+
+        $manifest = $this->manifestService->getActiveManifest($app->refresh());
+
+        return response()->json($this->roster($app, $manifest ?? []));
+    }
+
+    /**
+     * The patch that writes — or clears — the offline block.
+     *
+     * `settings` is optional on a manifest, so adding a member of it fails on an
+     * app that never had one. And removing a path that is not there fails too,
+     * which is why clearing is a no-op when there is nothing to clear.
+     *
+     * @param  array<string, mixed>  $manifest
+     * @param  list<string>  $exclude
+     * @return list<array<string, mixed>>
+     */
+    private function offlineOps(array $manifest, bool $isDefault, bool $enabled, array $exclude): array
+    {
+        if ($isDefault) {
+            if (! isset($manifest['settings']['offline'])) {
+                return [];
+            }
+
+            // Removing the LAST key of `settings` would leave an empty PHP
+            // array, which encodes as a JSON array and fails the schema — so
+            // when this was the only setting, the object goes with it.
+            return array_keys($manifest['settings']) === ['offline']
+                ? [['op' => 'remove', 'path' => '/settings']]
+                : [['op' => 'remove', 'path' => '/settings/offline']];
+        }
+
+        $value = ['enabled' => $enabled];
+        if ($exclude !== []) {
+            $value['exclude_objects'] = $exclude;
+        }
+
+        return isset($manifest['settings'])
+            ? [['op' => 'add', 'path' => '/settings/offline', 'value' => $value]]
+            : [['op' => 'add', 'path' => '/settings', 'value' => ['offline' => $value]]];
+    }
+
+    /**
+     * The roster, plus what this screen needs beyond roles.
+     *
+     * The offline block rides along because both halves of this panel are saved
+     * by the same three endpoints and re-read from whatever they return — a
+     * second request to fetch it would be one more thing to keep in step.
+     *
+     * @param  array<string, mixed>  $manifest
+     * @return array<string, mixed>
+     */
+    private function roster(App $app, array $manifest): array
+    {
+        $offline = $manifest['settings']['offline'] ?? [];
+
+        return [
+            ...$this->assignments->roster($app, $manifest),
+            'objects' => collect($manifest['objects'] ?? [])
+                ->map(fn (array $o): array => ['slug' => $o['slug'] ?? '', 'name' => $o['name'] ?? ($o['slug'] ?? '')])
+                ->filter(fn (array $o): bool => $o['slug'] !== '')
+                ->values()
+                ->all(),
+            'offline' => [
+                'enabled' => ($offline['enabled'] ?? true) !== false,
+                'exclude_objects' => array_values((array) ($offline['exclude_objects'] ?? [])),
+            ],
+        ];
     }
 
     /**

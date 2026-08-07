@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Loader2, ShieldCheck } from '@lucide/vue';
+import { CloudOff, Loader2, ShieldCheck } from '@lucide/vue';
 import axios from 'axios';
 import { onMounted, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
@@ -29,12 +29,22 @@ interface Roster {
     access_mode: string;
     roles: Role[];
     members: Member[];
+    /** The app's own objects, so an exclusion can be picked rather than typed. */
+    objects: { slug: string; name: string }[];
+    offline: { enabled: boolean; exclude_objects: string[] };
 }
 
 const loading = ref(true);
 const savingUserId = ref<number | null>(null);
 const savingMode = ref(false);
-const roster = ref<Roster>({ access_mode: 'open', roles: [], members: [] });
+const savingOffline = ref(false);
+const roster = ref<Roster>({
+    access_mode: 'open',
+    roles: [],
+    members: [],
+    objects: [],
+    offline: { enabled: true, exclude_objects: [] },
+});
 
 async function load() {
     loading.value = true;
@@ -102,6 +112,52 @@ async function onModeChange(mode: 'open' | 'allowlist') {
     } finally {
         savingMode.value = false;
     }
+}
+
+/**
+ * What this app may leave on a device.
+ *
+ * On this screen and not a settings page of its own, because it is the same
+ * question the rest of the panel answers: the mode above says who may open the
+ * app, this says which of its data may still be on their phone tomorrow.
+ *
+ * Both halves are saved the same way — one POST, and the response is the new
+ * truth. Nothing here keeps a local draft, so the checkbox cannot end up
+ * disagreeing with the manifest.
+ */
+async function saveOffline(enabled: boolean, exclude: string[]) {
+    if (savingOffline.value) {
+        return;
+    }
+
+    savingOffline.value = true;
+    const previous = roster.value.offline;
+    try {
+        const { data } = await axios.post<Roster>(
+            `/apps/${props.appId}/access/offline`,
+            { enabled, exclude_objects: exclude },
+        );
+        roster.value = data;
+        toast.success(t('apps.access.saved'));
+    } catch {
+        // Put the control back where it was. A toggle that stays flipped after
+        // a failed save is a claim about the app that is not true.
+        roster.value = { ...roster.value, offline: previous };
+        toast.error(t('apps.access.save_failed'));
+    } finally {
+        savingOffline.value = false;
+    }
+}
+
+function toggleExcluded(slug: string) {
+    const current = roster.value.offline.exclude_objects;
+
+    void saveOffline(
+        roster.value.offline.enabled,
+        current.includes(slug)
+            ? current.filter((s) => s !== slug)
+            : [...current, slug],
+    );
 }
 
 onMounted(load);
@@ -241,5 +297,117 @@ onMounted(load);
                 </tbody>
             </table>
         </div>
+
+        <!--
+            What the app may leave behind. Below the roster because it is the
+            second half of the same question: who may open this, and what of it
+            is still on their phone tomorrow.
+        -->
+        <section v-if="!loading" class="mt-8 rounded-sp-sm border border-soft">
+            <header
+                class="flex items-start gap-3 border-b border-soft px-4 py-3"
+            >
+                <span
+                    class="mt-0.5 inline-flex size-8 shrink-0 items-center justify-center rounded-sp-sm bg-accent-blue/15 text-accent-blue"
+                >
+                    <CloudOff class="size-4" />
+                </span>
+                <div class="min-w-0 flex-1">
+                    <h3 class="text-sm font-semibold text-ink">
+                        {{ t('apps.access.offline_title') }}
+                    </h3>
+                    <p class="mt-1 text-xs leading-relaxed text-ink-muted">
+                        {{ t('apps.access.offline_description') }}
+                    </p>
+                </div>
+                <div class="flex shrink-0 items-center gap-2">
+                    <Loader2
+                        v-if="savingOffline"
+                        class="size-4 animate-spin text-ink-muted"
+                    />
+                    <button
+                        type="button"
+                        role="switch"
+                        :aria-checked="roster.offline.enabled"
+                        :disabled="savingOffline"
+                        class="relative inline-flex h-5 w-9 shrink-0 items-center rounded-pill transition-colors disabled:opacity-50"
+                        :class="
+                            roster.offline.enabled
+                                ? 'bg-accent-blue'
+                                : 'bg-medium'
+                        "
+                        @click="
+                            saveOffline(
+                                !roster.offline.enabled,
+                                roster.offline.exclude_objects,
+                            )
+                        "
+                    >
+                        <span
+                            class="inline-block size-4 rounded-full bg-white transition-transform"
+                            :class="
+                                roster.offline.enabled
+                                    ? 'translate-x-[1.125rem]'
+                                    : 'translate-x-0.5'
+                            "
+                        />
+                    </button>
+                </div>
+            </header>
+
+            <div class="px-4 py-3">
+                <!--
+                    Off is a whole-app statement, so there is nothing left to
+                    exclude. Saying WHAT it costs matters: somebody turning this
+                    off to protect one screen should know they just took the app
+                    away from the basement it was built for.
+                -->
+                <p
+                    v-if="!roster.offline.enabled"
+                    class="text-xs leading-relaxed text-ink-muted"
+                >
+                    {{ t('apps.access.offline_off') }}
+                </p>
+
+                <template v-else-if="roster.objects.length > 0">
+                    <p class="text-xs text-ink-muted">
+                        {{ t('apps.access.offline_exclude_label') }}
+                    </p>
+                    <div class="mt-2 flex flex-wrap gap-1.5">
+                        <button
+                            v-for="object in roster.objects"
+                            :key="object.slug"
+                            type="button"
+                            :disabled="savingOffline"
+                            class="inline-flex items-center gap-1.5 rounded-pill border px-2.5 py-1 text-xs transition-colors disabled:opacity-50"
+                            :class="
+                                roster.offline.exclude_objects.includes(
+                                    object.slug,
+                                )
+                                    ? 'border-accent-blue/40 bg-accent-blue/15 text-accent-blue'
+                                    : 'border-medium bg-surface text-ink-muted hover:text-ink'
+                            "
+                            @click="toggleExcluded(object.slug)"
+                        >
+                            <CloudOff
+                                v-if="
+                                    roster.offline.exclude_objects.includes(
+                                        object.slug,
+                                    )
+                                "
+                                class="size-3"
+                            />
+                            {{ object.name }}
+                        </button>
+                    </div>
+                    <p
+                        v-if="roster.offline.exclude_objects.length > 0"
+                        class="mt-2 text-xs leading-relaxed text-ink-muted"
+                    >
+                        {{ t('apps.access.offline_excluded_hint') }}
+                    </p>
+                </template>
+            </div>
+        </section>
     </div>
 </template>

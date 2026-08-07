@@ -175,6 +175,10 @@ Route::middleware([
     Route::get('/apps/{app}/access', [AppAccessController::class, 'index'])->name('apps.access.index');
     Route::post('/apps/{app}/access', [AppAccessController::class, 'store'])->name('apps.access.store');
     Route::post('/apps/{app}/access/mode', [AppAccessController::class, 'updateMode'])->name('apps.access.mode');
+    // What this app may leave on a device. Beside the access mode because it is
+    // the same kind of statement: that one says who may open the app, this says
+    // which of its data may sit on a phone after they close it.
+    Route::post('/apps/{app}/access/offline', [AppAccessController::class, 'updateOffline'])->name('apps.access.offline');
     Route::delete('/apps/{app}/access/{assignment}', [AppAccessController::class, 'destroy'])
         ->where('assignment', 'aur_[a-z0-9_]+')
         ->name('apps.access.destroy');
