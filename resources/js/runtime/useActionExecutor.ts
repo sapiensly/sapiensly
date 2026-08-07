@@ -2,6 +2,7 @@ import { router } from '@inertiajs/vue3';
 import axios from 'axios';
 import { inject } from 'vue';
 import { toast } from 'vue-sonner';
+import { copyText, shareContent, speak, toggleFullscreen } from './device';
 import { requestScan } from './scanner';
 import { useRuntimeWrite } from './useRuntimeWrite';
 import { runtimeWord } from './words';
@@ -224,7 +225,13 @@ export function mayWaitForASignal(
         return false;
     }
 
-    if (actions.some((a) => objectIdsIn(a).some((id) => policy.excluded_object_ids.includes(id)))) {
+    if (
+        actions.some((a) =>
+            objectIdsIn(a).some((id) =>
+                policy.excluded_object_ids.includes(id),
+            ),
+        )
+    ) {
         return false;
     }
 
@@ -250,7 +257,9 @@ function objectIdsIn(node: unknown): string[] {
     }
 
     const found: string[] = [];
-    for (const [key, value] of Object.entries(node as Record<string, unknown>)) {
+    for (const [key, value] of Object.entries(
+        node as Record<string, unknown>,
+    )) {
         if (key === 'object_id' && typeof value === 'string') {
             found.push(value);
         } else if (typeof value === 'object') {
@@ -259,6 +268,45 @@ function objectIdsIn(node: unknown): string[] {
     }
 
     return found;
+}
+
+/**
+ * The URL that renders one of this app's pages as a PDF, or null when it could
+ * not be one.
+ *
+ * Shared by `download_pdf` and by `share`, which are the same document going to
+ * two different places — a printer and a customer's phone. Written twice they
+ * drifted immediately: the first version of share forgot `paper`, so a shared
+ * delivery note came out A4 while the printed one came out on label stock.
+ *
+ * Signed-in runtime only. A portal grants a visitor their own row, not a
+ * rendering of the business's pages — the route is not mounted there, and
+ * offering a link that 404s is worse than offering nothing.
+ */
+function pdfHref(action: RuntimeAction, ctx: ExecutionContext): string | null {
+    const slug = String(action.page_slug ?? '');
+    if (slug === '') return null;
+
+    const mount = mountFor(ctx);
+    if (!mount.startsWith('/r/')) return null;
+
+    const query = new URLSearchParams();
+    for (const [key, raw] of Object.entries(
+        (action.params as Record<string, unknown>) ?? {},
+    )) {
+        const value = interpolateTemplate(String(raw ?? ''), ctx);
+        if (value !== '' && value !== null && value !== undefined) {
+            query.set(key, String(value));
+        }
+    }
+
+    if (typeof action.paper === 'string' && action.paper !== '') {
+        query.set('paper', action.paper);
+    }
+
+    const qs = query.toString();
+
+    return `${mount}/${slug}/pdf` + (qs !== '' ? `?${qs}` : '');
 }
 
 /**
@@ -273,7 +321,10 @@ export function useActionExecutor() {
     // What this app may leave on the device. Absent outside a runtime page
     // (the builder preview mounts blocks directly), where the default — offline
     // allowed — is the behaviour every surface had before this existed.
-    const offlinePolicy = inject<{ value: OfflinePolicy } | null>('offlinePolicy', null);
+    const offlinePolicy = inject<{ value: OfflinePolicy } | null>(
+        'offlinePolicy',
+        null,
+    );
     // Every record mutation in the runtime goes out through here — see
     // useRuntimeWrite for why that matters before offline exists.
     const { write } = useRuntimeWrite();
@@ -305,6 +356,13 @@ export function useActionExecutor() {
                 // sending them to /actions would be a round trip for nothing.
                 'download_pdf',
                 'scan_to_find',
+                // The device ones. Every one of these happens in the hand
+                // holding the phone and nowhere else — a server that was told
+                // about them could not do anything with the news.
+                'share',
+                'copy',
+                'speak',
+                'toggle_fullscreen',
             ].includes(t);
         if (actions.every((a) => isClientSide(a.type))) {
             actions.forEach((a) => runClientAction(a, ctx));
@@ -328,7 +386,10 @@ export function useActionExecutor() {
                 queueOffline: mayWaitForASignal(
                     actions,
                     environment,
-                    offlinePolicy?.value ?? { enabled: true, excluded_object_ids: [] },
+                    offlinePolicy?.value ?? {
+                        enabled: true,
+                        excluded_object_ids: [],
+                    },
                 ),
                 label: actions.map((a) => a.type).join(' + '),
             },
@@ -473,6 +534,95 @@ export function useActionExecutor() {
         );
     }
 
+    /**
+     * Hand the record — or the paper it produces — to somebody outside the app.
+     *
+     * The customer who needs the delivery note does not have a login and is
+     * never going to be given one; what they have is WhatsApp. `page_slug`
+     * shares the rendered PDF as a FILE, which is the version that arrives as a
+     * document rather than as a link to a page they cannot open. Everything
+     * else shares text and a url.
+     *
+     * The PDF is fetched before the sheet opens, so a share that fails fails
+     * with the document still downloadable. A browser with no share sheet gets
+     * the download instead — the same job, one more tap.
+     */
+    async function shareAction(
+        action: RuntimeAction,
+        ctx: ExecutionContext,
+    ): Promise<void> {
+        const title = String(
+            interpolateTemplate(String(action.title ?? ''), ctx) ?? '',
+        );
+        const text = String(
+            interpolateTemplate(String(action.text ?? ''), ctx) ?? '',
+        );
+        const href = pdfHref(action, ctx);
+
+        let files: File[] | undefined;
+        if (href !== null) {
+            const blob = await axios
+                .get<Blob>(href, { responseType: 'blob' })
+                .then((r) => r.data)
+                .catch(() => null);
+
+            if (blob === null) {
+                toast.error(runtimeWord(locale, 'share_failed'));
+
+                return;
+            }
+
+            const name = `${String(action.page_slug ?? 'documento')}.pdf`;
+            files = [new File([blob], name, { type: 'application/pdf' })];
+        }
+
+        // An explicit url wins; otherwise the page the person is looking at,
+        // which is what "share this" means when nobody said otherwise.
+        const url =
+            typeof action.url === 'string' && action.url !== ''
+                ? String(interpolateTemplate(action.url, ctx))
+                : files === undefined
+                  ? window.location.href
+                  : undefined;
+
+        const outcome = await shareContent({
+            ...(title !== '' ? { title } : {}),
+            ...(text !== '' ? { text } : {}),
+            ...(url !== undefined ? { url } : {}),
+            ...(files !== undefined ? { files } : {}),
+        });
+
+        if (outcome === 'copied') {
+            toast.success(runtimeWord(locale, 'share_copied'));
+        } else if (outcome === 'failed') {
+            // Nothing to copy and no sheet: a file. Give them the download,
+            // which is the same document by the other route.
+            if (href !== null) {
+                window.location.href = href;
+            } else {
+                toast.error(runtimeWord(locale, 'share_failed'));
+            }
+        }
+    }
+
+    async function copyAction(
+        action: RuntimeAction,
+        ctx: ExecutionContext,
+    ): Promise<void> {
+        const text = String(
+            interpolateTemplate(String(action.text ?? ''), ctx) ?? '',
+        );
+        if (text === '') return;
+
+        if (await copyText(text)) {
+            toast.success(runtimeWord(locale, 'copy_done'));
+
+            return;
+        }
+
+        toast.error(runtimeWord(locale, 'copy_failed'));
+    }
+
     function runClientAction(action: RuntimeAction, ctx: ExecutionContext) {
         switch (action.type) {
             case 'navigate': {
@@ -487,35 +637,39 @@ export function useActionExecutor() {
                 // file, and router.visit would be waiting for a page that
                 // never comes. The browser takes the download and leaves the
                 // app where it was.
-                const slug = String(action.page_slug ?? '');
-                if (slug === '') break;
-
-                const query = new URLSearchParams();
-                for (const [key, raw] of Object.entries(
-                    (action.params as Record<string, unknown>) ?? {},
-                )) {
-                    const value = interpolateTemplate(String(raw ?? ''), ctx);
-                    if (value !== '' && value !== null && value !== undefined) {
-                        query.set(key, String(value));
-                    }
-                }
-
-                // Signed-in runtime only. A portal grants a visitor their own
-                // row, not a rendering of the business's pages — the route is
-                // not mounted there, and offering a link that 404s is worse
-                // than offering nothing.
-                const mount = mountFor(ctx);
-                if (!mount.startsWith('/r/')) break;
-
-                if (typeof action.paper === 'string' && action.paper !== '') {
-                    query.set('paper', action.paper);
-                }
-
-                const qs = query.toString();
-                window.location.href =
-                    `${mount}/${slug}/pdf` + (qs !== '' ? `?${qs}` : '');
+                const href = pdfHref(action, ctx);
+                if (href !== null) window.location.href = href;
                 break;
             }
+            case 'share': {
+                void shareAction(action, ctx);
+                break;
+            }
+            case 'copy': {
+                void copyAction(action, ctx);
+                break;
+            }
+            case 'speak': {
+                // Silent failure would be indistinguishable from a device with
+                // the volume down, so a browser that cannot speak says the
+                // words on screen instead of saying nothing.
+                const text = String(
+                    interpolateTemplate(String(action.text ?? ''), ctx) ?? '',
+                );
+                if (text === '') break;
+                if (
+                    !speak(
+                        text,
+                        typeof action.lang === 'string' ? action.lang : locale,
+                    )
+                ) {
+                    toast.info(text);
+                }
+                break;
+            }
+            case 'toggle_fullscreen':
+                void toggleFullscreen();
+                break;
             case 'scan_to_find': {
                 // Reading the code is the easy half; what somebody wants is the
                 // record it names, open. Without this the scan produces a

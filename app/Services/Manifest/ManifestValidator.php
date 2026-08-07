@@ -1153,6 +1153,9 @@ class ManifestValidator
      * one: they leave the page or hand over a file, which is why a button
      * carrying only one of them is finished — but neither writes the input a
      * form just collected, so a submit that only does that is still a dead end.
+     * The device actions (share, copy, speak, toggle_fullscreen) sit in the same
+     * list for the same reason: each one visibly does something where the person
+     * is standing, and none of them saves what a form just collected.
      *
      * @param  list<array<string, mixed>>  $actions
      */
@@ -1160,7 +1163,7 @@ class ManifestValidator
     {
         $effectful = $requirePersist
             ? ['create_record', 'update_record', 'delete_record', 'run_workflow']
-            : ['create_record', 'update_record', 'delete_record', 'run_workflow', 'navigate', 'open_modal', 'close_modal', 'scan_to_find', 'download_pdf'];
+            : ['create_record', 'update_record', 'delete_record', 'run_workflow', 'navigate', 'open_modal', 'close_modal', 'scan_to_find', 'download_pdf', 'share', 'copy', 'speak', 'toggle_fullscreen'];
 
         foreach ($actions as $action) {
             if (in_array($action['type'] ?? '', $effectful, true)) {

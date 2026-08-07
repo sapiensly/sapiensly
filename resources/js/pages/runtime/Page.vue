@@ -19,6 +19,7 @@ import { blockDataBus } from '@/runtime/useActionExecutor';
 import { useLiveRecords } from '@/runtime/useLiveRecords';
 import { useScrollReveal } from '@/runtime/useReveal';
 import { useSidebarCollapsed } from '@/runtime/useSidebarCollapsed';
+import { useWakeLock } from '@/runtime/useWakeLock';
 import { Head, usePage } from '@inertiajs/vue3';
 import { PanelLeftClose, PanelLeftOpen } from '@lucide/vue';
 import { computed, onMounted, onUnmounted, provide, ref, watch } from 'vue';
@@ -347,6 +348,16 @@ const sidebarCollapsed = useSidebarCollapsed();
 
 const sectionsEl = ref<HTMLElement | null>(null);
 useScrollReveal(sectionsEl);
+
+/**
+ * Some pages are worked ON rather than looked at.
+ *
+ * A page authored `keep_awake` holds the screen on for as long as it is the
+ * page in front of somebody: a scanning station, the till on a counter, an
+ * inspection form filled in over twenty minutes with gloves on. Per page and
+ * not per app, because the app also has a list somebody leaves open on a desk.
+ */
+useWakeLock(computed(() => props.page.keep_awake === true));
 
 // Headless-render readiness. HeadlessLandingShot drives this page in Chrome with
 // prefers-reduced-motion forced (so every data-sp-reveal is already at its final

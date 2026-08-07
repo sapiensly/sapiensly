@@ -112,6 +112,11 @@ const WORDS: Record<string, Dict> = {
         voice_listening: 'Listening… tap to stop',
         voice_no_mic: 'No microphone available. Fill the form by hand.',
         voice_heard: 'Heard: {text}',
+        share_copied: 'Link copied — paste it wherever you like.',
+        share_failed: 'This could not be shared from this device.',
+        copy_done: 'Copied',
+        copy_failed: 'Could not copy. Select the text and copy it by hand.',
+        scan_torch: 'Light',
         ask_placeholder: 'Ask in your own words…',
         ask_showing: 'Showing: {q}',
         ask_not_understood:
@@ -269,6 +274,11 @@ const WORDS: Record<string, Dict> = {
         voice_no_mic:
             'No hay micrófono disponible. Llena el formulario a mano.',
         voice_heard: 'Se escuchó: {text}',
+        share_copied: 'Enlace copiado — pégalo donde quieras.',
+        share_failed: 'No se pudo compartir desde este dispositivo.',
+        copy_done: 'Copiado',
+        copy_failed: 'No se pudo copiar. Selecciona el texto y cópialo a mano.',
+        scan_torch: 'Luz',
         ask_placeholder: 'Pregunta con tus palabras…',
         ask_showing: 'Mostrando: {q}',
         ask_not_understood:
@@ -424,6 +434,12 @@ const WORDS: Record<string, Dict> = {
         voice_listening: 'Ouvindo… toque para parar',
         voice_no_mic: 'Sem microfone disponível. Preencha à mão.',
         voice_heard: 'Ouvi: {text}',
+        share_copied: 'Link copiado — cole onde quiser.',
+        share_failed: 'Não foi possível compartilhar deste aparelho.',
+        copy_done: 'Copiado',
+        copy_failed:
+            'Não foi possível copiar. Selecione o texto e copie à mão.',
+        scan_torch: 'Luz',
         ask_placeholder: 'Pergunte com suas palavras…',
         ask_showing: 'Mostrando: {q}',
         ask_not_understood:
@@ -580,6 +596,12 @@ const WORDS: Record<string, Dict> = {
         voice_listening: 'À l’écoute… touchez pour arrêter',
         voice_no_mic: 'Aucun micro disponible. Remplissez à la main.',
         voice_heard: 'Entendu : {text}',
+        share_copied: 'Lien copié — collez-le où vous voulez.',
+        share_failed: 'Impossible de partager depuis cet appareil.',
+        copy_done: 'Copié',
+        copy_failed:
+            'Impossible de copier. Sélectionnez le texte et copiez-le à la main.',
+        scan_torch: 'Lumière',
         ask_placeholder: 'Demandez avec vos mots…',
         ask_showing: 'Affichage : {q}',
         ask_not_understood:

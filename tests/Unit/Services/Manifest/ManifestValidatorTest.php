@@ -1239,6 +1239,42 @@ it('does not warn when a button scans a code or hands over a PDF', function () {
         ->and(collect($result->warnings)->pluck('code'))->not->toContain('no_effect');
 });
 
+it('accepts the device actions on a button', function () {
+    // Written by a model that was told these exist. If the schema rejected any
+    // of them the model would be told the patch succeeded and the app would
+    // fail to save — which is the failure the catalog and the schema are
+    // supposed to agree about.
+    $manifest = baseManifest();
+    $manifest['pages'] = [[
+        'id' => id('pag'), 'slug' => 'ordenes', 'name' => 'Órdenes', 'path' => '/ordenes',
+        'keep_awake' => true,
+        'blocks' => [
+            ['id' => id('blk'), 'type' => 'button', 'label' => 'Enviar al cliente', 'on_click' => [
+                ['type' => 'share', 'page_slug' => 'ordenes', 'params' => ['id' => '{{params.id}}'], 'paper' => 'a4'],
+            ]],
+            ['id' => id('blk'), 'type' => 'button', 'label' => 'Compartir liga', 'on_click' => [
+                ['type' => 'share', 'title' => 'Orden', 'text' => 'Tu orden', 'url' => 'https://x.test/o/1'],
+            ]],
+            ['id' => id('blk'), 'type' => 'button', 'label' => 'Copiar folio', 'on_click' => [
+                ['type' => 'copy', 'text' => '{{row.data.folio}}'],
+            ]],
+            ['id' => id('blk'), 'type' => 'button', 'label' => 'Leer en voz alta', 'on_click' => [
+                ['type' => 'speak', 'text' => 'Siguiente parada', 'lang' => 'es-MX'],
+            ]],
+            ['id' => id('blk'), 'type' => 'button', 'label' => 'Pantalla completa', 'on_click' => [
+                ['type' => 'toggle_fullscreen'],
+            ]],
+        ],
+    ]];
+
+    $result = (new ManifestValidator)->validate($manifest);
+
+    // Each one visibly does something where the person is standing, so none of
+    // them is a button that goes nowhere.
+    expect($result->valid)->toBeTrue()
+        ->and(collect($result->warnings)->pluck('code'))->not->toContain('no_effect');
+});
+
 it('still flags a form whose submit only downloads a PDF', function () {
     $manifest = baseManifest();
     $manifest['pages'] = [[

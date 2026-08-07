@@ -285,6 +285,8 @@ export interface PageDef {
     name: string;
     path: string;
     icon?: string;
+    /** Hold the screen awake while this page is open. See `useWakeLock`. */
+    keep_awake?: boolean;
     blocks: AnyBlock[];
 }
 

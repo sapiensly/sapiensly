@@ -1760,6 +1760,10 @@
                 "icon": {
                     "type": "string"
                 },
+                "keep_awake": {
+                    "type": "boolean",
+                    "description": "Hold the screen on while this page is open. For a page worked ON rather than looked at: a scanning station, the till on a counter, an inspection form filled in over twenty minutes with gloves on. Per page and never per app — the app also has a list somebody leaves open on a desk. Silently does nothing where the browser has no Wake Lock API."
+                },
                 "layout": {
                     "enum": ["default", "full_width", "centered", "two_column"]
                 },
@@ -5393,7 +5397,7 @@
             }
         },
         "action": {
-            "description": "A single step inside an action_sequence (button.on_click, form.on_submit/on_cancel, table action column). Its `type` must be one of: navigate, open_modal, close_modal, create_record, update_record, delete_record, show_toast, refresh, run_workflow. If this failed, the action `type` is unknown or it is missing a required arg for that type — call list_available_actions for each action's required props and the canonical patterns.",
+            "description": "A single step inside an action_sequence (button.on_click, form.on_submit/on_cancel, table action column). Its `type` must be one of: navigate, open_modal, close_modal, create_record, update_record, delete_record, show_toast, refresh, run_workflow, scan_to_find, download_pdf, share, copy, speak, toggle_fullscreen. If this failed, the action `type` is unknown or it is missing a required arg for that type — call list_available_actions for each action's required props and the canonical patterns.",
             "oneOf": [
                 {
                     "type": "object",
@@ -5460,6 +5464,94 @@
                             ],
                             "default": "a4",
                             "description": "Named rather than measured, because label stock is SOLD by these names and a paper size out by two millimetres is a wasted roll. a4/letter are documents with margins; the label_* sizes print edge to edge \u2014 4\u00d76in shipping, 2\u00d71in asset tags, 62\u00d729mm Dymo address."
+                        }
+                    }
+                },
+                {
+                    "type": "object",
+                    "required": ["type"],
+                    "additionalProperties": false,
+                    "description": "Hand something to whatever the person shares things with — WhatsApp, mail, AirDrop. Give `page_slug` (with the same `params`/`paper` as download_pdf) to share that page's PDF as a FILE: that is how a signed delivery note reaches a customer who has no login and is never going to be given one. Otherwise it shares `text` + `url` (defaulting to the page the reader is on). Falls back to copying the link where there is no share sheet, and to the plain download when a file cannot be shared, so it is never a dead end. Signed-in runtime only for the PDF form.",
+                    "properties": {
+                        "type": {
+                            "const": "share"
+                        },
+                        "title": {
+                            "type": "string",
+                            "maxLength": 200
+                        },
+                        "text": {
+                            "type": "string",
+                            "maxLength": 500
+                        },
+                        "url": {
+                            "type": "string",
+                            "maxLength": 500
+                        },
+                        "page_slug": {
+                            "type": "string",
+                            "maxLength": 120
+                        },
+                        "params": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": ["string", "number", "boolean", "null"]
+                            }
+                        },
+                        "paper": {
+                            "enum": [
+                                "a4",
+                                "letter",
+                                "label_4x6",
+                                "label_2x1",
+                                "label_dymo"
+                            ],
+                            "default": "a4"
+                        }
+                    }
+                },
+                {
+                    "type": "object",
+                    "required": ["type", "text"],
+                    "additionalProperties": false,
+                    "description": "Put text on the clipboard — a tracking number, a reference, a link somebody has to paste into another system. Interpolates {{row.*}}/{{params.*}}/{{form.*}}. Says whether it landed rather than claiming success blindly.",
+                    "properties": {
+                        "type": {
+                            "const": "copy"
+                        },
+                        "text": {
+                            "type": "string",
+                            "maxLength": 2000
+                        }
+                    }
+                },
+                {
+                    "type": "object",
+                    "required": ["type", "text"],
+                    "additionalProperties": false,
+                    "description": "Say it out loud, for the half of a job done with both hands full: the next address on the route, the quantity to pick, the name at the door. Interpolates {{row.*}}/{{params.*}}/{{form.*}}. `lang` overrides the voice's language (defaults to the app's locale). A browser that cannot speak shows the words as a toast instead.",
+                    "properties": {
+                        "type": {
+                            "const": "speak"
+                        },
+                        "text": {
+                            "type": "string",
+                            "maxLength": 500
+                        },
+                        "lang": {
+                            "type": "string",
+                            "maxLength": 20
+                        }
+                    }
+                },
+                {
+                    "type": "object",
+                    "required": ["type"],
+                    "additionalProperties": false,
+                    "description": "Go full screen, or come back out. For the app running on a tablet bolted to a counter: the browser chrome above it is an escape hatch into the rest of the internet, and a till that can be navigated away from is a till that will be. Needs a tap, which is why it is a button action and not a page setting.",
+                    "properties": {
+                        "type": {
+                            "const": "toggle_fullscreen"
                         }
                     }
                 },

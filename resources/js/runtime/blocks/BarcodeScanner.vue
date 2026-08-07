@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { X } from '@lucide/vue';
+import { Flashlight, X } from '@lucide/vue';
 import { onBeforeUnmount, onMounted, ref } from 'vue';
+import { haptic } from '../device';
 import { runtimeWord } from '../words';
 
 /**
@@ -26,8 +27,43 @@ const emit = defineEmits<{
 const video = ref<HTMLVideoElement | null>(null);
 const failed = ref<string | null>(null);
 
+/**
+ * The phone's own lamp.
+ *
+ * Offered only when the camera says it has one — a front camera and most
+ * laptops do not, and a button that does nothing is worse than no button. It
+ * matters because the places barcodes live are shelving aisles, van interiors
+ * and the back of a meter cupboard, where the camera can see the label but not
+ * well enough to decode it, and the person's other hand is holding the box.
+ */
+const torchAvailable = ref(false);
+const torchOn = ref(false);
+
 let stream: MediaStream | null = null;
 let stopped = false;
+
+function videoTrack(): MediaStreamTrack | null {
+    return stream?.getVideoTracks()[0] ?? null;
+}
+
+async function toggleTorch(): Promise<void> {
+    const track = videoTrack();
+    if (track === null) return;
+
+    const next = !torchOn.value;
+
+    try {
+        await track.applyConstraints({
+            advanced: [{ torch: next } as unknown as MediaTrackConstraintSet],
+        });
+        torchOn.value = next;
+    } catch {
+        // Some devices advertise the capability and then refuse it while the
+        // stream is live. Leaving the toggle where it was keeps the button
+        // honest about what the lamp is actually doing.
+        torchAvailable.value = false;
+    }
+}
 
 /** The native detector, or a WASM one with the same shape when there is none. */
 async function makeDetector(): Promise<{
@@ -77,6 +113,11 @@ async function start(): Promise<void> {
         return;
     }
 
+    const capabilities = videoTrack()?.getCapabilities?.() as
+        | { torch?: boolean }
+        | undefined;
+    torchAvailable.value = capabilities?.torch === true;
+
     const el = video.value;
     if (el === null) return;
     el.srcObject = stream;
@@ -96,6 +137,10 @@ async function start(): Promise<void> {
             const found = await detector.detect(video.value);
             const value = found[0]?.rawValue?.trim();
             if (value) {
+                // Confirmed in the hand, because the hand is where the phone
+                // is: an operator holding it over a pallet cannot also be
+                // watching the screen for the sheet to close.
+                haptic();
                 emit('scanned', value);
 
                 return; // one read per open: the caller decides what happens next
@@ -133,18 +178,36 @@ onBeforeUnmount(stop);
             <span class="text-sm">
                 {{ runtimeWord(locale, 'scan_aim') }}
             </span>
-            <button
-                type="button"
-                data-sp-scanner-close
-                class="rounded-pill p-1.5 transition-colors hover:bg-white/10"
-                :aria-label="runtimeWord(locale, 'scan_close')"
-                @click="
-                    stop();
-                    emit('close');
-                "
-            >
-                <X class="size-5" />
-            </button>
+            <div class="flex items-center gap-1">
+                <button
+                    v-if="torchAvailable"
+                    type="button"
+                    data-sp-scanner-torch
+                    :aria-pressed="torchOn"
+                    :class="[
+                        'inline-flex items-center gap-1.5 rounded-pill px-2.5 py-1 text-xs transition-colors',
+                        torchOn
+                            ? 'bg-white text-black'
+                            : 'bg-white/10 hover:bg-white/20',
+                    ]"
+                    @click="toggleTorch"
+                >
+                    <Flashlight class="size-4" />
+                    {{ runtimeWord(locale, 'scan_torch') }}
+                </button>
+                <button
+                    type="button"
+                    data-sp-scanner-close
+                    class="rounded-pill p-1.5 transition-colors hover:bg-white/10"
+                    :aria-label="runtimeWord(locale, 'scan_close')"
+                    @click="
+                        stop();
+                        emit('close');
+                    "
+                >
+                    <X class="size-5" />
+                </button>
+            </div>
         </div>
 
         <div class="relative flex flex-1 items-center justify-center">
