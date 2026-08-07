@@ -1256,6 +1256,8 @@ it('accepts every capture the catalog offers', function () {
         ['id' => id('fld'), 'slug' => 'evidencia', 'name' => 'Evidencia', 'type' => 'file', 'capture' => 'camera', 'stamp' => true],
         ['id' => id('fld'), 'slug' => 'pantalla', 'name' => 'Pantalla', 'type' => 'file', 'capture' => 'screenshot'],
         ['id' => id('fld'), 'slug' => 'firma', 'name' => 'Firma', 'type' => 'file', 'capture' => 'signature'],
+        ['id' => id('fld'), 'slug' => 'peso', 'name' => 'Peso', 'type' => 'number', 'capture' => 'scale'],
+        ['id' => id('fld'), 'slug' => 'donde', 'name' => 'Dónde', 'type' => 'geo', 'capture' => 'auto'],
     ];
 
     $result = (new ManifestValidator)->validate($manifest);

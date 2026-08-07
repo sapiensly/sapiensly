@@ -6,16 +6,25 @@ import {
     MapPin,
     Mic,
     Nfc,
+    Scale,
     ScanLine,
     ScreenShare,
 } from '@lucide/vue';
-import { computed, defineAsyncComponent, inject, ref, watch } from 'vue';
+import {
+    computed,
+    defineAsyncComponent,
+    inject,
+    onMounted,
+    ref,
+    watch,
+} from 'vue';
 import {
     canCaptureScreen,
     canPickContact,
     captureScreen,
     pickContact,
 } from '../device';
+import { canReadScale, readWeight } from '../scale';
 import { requestScan } from '../scanner';
 import type { FieldDef } from '../types/manifest';
 import type { OfflinePolicy } from '../useActionExecutor';
@@ -388,6 +397,52 @@ function setGeoPart(part: 'lat' | 'lng', raw: string): void {
     update(both ? { lat, lng } : null);
 }
 
+/**
+ * A number read off the machine instead of off its display.
+ *
+ * Offered only where a serial port can be asked for at all — the button is one
+ * more way to fill the box, and the box is still there for the shop with a
+ * scale that plugs into nothing.
+ */
+const wantsScale = computed(
+    () => props.field.capture === 'scale' && canReadScale(),
+);
+const weighing = ref(false);
+const scaleFailed = ref(false);
+
+async function weigh(): Promise<void> {
+    weighing.value = true;
+    scaleFailed.value = false;
+
+    const reading = await readWeight();
+
+    weighing.value = false;
+
+    if (reading === null) {
+        scaleFailed.value = true;
+
+        return;
+    }
+
+    update(reading);
+}
+
+/**
+ * Taken as the form opens, because the point of the field is where the person
+ * WAS — a check-in, a delivery. Only when the author asked for it, only when
+ * the field is still empty (an edit form must not overwrite where somebody
+ * actually was with where they are now), and always said out loud below.
+ */
+const autoLocated = ref(false);
+
+onMounted(() => {
+    if (props.field.type !== 'geo' || props.field.capture !== 'auto') return;
+    if (props.modelValue != null) return;
+
+    autoLocated.value = true;
+    void locate();
+});
+
 async function locate(): Promise<void> {
     geoError.value = null;
 
@@ -598,18 +653,50 @@ function isInMulti(value: string): boolean {
     </template>
 
     <template v-else-if="field.type === 'number' || field.type === 'currency'">
-        <input
-            :id="inputId"
-            :value="modelValue ?? ''"
-            @input="onNumber"
-            type="number"
-            :step="field.type === 'currency' ? '0.01' : 'any'"
-            :class="[
-                'h-9 w-full rounded-md border px-3 text-sm',
-                t.surfaceMuted,
-                t.text,
-            ]"
-        />
+        <div class="flex items-center gap-2">
+            <input
+                :id="inputId"
+                :value="modelValue ?? ''"
+                @input="onNumber"
+                type="number"
+                :step="field.type === 'currency' ? '0.01' : 'any'"
+                :class="[
+                    'h-9 w-full rounded-md border px-3 text-sm',
+                    t.surfaceMuted,
+                    t.text,
+                ]"
+            />
+            <!-- Reading the display and typing it in is the step that puts the
+                 wrong weight on the invoice. -->
+            <button
+                v-if="wantsScale"
+                type="button"
+                data-sp-scale-read
+                :disabled="weighing"
+                :class="[
+                    'inline-flex h-9 shrink-0 items-center gap-1.5 rounded-md border px-2.5 text-xs transition-colors hover:bg-surface-hover disabled:opacity-50',
+                    t.surfaceMuted,
+                    t.textMuted,
+                ]"
+                @click="weigh"
+            >
+                <Scale class="size-3.5" />
+                {{
+                    runtimeWord(
+                        locale ?? 'en',
+                        weighing ? 'scale_reading' : 'scale_button',
+                    )
+                }}
+            </button>
+        </div>
+
+        <p
+            v-if="scaleFailed"
+            data-sp-scale-failed
+            class="mt-1 text-[10px] text-amber-500"
+        >
+            {{ runtimeWord(locale ?? 'en', 'scale_failed') }}
+        </p>
     </template>
 
     <template v-else-if="field.type === 'boolean'">
@@ -1169,6 +1256,17 @@ function isInMulti(value: string): boolean {
             class="mt-1 text-[10px] text-amber-500"
         >
             {{ geoError }}
+        </p>
+
+        <!-- Said out loud. A location taken without being asked for is the
+             difference between recording work and tracking somebody, and the
+             only honest version of it is one the person can see happening. -->
+        <p
+            v-else-if="autoLocated"
+            data-sp-geo-auto
+            :class="['mt-1 text-[10px]', t.textSubtle]"
+        >
+            {{ runtimeWord(locale ?? 'en', 'geo_auto_note') }}
         </p>
     </template>
 

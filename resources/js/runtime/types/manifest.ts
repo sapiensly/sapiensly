@@ -58,7 +58,11 @@ export interface FieldDef {
         | 'screenshot'
         | 'nfc'
         | 'contact'
-        | 'dictation';
+        | 'dictation'
+        | 'scale'
+        // geo only, and the one capture that happens without being pressed —
+        // hence the note the field prints under itself when it does.
+        | 'auto';
     /** camera only: burn the date, time and place into the photo. */
     stamp?: boolean;
     /** Derived fields (rollup/lookup/formula): what they draw from and return. */

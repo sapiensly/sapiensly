@@ -135,7 +135,7 @@ class AppScaffolder
         // unreachable through the typed path until now.
         'single_select' => ['default', 'display'],
         'multi_select' => ['default'],
-        'number' => ['min', 'max', 'precision', 'format', 'default'],
+        'number' => ['min', 'max', 'precision', 'format', 'default', 'capture'],
         'currency' => ['currency_code', 'min', 'max', 'default'],
         'boolean' => ['default', 'display'],
         'date' => ['default'],
@@ -143,6 +143,8 @@ class AppScaffolder
         'rating' => ['max', 'default', 'icon'],
         'slider' => ['min', 'max', 'step', 'default', 'format', 'currency_code'],
         'date_range' => ['include_time', 'default'],
+        // A point has nothing to configure except WHEN it is taken.
+        'geo' => ['capture'],
         'file' => ['max_size_mb', 'mime_types', 'capture', 'stamp'],
         'rich_text' => ['default', 'max_length'],
         'relation' => ['target_object_id', 'cardinality', 'on_delete', 'inverse_field_id'],

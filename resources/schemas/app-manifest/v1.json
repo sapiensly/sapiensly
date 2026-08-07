@@ -730,6 +730,10 @@
                         "format": {
                             "enum": ["plain", "thousands", "scientific"]
                         },
+                        "capture": {
+                            "enum": ["scale"],
+                            "description": "`scale` adds a button that reads the number off a machine plugged into the computer — a shop scale, a caliper, a bench meter, nearly all of which send a line of text over a serial port several times a second. Somebody reading that display and typing it into the form is the step that puts the wrong weight on the invoice, and it is the step this removes. It waits for two agreeing readings and refuses one the device marks as unsettled, so a pan still moving is never written down. Chromium only, and it needs somebody to point at the port — so the box beside it still takes a typed number, which is what happens everywhere else."
+                        },
                         "derived_rate": true
                     },
                     "required": ["type"]
@@ -1418,6 +1422,10 @@
                         "help_text": true,
                         "type": {
                             "const": "geo"
+                        },
+                        "capture": {
+                            "enum": ["auto"],
+                            "description": "`auto` asks the device for the location as soon as the form opens, instead of waiting for somebody to press the button. Set it ONLY when the whole point of the field is where the person was — a visit check-in, proof of delivery — and never as a convenience, because a location taken without being asked for is the difference between recording work and tracking staff. The form SAYS it did it, in a line under the field, and every other way in stays: the coordinates can still be typed, picked on a map or replaced. A refusal is not an error; the field is simply empty and waiting, exactly as it would be without this."
                         }
                     },
                     "required": ["type"]
