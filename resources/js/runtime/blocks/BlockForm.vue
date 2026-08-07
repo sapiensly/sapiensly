@@ -120,7 +120,7 @@ function spansBothColumns(rf: { field: { type: string } }): boolean {
  */
 const gridClass = computed(() =>
     visibleFields.value.length > 5
-        ? 'grid grid-cols-1 gap-x-4 gap-y-3 md:grid-cols-2'
+        ? 'grid grid-cols-1 gap-x-4 gap-y-4 md:grid-cols-2'
         : 'space-y-4',
 );
 
@@ -304,6 +304,17 @@ async function fillFrom(file: File): Promise<void> {
 // keep it as the pristine copy — never the same object as formData.
 const pristine = ref<Record<string, unknown>>({ ...formData.value });
 const fieldErrors = ref<Record<string, string[]>>({});
+
+/**
+ * The one line under a field: its error, or failing that its help text.
+ *
+ * The error WINS rather than joining the help, so a field never says two things
+ * at once — and so the line does not change height when validation fails on a
+ * field that already had something to say.
+ */
+function fieldNote(rf: { slug: string; field: { help_text?: string } }): string {
+    return (fieldErrors.value[rf.slug] ?? [])[0] ?? rf.field.help_text ?? '';
+}
 const submitting = ref(false);
 
 function initialState(): Record<string, unknown> {
@@ -529,24 +540,29 @@ async function cancel() {
                 </div>
 
                 <!--
-                One line under the field, always there. The error REPLACES the
-                help rather than joining it, so validating a form does not
-                shove everything below it down the page — and the help text a
-                manifest can set finally has somewhere to appear at all.
+                One line under the field, and the error REPLACES the help
+                rather than joining it, so validating a form does not shove
+                everything below it down the page.
+
+                The line is only RESERVED for a field that has help text. It
+                used to be reserved for every field, which on a desktop is
+                invisible and on a phone is the whole problem: seventeen pixels
+                of nothing under each of ten fields is two fewer fields on
+                screen, and a form where you scroll past emptiness to reach the
+                next question. A field with no help text gets the line only
+                when it has an error — which shifts what is below it by one
+                line, at the one moment the reader is already looking.
             -->
                 <p
-                    class="min-h-[1.05rem] text-[11px] leading-tight"
+                    v-if="fieldNote(rf) !== ''"
+                    class="text-[11px] leading-tight"
                     :class="
                         (fieldErrors[rf.slug] ?? []).length > 0
                             ? 'text-red-400'
                             : t.textSubtle
                     "
                 >
-                    {{
-                        (fieldErrors[rf.slug] ?? [])[0] ??
-                        rf.field.help_text ??
-                        ''
-                    }}
+                    {{ fieldNote(rf) }}
                 </p>
             </div>
         </div>

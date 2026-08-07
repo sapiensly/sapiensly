@@ -54,6 +54,14 @@ const forwarded = useForwardPropsEmits(delegatedProps, emits)
     >
       <slot />
 
+      <!--
+        Absolute, so it sits in the top-right corner of the CONTENT and scrolls
+        up with it on a very tall dialog. Keeping it in view would mean
+        splitting this into a fixed frame around a scrolling body, and several
+        call sites pass their own `flex flex-col` with `flex-1` children that
+        expect to be direct children of this box — a wrapper would break their
+        layout to fix a button that DialogHeader's `pr-8` already keeps clear.
+      -->
       <DialogClose
         v-if="showCloseButton"
         data-slot="dialog-close"
