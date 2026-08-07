@@ -77,6 +77,25 @@ describe('a file that is a picture', () => {
         w.unmount();
     });
 
+    it('gives a signature something to be seen against', async () => {
+        // A signature is near-black strokes on a TRANSPARENT canvas — the pad
+        // clears rather than fills — so on a dark surface it renders as
+        // nothing. Both the thumbnail and the viewer paint a ground under it;
+        // for an opaque photo that ground is never seen.
+        const w = value(
+            { type: 'file' },
+            { ...photo, original_name: 'firma.png', mime: 'image/png' },
+        );
+
+        expect(w.find('img').classes()).toContain('bg-white');
+
+        await w.find('button').trigger('click');
+        const full = document.querySelector('[data-sp-lightbox] img');
+        expect(full!.className).toContain('bg-white');
+
+        w.unmount();
+    });
+
     it('says when the bytes are still only on this device', () => {
         // A thumbnail identical to an uploaded one has somebody believe the
         // photo is in the record.

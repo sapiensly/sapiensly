@@ -7,7 +7,7 @@ import { runtimeWord } from './words';
  * The second half is the point. An app that silently shows yesterday's work
  * orders is worse than one that will not open: the technician acts on them. So
  * the runtime never renders cached rows without saying, in the same breath,
- * when they were fetched — the same rule EnvironmentBar follows for sandbox
+ * when they were fetched — the same rule PreviewBar follows for sandbox
  * data, where every number on the page is fiction and says so.
  */
 

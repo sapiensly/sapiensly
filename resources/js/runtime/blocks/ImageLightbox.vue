@@ -43,12 +43,23 @@ onUnmounted(() => document.removeEventListener('keydown', onKeydown));
             data-sp-lightbox
             @click="emit('close')"
         >
-            <!-- `contain` rather than a width: a portrait photo and a wide
-                 signature are both whole, neither cropped nor stretched. -->
+            <!--
+                `contain` rather than a width: a portrait photo and a wide
+                signature are both whole, neither cropped nor stretched.
+
+                AND A WHITE GROUND, which is not decoration. A signature is
+                saved as near-black strokes on a TRANSPARENT canvas — the pad
+                clears rather than fills — so on this near-black overlay it
+                rendered as nothing at all: the viewer opened, and the customer's
+                signature was an empty rectangle. Any field image may carry
+                alpha, and only the surface showing it knows what is behind it.
+                Harmless for a photo, whose pixels are opaque and whose box is
+                its own aspect ratio, so no white shows around it.
+            -->
             <img
                 :src="props.src"
                 :alt="props.alt ?? ''"
-                class="max-h-full max-w-full object-contain"
+                class="max-h-full max-w-full bg-white object-contain"
                 @click.stop
             />
 

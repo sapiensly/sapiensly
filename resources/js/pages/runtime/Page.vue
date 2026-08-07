@@ -3,12 +3,11 @@ import AppRenderer from '@/runtime/AppRenderer.vue';
 import BarcodeScanner from '@/runtime/blocks/BarcodeScanner.vue';
 import BlockBreadcrumb from '@/runtime/blocks/BlockBreadcrumb.vue';
 import ConfirmDialog from '@/runtime/ConfirmDialog.vue';
-import EnvironmentBar from '@/runtime/EnvironmentBar.vue';
 import { manifestFontHrefs } from '@/runtime/fonts';
 import LandingChatbotBubble from '@/runtime/LandingChatbotBubble.vue';
 import OfflineBar from '@/runtime/OfflineBar.vue';
 import { startOfflineQueue } from '@/runtime/offlineQueue';
-import RolePreviewBar from '@/runtime/RolePreviewBar.vue';
+import PreviewBar from '@/runtime/PreviewBar.vue';
 import RuntimeChatPanel from '@/runtime/RuntimeChatPanel.vue';
 import { runtimeSettingsStyle } from '@/runtime/runtimeStyle';
 import { answerScan, pendingScan } from '@/runtime/scanner';
@@ -565,10 +564,15 @@ onMounted(() => {
                          and an app in the sandbox with no sign of it is the
                          accident this whole feature exists to prevent. -->
                     <OfflineBar :locale="locale" />
-                    <EnvironmentBar
-                        v-if="props.environment"
-                        :current="props.environment.current"
-                        :can-switch="props.environment.can_switch"
+                    <PreviewBar
+                        :environment="
+                            props.environment?.current ?? 'production'
+                        "
+                        :can-switch-environment="
+                            props.environment?.can_switch ?? false
+                        "
+                        :role="props.rolePreview?.current ?? null"
+                        :roles="props.rolePreview?.roles ?? []"
                         :app-slug="props.app.slug"
                         :locale="locale"
                     />
@@ -603,17 +607,15 @@ onMounted(() => {
         >
             <div class="px-5">
                 <OfflineBar :locale="locale" />
-                <EnvironmentBar
-                    v-if="props.environment"
-                    :current="props.environment.current"
-                    :can-switch="props.environment.can_switch"
+                <PreviewBar
+                    :environment="props.environment?.current ?? 'production'"
+                    :can-switch-environment="
+                        props.environment?.can_switch ?? false
+                    "
+                    :role="props.rolePreview?.current ?? null"
+                    :roles="props.rolePreview?.roles ?? []"
                     :app-slug="props.app.slug"
                     :locale="locale"
-                />
-                <RolePreviewBar
-                    v-if="props.rolePreview"
-                    :current="props.rolePreview.current"
-                    :roles="props.rolePreview.roles"
                 />
                 <SiteHeader
                     :brand="brand"

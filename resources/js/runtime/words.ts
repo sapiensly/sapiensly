@@ -166,6 +166,12 @@ const WORDS: Record<string, Dict> = {
         offline_file_held: 'On this device — sent with the form.',
         offline_no_room: 'No room to keep more files on this device.',
         geo_view_on_map: 'See on the map',
+        preview_role_as: 'Viewing as «{role}»',
+        preview_role_explains: 'This is what that role can reach.',
+        preview_role_pick: 'View as…',
+        preview_role_none: 'No restrictions (you)',
+        preview_role_exit: 'Back to my view',
+        preview_more: 'More options',
     },
     es: {
         columns: 'Columnas',
@@ -316,6 +322,12 @@ const WORDS: Record<string, Dict> = {
         offline_no_room:
             'No hay espacio para guardar más archivos en este dispositivo.',
         geo_view_on_map: 'Ver en el mapa',
+        preview_role_as: 'Viendo como «{role}»',
+        preview_role_explains: 'Así ve la app este rol.',
+        preview_role_pick: 'Ver la app como…',
+        preview_role_none: 'Sin restricciones (tú)',
+        preview_role_exit: 'Volver a mi vista',
+        preview_more: 'Más opciones',
     },
     pt: {
         columns: 'Colunas',
@@ -464,6 +476,12 @@ const WORDS: Record<string, Dict> = {
         offline_no_room:
             'Não há espaço para guardar mais ficheiros neste dispositivo.',
         geo_view_on_map: 'Ver no mapa',
+        preview_role_as: 'A ver como «{role}»',
+        preview_role_explains: 'É assim que este perfil vê a aplicação.',
+        preview_role_pick: 'Ver a aplicação como…',
+        preview_role_none: 'Sem restrições (você)',
+        preview_role_exit: 'Voltar à minha vista',
+        preview_more: 'Mais opções',
     },
     fr: {
         columns: 'Colonnes',
@@ -615,6 +633,12 @@ const WORDS: Record<string, Dict> = {
         offline_no_room:
             'Plus de place pour garder des fichiers sur cet appareil.',
         geo_view_on_map: 'Voir sur la carte',
+        preview_role_as: 'Vue en tant que «{role}»',
+        preview_role_explains: 'Voici ce que ce rôle peut atteindre.',
+        preview_role_pick: 'Voir l’application en tant que…',
+        preview_role_none: 'Sans restrictions (vous)',
+        preview_role_exit: 'Revenir à ma vue',
+        preview_more: 'Plus d’options',
     },
 };
 

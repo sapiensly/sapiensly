@@ -7,7 +7,7 @@
  *  2. N of their changes are held on this device, unsent.
  *  3. N of their changes were refused by the server and are not going to land.
  *
- * A bar rather than a toast, for the reason EnvironmentBar is one: while any of
+ * A bar rather than a toast, for the reason PreviewBar is one: while any of
  * these is true, everything on the page is a claim with a caveat, and somebody
  * who forgets that acts on a work order that was reassigned an hour ago.
  *
