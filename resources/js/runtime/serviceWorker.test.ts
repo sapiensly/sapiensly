@@ -24,6 +24,8 @@ type SwInternals = {
     isInertiaRequest: (request: { headers: Headers }) => boolean;
     cacheKey: (request: { url: string; headers: Headers }) => string;
     storable: (response: { status: number; type?: string; headers: Headers } | null) => boolean;
+    fresh: (response: { headers: Headers }, now: number) => boolean;
+    MAX_AGE_MS: number;
 };
 
 function loadWorker(): SwInternals {
@@ -112,6 +114,38 @@ describe('what the worker is allowed to keep', () => {
 
     it('survives having nothing to judge', () => {
         expect(sw.storable(null)).toBe(false);
+    });
+});
+
+describe('how long tenant rows may live on this device', () => {
+    const stamped = (at: string | null) =>
+        ({ headers: new Headers(at === null ? {} : { 'x-sapiensly-cached-at': at }) }) as { headers: Headers };
+
+    const now = Date.parse('2026-08-06T12:00:00Z');
+    const daysAgo = (n: number) => new Date(now - n * 24 * 60 * 60 * 1000).toISOString();
+
+    it('keeps a page through any realistic stretch of field work', () => {
+        expect(sw.fresh(stamped(daysAgo(0)), now)).toBe(true);
+        expect(sw.fresh(stamped(daysAgo(29)), now)).toBe(true);
+    });
+
+    it('forgets one past the bound', () => {
+        // Not about freshness — the offline bar already says how old the data
+        // is. This is the other risk: a phone in a drawer, or lost, still
+        // holding somebody's customer list a year later.
+        expect(sw.fresh(stamped(daysAgo(31)), now)).toBe(false);
+        expect(sw.fresh(stamped(daysAgo(400)), now)).toBe(false);
+    });
+
+    it('keeps an entry it cannot date rather than deleting on a guess', () => {
+        // No stamp means it predates this rule. Throwing somebody's cache away
+        // because we changed our own bookkeeping is the wrong way round.
+        expect(sw.fresh(stamped(null), now)).toBe(true);
+        expect(sw.fresh(stamped('not a date'), now)).toBe(true);
+    });
+
+    it('bounds the retention at thirty days', () => {
+        expect(sw.MAX_AGE_MS).toBe(30 * 24 * 60 * 60 * 1000);
     });
 });
 

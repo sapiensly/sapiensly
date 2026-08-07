@@ -75,6 +75,20 @@ export function offlineQueueSupported(): boolean {
 }
 
 /**
+ * How many unsent writes one device may hold.
+ *
+ * A bound, not a guess at a workload: a phone left offline against a chatty app
+ * would otherwise queue until IndexedDB gives up, and the browser's own quota
+ * failure arrives mid-write with nothing useful to say. Past this the write
+ * fails plainly and the person is told it needs a connection — which is true,
+ * and is what they would rather hear than a two-hundredth silent promise.
+ *
+ * Two hundred is far beyond a day of field work and far below anything that
+ * strains the store. Attachments have their own, tighter budget in bytes.
+ */
+const MAX_PENDING = 200;
+
+/**
  * Hold a write until there is a signal.
  *
  * Returns the entry so the caller can say what happened, or null when the
@@ -96,6 +110,10 @@ export async function enqueue(url: string, payload: unknown, label: string): Pro
     };
 
     try {
+        if ((await run<number>(PENDING, 'readonly', (s) => s.count())) >= MAX_PENDING) {
+            return null;
+        }
+
         await run(PENDING, 'readwrite', (s) => s.add(entry));
         await refresh();
 

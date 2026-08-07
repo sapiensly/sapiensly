@@ -76,6 +76,20 @@ describe('holding a write', () => {
 
         expect(useOfflineQueue().pendingCount.value).toBe(2);
     });
+
+    it('refuses once the device is holding all the writes it may', async () => {
+        // A bound we chose, so the write fails plainly and the person is told
+        // it needs a connection — rather than the browser's own quota failing
+        // mid-write with nothing useful to say.
+        const store = fake.database.stores.get('pending')!;
+        for (let i = 0; i < 200; i++) {
+            store.set(`filler-${i}`, { id: `filler-${i}`, queuedAt: i } as never);
+        }
+        await refresh();
+
+        expect(await enqueue('/r/x/actions', {}, 'one too many')).toBeNull();
+        expect(useOfflineQueue().pendingCount.value).toBe(200);
+    });
 });
 
 describe('sending what was held', () => {
