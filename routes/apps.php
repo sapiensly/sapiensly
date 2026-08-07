@@ -20,6 +20,7 @@ use App\Http\Controllers\AppRecordOptionsController;
 use App\Http\Controllers\AppRecordTrailController;
 use App\Http\Controllers\AppRuntimeAgentController;
 use App\Http\Controllers\AppRuntimeController;
+use App\Http\Controllers\AppTrackingController;
 use App\Http\Controllers\AppVersionsController;
 use App\Http\Controllers\AppWebManifestController;
 use App\Http\Controllers\AppWorkflowController;
@@ -230,6 +231,24 @@ Route::middleware([
         ->where('app_slug', '[a-z][a-z0-9_]*')
         ->middleware('throttle:runtime-actions')
         ->name('apps.runtime.push.store');
+
+    // Where somebody went, while they were looking at the app. Every one of
+    // these re-checks `settings.tracking` server-side: a client that posts to
+    // an app whose owner never turned this on is refused, or the setting is
+    // decoration.
+    Route::post('/r/{app_slug}/tracking/start', [AppTrackingController::class, 'start'])
+        ->where('app_slug', '[a-z][a-z0-9_]*')
+        ->middleware('throttle:runtime-actions')
+        ->name('apps.runtime.tracking.start');
+
+    Route::post('/r/{app_slug}/tracking/pings', [AppTrackingController::class, 'pings'])
+        ->where('app_slug', '[a-z][a-z0-9_]*')
+        ->middleware('throttle:runtime-actions')
+        ->name('apps.runtime.tracking.pings');
+
+    Route::post('/r/{app_slug}/tracking/stop', [AppTrackingController::class, 'stop'])
+        ->where('app_slug', '[a-z][a-z0-9_]*')
+        ->name('apps.runtime.tracking.stop');
 
     // Who is holding the device, for the actions somebody should have to mean.
     Route::get('/r/{app_slug}/identity/challenge', [AppIdentityController::class, 'challenge'])

@@ -56,6 +56,15 @@ Schedule::command('records:prune-trash')
     ->withoutOverlapping()
     ->runInBackground();
 
+// Delete location trails past each app's retention, and close the sessions a
+// phone abandoned when its battery ran out. Hourly rather than nightly for the
+// session half: "who is being tracked right now" has to be answerable, and a
+// row left open for a day says somebody is being followed who is not.
+Schedule::command('tracking:prune')
+    ->hourly()
+    ->withoutOverlapping()
+    ->runInBackground();
+
 // Fire record.date_reached workflows whose date-field offset is due.
 Schedule::command('flows:dispatch-date-reached')
     ->everyMinute()

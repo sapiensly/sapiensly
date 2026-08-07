@@ -20,6 +20,9 @@ const BlockHeading = defineAsyncComponent(
 const BlockDivider = defineAsyncComponent(
     () => import('./blocks/BlockDivider.vue'),
 );
+const BlockTracking = defineAsyncComponent(
+    () => import('./blocks/BlockTracking.vue'),
+);
 const BlockSpacer = defineAsyncComponent(
     () => import('./blocks/BlockSpacer.vue'),
 );
@@ -163,6 +166,7 @@ const componentForType = {
     text: BlockText,
     heading: BlockHeading,
     divider: BlockDivider,
+    tracking: BlockTracking,
     spacer: BlockSpacer,
     table: BlockTable,
     data_grid: BlockDataGrid,

@@ -330,6 +330,14 @@ DEVICE ACTIONS (in any on_click / on_submit; `list_available_actions` has the pr
 - `toggle_fullscreen` — for a tablet bolted to a counter, where the browser chrome is an escape hatch into the rest of the internet.
 - `require_identity` — FIRST in the sequence, in front of what somebody should have to mean: a refund, a write-off, a price override, an irreversible delete. It asks the device WHO is holding it (fingerprint/face/PIN) and nothing after it runs unless that answers. Do NOT gate an action people must be able to take on any machine: a device with no sensor stops the sequence and says so.
 
+RECORDING WHERE SOMEBODY WENT (`settings.tracking` + the `tracking` block):
+- OFF unless you turn it on, which is the reverse of `settings.offline` and for the reverse reason: an app that stops working in a basement is broken, an app that follows people who did not agree is an incident. Turn it on ONLY when the brief asks for routes, arrival times or automatic check-in — and SAY in your reply that you did.
+- THE HONEST LIMIT, which you must repeat to the user: the web has no background geolocation. A trail exists only while the app is OPEN on screen, and stops when the phone locks. Pair the page with `keep_awake: true`. Gaps are recorded as gaps rather than papered over, because a straight line across a hole reads as a journey nobody made.
+- SHAPE: `settings.tracking = {enabled: true, min_interval_s?: 30, min_distance_m?: 50, geofence_radius_m?: 150, retain_days?: 30}`. Then a `tracking` block on the page the work is on, with `record_id_expression: "{{params.id}}"` so the fence is drawn around that record's `geo` field.
+- PREFER THE GEOFENCE OVER THE TRAIL. `location.arrived` is what the business actually needs — the visit stamps itself, the customer is told the technician is outside, the route step closes. The breadcrumb trail is the part that feels like surveillance and answers questions nobody asked. If the brief only needs arrival, set the fence and do not put the trail on a page anybody keeps open.
+- WHAT THE PERSON SEES: nothing records until they tap start, a bar runs the whole time saying so, and stop works immediately. Do not design around hiding it — that is the difference between recording work and watching a person, and the platform will not let you.
+- `retain_days` is a promise, enforced by a nightly prune. Set it to the shortest span that still answers the question the app was built to answer.
+
 A PAGE THAT MUST NOT SLEEP: `keep_awake: true` on the page (not the app) holds the screen on while it is open — a scanning station, a till, an inspection form filled in over twenty minutes with gloves on. Never set it app-wide: the app also has a list somebody leaves open on a desk.
 
 TELLING SOMEBODY WHILE THE APP IS CLOSED: see the `notifications` topic — `notify.send` with channel:"push".

@@ -2048,6 +2048,32 @@
                 }
             ]
         },
+        "block_tracking": {
+            "allOf": [
+                {
+                    "$ref": "#/$defs/block_base"
+                },
+                {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "description": "The control that starts and stops a location trail, and the line that says one is running. Requires settings.tracking.enabled — without it the server refuses every call and the block does nothing. `record_id_expression` (usually \"{{params.id}}\" on a record's own page) names the record whose `geo` field the geofence is drawn around: arriving there fires a `location.arrived` workflow, leaving fires `location.departed`. Omit it for a plain trail with no fence. PUT IT ON THE PAGE THE WORK IS ON — a visit, a route, a delivery — never on a dashboard, and never on a page somebody leaves open all day.",
+                    "properties": {
+                        "id": true,
+                        "live": true,
+                        "visibility": true,
+                        "style": true,
+                        "type": {
+                            "const": "tracking"
+                        },
+                        "record_id_expression": {
+                            "type": "string",
+                            "maxLength": 200
+                        }
+                    },
+                    "required": ["type"]
+                }
+            ]
+        },
         "block_divider": {
             "allOf": [
                 {
@@ -5260,6 +5286,9 @@
                     "$ref": "#/$defs/block_heading"
                 },
                 {
+                    "$ref": "#/$defs/block_tracking"
+                },
+                {
                     "$ref": "#/$defs/block_divider"
                 },
                 {
@@ -5795,7 +5824,7 @@
             }
         },
         "trigger": {
-            "description": "A workflow trigger. Its `type` must be one of: manual, record.created, record.updated, record.deleted, schedule, webhook.inbound. If this failed, the trigger `type` is unknown or it is missing a required arg for that type (record.* needs object_id; schedule needs cron) — call list_available_triggers for each trigger's required props.",
+            "description": "A workflow trigger. Its `type` must be one of: manual, record.created, record.updated, record.deleted, location.arrived, location.departed, schedule, webhook.inbound. If this failed, the trigger `type` is unknown or it is missing a required arg for that type (record.* needs object_id; schedule needs cron) — call list_available_triggers for each trigger's required props.",
             "oneOf": [
                 {
                     "type": "object",
@@ -5808,6 +5837,26 @@
                         "label": {
                             "type": "string",
                             "maxLength": 60
+                        }
+                    }
+                },
+                {
+                    "type": "object",
+                    "required": ["type", "object_id"],
+                    "additionalProperties": false,
+                    "description": "Fires when somebody RECORDING THEIR ROUTE crosses the fence drawn around this record's `geo` field — arriving, or leaving. Needs settings.tracking.enabled and a `tracking` block on the page the person is on; nothing fires for somebody who never started a trail, which is the point. Payload: the record, plus {location: {lat, lng, distance_m}}. Use it to stamp a visit's arrival, tell a customer the technician is outside, or close a route step. Never fires for the state a trail STARTED in: somebody who opens the app already at the site has not arrived while it was watching.",
+                    "properties": {
+                        "type": {
+                            "enum": [
+                                "location.arrived",
+                                "location.departed"
+                            ]
+                        },
+                        "object_id": {
+                            "$ref": "#/$defs/id"
+                        },
+                        "filter": {
+                            "$ref": "#/$defs/filter_expression"
                         }
                     }
                 },
@@ -6842,6 +6891,40 @@
                 "default_timezone": {
                     "type": "string",
                     "default": "America/Mexico_City"
+                },
+                "tracking": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "description": "Whether this app may record where its users GO. OFF unless it is here and enabled:true — the reverse of `offline`, and for the reverse reason: an app that stops working in a basement is broken, an app that follows people who did not agree is an incident. Even then nothing is recorded until the person taps start on a `tracking` block, a visible bar runs the whole time, and they can stop it. The web has no background geolocation, so a trail only exists while the app is open on screen — pair the page with keep_awake and expect gaps, which are recorded AS gaps. SET THIS ONLY when the brief asks for routes, arrival times or automatic check-in, say in your reply that you turned it on, and prefer the geofence (a `location.arrived` workflow) over the trail: knowing somebody arrived is what the business needs, and the breadcrumb trail is the part that feels like surveillance.",
+                    "properties": {
+                        "enabled": {
+                            "type": "boolean"
+                        },
+                        "min_interval_s": {
+                            "type": "integer",
+                            "minimum": 15,
+                            "maximum": 3600,
+                            "description": "Never record two points closer together in time than this (default 30). Lower is not better: it flattens a battery and fills a table with rows saying the same thing."
+                        },
+                        "min_distance_m": {
+                            "type": "integer",
+                            "minimum": 10,
+                            "maximum": 10000,
+                            "description": "…or closer together in space (default 50). Standing still should cost nothing."
+                        },
+                        "geofence_radius_m": {
+                            "type": "integer",
+                            "minimum": 50,
+                            "maximum": 10000,
+                            "description": "How close counts as arrived (default 150). Below about fifty metres a fence is narrower than a phone's own fix and fires on somebody standing still."
+                        },
+                        "retain_days": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 365,
+                            "description": "How long a trail is kept before it is deleted (default 30). This is the promise that a trail does not outlive the work it documents — set it to the shortest span that still answers the question the app was built to answer."
+                        }
+                    }
                 },
                 "offline": {
                     "type": "object",

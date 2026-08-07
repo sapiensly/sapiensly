@@ -79,6 +79,9 @@ final class Schemas
         // that device holds for saying who is using it
         'push_subscriptions',
         'device_credentials',
+        // Where somebody went, while they were looking at the app
+        'tracking_sessions',
+        'location_pings',
         'pipeline_runs',
         'workflow_runs',
         'workflow_step_runs',
