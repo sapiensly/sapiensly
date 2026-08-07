@@ -46,7 +46,16 @@ class PublicAppActionController extends Controller
 {
     private const SERVER_SIDE = ['create_record', 'update_record', 'delete_record'];
 
-    private const CLIENT_SIDE = ['navigate', 'open_modal', 'close_modal', 'show_toast', 'refresh'];
+    /**
+     * Mirrors the authenticated endpoint, minus the two it deliberately does
+     * not serve: `download_pdf` and `scan_to_find` render the business's own
+     * pages and are not mounted here, and offering a link that 404s is worse
+     * than offering nothing. The rest happen entirely in the visitor's browser.
+     */
+    private const CLIENT_SIDE = [
+        'navigate', 'open_modal', 'close_modal', 'show_toast', 'refresh',
+        'share', 'copy', 'speak', 'toggle_fullscreen',
+    ];
 
     /** Action → the capability the visitor role must hold on the target object. */
     private const REQUIRED_CAPABILITY = [
@@ -263,7 +272,10 @@ class PublicAppActionController extends Controller
      */
     private function resolveClientAction(array $action, array $context): array
     {
-        foreach (['to', 'message'] as $key) {
+        // `text`/`title`/`url` are the device actions', resolved for the same
+        // reason as `to`: {{record.id}} is what a create just minted and the
+        // visitor's browser has never seen it.
+        foreach (['to', 'message', 'text', 'title', 'url'] as $key) {
             if (isset($action[$key]) && is_string($action[$key])) {
                 $action[$key] = $this->expressions->resolve($action[$key], $context);
             }

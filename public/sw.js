@@ -78,7 +78,11 @@ self.addEventListener('activate', (event) => {
             const names = await caches.keys();
             await Promise.all(
                 names
-                    .filter((name) => name.startsWith('sapiensly-') && !OURS.includes(name))
+                    .filter(
+                        (name) =>
+                            name.startsWith('sapiensly-') &&
+                            !OURS.includes(name),
+                    )
                     .map((name) => caches.delete(name)),
             );
             await forgetWhatIsTooOld();
@@ -139,7 +143,9 @@ self.addEventListener('message', (event) => {
         (async () => {
             const names = await caches.keys();
             await Promise.all(
-                names.filter((name) => name.startsWith('sapiensly-')).map((name) => caches.delete(name)),
+                names
+                    .filter((name) => name.startsWith('sapiensly-'))
+                    .map((name) => caches.delete(name)),
             );
             event.source?.postMessage({ type: 'sapiensly:purged' });
         })(),
@@ -170,12 +176,16 @@ self.addEventListener('fetch', (event) => {
         return; // admin, builder, auth, APIs — straight to the network.
     }
 
-    event.respondWith(networkFirst(request, isInertiaRequest(request) ? DATA : SHELL));
+    event.respondWith(
+        networkFirst(request, isInertiaRequest(request) ? DATA : SHELL),
+    );
 });
 
 /** Hashed build output and the static fonts the runtime renders with. */
 function isImmutableAsset(url) {
-    return url.pathname.startsWith('/build/') || url.pathname.startsWith('/fonts/');
+    return (
+        url.pathname.startsWith('/build/') || url.pathname.startsWith('/fonts/')
+    );
 }
 
 /** The two mounts a built app is served from: authenticated and public portal. */
@@ -291,6 +301,94 @@ async function withHeaders(response, extra) {
 }
 
 /**
+ * What a notification says, out of what the server encrypted.
+ *
+ * The payload is read defensively because it is the ONE thing here that arrives
+ * from outside: a push with no body at all is legal (a service may wake a
+ * worker without one), and a worker that throws while handling `push` shows the
+ * browser's own "This site has been updated in the background" instead — which
+ * is worse than saying nothing, because it is a notification that tells the
+ * person nothing and cannot be turned off.
+ */
+function notificationFrom(event) {
+    let payload = {};
+
+    try {
+        payload = event.data?.json() ?? {};
+    } catch {
+        payload = {};
+    }
+
+    const title =
+        typeof payload.title === 'string' && payload.title !== ''
+            ? payload.title
+            : null;
+    if (title === null) {
+        return null;
+    }
+
+    return {
+        title,
+        body: typeof payload.body === 'string' ? payload.body : '',
+        url: typeof payload.url === 'string' ? payload.url : null,
+        app: typeof payload.app === 'string' ? payload.app : null,
+    };
+}
+
+self.addEventListener('push', (event) => {
+    const message = notificationFrom(event);
+    if (message === null) {
+        return;
+    }
+
+    event.waitUntil(
+        self.registration.showNotification(message.title, {
+            body: message.body,
+            // The app's own icon, not the platform's: somebody installs
+            // «Servicio Campo» and that is what should be on the notification.
+            icon: message.app ? `/r/${message.app}/icon.png` : '/favicon.ico',
+            badge: '/favicon.ico',
+            // Same tag replaces rather than stacks: three updates about one
+            // work order should be one line in the shade, showing the latest.
+            tag: message.url ?? message.app ?? 'sapiensly',
+            data: { url: message.url },
+        }),
+    );
+});
+
+/**
+ * Tapping it opens the work, in the tab that is already there when there is one.
+ *
+ * Opening a second window every time is how somebody ends up with nine copies
+ * of the same app and unsaved work in one of them.
+ */
+self.addEventListener('notificationclick', (event) => {
+    event.notification.close();
+
+    const url = event.notification.data?.url;
+    if (!url) {
+        return;
+    }
+
+    event.waitUntil(
+        (async () => {
+            const open = await self.clients.matchAll({
+                type: 'window',
+                includeUncontrolled: true,
+            });
+
+            for (const client of open) {
+                if (client.url.includes(url) && 'focus' in client) {
+                    return client.focus();
+                }
+            }
+
+            return self.clients.openWindow(url);
+        })(),
+    );
+});
+
+/**
  * The decisions, exposed for tests.
  *
  * A service worker is a script the browser runs, not a module anything can
@@ -299,4 +397,13 @@ async function withHeaders(response, extra) {
  * real browser offline. That test is worth having and is not the one you want
  * to run on every commit.
  */
-self.__swInternals = { isRuntimePath, isImmutableAsset, isInertiaRequest, cacheKey, storable, fresh, MAX_AGE_MS };
+self.__swInternals = {
+    isRuntimePath,
+    isImmutableAsset,
+    isInertiaRequest,
+    cacheKey,
+    storable,
+    fresh,
+    MAX_AGE_MS,
+    notificationFrom,
+};

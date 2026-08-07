@@ -29,7 +29,22 @@ class AppActionController extends Controller
 {
     private const SERVER_SIDE = ['create_record', 'update_record', 'delete_record', 'run_workflow'];
 
-    private const CLIENT_SIDE = ['navigate', 'open_modal', 'close_modal', 'show_toast', 'refresh'];
+    /**
+     * Everything that happens in the browser rather than here.
+     *
+     * The list has to be COMPLETE, not just the ones that need a server-side
+     * expression resolved. A sequence containing one server action is sent here
+     * whole, and anything not named below comes back as `unknown_action` with
+     * the whole sequence marked failed — so "create the order, then share it"
+     * would save the record and then report failure, which is the worst
+     * possible pair of outcomes. That is also why the device actions belong
+     * here the day they are added.
+     */
+    private const CLIENT_SIDE = [
+        'navigate', 'open_modal', 'close_modal', 'show_toast', 'refresh',
+        'download_pdf', 'scan_to_find',
+        'share', 'copy', 'speak', 'toggle_fullscreen',
+    ];
 
     public function __construct(
         private AppManifestService $manifestService,
@@ -198,7 +213,12 @@ class AppActionController extends Controller
      */
     private function resolveClientAction(array $action, array $context): array
     {
-        foreach (['to', 'message'] as $key) {
+        // `text`, `title` and `url` are the device actions' expression-bearing
+        // fields. Resolved here for the same reason `to` is: {{record.id}} is
+        // the id a create just minted, and the client has never seen it — so a
+        // share or a copy written right after one is only correct if it is
+        // filled in on this side.
+        foreach (['to', 'message', 'text', 'title', 'url'] as $key) {
             if (isset($action[$key]) && is_string($action[$key])) {
                 $action[$key] = $this->expressions->resolve($action[$key], $context);
             }

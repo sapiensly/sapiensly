@@ -75,6 +75,8 @@ final class Schemas
         'builder_conversations',
         'builder_messages',
         'build_findings',
+        // Where to reach one person's phone when the app is closed
+        'push_subscriptions',
         'pipeline_runs',
         'workflow_runs',
         'workflow_step_runs',

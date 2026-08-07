@@ -300,10 +300,38 @@ TELLING A PERSON SOMETHING HAPPENED (`notify.send`):
 - This is the native step for email and in-app messages. Use it INSTEAD of a `connector.call` whenever the user says "avísame", "que le llegue un correo", "notifica al equipo", "mándale confirmación" — a connector for plain email is a needless integration the user then has to authorize.
 - SHAPE: `{type:"notify.send", channel?:"email"|"in_app", to:[…], subject:"…", body:"…", link?:"…"}`. Every field is expression-resolved first, which is the whole point: the subject and body quote the record that triggered the run.
 - `to` entries, and no fifth form: a plain address, `user:<id>`, `role:<app role slug>`, or `owner`. "{{trigger.record.data.email}}" reaches whoever submitted the record — the canonical confirmation. "role:admin" reaches everyone GRANTED that role in the Access panel (not every member who merely inherits the default role, so if nobody has been assigned it, nobody is notified — say so rather than assuming). A `user:` id from another organization resolves to nothing.
-- CHANNEL: `email` sends a message wearing the org's Brandbook (accent + logo). `in_app` raises it in the app's notification bell instead — right for internal "a ti te toca esto" and for anything too frequent to email.
+- CHANNEL: `email` sends a message wearing the org's Brandbook (accent + logo). `in_app` raises it in the app's notification bell instead — right for internal "a ti te toca esto" and for anything too frequent to email. `push` reaches the person's PHONE while the app is closed — the only one that finds a technician who has been handed a job while driving.
+- CHOOSING `push`: for what is urgent and useless later (an assignment, an escalation, a delivery at the gate). It is addressed to a PERSON and delivered to every device they allowed notifications on, so `to` must be a `user:`/`role:`/`owner` reference — a bare email address has no device behind it. Nobody has a device until they tap "avísame en este dispositivo" in the app's notification bell, so `sent: 0` with "no device has allowed notifications" is the NORMAL first answer and not a fault: report it that way instead of claiming somebody was reached. Pair it with `in_app` (or `email`) so the message also lands somewhere permanent — a push notification is a tap on the shoulder, not a record.
 - IT NEVER FAILS THE RUN over an unreachable recipient. The output is `{sent, recipients, unresolved, throttled, failed}` — READ IT and report honestly: "le avisé al cliente" is false if `sent` is 0. `unresolved` means nothing matched (a blank expression, a bad address, a role nobody holds); `throttled` means the organization's hourly ceiling was hit (20 recipients per step, 200 sends per hour).
 - WHY THE CEILING EXISTS: a public portal lets a stranger write a record, `record.created` runs a workflow, and that workflow can send email. Nothing in the chain is wrong alone; together it is a spam cannon. Design within the ceiling — notify the ONE person who needs to know, not a list.
 - During `verify_workflow` nothing is sent (the output carries `simulated: true`) but recipients still resolve, so verification tells you who WOULD be reached.
+TXT,
+
+        'device' => <<<'TXT'
+THE PHONE THE APP IS RUNNING ON (captures and device actions):
+- THE RULE THAT COVERS ALL OF THEM: every one of these is an EXTRA way in and the ordinary input stays behind it. A desktop, missing hardware, a refused permission — each leaves a box somebody types into rather than an app somebody cannot use. So none of them is ever a risk to author, and none of them is a reason to skip validation, filters or exports: the stored VALUE is the same as the plain field's.
+- WHERE TO REACH FOR THEM: whenever the brief describes somebody standing up. A technician, a driver, a picker, a counter, an inspector. If the person doing the work is at a desk, use plain fields.
+
+CAPTURES (a `capture` property on a field; call `list_available_field_types` for the exact props):
+- `string` + capture:"barcode" — a camera Scan button AND handheld-scanner-gun support. SKUs, asset tags, tracking, batch and serial numbers.
+- `string` + capture:"nfc" — a tag held against the phone. For what a printed label cannot survive: a card in a wallet, a tag glued to a machine outdoors.
+- `string`/`email`/`phone` + capture:"contact" — the phone's own contact picker (name / address / number, by field type).
+- `string`/`long_text` + capture:"dictation" — a microphone that types what is said, appending. The BROWSER's recogniser: free, instant, no upload. Use it for the findings/notes field somebody fills in next to what they are describing. NOT the same as a form's `fill_from_voice`, which records audio and spends a model call to fill a WHOLE form.
+- `number` + capture:"scale" — reads the number off a scale, caliper or bench meter over a serial port. Use it wherever somebody currently reads a display and types what they saw, which is where the wrong weight comes from.
+- `file` + capture:"camera" — a photo. ADD stamp:true when the photo is EVIDENCE (meter readings, damage on arrival, proof somebody was somewhere): the date, time and coordinates are burned into the image. Leave stamp off for ordinary attachments — it costs the phone camera's focus and exposure.
+- `file` + capture:"signature" — a pad, stored as a PNG. Delivery notes, consent, handover, sign-off.
+- `file` + capture:"screenshot" — a picture of a window, chosen by the person. Support tickets and bug reports, where the screen IS the report.
+- `geo` + capture:"auto" — the location taken as the form OPENS instead of on a tap. ONLY when the point of the field is where the person was (a visit check-in, proof of delivery), NEVER as a convenience: a location taken without being asked for is the difference between recording work and tracking staff. The form says out loud that it did it. Plain `geo` (no capture) is the default and is what almost every app wants.
+
+DEVICE ACTIONS (in any on_click / on_submit; `list_available_actions` has the props):
+- `share` — the device's own share sheet. With `page_slug` it shares that page's PDF as a FILE, which is how a signed delivery note reaches a customer who has no login and never will; without one it shares a link. Put it BESIDE `download_pdf` on anything the customer rather than the office needs.
+- `copy` — a folio, a reference, a tracking number onto the clipboard.
+- `speak` — reads text out loud, for work done with both hands full (the next address, the quantity to pick).
+- `toggle_fullscreen` — for a tablet bolted to a counter, where the browser chrome is an escape hatch into the rest of the internet.
+
+A PAGE THAT MUST NOT SLEEP: `keep_awake: true` on the page (not the app) holds the screen on while it is open — a scanning station, a till, an inspection form filled in over twenty minutes with gloves on. Never set it app-wide: the app also has a list somebody leaves open on a desk.
+
+TELLING SOMEBODY WHILE THE APP IS CLOSED: see the `notifications` topic — `notify.send` with channel:"push".
 TXT,
 
         'offline' => <<<'TXT'
@@ -436,7 +464,7 @@ TXT,
     {
         $topics = implode(', ', array_keys(self::TOPICS));
 
-        return "Fetch detailed authoring guidance for ONE area of the App manifest, on demand, so you only carry the rules relevant to the current task. Pass `topic` (one of: {$topics}). Call this BEFORE building in an area you're unsure about: `forms` (data entry/buttons/modals/actions), `workflows` (automation/script.run), `derived_fields` (formula/lookup/rollup + system fields), `expressions` (formula syntax + function catalog), `design` (theme/websites/dashboards/charts), `palette` (brand-derived colour palette + CSS vars), `icons` (named icons + emoji for any block icon), `custom_css` (the scoped raw-CSS escape hatch + targeting hooks), `permissions` (roles, object/page policies, row/field restrictions, access_mode — the ENFORCED access layer), `verification` (simulate_query/inspect/seed), `visual_review` (screenshot review), `connected_objects` (integrations), `example` (a complete minimal manifest). Omit `topic` to list the available topics.";
+        return "Fetch detailed authoring guidance for ONE area of the App manifest, on demand, so you only carry the rules relevant to the current task. Pass `topic` (one of: {$topics}). Call this BEFORE building in an area you're unsure about: `forms` (data entry/buttons/modals/actions), `workflows` (automation/script.run), `derived_fields` (formula/lookup/rollup + system fields), `expressions` (formula syntax + function catalog), `design` (theme/websites/dashboards/charts), `palette` (brand-derived colour palette + CSS vars), `icons` (named icons + emoji for any block icon), `custom_css` (the scoped raw-CSS escape hatch + targeting hooks), `permissions` (roles, object/page policies, row/field restrictions, access_mode — the ENFORCED access layer), `verification` (simulate_query/inspect/seed), `visual_review` (screenshot review), `connected_objects` (integrations), `device` (the phone the app runs on: scanning, NFC, dictation, stamped photos, signatures, scales, share/copy/speak, keep_awake), `example` (a complete minimal manifest). Omit `topic` to list the available topics.";
     }
 
     /**

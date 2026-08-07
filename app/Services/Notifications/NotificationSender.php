@@ -24,6 +24,7 @@ class NotificationSender
     public function __construct(
         private readonly RecipientResolver $resolver,
         private readonly NotificationQuota $quota,
+        private readonly PushSender $push,
     ) {}
 
     /**
@@ -72,6 +73,21 @@ class NotificationSender
             ];
         }
 
+        // Said once, plainly, instead of once per recipient as a delivery
+        // failure. An installation with no VAPID pair is missing a feature, not
+        // failing to use one, and the fix is an environment variable rather
+        // than anything about this workflow.
+        if ($channel === 'push' && ! $this->push->isConfigured()) {
+            return [
+                'sent' => 0,
+                'channel' => $channel,
+                'recipients' => [],
+                'unresolved' => $unresolved,
+                'throttled' => $throttled,
+                'failed' => ['push notifications are not configured on this installation'],
+            ];
+        }
+
         $granted = $this->quota->claim($app, count($recipients));
         if ($granted < count($recipients)) {
             $throttled += count($recipients) - $granted;
@@ -88,6 +104,29 @@ class NotificationSender
             try {
                 if ($channel === 'in_app') {
                     $this->storeInApp($app, $recipient, $title, $body, $link, $workflowId, $workflowRunId);
+                } elseif ($channel === 'push') {
+                    // Addressed to a person, delivered to their DEVICES. An
+                    // address with no account behind it cannot be one: a push
+                    // subscription is made by a browser somebody signed into.
+                    if ($recipient->userId === null) {
+                        $failed[] = (string) $recipient->email.' (not a member, so no device)';
+
+                        continue;
+                    }
+
+                    $result = $this->push->sendToUser($app, $recipient->userId, $title, $body, $link);
+
+                    // Reported rather than counted as sent. "Nobody allowed
+                    // notifications yet" and "the push service refused" are
+                    // different problems with different fixes, and an author
+                    // who is told neither goes looking in the wrong place.
+                    if ($result['sent'] === 0) {
+                        $failed[] = 'user:'.$recipient->userId.($result['devices'] === 0
+                            ? ' (no device has allowed notifications)'
+                            : ' (the push service would not deliver)');
+
+                        continue;
+                    }
                 } else {
                     if ($recipient->email === null) {
                         $failed[] = 'user:'.$recipient->userId.' (no email address)';

@@ -11,6 +11,7 @@ use App\Http\Controllers\AppExportController;
 use App\Http\Controllers\AppFileController;
 use App\Http\Controllers\AppNotificationController;
 use App\Http\Controllers\AppPrintController;
+use App\Http\Controllers\AppPushSubscriptionController;
 use App\Http\Controllers\AppRecordExtractController;
 use App\Http\Controllers\AppRecordFormController;
 use App\Http\Controllers\AppRecordLookupController;
@@ -214,6 +215,25 @@ Route::middleware([
         ->where('app_slug', '[a-z][a-z0-9_]*')
         ->middleware(['throttle:runtime-actions', BindAppEnvironment::class, IdempotentRuntimeWrite::class])
         ->name('apps.runtime.actions');
+
+    // Push: where a browser says "you may tell me things", per app. The public
+    // key is fetched separately because a page has to know whether to offer the
+    // button at all before it asks anybody for permission.
+    // Three segments on purpose: `/r/{app_slug}/{page_slug?}` would otherwise
+    // swallow a two-segment version and serve it as a page called "key".
+    Route::get('/r/{app_slug}/push/key', [AppPushSubscriptionController::class, 'key'])
+        ->where('app_slug', '[a-z][a-z0-9_]*')
+        ->name('apps.runtime.push.key');
+
+    Route::post('/r/{app_slug}/push', [AppPushSubscriptionController::class, 'store'])
+        ->where('app_slug', '[a-z][a-z0-9_]*')
+        ->middleware('throttle:runtime-actions')
+        ->name('apps.runtime.push.store');
+
+    Route::delete('/r/{app_slug}/push', [AppPushSubscriptionController::class, 'destroy'])
+        ->where('app_slug', '[a-z][a-z0-9_]*')
+        ->middleware('throttle:runtime-actions')
+        ->name('apps.runtime.push.destroy');
 
     // Runtime agent (power #3): end-users converse with the app's embedded
     // agent, which reads the app's data through the auto-derived toolset and

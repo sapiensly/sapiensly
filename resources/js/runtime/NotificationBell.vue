@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { Bell } from '@lucide/vue';
+import { Bell, BellOff, BellRing } from '@lucide/vue';
 import axios from 'axios';
 import { onMounted, ref } from 'vue';
+import { disablePush, enablePush, pushState, type PushState } from './push';
 
 /**
  * The in-app inbox `notify.send` writes to.
@@ -59,7 +60,39 @@ async function markAllRead() {
     }
 }
 
-onMounted(load);
+/**
+ * The same inbox, on a phone that is in a pocket.
+ *
+ * Offered HERE and nowhere else, because this is the one place in the app that
+ * is already about being told things — and because permission has to be asked
+ * for from a tap. A page that asks on load is refused by people who have not
+ * decided yet, and a refusal in Chrome is close to permanent: there is no
+ * second chance to ask, only a settings screen nobody visits.
+ */
+const pushing = ref<PushState | null>(null);
+const busy = ref(false);
+
+async function togglePush() {
+    if (busy.value) return;
+
+    busy.value = true;
+    pushing.value =
+        pushing.value === 'on'
+            ? await disablePush(props.appSlug)
+            : await enablePush(props.appSlug).catch(
+                  () => 'denied' as PushState,
+              );
+    busy.value = false;
+}
+
+onMounted(async () => {
+    await load();
+
+    // Asked for, not acted on: this only decides whether a button appears.
+    pushing.value = await pushState(props.appSlug).catch(
+        () => 'unsupported' as PushState,
+    );
+});
 </script>
 
 <template>
@@ -106,6 +139,28 @@ onMounted(load);
                     Marcar todas leídas
                 </button>
             </div>
+
+            <!-- Only where it can actually work. A row offering something this
+                 browser cannot do, or offering to turn on what a refusal made
+                 unaskable, is a row that teaches people to ignore this panel. -->
+            <button
+                v-if="pushing === 'on' || pushing === 'off'"
+                type="button"
+                data-sp-push-toggle
+                :disabled="busy"
+                class="flex w-full items-center gap-2 border-b border-black/5 px-4 py-2.5 text-left text-[11px] text-neutral-600 transition-colors hover:bg-black/[0.03] disabled:opacity-50 dark:border-white/10 dark:text-neutral-300 dark:hover:bg-white/[0.04]"
+                @click="togglePush"
+            >
+                <component
+                    :is="pushing === 'on' ? BellRing : BellOff"
+                    class="size-3.5 shrink-0"
+                />
+                {{
+                    pushing === 'on'
+                        ? 'Avisarme en este dispositivo: activado'
+                        : 'Avisarme en este dispositivo aunque la app esté cerrada'
+                }}
+            </button>
 
             <p
                 v-if="loaded && items.length === 0"
