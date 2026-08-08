@@ -1,10 +1,26 @@
 import '../css/app.css';
+/**
+ * vue-sonner ships its stylesheet SEPARATELY from v2, and nothing imported it.
+ * Everything that makes a toast a toast lives in there — `position: fixed`, the
+ * width, the card, the shadow, the corner it flies into — so every toast in the
+ * app rendered as bare DOM at the end of the body: a full-bleed line at the
+ * bottom of the screen with the icon on top of the text. It still SAID the
+ * right thing, which is why it survived: nothing throws, nothing logs, and the
+ * only way to see it is to look.
+ */
+import 'vue-sonner/style.css';
 
 import { createInertiaApp } from '@inertiajs/vue3';
 import { resolvePageComponent } from 'laravel-vite-plugin/inertia-helpers';
 import type { DefineComponent } from 'vue';
 import { createApp, h } from 'vue';
-import { Toaster } from 'vue-sonner';
+/**
+ * The project's own wrapper rather than the bare Toaster: it binds the toast
+ * surface to the app's `--popover` tokens, so a toast follows the appearance
+ * the person CHOSE. sonner's own theming is a prop defaulting to light, which
+ * would put a white card over a dark app.
+ */
+import { Toaster } from './components/ui/sonner';
 import { initializeTheme } from './composables/useAppearance';
 import { createI18nInstance } from './i18n';
 import { initScrollbars } from './lib/scrollbars';
