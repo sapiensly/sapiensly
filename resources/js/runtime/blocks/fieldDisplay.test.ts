@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import type { FieldDef, FieldType } from '../types/manifest';
 import {
     EMPTY_MARK,
+    dateInputValue,
+    dateTimeInputValue,
     formatFieldValue,
     type DisplayContext,
 } from './fieldDisplay';
@@ -138,5 +140,46 @@ describe('a relation', () => {
         );
 
         expect(out).not.toContain('rec_');
+    });
+});
+
+describe('what a native date input can show', () => {
+    // A datetime input accepts `YYYY-MM-DDTHH:MM` and silently discards
+    // anything else. {{now()}} resolves to ISO 8601 WITH an offset and the
+    // store hands datetimes back with a space and seconds — so the box on a
+    // live check-in form came up empty over a value that was really there,
+    // which reads as "no time recorded" and invites filling it in again.
+    it('trims the shapes the platform actually produces', () => {
+        expect(dateTimeInputValue('2026-08-08T11:29:00+00:00')).toBe(
+            '2026-08-08T11:29',
+        );
+        expect(dateTimeInputValue('2026-08-08 11:29:00')).toBe(
+            '2026-08-08T11:29',
+        );
+        expect(dateTimeInputValue('2026-08-08T11:29')).toBe('2026-08-08T11:29');
+        expect(dateInputValue('2026-08-08T11:29:00+00:00')).toBe('2026-08-08');
+        expect(dateInputValue('2026-08-08')).toBe('2026-08-08');
+    });
+
+    it('keeps the wall clock as written rather than converting it', () => {
+        // 11:29 was entered as 11:29. Reading the offset and shifting would
+        // move every stored time by the reader's zone — the app's naive local
+        // time is what the write path assumes on the way back in.
+        expect(dateTimeInputValue('2026-08-08T11:29:00-06:00')).toBe(
+            '2026-08-08T11:29',
+        );
+    });
+
+    it('shows a day-only value at midnight instead of dropping it', () => {
+        // Empty would lose what somebody entered on the next save.
+        expect(dateTimeInputValue('2026-08-08')).toBe('2026-08-08T00:00');
+    });
+
+    it('answers empty for anything that is not a stamp', () => {
+        expect(dateTimeInputValue(null)).toBe('');
+        expect(dateTimeInputValue(undefined)).toBe('');
+        expect(dateTimeInputValue('')).toBe('');
+        expect(dateTimeInputValue('mañana')).toBe('');
+        expect(dateInputValue(1754648940)).toBe('');
     });
 });
