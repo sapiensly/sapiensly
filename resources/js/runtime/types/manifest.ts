@@ -276,6 +276,7 @@ export interface BlockOther extends BlockBase {
         | 'tabs'
         | 'testimonials'
         | 'timeline'
+        | 'tracking'
         | 'word_cloud'
         | 'barcode'
         | 'record_form';
