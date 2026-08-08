@@ -157,6 +157,11 @@ Route::middleware([
         ->name('apps.builder.workflows.webhook-info');
     Route::get('/apps/{app}/builder/connector-actions', [AppWorkflowController::class, 'connectorActions'])
         ->name('apps.builder.connector-actions');
+    // Capture a key/bearer secret straight from the provisioning card, so
+    // "authorize this connection" is answerable where it is asked.
+    Route::post('/apps/{app}/builder/integrations/{integration}/credentials', [AppBuilderController::class, 'storeIntegrationCredentials'])
+        ->middleware('throttle:20,1')
+        ->name('apps.builder.integrations.credentials');
     Route::get('/apps/{app}/builder/channels', [AppWorkflowController::class, 'channels'])
         ->name('apps.builder.channels');
     // Gated-write proposals (propose-don't-mutate approval gate).

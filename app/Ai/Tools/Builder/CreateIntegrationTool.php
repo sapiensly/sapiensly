@@ -5,6 +5,7 @@ namespace App\Ai\Tools\Builder;
 use App\Enums\IntegrationAuthType;
 use App\Models\User;
 use App\Services\Builder\Integrations\IntegrationAuthoring;
+use App\Support\Integrations\IntegrationAuthorization;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Laravel\Ai\Contracts\Tool;
 use Laravel\Ai\Tools\Request;
@@ -108,12 +109,22 @@ DESC;
             fn (string $a): bool => trim($a) !== '',
         ));
 
+        $auth = app(IntegrationAuthorization::class);
+
         $this->proposal = [
             'integration_id' => $integration->id,
             'name' => $integration->name,
             'auth_type' => $resolvedType?->value ?? (string) $integration->auth_type,
             'authorize_required' => $authorizeRequired,
             'authorized' => ! $authorizeRequired,
+            // How the card lets the user finish: a consent round-trip against
+            // the provider, or one secret typed into the card itself. Without
+            // these it could only link out to the integrations admin, which is
+            // not where authorization happens for either kind.
+            'authorize_url' => $auth->requiresPerUserConsent($integration)
+                ? route('integrations.oauth2.authorize', $integration, absolute: false)
+                : null,
+            'secret_field' => $auth->secretFieldFor($integration),
             'reason' => trim((string) ($args['reason'] ?? '')),
             'actions' => $actions,
         ];

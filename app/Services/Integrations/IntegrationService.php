@@ -8,6 +8,7 @@ use App\Models\Integration;
 use App\Models\User;
 use App\Services\Integrations\Support\SsrfGuard;
 use App\Services\Tools\DatabaseConnectionFactory;
+use App\Support\Integrations\IntegrationAuthorization;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\DB;
@@ -142,9 +143,47 @@ class IntegrationService
             $patch['auth_config'] = $current;
         }
 
+        $this->promoteDraftOnceUsable($integration, $patch);
+
         $integration->update($patch);
 
         return $integration->fresh();
+    }
+
+    /**
+     * A draft connection that has just been given its credentials is a working
+     * connection, and must stop saying otherwise.
+     *
+     * The builder creates connections as `draft`; for every org-level auth type
+     * "authorized" IS `status !== 'draft'`. Nothing flipped it back: the edit
+     * form carries `status` but never exposes it, so saving an API key
+     * re-submitted `draft` and the connection stayed unusable for ever while the
+     * provisioning card's Recheck never went green. Promotion is derived from
+     * the credentials rather than typed by anyone, so it cannot drift again.
+     *
+     * An explicit `status` in the patch always wins — this only fills a gap
+     * nobody was answering.
+     *
+     * @param  array<string, mixed>  $patch
+     */
+    private function promoteDraftOnceUsable(Integration $integration, array &$patch): void
+    {
+        if ($integration->status !== 'draft' || array_key_exists('status', $patch)) {
+            return;
+        }
+
+        // Judge the credentials against the auth type this save LANDS on: the
+        // same request may be switching the type and filling it in at once.
+        $probe = clone $integration;
+        if (array_key_exists('auth_type', $patch)) {
+            $probe->auth_type = $patch['auth_type'];
+        }
+
+        $candidate = $patch['auth_config'] ?? $integration->auth_config ?? [];
+
+        if (app(IntegrationAuthorization::class)->hasUsableCredentials($probe, $candidate)) {
+            $patch['status'] = 'active';
+        }
     }
 
     public function delete(Integration $integration): void

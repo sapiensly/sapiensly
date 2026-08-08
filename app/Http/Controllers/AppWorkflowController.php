@@ -6,7 +6,6 @@ use App\Enums\IntegrationAuthType;
 use App\Models\App;
 use App\Models\Channel;
 use App\Models\Integration;
-use App\Models\IntegrationUserToken;
 use App\Models\Tool;
 use App\Models\WorkflowProposal;
 use App\Models\WorkflowRun;
@@ -17,6 +16,7 @@ use App\Services\Workflows\WorkflowAssertionEvaluator;
 use App\Services\Workflows\WorkflowEngine;
 use App\Services\Workflows\WorkflowProposalService;
 use App\Services\Workflows\WorkflowWebhookSignature;
+use App\Support\Integrations\IntegrationAuthorization;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -140,14 +140,6 @@ class AppWorkflowController extends Controller
             ->orderBy('name')
             ->get();
 
-        $authorizedIds = IntegrationUserToken::query()
-            ->where('user_id', $user->id)
-            ->whereIn('integration_id', $integrations->pluck('id'))
-            ->get()
-            ->filter(fn (IntegrationUserToken $token): bool => $token->isAuthorized())
-            ->pluck('integration_id')
-            ->all();
-
         $actionsByIntegration = Tool::query()
             ->forAccountContext($user)
             ->whereNotNull('config->integration_id')
@@ -156,10 +148,22 @@ class AppWorkflowController extends Controller
             ->groupBy(fn (Tool $tool): string => (string) ($tool->config['integration_id'] ?? ''))
             ->map(fn ($tools) => $tools->map(fn (Tool $tool): array => $this->connectorActions->resolve($tool)->jsonSerialize())->values());
 
+        $auth = app(IntegrationAuthorization::class);
+
         $payload = $integrations->map(fn (Integration $integration): array => [
             'id' => $integration->id,
             'name' => $integration->name,
-            'authorized' => $this->integrationAuthorized($integration, $authorizedIds),
+            'authorized' => $auth->authorizedFor($integration, $user),
+            // What it would TAKE to authorize, so the provisioning card can offer
+            // the right thing instead of sending everyone to the admin surface:
+            // a consent round-trip, or one secret typed into the card.
+            'auth_type' => $integration->auth_type instanceof IntegrationAuthType
+                ? $integration->auth_type->value
+                : (string) $integration->auth_type,
+            'authorize_url' => $auth->requiresPerUserConsent($integration)
+                ? route('integrations.oauth2.authorize', $integration, absolute: false)
+                : null,
+            'secret_field' => $auth->secretFieldFor($integration),
             'actions' => $actionsByIntegration->get($integration->id, collect())->all(),
         ]);
 
@@ -190,21 +194,6 @@ class AppWorkflowController extends Controller
     /**
      * @param  list<string>  $authorizedIds
      */
-    private function integrationAuthorized(Integration $integration, array $authorizedIds): bool
-    {
-        $authType = $integration->auth_type;
-
-        if ($authType === IntegrationAuthType::None) {
-            return true;
-        }
-
-        if ($authType === IntegrationAuthType::OAuth2AuthorizationCode) {
-            return in_array($integration->id, $authorizedIds, true);
-        }
-
-        return $integration->status !== 'draft';
-    }
-
     /**
      * Replace a single workflow in the manifest with the payload the editor
      * just produced. We resolve the workflow by ID (NOT array index) so we

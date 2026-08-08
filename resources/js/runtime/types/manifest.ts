@@ -316,7 +316,7 @@ export interface PageSummary {
 
 export type BlockData = Record<
     string,
-    TableBlockData | StatBlockData | BlockErrorData
+    TableBlockData | StatBlockData | BlockErrorData | BlockConnectData
 >;
 
 export interface TableBlockData {
@@ -367,6 +367,20 @@ export interface StatBlockData {
  */
 export interface BlockErrorData {
     error: string;
+}
+
+/**
+ * Returned instead of data when the block reads a connection the VIEWER has not
+ * authorized yet. Not an error: nothing is broken, they simply have not
+ * connected their account — so the runtime offers the handshake rather than
+ * "this section could not be loaded".
+ */
+export interface BlockConnectData {
+    connect: {
+        integration_id: string;
+        name: string;
+        authorize_url: string;
+    };
 }
 
 export type RuntimeTheme = 'light' | 'dark';

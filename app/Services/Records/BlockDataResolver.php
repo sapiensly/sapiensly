@@ -8,6 +8,7 @@ use App\Models\User;
 use App\Services\Apps\AppAccessContext;
 use App\Services\Connected\ConnectedIntegrationResolver;
 use App\Services\Connected\ConnectedObjectReader;
+use App\Support\Integrations\IntegrationAuthorization;
 use Illuminate\Support\Facades\Log;
 use RuntimeException;
 use Throwable;
@@ -101,6 +102,18 @@ class BlockDataResolver
             if ($block['type'] === 'split_view') {
                 $data += $this->resolve($app, $block['left_blocks'] ?? [], $manifest, $context);
                 $data += $this->resolve($app, $block['right_blocks'] ?? [], $manifest, $context);
+
+                continue;
+            }
+
+            // A block reading a connection the VIEWER has not authorized cannot
+            // be rendered, and "this section could not be loaded" is the wrong
+            // thing to say about it — nothing is broken, they simply have not
+            // connected their account yet. Answered before the read is even
+            // attempted, so the page does not wait on a call that must fail.
+            $connect = $this->connectPromptFor($app, $block, $manifest, $context);
+            if ($connect !== null) {
+                $data[$block['id']] = ['connect' => $connect];
 
                 continue;
             }
@@ -1438,6 +1451,85 @@ class BlockDataResolver
     }
 
     /**
+     * The "connect your account" prompt a block needs instead of its data, or
+     * null when it can be read normally.
+     *
+     * Only ever raised for a connection whose authorization is PER USER: those
+     * are the ones the viewer can do something about. An org-level credential
+     * that is missing is an administrator's problem, and telling a technician to
+     * go and connect something they cannot connect is worse than the error.
+     *
+     * A block is scanned generically for every `object_id` it carries — a chart
+     * has one per series, a metric_grid one per item, and a tabs block hides
+     * them a level down. Enumerating the known reference sites is how this kind
+     * of walk goes stale; the blanket scan cannot.
+     *
+     * @param  array<string, mixed>  $block
+     * @param  array<string, mixed>  $manifest
+     * @param  array<string, mixed>  $context
+     * @return array{integration_id: string, name: string, authorize_url: string}|null
+     */
+    private function connectPromptFor(App $app, array $block, array $manifest, array $context): ?array
+    {
+        $actor = $context['__actor'] ?? null;
+        if (! $actor instanceof User) {
+            // A portal visitor holds no per-user token and has nowhere to go —
+            // IntegrationUserToken is keyed by a platform user.
+            return null;
+        }
+
+        $objectIds = [];
+        $this->collectObjectIds($block, $objectIds);
+        if ($objectIds === []) {
+            return null;
+        }
+
+        $authorization = app(IntegrationAuthorization::class);
+
+        foreach (array_keys($objectIds) as $objectId) {
+            $object = $this->findObject($manifest, $objectId);
+            if ($object === null || ($object['source']['type'] ?? 'internal') !== 'connected') {
+                continue;
+            }
+
+            $integration = $this->integrations->resolve($app, $object['source']['integration_id'] ?? null);
+            if ($integration === null
+                || ! $authorization->requiresPerUserConsent($integration)
+                || $authorization->authorizedFor($integration, $actor)) {
+                continue;
+            }
+
+            return [
+                'integration_id' => $integration->id,
+                'name' => $integration->name,
+                'authorize_url' => route('integrations.oauth2.authorize', $integration, absolute: false),
+            ];
+        }
+
+        return null;
+    }
+
+    /**
+     * Collect every `object_id` anywhere under $node, keyed for uniqueness.
+     *
+     * @param  array<string, true>  $found
+     */
+    private function collectObjectIds(mixed $node, array &$found): void
+    {
+        if (! is_array($node)) {
+            return;
+        }
+
+        foreach ($node as $key => $value) {
+            if ($key === 'object_id' && is_string($value)) {
+                $found[$value] = true;
+            } elseif (is_array($value)) {
+                $this->collectObjectIds($value, $found);
+            }
+        }
+    }
+
+    /**
      * Read a connected object's rows live from its external system (passthrough)
      * and normalize them to the {id, data} shape, using the external id as the
      * row identity. The block's data-source query (filter/sort/pagination) is
@@ -1572,10 +1664,18 @@ class BlockDataResolver
             $actor = $actorRaw instanceof User ? $actorRaw : null;
             $hasPreviousWindow = str_contains($json, '"compare_window":"previous"');
 
+            $authorization = app(IntegrationAuthorization::class);
+
             $reads = [];
             foreach ($objects as $object) {
                 $integration = $this->integrations->resolve($app, $object['source']['integration_id'] ?? null);
                 if ($integration === null) {
+                    continue;
+                }
+                // Don't spend a round-trip warming a read the viewer is not
+                // authorized to make — the block will show the connect prompt.
+                if ($authorization->requiresPerUserConsent($integration)
+                    && ! $authorization->authorizedFor($integration, $actor)) {
                     continue;
                 }
                 $reads[] = ['object' => $object, 'integration' => $integration, 'query' => [], 'actor' => $actor, 'context' => $context];

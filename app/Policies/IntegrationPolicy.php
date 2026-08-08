@@ -73,6 +73,22 @@ class IntegrationPolicy
         return $user->hasPermissionTo('integrations.delete') && $integration->isOwnedBy($user);
     }
 
+    /**
+     * Connect MY OWN account to a connection the tenant already configured
+     * (the per-user OAuth handshake).
+     *
+     * Deliberately NOT gated on any `integrations.*` permission: the people who
+     * need this are the ones who never administer connections — the technician
+     * opening a built app whose dashboard reads live, the person the builder
+     * just asked to authorize. They see no secrets and change nothing shared;
+     * the only thing produced is a token belonging to them. Tenant visibility is
+     * the whole gate.
+     */
+    public function connect(User $user, Integration $integration): bool
+    {
+        return $integration->isVisibleTo($user) || $integration->visibility === Visibility::Global;
+    }
+
     public function execute(User $user, Integration $integration): bool
     {
         if (! $integration->isVisibleTo($user) && $integration->visibility !== Visibility::Global) {

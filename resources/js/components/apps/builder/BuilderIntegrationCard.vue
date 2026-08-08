@@ -3,17 +3,26 @@
  * Provisioning card — the headline of mid-conversation integration setup
  * (FR-7/8). When a flow needs a system that isn't connected, the builder
  * creates a DRAFT connection and surfaces this card: what the flow needs, the
- * state machine (proposed → awaiting authorization → ready), and a Connect
- * button that sends the user to authorize in the provider's OWN surface. The
- * AI never enters credentials (invariant 4).
+ * state machine (proposed → awaiting authorization → ready), and the way to
+ * finish. The AI never enters credentials (invariant 4).
  *
- * The dependent connector.call stays unauthorized until the user connects;
- * Recheck re-reads the live authorization state.
+ * Authorization is answered HERE, in the two shapes it actually takes:
+ *
+ *  - OAuth: `authorize_url` sends the user to consent in the provider's own
+ *    surface, per user. It used to link to the integrations admin, which has no
+ *    authorize button — the real route ran through inventing a Tool nobody
+ *    asked for, six screens behind a button that said "Connect X".
+ *  - A key/bearer secret: a password field on the card itself, posted straight
+ *    to the server. The chat never sees it; the conversation only learns the
+ *    connection became authorized.
+ *
+ * The dependent connector.call stays unauthorized until then; Recheck re-reads
+ * the live authorization state.
  */
 
 import { ArrowUpRight, Check, Loader2 } from '@lucide/vue';
 import axios from 'axios';
-import { ref } from 'vue';
+import { computed, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 
 export interface IntegrationProposal {
@@ -22,6 +31,10 @@ export interface IntegrationProposal {
     auth_type: string;
     authorize_required: boolean;
     authorized: boolean;
+    /** Present only for per-user OAuth: where the consent round-trip starts. */
+    authorize_url?: string | null;
+    /** The auth_config key a single typed secret lands under, when it is one. */
+    secret_field?: string | null;
     reason?: string;
     actions?: string[];
 }
@@ -33,29 +46,80 @@ const props = defineProps<{
 
 const { t } = useI18n();
 
-// Live authorization state, seeded from the proposal and refreshed on Recheck.
+// Live authorization state, seeded from the proposal and refreshed on Recheck
+// (and immediately after a secret is saved).
 const authorized = ref(props.proposal.authorized);
-const rechecking = ref(false);
+const authorizeUrl = ref(props.proposal.authorize_url ?? null);
+const secretField = ref(props.proposal.secret_field ?? null);
 
-const connectUrl = `/system/integrations/${props.proposal.integration_id}`;
+const rechecking = ref(false);
+const saving = ref(false);
+const secret = ref('');
+const error = ref<string | null>(null);
+
+/** The connection is finished by consent elsewhere, or by a secret typed here. */
+const connectsByConsent = computed(() => !!authorizeUrl.value);
+const connectsBySecret = computed(
+    () => !connectsByConsent.value && !!secretField.value,
+);
+
+/**
+ * Come back to the builder once consent completes, rather than to whichever
+ * admin page the flow happened to pass through.
+ */
+const returnTo = computed(() =>
+    typeof window === 'undefined'
+        ? ''
+        : window.location.pathname + window.location.search,
+);
+
+const consentHref = computed(() =>
+    authorizeUrl.value
+        ? `${authorizeUrl.value}?return_to=${encodeURIComponent(returnTo.value)}`
+        : '',
+);
 
 async function recheck() {
     rechecking.value = true;
+    error.value = null;
     try {
         const { data } = await axios.get(
             `/apps/${props.appId}/builder/connector-actions`,
         );
         const found = (data.integrations ?? []).find(
-            (i: { id: string; authorized: boolean }) =>
-                i.id === props.proposal.integration_id,
+            (i: { id: string }) => i.id === props.proposal.integration_id,
         );
         if (found) {
             authorized.value = found.authorized;
+            authorizeUrl.value = found.authorize_url ?? null;
+            secretField.value = found.secret_field ?? null;
         }
     } catch {
         // Non-fatal — leave the current state; the user can retry.
     } finally {
         rechecking.value = false;
+    }
+}
+
+async function saveSecret() {
+    if (secret.value.trim() === '' || saving.value) return;
+
+    saving.value = true;
+    error.value = null;
+    try {
+        const { data } = await axios.post(
+            `/apps/${props.appId}/builder/integrations/${props.proposal.integration_id}/credentials`,
+            { secret: secret.value },
+        );
+        authorized.value = !!data.authorized;
+        // Drop it from memory the moment the server has it.
+        secret.value = '';
+    } catch (e) {
+        const message = (e as { response?: { data?: { message?: string } } })
+            ?.response?.data?.message;
+        error.value = message ?? t('apps.builder.provision.secret_failed');
+    } finally {
+        saving.value = false;
     }
 }
 </script>
@@ -129,6 +193,45 @@ async function recheck() {
                     })
                 }}
             </p>
+
+            <!-- The secret goes straight to the server from here: no trip to the
+                 integrations admin, and nothing typed into the conversation. -->
+            <form
+                v-if="!authorized && connectsBySecret"
+                class="space-y-1.5"
+                @submit.prevent="saveSecret"
+            >
+                <label
+                    :for="`sp-secret-${proposal.integration_id}`"
+                    class="block text-[10px] tracking-wider text-ink-subtle uppercase"
+                >
+                    {{ t('apps.builder.provision.secret_label') }}
+                </label>
+                <div class="flex items-center gap-2">
+                    <input
+                        :id="`sp-secret-${proposal.integration_id}`"
+                        v-model="secret"
+                        type="password"
+                        autocomplete="off"
+                        spellcheck="false"
+                        :placeholder="
+                            t('apps.builder.provision.secret_placeholder')
+                        "
+                        class="min-w-0 flex-1 rounded-xs border border-soft bg-surface px-2.5 py-1.5 font-mono text-xs text-ink placeholder:text-ink-subtle focus:border-accent-blue focus:outline-none"
+                    />
+                    <button
+                        type="submit"
+                        class="inline-flex shrink-0 items-center gap-1 rounded-pill bg-accent-blue px-3 py-1.5 text-[11px] font-medium text-white transition-colors hover:bg-accent-blue/90 disabled:opacity-50"
+                        :disabled="saving || secret.trim() === ''"
+                    >
+                        <Loader2 v-if="saving" class="size-3 animate-spin" />
+                        {{ t('apps.builder.provision.secret_save') }}
+                    </button>
+                </div>
+                <p v-if="error" class="text-[11px] text-sp-danger">
+                    {{ error }}
+                </p>
+            </form>
         </div>
 
         <!-- Actions -->
@@ -154,7 +257,22 @@ async function recheck() {
                     {{ t('apps.builder.provision.recheck') }}
                 </button>
                 <a
-                    :href="connectUrl"
+                    v-if="connectsByConsent"
+                    :href="consentHref"
+                    class="inline-flex items-center gap-1 rounded-pill bg-accent-blue px-3 py-1 text-[11px] font-medium text-white transition-colors hover:bg-accent-blue/90"
+                >
+                    {{
+                        t('apps.builder.provision.connect', {
+                            name: proposal.name,
+                        })
+                    }}
+                    <ArrowUpRight class="size-3" />
+                </a>
+                <!-- Neither consent nor a single secret (basic auth, client
+                     credentials): the admin form is the honest destination. -->
+                <a
+                    v-else-if="!connectsBySecret"
+                    :href="`/system/integrations/${proposal.integration_id}/edit`"
                     target="_blank"
                     rel="noopener"
                     class="inline-flex items-center gap-1 rounded-pill bg-accent-blue px-3 py-1 text-[11px] font-medium text-white transition-colors hover:bg-accent-blue/90"

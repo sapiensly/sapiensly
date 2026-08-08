@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\AccountSwitchController;
 use App\Http\Controllers\AppPrintController;
+use App\Http\Controllers\Integrations\IntegrationOAuth2Controller;
 use App\Http\Controllers\LandingRenderController;
 use App\Http\Controllers\PortalAuthController;
 use App\Http\Controllers\PublicAppActionController;
@@ -150,15 +151,18 @@ Route::middleware([
 
     Route::post('account/switch', AccountSwitchController::class)->name('account.switch');
 
-    // Per-user OAuth 2.0 Authorization Code handshake for MCP tools. Kept in
-    // web.php so the provider redirect lands in the authenticated session that
-    // started the handshake — the callback validates state from that session
-    // and stores the tokens against the current user (not the shared
-    // integration). The callback path is kept stable because it is the
-    // redirect_uri registered with providers.
+    // Per-user OAuth 2.0 Authorization Code handshake. Kept in web.php so the
+    // provider redirect lands in the authenticated session that started the
+    // handshake — the callback validates state from that session and stores the
+    // tokens against the current user (not the shared integration). The callback
+    // path is kept stable because it is the redirect_uri registered with
+    // providers, and it is SHARED by both entry points (a connection, or a tool
+    // bound to one): each records where to return, the exchange is identical.
+    Route::get('integrations/{integration}/authorize', [IntegrationOAuth2Controller::class, 'redirect'])
+        ->name('integrations.oauth2.authorize');
     Route::get('tools/{tool}/oauth2/authorize', [ToolOAuth2Controller::class, 'redirect'])
         ->name('tools.oauth2.authorize');
-    Route::get('oauth/integrations/callback', [ToolOAuth2Controller::class, 'callback'])
+    Route::get('oauth/integrations/callback', [IntegrationOAuth2Controller::class, 'callback'])
         ->name('integrations.oauth2.callback');
 });
 

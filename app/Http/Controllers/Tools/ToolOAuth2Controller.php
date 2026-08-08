@@ -3,26 +3,24 @@
 namespace App\Http\Controllers\Tools;
 
 use App\Http\Controllers\Controller;
+use App\Http\Controllers\Integrations\IntegrationOAuth2Controller;
 use App\Models\Integration;
-use App\Models\IntegrationUserToken;
 use App\Models\Tool;
 use App\Services\Integrations\OAuth2\OAuth2AuthorizationCodeFlow;
-use App\Services\Integrations\OAuth2\OAuth2TokenRefresher;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 
 /**
- * Per-user OAuth 2.0 Authorization Code flow for MCP tools. The integration
- * holds the shared client configuration; this flow authorizes the *current
- * user* and stores their tokens in IntegrationUserToken, so members never
- * share an access token. Authorization happens here (Tools), never on the
- * org-level integration page.
+ * The tool-page entry point into the per-user OAuth 2.0 handshake. It only
+ * resolves the tool's integration and records where to land afterwards — the
+ * handshake itself (and the shared callback leg) lives in
+ * IntegrationOAuth2Controller, because the token it produces belongs to the
+ * (user, integration) pair and never to the tool.
  */
 class ToolOAuth2Controller extends Controller
 {
     public function __construct(
         private OAuth2AuthorizationCodeFlow $flow,
-        private OAuth2TokenRefresher $refresher,
     ) {}
 
     public function redirect(Request $request, Tool $tool): RedirectResponse
@@ -63,57 +61,14 @@ class ToolOAuth2Controller extends Controller
 
         $prepared = $this->flow->buildAuthorizeUrl($integration);
 
-        $request->session()->put('tools.oauth2.state', [
-            'tool_id' => $tool->id,
+        $request->session()->put(IntegrationOAuth2Controller::STATE_KEY, [
             'integration_id' => $integration->id,
             'user_id' => $request->user()->id,
             'state' => $prepared['state'],
             'code_verifier' => $prepared['code_verifier'],
+            'return_to' => route('tools.show', $tool, absolute: false),
         ]);
 
         return redirect()->away($prepared['url']);
-    }
-
-    public function callback(Request $request): RedirectResponse
-    {
-        $stored = $request->session()->pull('tools.oauth2.state');
-        if (! is_array($stored) || empty($stored['tool_id']) || empty($stored['integration_id'])) {
-            abort(400, __('No pending OAuth 2.0 handshake in this session.'));
-        }
-
-        $tool = Tool::findOrFail($stored['tool_id']);
-        $integration = Integration::findOrFail($stored['integration_id']);
-
-        $error = (string) $request->query('error', '');
-        if ($error !== '') {
-            return redirect()
-                ->route('tools.show', $tool)
-                ->withErrors(['oauth2' => __('Provider returned error: :error', ['error' => $error])]);
-        }
-
-        $code = (string) $request->query('code', '');
-        $state = (string) $request->query('state', '');
-        if ($code === '' || $state === '') {
-            abort(400, __('Missing code or state parameter.'));
-        }
-
-        if (! hash_equals((string) ($stored['state'] ?? ''), $state)) {
-            abort(400, __('OAuth 2.0 state mismatch — possible CSRF.'));
-        }
-
-        $tokens = $this->refresher->requestWithAuthorizationCode(
-            $integration->auth_config ?? [],
-            $code,
-            $stored['code_verifier'] ?? null,
-        );
-
-        IntegrationUserToken::updateOrCreate(
-            ['user_id' => $stored['user_id'], 'integration_id' => $integration->id],
-            ['auth_config' => $tokens],
-        );
-
-        return redirect()
-            ->route('tools.show', $tool)
-            ->with('success', __('Authorization completed.'));
     }
 }

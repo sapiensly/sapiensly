@@ -11,6 +11,7 @@ use App\Models\Integration;
 use App\Models\Tool;
 use App\Services\Integrations\IntegrationService;
 use App\Services\Integrations\OAuth2\OAuth2DiscoveryService;
+use App\Support\Integrations\IntegrationAuthorization;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -256,7 +257,16 @@ class IntegrationController extends Controller
      */
     private function present(Integration $integration): array
     {
+        $auth = app(IntegrationAuthorization::class);
+        $user = request()->user();
+
         return $this->summarize($integration) + [
+            // Whether the VIEWER can call this connection, and where they go to
+            // fix it if not. Authorizing used to require inventing a Tool and
+            // authorizing from there; the connection is where people look.
+            'authorized' => $auth->authorizedFor($integration, $user),
+            'requires_per_user_consent' => $auth->requiresPerUserConsent($integration),
+            'authorize_url' => route('integrations.oauth2.authorize', $integration, absolute: false),
             'description' => $integration->description,
             'default_headers' => $integration->default_headers,
             'allow_insecure_tls' => $integration->allow_insecure_tls,
