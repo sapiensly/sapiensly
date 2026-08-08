@@ -83,7 +83,7 @@ function scaffoldWithChild(string $locale): array
  *
  * @return array<string, mixed>
  */
-function scaffoldPos(string $locale): array
+function scaffoldPos(string $locale, ?callable $tweak = null): array
 {
     $base = [
         'schema_version' => '1.0.0',
@@ -124,7 +124,7 @@ function scaffoldPos(string $locale): array
         ],
     ];
 
-    return app(AppScaffolder::class)->assemble($base, $spec);
+    return app(AppScaffolder::class)->assemble($base, $tweak === null ? $spec : $tweak($spec));
 }
 
 /**
@@ -990,6 +990,59 @@ it('produces a schema-valid manifest with the POS screen', function () {
 
     expect($result->errors)->toBe([]);
     expect($result->valid)->toBeTrue();
+});
+
+it('opens a new order with every required field the order object has', function () {
+    // `values` is the whole payload, so the new-order button has to satisfy the
+    // order's required fields or the till's FIRST tap is refused — which is
+    // what it did: the status was written, the required folio beside it was
+    // not. Seeding it blank fails the same check, since blank is what required
+    // means.
+    $manifest = scaffoldPos('es-MX');
+
+    $comandas = collect($manifest['objects'])->firstWhere('slug', 'comandas');
+    $create = collect(blockByType(pageBySlug($manifest, 'pos'), 'button')['on_click'])
+        ->firstWhere('type', 'create_record');
+
+    $required = collect($comandas['fields'])
+        ->filter(fn ($f) => ! empty($f['required']) && ! array_key_exists('default', $f))
+        ->pluck('slug');
+
+    expect($required)->not->toBeEmpty();
+    foreach ($required as $slug) {
+        expect(array_key_exists($slug, $create['values']))->toBeTrue(
+            "new-order create_record must write required '{$slug}'",
+        );
+        // Blank fails `required` exactly like a missing key — the old fallback
+        // seeded '' and was refused all the same.
+        expect($create['values'][$slug])->not->toBe('');
+    }
+});
+
+it('does not generate a POS screen it could not open an order on', function () {
+    // A required field no till can answer — an order that must name a customer
+    // — means this is not a POS. Better no screen than a button that always
+    // fails.
+    $manifest = scaffoldPos('es-MX');
+    expect(pageBySlug($manifest, 'pos'))->not->toBeNull();
+
+    // The order's required field is the one that LABELS it, and with no string
+    // on the object that is whatever comes first — here an email, which no till
+    // can answer for an order that does not exist yet.
+    $withUnfillable = scaffoldPos('es-MX', function (array $spec): array {
+        foreach ($spec['objects'] as $i => $object) {
+            if ($object['slug'] === 'comandas') {
+                $spec['objects'][$i]['fields'] = [
+                    ['name' => 'Correo', 'slug' => 'correo', 'type' => 'email', 'options' => null],
+                    $object['fields'][1],
+                ];
+            }
+        }
+
+        return $spec;
+    });
+
+    expect(pageBySlug($withUnfillable, 'pos'))->toBeNull();
 });
 
 it('does not generate a POS screen without a priced product triad', function () {

@@ -59,6 +59,7 @@ const NfcReader = defineAsyncComponent(() => import('./NfcReader.vue'));
 const CameraCapture = defineAsyncComponent(() => import('./CameraCapture.vue'));
 
 import RelationPicker from './RelationPicker.vue';
+import { dateInputValue, dateTimeInputValue } from './fieldDisplay';
 
 const props = defineProps<{
     /** Field descriptor from the manifest. Drives which input is rendered. */
@@ -758,7 +759,7 @@ function isInMulti(value: string): boolean {
     <template v-else-if="field.type === 'date'">
         <input
             :id="inputId"
-            :value="(modelValue as string) ?? ''"
+            :value="dateInputValue(modelValue)"
             @input="onInput"
             type="date"
             :class="[
@@ -772,7 +773,7 @@ function isInMulti(value: string): boolean {
     <template v-else-if="field.type === 'datetime'">
         <input
             :id="inputId"
-            :value="(modelValue as string) ?? ''"
+            :value="dateTimeInputValue(modelValue)"
             @input="onInput"
             type="datetime-local"
             :class="[
@@ -898,7 +899,11 @@ function isInMulti(value: string): boolean {
         <div class="flex items-center gap-2">
             <input
                 :id="`${inputId}_from`"
-                :value="range.from ?? ''"
+                :value="
+                    field.include_time
+                        ? dateTimeInputValue(range.from)
+                        : dateInputValue(range.from)
+                "
                 @input="patchRange('from', $event)"
                 :type="field.include_time ? 'datetime-local' : 'date'"
                 :class="[
@@ -910,7 +915,11 @@ function isInMulti(value: string): boolean {
             <span :class="['text-xs', t.textSubtle]">→</span>
             <input
                 :id="`${inputId}_to`"
-                :value="range.to ?? ''"
+                :value="
+                    field.include_time
+                        ? dateTimeInputValue(range.to)
+                        : dateInputValue(range.to)
+                "
                 @input="patchRange('to', $event)"
                 :type="field.include_time ? 'datetime-local' : 'date'"
                 :class="[

@@ -448,6 +448,39 @@ it('rejects a relation that matches no record — never storing a dangling fk', 
     expect(Record::where('object_definition_id', $prod['id'])->count())->toBe(0);
 });
 
+it('resolves a relation given by the target record email', function () {
+    // The shape behind a live failure: a check-in form filled its «Empleado»
+    // relation with {{current_user.id}} — the platform user id, which is not a
+    // record id and never resolves, so the page could not be used at all. An
+    // email IS the handle that ties the person signing in to the row about
+    // them, and it was excluded from the index for no reason but its type.
+    $empleado = objectOf('empleado', [
+        fieldOf('nombre', 'string'),
+        fieldOf('email', 'email'),
+    ]);
+    $asistencia = objectOf('asistencia', [
+        fieldOf('fecha', 'date'),
+        fieldOf('empleado', 'relation', ['target_object_id' => $empleado['id'], 'cardinality' => 'many_to_one']),
+    ]);
+    $manifest = wmanifest([$empleado, $asistencia]);
+    $person = Record::create([
+        'app_id' => $this->testApp->id,
+        'object_definition_id' => $empleado['id'],
+        'data' => ['nombre' => 'Test', 'email' => 'edgar@sapiensly.ai'],
+    ]);
+
+    $rec = $this->service->create($this->testApp, $manifest, $asistencia['id'], [
+        'fecha' => '2026-08-08', 'empleado' => 'Edgar@Sapiensly.ai',
+    ]);
+
+    expect($rec->data['empleado'])->toBe($person->id);
+
+    // And the platform user id still resolves to nothing, loudly.
+    expect(fn () => $this->service->create($this->testApp, $manifest, $asistencia['id'], [
+        'fecha' => '2026-08-08', 'empleado' => '1',
+    ]))->toThrow(RecordValidationException::class);
+});
+
 it('resolves a many_to_many relation from a list of names', function () {
     $tag = objectOf('tag', [fieldOf('nombre', 'string')]);
     $post = objectOf('post', [

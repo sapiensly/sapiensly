@@ -389,3 +389,41 @@ export function formatDate(
           })
         : parsed.toLocaleDateString(locale, { dateStyle: 'medium' });
 }
+
+/**
+ * What a native date / datetime input can actually show.
+ *
+ * `<input type="date">` and `<input type="datetime-local">` accept ONE spelling
+ * each — `YYYY-MM-DD` and `YYYY-MM-DDTHH:MM` — and silently DISCARD anything
+ * else, leaving an empty box. Almost nothing the platform holds is spelled that
+ * way: `{{now()}}` resolves to an ISO 8601 string with an offset
+ * (`2026-08-08T11:29:00+00:00`), and the store hands a datetime back as
+ * `2026-08-08 11:29:00`. Both render blank, which reads as "no time recorded"
+ * over a record that has one — and on a form it invites somebody to fill in
+ * again what is already there.
+ *
+ * The wall clock is kept as written rather than converted: the runtime stores
+ * an app's naive local time, the same reading the write path assumes.
+ */
+export function dateInputValue(value: unknown): string {
+    if (typeof value !== 'string') return '';
+
+    return /^(\d{4}-\d{2}-\d{2})/.exec(value.trim())?.[1] ?? '';
+}
+
+/**
+ * The datetime half of the same rule. A value carrying only a day is shown at
+ * midnight rather than dropped — the day is what somebody entered, and an empty
+ * box would lose it on the next save.
+ */
+export function dateTimeInputValue(value: unknown): string {
+    if (typeof value !== 'string') return '';
+
+    const raw = value.trim();
+    const stamp = /^(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2})/.exec(raw);
+    if (stamp !== null) return `${stamp[1]}T${stamp[2]}`;
+
+    const day = dateInputValue(raw);
+
+    return day === '' ? '' : `${day}T00:00`;
+}

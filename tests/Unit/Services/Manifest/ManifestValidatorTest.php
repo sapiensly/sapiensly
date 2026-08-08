@@ -4348,3 +4348,307 @@ it('design-lint R14: several views over one object are not a second overview', f
     expect($r->valid)->toBeTrue()
         ->and(designWarnings($r)->pluck('message')->implode(' '))->not->toContain('second overview');
 });
+
+/*
+|--------------------------------------------------------------------------
+| R15 — the signed-in person's platform id written into a relation
+|--------------------------------------------------------------------------
+|
+| Observed in production on `/r/erp/checkin_simple`: a check-in form whose
+| «Empleado» relation was filled with `{{current_user.id}}` in BOTH the form
+| field's default and the `create_record` that ran on submit. That id is the
+| USER row's — `1` — and a relation stores a record id, so every attempt to
+| check in came back «No Empleados record matches '1'» and the page could not
+| be used at all. Choosing the right employee by hand did not help: the action's
+| values map overrode the picker.
+|
+| The platform taught it — `default_expression` is documented as "use
+| {{current_user.id}}, {{today()}}, {{now()}}" — so a rail, not a sentence.
+|
+*/
+
+/**
+ * A check-in page: an `asistencias` object with an `empleado` relation to
+ * `empleados`, and a create form over it.
+ *
+ * @param  array<string, mixed>  $formField  extra keys on the empleado form field
+ * @param  array<string, string>  $values  the create_record values map
+ */
+function checkinManifest(array $formField = [], array $values = []): array
+{
+    $m = baseManifest();
+
+    $nombre = id('fld');
+    $correo = id('fld');
+    $empleados = [
+        'id' => id('obj'), 'slug' => 'empleados', 'name' => 'Empleados',
+        'primary_display_field_id' => $nombre,
+        'fields' => [
+            ['id' => $nombre, 'slug' => 'nombre', 'name' => 'Nombre', 'type' => 'string'],
+            ['id' => $correo, 'slug' => 'email', 'name' => 'Email', 'type' => 'email'],
+        ],
+    ];
+
+    $fecha = id('fld');
+    $empleado = id('fld');
+    $asistencias = [
+        'id' => id('obj'), 'slug' => 'asistencias', 'name' => 'Asistencias',
+        'primary_display_field_id' => $fecha,
+        'fields' => [
+            ['id' => $fecha, 'slug' => 'fecha', 'name' => 'Fecha', 'type' => 'date'],
+            ['id' => $empleado, 'slug' => 'empleado', 'name' => 'Empleado', 'type' => 'relation',
+                'cardinality' => 'many_to_one', 'target_object_id' => $empleados['id']],
+        ],
+    ];
+
+    $m['objects'][] = $empleados;
+    $m['objects'][] = $asistencias;
+
+    $m['pages'][] = [
+        'id' => id('pag'), 'slug' => 'checkin_simple', 'name' => 'Check-in', 'path' => '/checkin',
+        'blocks' => [[
+            'id' => id('blk'), 'type' => 'form', 'mode' => 'create',
+            'object_id' => $asistencias['id'],
+            'fields' => [
+                ['field_id' => $fecha, 'default_expression' => '{{today()}}'],
+                array_merge(['field_id' => $empleado], $formField),
+            ],
+            'on_submit' => [[
+                'type' => 'create_record', 'object_id' => $asistencias['id'],
+                'values' => $values === [] ? ['fecha' => '{{today()}}'] : $values,
+            ]],
+        ]],
+    ];
+
+    return $m;
+}
+
+it('design-lint R15: warns when a form default fills a relation with the platform user id', function () {
+    $r = (new ManifestValidator)->validate(checkinManifest(
+        formField: ['default_expression' => '{{current_user.id}}'],
+    ));
+
+    $warning = designWarnings($r)->firstWhere(fn ($w) => str_contains($w->message, 'platform user id'));
+
+    // Non-blocking: an app already carrying this must stay saveable while it is fixed.
+    expect($r->valid)->toBeTrue()
+        ->and($warning)->not->toBeNull()
+        ->and($warning->message)->toContain("'Empleado'")
+        // Names the object, so the message reads like the runtime error it predicts.
+        ->and($warning->message)->toContain('Empleados')
+        // And says what to write instead — the spelling that resolves.
+        ->and($warning->message)->toContain('{{current_user.email}}')
+        ->and($warning->path)->toBe('/pages/0/blocks/0/fields/1/default_expression');
+});
+
+it('design-lint R15: warns when an action value fills a relation with the platform user id', function () {
+    // The half that actually broke the live page: the values map overrides
+    // whatever the picker was given, so a correct choice by hand still failed.
+    $r = (new ManifestValidator)->validate(checkinManifest(
+        values: ['fecha' => '{{today()}}', 'empleado' => '{{current_user.id}}'],
+    ));
+
+    $warning = designWarnings($r)->firstWhere(fn ($w) => str_contains($w->message, 'platform user id'));
+
+    expect($r->valid)->toBeTrue()
+        ->and($warning)->not->toBeNull()
+        ->and($warning->path)->toBe('/pages/0/blocks/0/on_submit/0/values/empleado');
+});
+
+it('design-lint R15: leaves current_user.id on a non-relation field alone', function () {
+    // On a number or a string it is exactly right — "who filed this" as a
+    // plain value — and the documentation says so.
+    $m = checkinManifest();
+    $m['objects'][2]['fields'][] = ['id' => id('fld'), 'slug' => 'capturado_por', 'name' => 'Capturado por', 'type' => 'string'];
+    $m['pages'][0]['blocks'][0]['fields'][] = [
+        'field_id' => $m['objects'][2]['fields'][2]['id'],
+        'default_expression' => '{{current_user.id}}',
+    ];
+
+    $r = (new ManifestValidator)->validate($m);
+
+    expect($r->valid)->toBeTrue()
+        ->and(designWarnings($r)->pluck('message')->implode(' '))->not->toContain('platform user id');
+});
+
+it('design-lint R15: leaves a relation filled from the form or by email alone', function () {
+    $r = (new ManifestValidator)->validate(checkinManifest(
+        values: ['fecha' => '{{today()}}', 'empleado' => '{{form.empleado}}'],
+    ));
+    $byEmail = (new ManifestValidator)->validate(checkinManifest(
+        values: ['fecha' => '{{today()}}', 'empleado' => '{{current_user.email}}'],
+    ));
+
+    expect($r->valid)->toBeTrue()
+        ->and(designWarnings($r)->pluck('message')->implode(' '))->not->toContain('platform user id')
+        ->and($byEmail->valid)->toBeTrue()
+        ->and(designWarnings($byEmail)->pluck('message')->implode(' '))->not->toContain('platform user id');
+});
+
+/*
+|--------------------------------------------------------------------------
+| R16 / R17 — a form that cannot be filed, and one that discards the answer
+|--------------------------------------------------------------------------
+|
+| `values` is the WHOLE payload a create_record writes: AppActionExecutor
+| resolves that map and hands it to the write path, and nothing merges the
+| form's own fields into it. Two failures follow, and the live check-in page
+| had both. A required field missing from `values` is a guaranteed 422 on
+| every press — fixing the relation it wrote wrong only uncovered the required
+| «Ubicación Check-in» it wrote not at all. And a field the form DOES render,
+| written as something else, is a control whose answer is thrown away: the
+| employee was picked from a real list and saved as {{current_user.id}}, the
+| status was a select saved as the constant "presente".
+|
+*/
+
+/**
+ * A create form over `asistencias`, whose «Ubicación» is required.
+ *
+ * @param  array<string, string>  $values  the create_record values map
+ * @param  list<array<string, mixed>>  $formFields
+ */
+function unfilableManifest(array $values, array $formFields = []): array
+{
+    $m = baseManifest();
+
+    $fecha = id('fld');
+    $ubicacion = id('fld');
+    $estado = id('fld');
+    $m['objects'][] = [
+        'id' => id('obj'), 'slug' => 'asistencias', 'name' => 'Asistencias',
+        'primary_display_field_id' => $fecha,
+        'fields' => [
+            ['id' => $fecha, 'slug' => 'fecha', 'name' => 'Fecha', 'type' => 'date'],
+            ['id' => $ubicacion, 'slug' => 'ubicacion', 'name' => 'Ubicación', 'type' => 'string', 'required' => true],
+            ['id' => $estado, 'slug' => 'estado', 'name' => 'Estado', 'type' => 'single_select', 'options' => [
+                ['id' => id('opt'), 'value' => 'presente', 'label' => 'Presente'],
+                ['id' => id('opt'), 'value' => 'ausente', 'label' => 'Ausente'],
+            ]],
+        ],
+    ];
+    $objectId = $m['objects'][1]['id'];
+
+    $m['pages'][] = [
+        'id' => id('pag'), 'slug' => 'checkin', 'name' => 'Check-in', 'path' => '/checkin',
+        'blocks' => [[
+            'id' => id('blk'), 'type' => 'form', 'mode' => 'create', 'object_id' => $objectId,
+            'fields' => $formFields === [] ? [['field_id' => $fecha]] : $formFields,
+            'on_submit' => [['type' => 'create_record', 'object_id' => $objectId, 'values' => $values]],
+        ]],
+    ];
+
+    // Handles the caller needs to write its own values/fields against.
+    $m['__ids'] = compact('fecha', 'ubicacion', 'estado');
+
+    return $m;
+}
+
+it('design-lint R16: warns about a create_record that omits a required field', function () {
+    $m = unfilableManifest(['fecha' => '{{today()}}']);
+    unset($m['__ids']);
+
+    $r = (new ManifestValidator)->validate($m);
+    $warning = designWarnings($r)->firstWhere(fn ($w) => str_contains($w->message, 'is required on'));
+
+    expect($r->valid)->toBeTrue()
+        ->and($warning)->not->toBeNull()
+        ->and($warning->message)->toContain("'Ubicación'")
+        // Says the runtime error it predicts, verbatim — that is the string the
+        // author will otherwise meet on the page with no idea where it came from.
+        ->and($warning->message)->toContain('Ubicación is required')
+        ->and($warning->path)->toBe('/pages/0/blocks/0/on_submit/0/values');
+});
+
+it('design-lint R16: rendering the field on the form does not fill it', function () {
+    // The trap this rule exists for: the two look interchangeable when you read
+    // the page, and only one of them writes anything.
+    $m = unfilableManifest(['fecha' => '{{today()}}']);
+    $ids = $m['__ids'];
+    unset($m['__ids']);
+    $m['pages'][0]['blocks'][0]['fields'][] = ['field_id' => $ids['ubicacion']];
+
+    $r = (new ManifestValidator)->validate($m);
+
+    expect(designWarnings($r)->pluck('message')->implode(' '))->toContain('Ubicación is required');
+});
+
+it('design-lint R16: stays quiet when the value is written, or a default fills it', function () {
+    $written = unfilableManifest(['fecha' => '{{today()}}', 'ubicacion' => '{{form.ubicacion}}']);
+    unset($written['__ids']);
+
+    $defaulted = unfilableManifest(['fecha' => '{{today()}}']);
+    unset($defaulted['__ids']);
+    $defaulted['objects'][1]['fields'][1]['default'] = 'Oficina';
+
+    foreach ([$written, $defaulted] as $m) {
+        $r = (new ManifestValidator)->validate($m);
+        expect($r->valid)->toBeTrue()
+            ->and(designWarnings($r)->pluck('message')->implode(' '))->not->toContain('is required on');
+    }
+});
+
+it('design-lint R17: warns when the action overwrites what the form collected', function () {
+    $m = unfilableManifest([]);
+    $ids = $m['__ids'];
+    unset($m['__ids']);
+    $m['pages'][0]['blocks'][0]['fields'] = [
+        ['field_id' => $ids['ubicacion']],
+        ['field_id' => $ids['estado']],
+    ];
+    $m['pages'][0]['blocks'][0]['on_submit'][0]['values'] = [
+        'ubicacion' => '{{form.ubicacion}}',
+        'estado' => 'presente',
+    ];
+
+    $r = (new ManifestValidator)->validate($m);
+    $warning = designWarnings($r)->firstWhere(fn ($w) => str_contains($w->message, 'is discarded'));
+
+    expect($r->valid)->toBeTrue()
+        ->and($warning)->not->toBeNull()
+        ->and($warning->message)->toContain("'Estado'")
+        ->and($warning->message)->toContain('{{form.estado}}')
+        ->and($warning->path)->toBe('/pages/0/blocks/0/on_submit/0/values/estado')
+        // The field written from the form is not the complaint.
+        ->and(designWarnings($r)->pluck('path'))->not->toContain('/pages/0/blocks/0/on_submit/0/values/ubicacion');
+});
+
+it('design-lint R17: says nothing about a field the form does not render', function () {
+    // An employee's detail page creating an attendance for THAT employee writes
+    // the relation from the url and never shows a picker. Nothing is discarded.
+    $m = unfilableManifest([]);
+    $ids = $m['__ids'];
+    unset($m['__ids']);
+    $m['pages'][0]['blocks'][0]['fields'] = [['field_id' => $ids['ubicacion']]];
+    $m['pages'][0]['blocks'][0]['on_submit'][0]['values'] = [
+        'ubicacion' => '{{form.ubicacion}}',
+        'estado' => 'presente',
+    ];
+
+    $r = (new ManifestValidator)->validate($m);
+
+    expect($r->valid)->toBeTrue()
+        ->and(designWarnings($r)->pluck('message')->implode(' '))->not->toContain('is discarded');
+});
+
+it('design-lint R17: leaves a readonly or conditionally hidden field alone', function () {
+    // `readonly` says the value was never the person's to give, and a field
+    // under visible_if may not be submitted at all — which is a legitimate
+    // reason for the action to supply it.
+    $m = unfilableManifest([]);
+    $ids = $m['__ids'];
+    unset($m['__ids']);
+    $m['pages'][0]['blocks'][0]['fields'] = [
+        ['field_id' => $ids['ubicacion'], 'readonly_expression' => 'true'],
+        ['field_id' => $ids['estado'], 'visible_if' => ['field_id' => $ids['fecha'], 'op' => 'is_not_null']],
+    ];
+    $m['pages'][0]['blocks'][0]['on_submit'][0]['values'] = [
+        'ubicacion' => 'Oficina',
+        'estado' => 'presente',
+    ];
+
+    $r = (new ManifestValidator)->validate($m);
+
+    expect($r->valid)->toBeTrue()
+        ->and(designWarnings($r)->pluck('message')->implode(' '))->not->toContain('is discarded');
+});
