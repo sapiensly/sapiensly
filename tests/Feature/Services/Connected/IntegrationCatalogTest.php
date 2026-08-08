@@ -5,6 +5,7 @@ use App\Models\User;
 use App\Services\Connected\ConnectedObjectAuthoring;
 use App\Services\Connected\ConnectedObjectModeler;
 use App\Services\Connected\IntegrationCatalog;
+use App\Services\Integrations\IntegrationCaller;
 use App\Services\Tools\McpClient;
 use App\Support\Tenancy\TenantCache;
 
@@ -70,7 +71,7 @@ it('remembers a summary-only tool as an empty shape after a no-rows read', funct
     $catalog = new IntegrationCatalog($mcp, app(TenantCache::class));
 
     $authoring = new ConnectedObjectAuthoring(
-        $mcp, new ConnectedObjectModeler, $catalog,
+        $mcp, new ConnectedObjectModeler, $catalog, app(IntegrationCaller::class),
     );
     $result = $authoring->author($this->user, $this->integration, ['tool_name' => 'overview-tool'], ['objects' => []]);
 

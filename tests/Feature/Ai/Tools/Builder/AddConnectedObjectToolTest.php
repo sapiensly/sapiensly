@@ -8,6 +8,7 @@ use App\Models\User;
 use App\Services\Connected\ConnectedObjectAuthoring;
 use App\Services\Connected\ConnectedObjectModeler;
 use App\Services\Connected\IntegrationCatalog;
+use App\Services\Integrations\IntegrationCaller;
 use App\Services\Manifest\AppManifestService;
 use App\Services\Manifest\ManifestValidator;
 use App\Services\Tools\McpClient;
@@ -55,7 +56,12 @@ beforeEach(function () {
 function aco_tool($test, McpClient $mcp): array
 {
     $propose = new ProposeChangeTool($test->testApp->fresh(), $test->manifestService, app(ManifestValidator::class));
-    $authoring = new ConnectedObjectAuthoring($mcp, new ConnectedObjectModeler, new IntegrationCatalog($mcp, app(TenantCache::class)));
+    $authoring = new ConnectedObjectAuthoring(
+        $mcp,
+        new ConnectedObjectModeler,
+        new IntegrationCatalog($mcp, app(TenantCache::class)),
+        app(IntegrationCaller::class),
+    );
     $tool = new AddConnectedObjectTool($propose, $authoring, $test->user);
 
     return [$tool, $propose];
@@ -127,7 +133,11 @@ it('rejects an unknown tool name, listing what the server exposes', function () 
         ->and($result['errors'][0]['message'])->toContain('search-tickets-tool');
 });
 
-it('refuses a non-MCP integration and an empty result set with clear reasons', function () {
+it('tells a caller which read a connection takes, and refuses an empty result set', function () {
+    // A REST connection used to be refused outright ("not an MCP server —
+    // author it via propose_change"), which is what made REST the hand-written
+    // path. It is now served; naming the wrong KIND of read is what gets
+    // corrected, and the message says which one this connection takes.
     $rest = Integration::factory()->forUser($this->user)->create([
         'base_url' => 'https://api.example.com',
         'is_mcp' => false,
@@ -142,7 +152,18 @@ it('refuses a non-MCP integration and an empty result set with clear reasons', f
         'integration_id' => $rest->id, 'tool_name' => 'x',
     ])), true);
     expect($result['ok'])->toBeFalse()
-        ->and($result['errors'][0]['message'])->toContain('not an MCP server');
+        ->and($result['errors'][0]['message'])->toContain('REST connection')
+        ->and($result['errors'][0]['message'])->toContain('`path`');
+
+    // And the mirror image: an MCP connection handed a path.
+    $mcp = Mockery::mock(McpClient::class);
+    [$tool] = aco_tool($this, $mcp);
+    $result = json_decode($tool->handle(new ToolRequest([
+        'integration_id' => $this->integration->id, 'path' => '/v1/tickets',
+    ])), true);
+    expect($result['ok'])->toBeFalse()
+        ->and($result['errors'][0]['message'])->toContain('MCP connection')
+        ->and($result['errors'][0]['message'])->toContain('`tool_name`');
 
     $mcp = Mockery::mock(McpClient::class);
     $mcp->shouldReceive('listTools')->andReturn([['name' => 'empty-tool', 'description' => '', 'input_schema' => []]]);

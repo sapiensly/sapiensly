@@ -34,16 +34,22 @@ class AddConnectedObjectTool implements Tool
     public function description(): string
     {
         return <<<'DESC'
-Create a LIVE connected object from an MCP integration in ONE call — the fast
-path for rule 1c-intent's DATA step. Pass `integration_id` (an is_mcp
-connection) and `tool_name` (its list/search tool); optionally `arguments`
+Create a LIVE connected object from ANY integration in ONE call — the fast
+path for rule 1c-intent's DATA step. Pass `integration_id`, then name the read
+the way that connection works: `tool_name` for an MCP server (its list/search
+tool), or `path` for a REST API (its list endpoint, e.g. "/crm/v3/objects/deals?limit=50",
+with `method` defaulting to GET). Never hand-write a connected object's
+propose_change for either transport — that is twenty fields, a field_map and an
+id_path composed by you, and it is the largest rejection class in the ledger.
+For MCP, optionally `arguments`
 (clamped to the tool's input_schema bounds automatically; date args anchored
 at today are stored as rolling {{today()}}/{{days_ago(N)}} expressions),
 `collection_path` (auto-detected when omitted), `id_path` and `object_name`.
-The SERVER calls the tool as the acting user, infers every field + field_map +
-type from the real rows, and banks the object via propose_change. Use this
-instead of hand-writing the object's propose_change (slow, error-prone); use
-sample_mcp_tool first only if you still need to DISCOVER which tool to read.
+The SERVER performs the read as the acting user, infers every field + field_map +
+type from the real rows, and banks the object via propose_change. The read IS the
+verification: an endpoint or tool that fails, or returns no rows, is reported here
+rather than becoming an object that errors on every page load. Use sample_mcp_tool
+(MCP) or sample_endpoint (REST) first only if you still need to DISCOVER what to read.
 Returns {ok, object, fields, date_field_ids, derived_rates, immature_periods,
 sampled_rows} — go straight to prepare_dashboard next. READ `immature_periods`
 BEFORE YOU CHART ANYTHING: a live source reports today's orders instantly but
@@ -63,19 +69,24 @@ DESC;
     {
         return [
             'integration_id' => $schema->string()
-                ->description('The MCP integration id (from list_available_integrations).')
+                ->description('The integration id (from list_available_integrations). MCP or REST.')
                 ->required(),
+            // Neither is `required`: which one applies is decided by the
+            // connection's transport, and the handler says which it wanted.
             'tool_name' => $schema->string()
-                ->description('The MCP tool that lists the records (e.g. a search/list tool).')
-                ->required(),
+                ->description('MCP connections: the tool that lists the records (e.g. a search/list tool).'),
+            'path' => $schema->string()
+                ->description('REST connections: the list endpoint, appended to the base URL, query string included (e.g. "/crm/v3/objects/deals?limit=50").'),
+            'method' => $schema->string()
+                ->description('REST connections: GET (default) or POST for a search endpoint. A list operation reads, so nothing else is accepted.'),
             'arguments' => $schema->object()
-                ->description('Arguments for the tool call, per its input_schema. Numeric values outside the schema bounds are clamped.'),
+                ->description('MCP connections: arguments for the tool call, per its input_schema. Numeric values outside the schema bounds are clamped.'),
             'collection_path' => $schema->string()
-                ->description('Dot path to the row array inside the tool result. Omit to auto-detect.'),
+                ->description('Dot path to the row array inside the response. Omit to auto-detect.'),
             'id_path' => $schema->string()
                 ->description("Dot path to each row's external id. Omit to auto-detect (an `id`-like key)."),
             'object_name' => $schema->string()
-                ->description('Display name for the object. Omit to derive one from the tool name.'),
+                ->description('Display name for the object. Omit to derive one from the tool name or path.'),
         ];
     }
 
@@ -89,22 +100,42 @@ DESC;
         if (! $integration instanceof Integration) {
             return $this->fail('Integration not found for this tenant.');
         }
-        if (! $integration->is_mcp) {
-            return $this->fail('This integration is not an MCP server — connected objects over REST are authored via propose_change (see connected_objects).');
-        }
-
         $base = $this->proposeTool->currentManifest();
         if (! is_array($base)) {
             return $this->fail('No active manifest exists for this app yet.');
         }
 
-        $authored = $this->authoring->author($this->user, $integration, [
-            'tool_name' => (string) ($args['tool_name'] ?? ''),
-            'arguments' => is_array($args['arguments'] ?? null) ? $args['arguments'] : [],
-            'collection_path' => is_string($args['collection_path'] ?? null) ? $args['collection_path'] : null,
-            'id_path' => is_string($args['id_path'] ?? null) ? $args['id_path'] : null,
-            'object_name' => is_string($args['object_name'] ?? null) ? $args['object_name'] : null,
-        ], $base);
+        $toolName = trim((string) ($args['tool_name'] ?? ''));
+        $path = trim((string) ($args['path'] ?? ''));
+
+        // The transport decides which half runs, and the connection knows its own
+        // transport — so a caller that named the wrong one is told which one this
+        // connection takes rather than being handed a generic failure.
+        if ($integration->is_mcp) {
+            if ($toolName === '') {
+                return $this->fail("«{$integration->name}» is an MCP connection: pass `tool_name` (its list/search tool), not `path`.");
+            }
+
+            $authored = $this->authoring->author($this->user, $integration, [
+                'tool_name' => $toolName,
+                'arguments' => is_array($args['arguments'] ?? null) ? $args['arguments'] : [],
+                'collection_path' => is_string($args['collection_path'] ?? null) ? $args['collection_path'] : null,
+                'id_path' => is_string($args['id_path'] ?? null) ? $args['id_path'] : null,
+                'object_name' => is_string($args['object_name'] ?? null) ? $args['object_name'] : null,
+            ], $base);
+        } else {
+            if ($path === '') {
+                return $this->fail("«{$integration->name}» is a REST connection: pass `path` (its list endpoint), not `tool_name`.");
+            }
+
+            $authored = $this->authoring->authorRest($this->user, $integration, [
+                'path' => $path,
+                'method' => is_string($args['method'] ?? null) ? $args['method'] : null,
+                'collection_path' => is_string($args['collection_path'] ?? null) ? $args['collection_path'] : null,
+                'id_path' => is_string($args['id_path'] ?? null) ? $args['id_path'] : null,
+                'object_name' => is_string($args['object_name'] ?? null) ? $args['object_name'] : null,
+            ], $base);
+        }
 
         if (($authored['ok'] ?? false) !== true) {
             return $this->fail($authored['error'] ?? 'Could not author the connected object.');
@@ -135,9 +166,24 @@ DESC;
             // like a collapse to zero; they are the calendar, not the business.
             'immature_periods' => $authored['immature_periods'],
             'sampled_rows' => count($authored['rows']),
-            'clamped_arguments' => $authored['clamped'] !== [] ? $authored['clamped'] : null,
-            'message' => "Connected object «{$object['name']}» banked ({$object['slug']}, ".count($object['fields'])." fields, live via {$object['source']['operations']['list']['mcp_tool']}). Next: prepare_dashboard + add_dashboard_page.",
+            'clamped_arguments' => ($authored['clamped'] ?? []) !== [] ? $authored['clamped'] : null,
+            'message' => "Connected object «{$object['name']}» banked ({$object['slug']}, ".count($object['fields'])." fields, live via {$this->describeListOperation($object)}). Next: prepare_dashboard + add_dashboard_page.",
         ], JSON_THROW_ON_ERROR);
+    }
+
+    /**
+     * How this object reads, for the confirmation line — the MCP tool it calls
+     * or the endpoint it hits.
+     *
+     * @param  array<string, mixed>  $object
+     */
+    private function describeListOperation(array $object): string
+    {
+        $list = $object['source']['operations']['list'] ?? [];
+
+        return isset($list['mcp_tool'])
+            ? (string) $list['mcp_tool']
+            : trim(((string) ($list['method'] ?? 'GET')).' '.((string) ($list['path'] ?? '')));
     }
 
     private function fail(string $message): string
