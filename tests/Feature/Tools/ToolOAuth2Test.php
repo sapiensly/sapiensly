@@ -33,9 +33,11 @@ test('authorize redirects the user to the provider and stashes per-user state', 
         ->assertRedirect()
         ->assertRedirectContains('https://auth.example.com/oauth/authorize');
 
-    expect(session('tools.oauth2.state.tool_id'))->toBe($tool->id)
-        ->and(session('tools.oauth2.state.integration_id'))->toBe($integration->id)
-        ->and(session('tools.oauth2.state.user_id'))->toBe($this->user->id);
+    // The handshake state is shared with the connection-level entry point; the
+    // tool only contributes where to land afterwards.
+    expect(session('integrations.oauth2.state.integration_id'))->toBe($integration->id)
+        ->and(session('integrations.oauth2.state.user_id'))->toBe($this->user->id)
+        ->and(session('integrations.oauth2.state.return_to'))->toBe(route('tools.show', $tool, absolute: false));
 });
 
 test('authorize works for a public PKCE client without a client_secret', function () {
@@ -71,15 +73,15 @@ test('callback exchanges the code and stores tokens for the current user', funct
     $tool = mcpOAuthTool($this->user, $integration);
 
     actingAs($this->user)
-        ->withSession(['tools.oauth2.state' => [
-            'tool_id' => $tool->id,
+        ->withSession(['integrations.oauth2.state' => [
             'integration_id' => $integration->id,
             'user_id' => $this->user->id,
             'state' => 'st4te',
             'code_verifier' => 'verifier',
+            'return_to' => route('tools.show', $tool, absolute: false),
         ]])
         ->get(route('integrations.oauth2.callback', ['code' => 'prov-code', 'state' => 'st4te']))
-        ->assertRedirect(route('tools.show', $tool));
+        ->assertRedirect(route('tools.show', $tool, absolute: false));
 
     $token = IntegrationUserToken::where('user_id', $this->user->id)
         ->where('integration_id', $integration->id)
@@ -97,8 +99,7 @@ test('callback rejects a state mismatch', function () {
     $tool = mcpOAuthTool($this->user, $integration);
 
     actingAs($this->user)
-        ->withSession(['tools.oauth2.state' => [
-            'tool_id' => $tool->id,
+        ->withSession(['integrations.oauth2.state' => [
             'integration_id' => $integration->id,
             'user_id' => $this->user->id,
             'state' => 'expected',

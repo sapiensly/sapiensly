@@ -78,7 +78,6 @@ interface IntegrationFormData {
     auth_config: Record<string, AuthConfigValue>;
     default_headers: Array<{ key: string; value: string }>;
     visibility: string;
-    status: string;
     allow_insecure_tls: boolean;
 }
 
@@ -201,7 +200,14 @@ const form = useForm<IntegrationFormData>({
         ? (props.template!.default_headers ?? [])
         : (props.integration?.default_headers ?? []),
     visibility: props.integration?.visibility ?? 'private',
-    status: props.integration?.status ?? 'active',
+    // `status` is deliberately NOT part of this form. It used to be, seeded
+    // from the record and bound to no input — so opening a builder-created
+    // DRAFT connection to enter its API key re-submitted `status: "draft"`,
+    // which the update rules reject (`in:active,inactive`). The save 422'd on a
+    // field the user could not see, and the connection stayed unauthorized for
+    // ever. The server derives the status from the credentials now
+    // (IntegrationService::promoteDraftOnceUsable); a create posts nothing here
+    // and gets the `active` default.
     allow_insecure_tls: props.integration?.allow_insecure_tls ?? false,
 });
 

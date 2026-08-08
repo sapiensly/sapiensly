@@ -6,6 +6,7 @@ use App\Models\Integration;
 use App\Models\User;
 use App\Services\Analyst\MaturationCheck;
 use App\Services\Analyst\RatioIdentity;
+use App\Services\Integrations\IntegrationCaller;
 use App\Services\Tools\McpClient;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Arr;
@@ -31,6 +32,7 @@ class ConnectedObjectAuthoring
         private readonly McpClient $mcp,
         private readonly ConnectedObjectModeler $modeler,
         private readonly IntegrationCatalog $catalog,
+        private readonly IntegrationCaller $caller,
     ) {}
 
     /**
@@ -66,6 +68,79 @@ class ConnectedObjectAuthoring
         }
 
         return $this->authorFromDecoded($integration, $spec, $resolved, $decoded, $manifest);
+    }
+
+    /**
+     * The same thing for a REST connection: call a real list endpoint as the
+     * acting user, infer the object from the rows that come back, and return the
+     * finished manifest node.
+     *
+     * This existed only for MCP, and the asymmetry was the whole problem. A REST
+     * source had to be hand-written as a propose_change — twenty fields, a
+     * field_map and an id_path composed by the model — which is the single
+     * largest rejection class in the build ledger and minutes of generation for
+     * work that is microseconds of code. The model now says WHICH endpoint, the
+     * same as it says which tool, and the server does the rest.
+     *
+     * The call IS the verification: an endpoint that 404s or returns no rows
+     * fails here, loudly, instead of becoming an object that renders an error on
+     * every page load.
+     *
+     * @param  array{path: string, method?: ?string, collection_path?: ?string, id_path?: ?string, object_name?: ?string}  $spec
+     * @param  array<string, mixed>  $manifest  current draft (slug uniqueness)
+     * @return array{ok: bool, object?: array<string, mixed>, rows?: list<array<string, mixed>>, date_field_ids?: list<string>, derived_rates?: list<array<string, mixed>>, immature_periods?: list<array<string, mixed>>, summary?: string, error?: string}
+     */
+    public function authorRest(User $user, Integration $integration, array $spec, array $manifest): array
+    {
+        $path = trim((string) ($spec['path'] ?? ''));
+        if ($path === '') {
+            return ['ok' => false, 'error' => 'A path is required to read a REST connection.'];
+        }
+
+        // Only ever a READ. The list operation of a connected object is by
+        // definition a read, and this method fires it for real — pointing it at
+        // a verb that changes something would make authoring an object a write.
+        $method = strtoupper(trim((string) ($spec['method'] ?? 'GET')));
+        if (! in_array($method, ['GET', 'POST'], true)) {
+            return ['ok' => false, 'error' => "A list operation reads: use GET (or POST for a search endpoint), not {$method}."];
+        }
+
+        try {
+            $response = $this->caller->send($integration, $method, $path, actor: $user);
+        } catch (\Throwable $e) {
+            return ['ok' => false, 'error' => $e->getMessage()];
+        }
+
+        if (! $response->successful()) {
+            return ['ok' => false, 'error' => "The endpoint {$method} {$path} returned HTTP {$response->status()}."];
+        }
+
+        $decoded = $response->json();
+        if (! is_array($decoded)) {
+            return ['ok' => false, 'error' => "The endpoint {$method} {$path} did not return JSON."];
+        }
+
+        [$rows, $collectionPath] = $this->extractRows($decoded, $spec['collection_path'] ?? null);
+        if ($rows === []) {
+            return ['ok' => false, 'error' => "The endpoint {$method} {$path} returned no rows to model the object from. Response keys: ".implode(', ', array_keys($decoded)).'.'];
+        }
+
+        $name = trim((string) ($spec['object_name'] ?? ''))
+            ?: Str::headline(trim((string) preg_replace('/\{.*?\}|\?.*$/', '', $path), '/') ?: 'Registros');
+
+        return $this->finishAuthoring(
+            rows: $rows,
+            idPathHint: is_string($spec['id_path'] ?? null) ? $spec['id_path'] : null,
+            name: $name,
+            manifest: $manifest,
+            listOperation: array_filter([
+                'method' => $method,
+                'path' => $path,
+                'collection_path' => $collectionPath,
+            ], fn ($v) => $v !== null),
+            integration: $integration,
+            source: "{$method} {$path}",
+        );
     }
 
     /**
@@ -260,29 +335,85 @@ class ConnectedObjectAuthoring
             return ['ok' => false, 'error' => "The MCP tool '{$toolName}' returned no rows to model the object from. Result keys: ".implode(', ', array_keys($decoded)).'.'];
         }
 
-        $modeled = $this->modeler->model($rows, is_string($spec['id_path'] ?? null) ? $spec['id_path'] : null);
-        if ($modeled['fields'] === []) {
-            return ['ok' => false, 'error' => "Could not infer any fields from the rows of '{$toolName}'."];
+        $authored = $this->finishAuthoring(
+            rows: $rows,
+            idPathHint: is_string($spec['id_path'] ?? null) ? $spec['id_path'] : null,
+            name: trim((string) ($spec['object_name'] ?? ''))
+                ?: Str::headline((string) preg_replace(['/^get[-_]/i', '/[-_]?tool$/i'], '', $toolName)),
+            manifest: $manifest,
+            listOperation: array_filter([
+                'mcp_tool' => $toolName,
+                'arguments' => $arguments !== [] ? $this->relativizeDateArguments($arguments) : null,
+                'collection_path' => $collectionPath,
+            ], fn ($v) => $v !== null),
+            integration: $integration,
+            source: $toolName,
+        );
+
+        if (($authored['ok'] ?? false) !== true) {
+            return $authored;
         }
 
-        $name = trim((string) ($spec['object_name'] ?? ''))
-            ?: Str::headline((string) preg_replace(['/^get[-_]/i', '/[-_]?tool$/i'], '', $toolName));
-        $slug = $this->uniqueObjectSlug($name, $manifest);
+        // Feed the catalog so the NEXT build sees this tool's row shape in its
+        // first discovery — zero sampling rounds. MCP only: the catalog is keyed
+        // by tool name, and a REST path has none.
+        $fieldMap = $authored['object']['source']['field_map'] ?? [];
+        $this->catalog->rememberShape(
+            $integration,
+            $toolName,
+            $collectionPath,
+            collect($authored['object']['fields'])->map(fn (array $f): array => [
+                'path' => collect($fieldMap)->firstWhere('field_id', $f['id'])['external_path'] ?? $f['slug'],
+                'type' => $f['type'],
+            ])->values()->all(),
+        );
+
+        return ['clamped' => $clamped] + $authored;
+    }
+
+    /**
+     * Everything both transports do once real rows are in hand: infer the
+     * fields, name and slug the object, assemble the manifest node around the
+     * caller's list operation, and say what the rows prove about it.
+     *
+     * Shared rather than written twice on purpose. The two paths differ only in
+     * how they FETCH — an MCP tool call or an HTTP request — and every rule
+     * after that (a derived rate must never be averaged, a series whose tail has
+     * not resolved must not be charted as a collapse) is a fact about the data,
+     * not about the transport. Duplicated, the REST path would have shipped
+     * without them and nobody would have noticed until a dashboard averaged a
+     * percentage.
+     *
+     * @param  list<array<string, mixed>>  $rows
+     * @param  array<string, mixed>  $manifest
+     * @param  array<string, mixed>  $listOperation
+     * @param  string  $source  human-readable origin, for the summary line
+     * @return array{ok: bool, object?: array<string, mixed>, rows?: list<array<string, mixed>>, date_field_ids?: list<string>, derived_rates?: list<array<string, mixed>>, immature_periods?: list<array<string, mixed>>, summary?: string, error?: string}
+     */
+    private function finishAuthoring(
+        array $rows,
+        ?string $idPathHint,
+        string $name,
+        array $manifest,
+        array $listOperation,
+        Integration $integration,
+        string $source,
+    ): array {
+        $modeled = $this->modeler->model($rows, $idPathHint);
+        if ($modeled['fields'] === []) {
+            return ['ok' => false, 'error' => "Could not infer any fields from the rows of '{$source}'."];
+        }
 
         $object = [
             'id' => 'obj_'.strtolower((string) Str::ulid()),
-            'slug' => $slug,
+            'slug' => $this->uniqueObjectSlug($name, $manifest),
             'name' => $name,
             'fields' => $modeled['fields'],
             'source' => array_filter([
                 'type' => 'connected',
                 'integration_id' => $integration->id,
                 'id_path' => $modeled['id_path'],
-                'operations' => ['list' => array_filter([
-                    'mcp_tool' => $toolName,
-                    'arguments' => $arguments !== [] ? $this->relativizeDateArguments($arguments) : null,
-                    'collection_path' => $collectionPath,
-                ], fn ($v) => $v !== null)],
+                'operations' => ['list' => $listOperation],
                 'field_map' => $modeled['field_map'],
             ], fn ($v) => $v !== null),
         ];
@@ -301,23 +432,10 @@ class ConnectedObjectAuthoring
         // the model is about to chart it and title the chart "collapse since 9 Jul".
         $maturation = app(MaturationCheck::class)->detect($object, $rows, $identities);
 
-        // Feed the catalog so the NEXT build sees this tool's row shape in its
-        // first discovery — zero sampling rounds.
-        $this->catalog->rememberShape(
-            $integration,
-            $toolName,
-            $collectionPath,
-            collect($modeled['fields'])->map(fn (array $f): array => [
-                'path' => collect($modeled['field_map'])->firstWhere('field_id', $f['id'])['external_path'] ?? $f['slug'],
-                'type' => $f['type'],
-            ])->values()->all(),
-        );
-
         return [
             'ok' => true,
             'object' => $object,
             'rows' => $rows,
-            'clamped' => $clamped,
             'date_field_ids' => collect($modeled['fields'])
                 ->filter(fn (array $f): bool => in_array($f['type'], ['date', 'datetime'], true))
                 ->pluck('id')->values()->all(),
@@ -327,7 +445,7 @@ class ConnectedObjectAuthoring
             // is the one moment it can be told, with the arithmetic to back it.
             'derived_rates' => $this->describeRates($identities),
             'immature_periods' => $this->describeMaturation($maturation),
-            'summary' => "Creé el objeto conectado «{$name}» (live desde {$toolName})",
+            'summary' => "Creé el objeto conectado «{$name}» (live desde {$source})",
         ];
     }
 

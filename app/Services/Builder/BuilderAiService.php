@@ -4,6 +4,7 @@ namespace App\Services\Builder;
 
 use App\Ai\BuilderAgent;
 use App\Ai\Tools\Builder\AddConnectedObjectTool;
+use App\Ai\Tools\Builder\AddConnectorActionTool;
 use App\Ai\Tools\Builder\AddCrudPageTool;
 use App\Ai\Tools\Builder\AddDashboardPageTool;
 use App\Ai\Tools\Builder\AddDetailPageTool;
@@ -2002,6 +2003,7 @@ class BuilderAiService
             new SampleEndpointTool(app(IntegrationCaller::class), $conversation->user),
             new SampleMcpToolTool(app(McpClient::class), $conversation->user),
             new AddConnectedObjectTool($proposeTool, app(ConnectedObjectAuthoring::class), $conversation->user),
+            new AddConnectorActionTool(app(IntegrationCaller::class), app(ConnectorActionResolver::class), $conversation->user),
             // The clock every model must ground time-relative reasoning on
             // (dashboards, date filters, "last N days"). Not in the Builder's
             // PlatformToolsFactory path, so bridged in explicitly.

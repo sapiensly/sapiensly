@@ -500,6 +500,29 @@ const brokenWords = computed(
     () => BROKEN_WORD[props.locale.slice(0, 2).toLowerCase()] ?? BROKEN_WORD.en,
 );
 
+/**
+ * What a block says when it reads a system the viewer has not connected.
+ *
+ * Distinct from the broken-block copy on purpose: nothing failed, and the
+ * person CAN fix it — a live connected object reads with each viewer's own
+ * token, so the first thing a technician saw on a working dashboard used to be
+ * an error about a section that was merely waiting for them to say yes.
+ */
+const CONNECT_WORD: Record<string, { title: string; cta: string }> = {
+    en: { title: 'Connect your {name} account to see this', cta: 'Connect' },
+    es: { title: 'Conecta tu cuenta de {name} para ver esto', cta: 'Conectar' },
+    pt: { title: 'Conecte sua conta {name} para ver isto', cta: 'Conectar' },
+    fr: {
+        title: 'Connectez votre compte {name} pour voir ceci',
+        cta: 'Connecter',
+    },
+};
+
+const connectWords = computed(
+    () =>
+        CONNECT_WORD[props.locale.slice(0, 2).toLowerCase()] ?? CONNECT_WORD.en,
+);
+
 function retryBlocks(): void {
     router.reload({ only: ['blockData'] });
 }
@@ -516,12 +539,66 @@ function blockError(blockId: string): string | null {
     }
     return null;
 }
+
+interface ConnectPrompt {
+    integration_id: string;
+    name: string;
+    authorize_url: string;
+}
+
+function blockConnect(blockId: string): ConnectPrompt | null {
+    const entry = props.blockData[blockId];
+    if (entry && typeof entry === 'object' && 'connect' in entry) {
+        const connect = (entry as { connect?: unknown }).connect;
+        if (connect && typeof connect === 'object') {
+            return connect as ConnectPrompt;
+        }
+    }
+    return null;
+}
+
+/** Come back to the page they were on once consent completes. */
+function connectHref(prompt: ConnectPrompt): string {
+    const returnTo =
+        typeof window === 'undefined'
+            ? ''
+            : window.location.pathname + window.location.search;
+    return `${prompt.authorize_url}?return_to=${encodeURIComponent(returnTo)}`;
+}
 </script>
 
 <template>
     <template v-for="block in blocks" :key="block.id">
         <div
-            v-if="blockError(block.id)"
+            v-if="blockConnect(block.id)"
+            class="flex flex-wrap items-center gap-3 rounded-sp-sm border border-dashed p-4 text-xs"
+            :style="{
+                borderColor: 'var(--sp-accent)',
+                background: 'var(--sp-surface)',
+                color: 'var(--sp-text-muted)',
+            }"
+        >
+            <span class="font-medium">
+                {{
+                    connectWords.title.replace(
+                        '{name}',
+                        blockConnect(block.id)!.name,
+                    )
+                }}
+            </span>
+            <a
+                :href="connectHref(blockConnect(block.id)!)"
+                class="rounded-pill px-3 py-1 font-medium transition-opacity hover:opacity-90"
+                :style="{
+                    background: 'var(--sp-accent)',
+                    color: 'var(--sp-accent-contrast)',
+                }"
+            >
+                {{ connectWords.cta }}
+            </a>
+        </div>
+        <div
+            v-else-if="blockError(block.id)"
             class="flex flex-wrap items-center gap-3 rounded-sp-sm border border-dashed p-4 text-xs"
             :style="{
                 borderColor: 'var(--sp-warn-border)',

@@ -20,6 +20,31 @@ use Illuminate\Support\Str;
  * way an attached contract does. That is the whole argument for making it an
  * option on `file` rather than a type of its own.
  */
+/**
+ * Stand up object storage for an upload test.
+ *
+ * `Storage::fake('s3')` alone is not enough: TenantStorage decides WHICH disk
+ * to write to before any disk is touched, and with a blank key/secret/bucket it
+ * refuses outright (TenantStorageNotConfiguredException → 503). So the upload
+ * tests passed only on a machine whose .env happened to have S3 filled in, and
+ * failed on a fresh checkout and in CI.
+ *
+ * Configured here rather than in phpunit.xml because a global value would make
+ * every OTHER test believe S3 is real — the export download path reaches for
+ * the bucket the moment it thinks one exists. Scoped and explicit, like a test
+ * that needs a provider key setting it in config().
+ */
+function fakeObjectStorage(): void
+{
+    config([
+        'filesystems.disks.s3.key' => 'testing',
+        'filesystems.disks.s3.secret' => 'testing',
+        'filesystems.disks.s3.bucket' => 'sapiensly-testing',
+    ]);
+
+    Storage::fake('s3');
+}
+
 function signatureUploadApp(User $owner, array $fieldOverrides = []): App
 {
     $app = App::factory()->create([
@@ -63,7 +88,7 @@ function signatureUploadApp(User $owner, array $fieldOverrides = []): App
 }
 
 it('stores a signed PNG exactly as it stores any attachment', function () {
-    Storage::fake('s3');
+    fakeObjectStorage();
 
     $owner = User::factory()->create();
     $app = signatureUploadApp($owner);
@@ -100,7 +125,7 @@ it('refuses a capture mode nobody implements', function () {
 });
 
 it('is closed to somebody who cannot reach the app', function () {
-    Storage::fake('s3');
+    fakeObjectStorage();
 
     $owner = User::factory()->create();
     $app = signatureUploadApp($owner);

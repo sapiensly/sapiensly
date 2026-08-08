@@ -58,9 +58,19 @@
         <env name="TENANT_DB_USERNAME" value="postgres"/>
         <env name="TENANT_DB_PASSWORD" value=""/>
         <env name="MAIL_MAILER" value="array"/>
-        <!-- Document/app-file uploads default to S3; use local disk in tests so
+        <!-- Document uploads default to S3; use local disk in tests so
              Storage::fake('local') covers them and no AWS credentials are needed. -->
         <env name="DOCUMENTS_DISK_DRIVER" value="local"/>
+        <!--
+            AWS_* is deliberately NOT pinned here. App-file uploads resolve
+            through TenantStorage, which falls back to the global `s3` disk and
+            treats a filled key/secret/bucket as "S3 is configured" — so filling
+            them globally makes every test that never faked s3 (the export
+            download path, for one) reach for a real bucket. A test that needs
+            object storage configures it itself and fakes the disk, the same way
+            a test that needs a provider key sets it in config(). See
+            tests/Feature/Apps/SignatureUploadTest.php.
+        -->
         <env name="QUEUE_CONNECTION" value="sync"/>
         <env name="SESSION_DRIVER" value="array"/>
         <env name="PULSE_ENABLED" value="false"/>

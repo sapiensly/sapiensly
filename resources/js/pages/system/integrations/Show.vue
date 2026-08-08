@@ -85,6 +85,9 @@ interface Integration {
     requests: RequestRow[];
     request_count: number;
     masked_auth_config: Record<string, unknown>;
+    authorized: boolean;
+    requires_per_user_consent: boolean;
+    authorize_url: string;
 }
 
 const props = defineProps<{
@@ -355,23 +358,69 @@ function destroyIntegration(): void {
                 </Link>
             </div>
 
+            <!-- Connect YOUR account. The client config being complete used to
+                 be reported here with no way to act on it: authorization lived
+                 on a Tool, so connecting meant inventing one first. The button
+                 is the whole point of this panel. -->
             <div
-                v-else-if="needsOAuth2Authorization && !isMcp"
-                class="flex items-start gap-3 rounded-sp-sm border border-soft bg-surface p-4"
+                v-else-if="needsOAuth2Authorization"
+                class="flex items-start gap-3 rounded-sp-sm border p-4"
+                :class="
+                    integration.authorized
+                        ? 'border-soft bg-surface'
+                        : 'border-accent-blue/30 bg-accent-blue/5'
+                "
             >
                 <div
-                    class="flex size-9 shrink-0 items-center justify-center rounded-xs bg-accent-blue/15 text-accent-blue"
+                    class="flex size-9 shrink-0 items-center justify-center rounded-xs"
+                    :class="
+                        integration.authorized
+                            ? 'bg-sp-success/15 text-sp-success'
+                            : 'bg-accent-blue/15 text-accent-blue'
+                    "
                 >
-                    <CheckCircle2 class="size-4" />
+                    <CheckCircle2
+                        v-if="integration.authorized"
+                        class="size-4"
+                    />
+                    <Plug v-else class="size-4" />
                 </div>
                 <div class="min-w-0 flex-1">
                     <p class="text-sm font-medium text-ink">
-                        {{ t('system.integrations.oauth2.client_ready_title') }}
+                        {{
+                            integration.authorized
+                                ? t(
+                                      'system.integrations.oauth2.connected_title',
+                                  )
+                                : t(
+                                      'system.integrations.oauth2.authorize_title',
+                                  )
+                        }}
                     </p>
                     <p class="mt-0.5 text-xs text-ink-muted">
-                        {{ t('system.integrations.oauth2.client_ready_hint') }}
+                        {{
+                            integration.authorized
+                                ? t('system.integrations.oauth2.connected_hint')
+                                : t('system.integrations.oauth2.per_user_hint')
+                        }}
                     </p>
                 </div>
+                <a
+                    :href="integration.authorize_url"
+                    class="inline-flex shrink-0 items-center gap-1.5 self-center rounded-pill px-3.5 py-1.5 text-xs font-medium transition-colors"
+                    :class="
+                        integration.authorized
+                            ? 'border border-soft text-ink-muted hover:bg-surface hover:text-ink'
+                            : 'bg-accent-blue text-white shadow-btn-primary hover:bg-accent-blue-hover'
+                    "
+                >
+                    <Plug class="size-3.5" />
+                    {{
+                        integration.authorized
+                            ? t('system.integrations.oauth2.reauthorize_cta')
+                            : t('system.integrations.oauth2.authorize_cta')
+                    }}
+                </a>
             </div>
 
             <!-- MCP hub: an MCP server IS a tool provider — it exposes its

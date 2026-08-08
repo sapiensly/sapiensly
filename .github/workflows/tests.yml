@@ -16,6 +16,49 @@ jobs:
   ci:
     runs-on: ubuntu-latest
 
+    # The suite needs a real PostgreSQL: phpunit.xml pins DB_CONNECTION=pgsql,
+    # the migrations relocate tables into the `platform`/`tenant` schemas and
+    # enable Row-Level Security, and RowLevelSecurityTest connects as the real
+    # `tenant_app` role. None of that has a sqlite equivalent — without this
+    # service the job could only ever fail at the first test that touches the
+    # database, which is nearly all of them.
+    #
+    # The image is pgvector's rather than the stock postgres one because the
+    # first migration runs `CREATE EXTENSION vector` (RAG embeddings), which
+    # needs the extension present on the SERVER, not just in the database.
+    #
+    # HOST_AUTH_METHOD=trust matches the empty DB_PASSWORD in phpunit.xml.
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_HOST_AUTH_METHOD: trust
+          # The database phpunit.xml points at. Laravel would create it on the
+          # first RefreshDatabase run, but having the service start with it
+          # keeps a connection failure legible as a connection failure.
+          POSTGRES_DB: sapiensly_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+      # WaitForQueuesToDrain talks to the queue through the real Redis
+      # connection rather than a fake, because what it asserts IS the queue
+      # depth. QUEUE_CONNECTION=sync in phpunit.xml covers everything else.
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -25,7 +68,12 @@ jobs:
         with:
           php-version: 8.4
           tools: composer:v2
-          coverage: xdebug
+          # `redis` is phpredis (config/database.php defaults REDIS_CLIENT to
+          # it) and is not enabled by default on the runner's PHP.
+          extensions: pgsql, pdo_pgsql, redis, gd, bcmath, intl, zip
+          # Nothing consumes a coverage report, and driving the whole suite
+          # through Xdebug costs several minutes per run for nothing.
+          coverage: none
 
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -45,6 +93,16 @@ jobs:
       - name: Generate Application Key
         run: php artisan key:generate
 
+      # Passport reads these at container-resolve time, so without them every
+      # request through the MCP guard dies on "Invalid key supplied" — a 500
+      # where the test expected a 401, which reads like an auth bug rather than
+      # a missing file. They are gitignored, so a fresh checkout never has them.
+      - name: Generate Passport Keys
+        run: php artisan passport:keys --no-interaction
+
+      # Feature tests render real Inertia pages, which resolve their assets
+      # through the Vite manifest — without a build every page test dies on
+      # "Unable to locate file in Vite manifest" rather than on anything real.
       - name: Build Assets
         run: npm run build
 

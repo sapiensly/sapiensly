@@ -35,6 +35,7 @@ use App\Services\Express\ExpressIntentRouter;
 use App\Services\Express\ExpressLauncher;
 use App\Services\Express\LabelGrounding;
 use App\Services\Import\ImportService;
+use App\Services\Integrations\IntegrationService;
 use App\Services\Landing\CustomDomainService;
 use App\Services\Landing\DraftPreviewShot;
 use App\Services\Landing\LandingPublisher;
@@ -54,6 +55,7 @@ use App\Support\Builder\FineTuneStyles;
 use App\Support\Builder\LandingLinks;
 use App\Support\Builder\WireframeImportMode;
 use App\Support\Css\ScopedAppCss;
+use App\Support\Integrations\IntegrationAuthorization;
 use App\Support\Manifest\PageNavigation;
 use App\Support\Storage\TenantPath;
 use Illuminate\Http\JsonResponse;
@@ -2926,6 +2928,59 @@ class AppBuilderController extends Controller
         }
 
         return response()->json(['ok' => true]);
+    }
+
+    /**
+     * Capture the ONE secret a key/bearer connection needs, from the
+     * provisioning card in the builder conversation.
+     *
+     * The card is where the user is told a connection needs authorizing, and
+     * until now the only way to act on that was to leave for the integrations
+     * admin, find the auth section of a long edit form, and come back. The
+     * secret still never touches the model: it is posted straight here from the
+     * browser, and the conversation only ever learns that the connection became
+     * authorized.
+     *
+     * Types whose credential is more than one field (basic auth, OAuth) are
+     * refused rather than half-captured — OAuth has its own consent route.
+     */
+    public function storeIntegrationCredentials(Request $request, App $app, Integration $integration): JsonResponse
+    {
+        $this->assertCanAccess($request, $app);
+        abort_unless($integration->isVisibleTo($request->user()), 403);
+        $this->authorize('update', $integration);
+
+        $data = $request->validate([
+            'secret' => ['required', 'string', 'max:8192'],
+            // API keys travel under a header/query name the provider chooses;
+            // the default suits the common bearer-style key.
+            'key_name' => ['nullable', 'string', 'max:255'],
+        ]);
+
+        $auth = app(IntegrationAuthorization::class);
+        $field = $auth->secretFieldFor($integration);
+
+        if ($field === null) {
+            return response()->json([
+                'message' => __('This connection needs more than a single secret — open it to finish setting it up.'),
+            ], 422);
+        }
+
+        $patch = [$field => $data['secret']];
+        if ($field === 'value') {
+            $existing = $integration->auth_config ?? [];
+            $patch['name'] = ($data['key_name'] ?? null) ?: ($existing['name'] ?? 'Authorization');
+            $patch['location'] = $existing['location'] ?? 'header';
+        }
+
+        // Through the service so the draft→active promotion and the merge rules
+        // are the same ones the admin form gets.
+        $updated = app(IntegrationService::class)->update($integration, ['auth_config' => $patch]);
+
+        return response()->json([
+            'ok' => true,
+            'authorized' => $auth->authorizedFor($updated, $request->user()),
+        ]);
     }
 
     private function assertCanAccess(Request $request, App $app): void

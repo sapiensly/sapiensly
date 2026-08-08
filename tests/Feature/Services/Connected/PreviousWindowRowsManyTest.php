@@ -5,6 +5,7 @@ use App\Models\User;
 use App\Services\Connected\ConnectedObjectAuthoring;
 use App\Services\Connected\ConnectedObjectModeler;
 use App\Services\Connected\IntegrationCatalog;
+use App\Services\Integrations\IntegrationCaller;
 use App\Services\Tools\McpClient;
 use App\Support\Tenancy\TenantCache;
 
@@ -17,7 +18,7 @@ use App\Support\Tenancy\TenantCache;
  */
 function pwm_authoring(McpClient $mcp): ConnectedObjectAuthoring
 {
-    return new ConnectedObjectAuthoring($mcp, new ConnectedObjectModeler, new IntegrationCatalog($mcp, app(TenantCache::class)));
+    return new ConnectedObjectAuthoring($mcp, new ConnectedObjectModeler, new IntegrationCatalog($mcp, app(TenantCache::class)), app(IntegrationCaller::class));
 }
 
 function pwm_object(string $id, string $integrationId, array $arguments, mixed $collectionPath = null): array
