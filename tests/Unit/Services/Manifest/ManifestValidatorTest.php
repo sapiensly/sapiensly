@@ -4348,3 +4348,139 @@ it('design-lint R14: several views over one object are not a second overview', f
     expect($r->valid)->toBeTrue()
         ->and(designWarnings($r)->pluck('message')->implode(' '))->not->toContain('second overview');
 });
+
+/*
+|--------------------------------------------------------------------------
+| R15 — the signed-in person's platform id written into a relation
+|--------------------------------------------------------------------------
+|
+| Observed in production on `/r/erp/checkin_simple`: a check-in form whose
+| «Empleado» relation was filled with `{{current_user.id}}` in BOTH the form
+| field's default and the `create_record` that ran on submit. That id is the
+| USER row's — `1` — and a relation stores a record id, so every attempt to
+| check in came back «No Empleados record matches '1'» and the page could not
+| be used at all. Choosing the right employee by hand did not help: the action's
+| values map overrode the picker.
+|
+| The platform taught it — `default_expression` is documented as "use
+| {{current_user.id}}, {{today()}}, {{now()}}" — so a rail, not a sentence.
+|
+*/
+
+/**
+ * A check-in page: an `asistencias` object with an `empleado` relation to
+ * `empleados`, and a create form over it.
+ *
+ * @param  array<string, mixed>  $formField  extra keys on the empleado form field
+ * @param  array<string, string>  $values  the create_record values map
+ */
+function checkinManifest(array $formField = [], array $values = []): array
+{
+    $m = baseManifest();
+
+    $nombre = id('fld');
+    $correo = id('fld');
+    $empleados = [
+        'id' => id('obj'), 'slug' => 'empleados', 'name' => 'Empleados',
+        'primary_display_field_id' => $nombre,
+        'fields' => [
+            ['id' => $nombre, 'slug' => 'nombre', 'name' => 'Nombre', 'type' => 'string'],
+            ['id' => $correo, 'slug' => 'email', 'name' => 'Email', 'type' => 'email'],
+        ],
+    ];
+
+    $fecha = id('fld');
+    $empleado = id('fld');
+    $asistencias = [
+        'id' => id('obj'), 'slug' => 'asistencias', 'name' => 'Asistencias',
+        'primary_display_field_id' => $fecha,
+        'fields' => [
+            ['id' => $fecha, 'slug' => 'fecha', 'name' => 'Fecha', 'type' => 'date'],
+            ['id' => $empleado, 'slug' => 'empleado', 'name' => 'Empleado', 'type' => 'relation',
+                'cardinality' => 'many_to_one', 'target_object_id' => $empleados['id']],
+        ],
+    ];
+
+    $m['objects'][] = $empleados;
+    $m['objects'][] = $asistencias;
+
+    $m['pages'][] = [
+        'id' => id('pag'), 'slug' => 'checkin_simple', 'name' => 'Check-in', 'path' => '/checkin',
+        'blocks' => [[
+            'id' => id('blk'), 'type' => 'form', 'mode' => 'create',
+            'object_id' => $asistencias['id'],
+            'fields' => [
+                ['field_id' => $fecha, 'default_expression' => '{{today()}}'],
+                array_merge(['field_id' => $empleado], $formField),
+            ],
+            'on_submit' => [[
+                'type' => 'create_record', 'object_id' => $asistencias['id'],
+                'values' => $values === [] ? ['fecha' => '{{today()}}'] : $values,
+            ]],
+        ]],
+    ];
+
+    return $m;
+}
+
+it('design-lint R15: warns when a form default fills a relation with the platform user id', function () {
+    $r = (new ManifestValidator)->validate(checkinManifest(
+        formField: ['default_expression' => '{{current_user.id}}'],
+    ));
+
+    $warning = designWarnings($r)->firstWhere(fn ($w) => str_contains($w->message, 'platform user id'));
+
+    // Non-blocking: an app already carrying this must stay saveable while it is fixed.
+    expect($r->valid)->toBeTrue()
+        ->and($warning)->not->toBeNull()
+        ->and($warning->message)->toContain("'Empleado'")
+        // Names the object, so the message reads like the runtime error it predicts.
+        ->and($warning->message)->toContain('Empleados')
+        // And says what to write instead — the spelling that resolves.
+        ->and($warning->message)->toContain('{{current_user.email}}')
+        ->and($warning->path)->toBe('/pages/0/blocks/0/fields/1/default_expression');
+});
+
+it('design-lint R15: warns when an action value fills a relation with the platform user id', function () {
+    // The half that actually broke the live page: the values map overrides
+    // whatever the picker was given, so a correct choice by hand still failed.
+    $r = (new ManifestValidator)->validate(checkinManifest(
+        values: ['fecha' => '{{today()}}', 'empleado' => '{{current_user.id}}'],
+    ));
+
+    $warning = designWarnings($r)->firstWhere(fn ($w) => str_contains($w->message, 'platform user id'));
+
+    expect($r->valid)->toBeTrue()
+        ->and($warning)->not->toBeNull()
+        ->and($warning->path)->toBe('/pages/0/blocks/0/on_submit/0/values/empleado');
+});
+
+it('design-lint R15: leaves current_user.id on a non-relation field alone', function () {
+    // On a number or a string it is exactly right — "who filed this" as a
+    // plain value — and the documentation says so.
+    $m = checkinManifest();
+    $m['objects'][2]['fields'][] = ['id' => id('fld'), 'slug' => 'capturado_por', 'name' => 'Capturado por', 'type' => 'string'];
+    $m['pages'][0]['blocks'][0]['fields'][] = [
+        'field_id' => $m['objects'][2]['fields'][2]['id'],
+        'default_expression' => '{{current_user.id}}',
+    ];
+
+    $r = (new ManifestValidator)->validate($m);
+
+    expect($r->valid)->toBeTrue()
+        ->and(designWarnings($r)->pluck('message')->implode(' '))->not->toContain('platform user id');
+});
+
+it('design-lint R15: leaves a relation filled from the form or by email alone', function () {
+    $r = (new ManifestValidator)->validate(checkinManifest(
+        values: ['fecha' => '{{today()}}', 'empleado' => '{{form.empleado}}'],
+    ));
+    $byEmail = (new ManifestValidator)->validate(checkinManifest(
+        values: ['fecha' => '{{today()}}', 'empleado' => '{{current_user.email}}'],
+    ));
+
+    expect($r->valid)->toBeTrue()
+        ->and(designWarnings($r)->pluck('message')->implode(' '))->not->toContain('platform user id')
+        ->and($byEmail->valid)->toBeTrue()
+        ->and(designWarnings($byEmail)->pluck('message')->implode(' '))->not->toContain('platform user id');
+});

@@ -345,6 +345,129 @@ class ManifestValidator
         $this->lintUnopenableObjects($manifest, $warnings);
         $this->lintDuplicateOverviews($manifest, $warnings);
         $this->lintObjectShape($manifest, $warnings);
+        $this->lintUserIdIntoRelation($manifest, $warnings);
+    }
+
+    /**
+     * R15 — the signed-in person's platform id written into a relation.
+     *
+     * `{{current_user.id}}` resolves to the id of the USER row behind the
+     * session — `1`, `47` — while a relation stores a RECORD id (`rec_…`).
+     * Nothing resolves one to the other, so the write is refused at submit time
+     * («No Empleados record matches '1'») and the form cannot be filed at all.
+     *
+     * This is not a slip somebody makes twice by accident: the platform teaches
+     * it. `default_expression` is documented as "use {{current_user.id}},
+     * {{today()}}, {{now()}}", which is right for a number or a string and
+     * wrong for the one field type that means "which record".
+     *
+     * Observed live on a check-in page, in BOTH places at once — the form
+     * field's default AND the `create_record` that overrode whatever the picker
+     * had been given — so choosing the right employee by hand did not help
+     * either. Hence the walk covers both, and generically: a default is checked
+     * against the object its form declares, a value against the object its
+     * action names.
+     *
+     * @param  array<string, mixed>  $manifest
+     * @param  list<ManifestValidationError>  $warnings
+     */
+    private function lintUserIdIntoRelation(array $manifest, array &$warnings): void
+    {
+        $names = [];
+        foreach ($manifest['objects'] ?? [] as $object) {
+            if (is_array($object) && isset($object['id'])) {
+                $names[(string) $object['id']] = (string) ($object['name'] ?? $object['slug'] ?? $object['id']);
+            }
+        }
+
+        /** @var array<string, array<string, array{name: string, target: string}>> $relations */
+        $relations = [];
+        foreach ($manifest['objects'] ?? [] as $object) {
+            if (! is_array($object) || ! isset($object['id'])) {
+                continue;
+            }
+            foreach ($object['fields'] ?? [] as $field) {
+                if (! is_array($field) || ($field['type'] ?? null) !== 'relation') {
+                    continue;
+                }
+                $entry = [
+                    'name' => (string) ($field['name'] ?? $field['slug'] ?? ''),
+                    'target' => $names[(string) ($field['target_object_id'] ?? '')] ?? 'the target object',
+                ];
+                // Keyed by BOTH handles: a form addresses a field by id, an
+                // action's values map by slug.
+                foreach ([$field['id'] ?? null, $field['slug'] ?? null] as $handle) {
+                    if (is_string($handle) && $handle !== '') {
+                        $relations[(string) $object['id']][$handle] = $entry;
+                    }
+                }
+            }
+        }
+
+        if ($relations !== []) {
+            $this->scanUserIdIntoRelation($manifest, '', null, $relations, $warnings);
+        }
+    }
+
+    /**
+     * Walk every node, carrying the object the enclosing node declared, and warn
+     * wherever `{{current_user.id}}` fills one of that object's relations.
+     *
+     * @param  array<string, array<string, array{name: string, target: string}>>  $relations
+     * @param  list<ManifestValidationError>  $warnings
+     */
+    private function scanUserIdIntoRelation(mixed $node, string $pointer, ?string $objectId, array $relations, array &$warnings): void
+    {
+        if (! is_array($node)) {
+            return;
+        }
+
+        // A node that names an object sets the scope for everything under it: a
+        // form's fields, an action's values. The nearest one wins, so a form
+        // inside a page about something else is read against its own object.
+        if (is_string($node['object_id'] ?? null)) {
+            $objectId = $node['object_id'];
+        }
+
+        $here = $relations[(string) $objectId] ?? [];
+
+        if ($here !== []) {
+            if (is_string($node['field_id'] ?? null) && is_string($node['default_expression'] ?? null)) {
+                $this->warnUserIdRelation($node['default_expression'], $node['field_id'], $here, "{$pointer}/default_expression", $warnings);
+            }
+
+            foreach ($node['values'] ?? [] as $slug => $expression) {
+                if (is_string($slug) && is_string($expression)) {
+                    $this->warnUserIdRelation($expression, $slug, $here, "{$pointer}/values/{$slug}", $warnings);
+                }
+            }
+        }
+
+        foreach ($node as $key => $child) {
+            if (is_array($child)) {
+                $this->scanUserIdIntoRelation($child, $pointer.'/'.$key, $objectId, $relations, $warnings);
+            }
+        }
+    }
+
+    /**
+     * @param  array<string, array{name: string, target: string}>  $relations
+     * @param  list<ManifestValidationError>  $warnings
+     */
+    private function warnUserIdRelation(string $expression, string $handle, array $relations, string $pointer, array &$warnings): void
+    {
+        $relation = $relations[$handle] ?? null;
+        if ($relation === null || preg_match('/\{\{\s*current_user\.id\s*\}\}/', $expression) !== 1) {
+            return;
+        }
+
+        $named = $relation['name'] === '' ? 'this relation' : "'{$relation['name']}'";
+
+        $warnings[] = new ManifestValidationError(
+            $pointer,
+            "{$named} is a relation to {$relation['target']}, and {{current_user.id}} is the signed-in person's platform user id — never a record id, so every submit is refused with \"No {$relation['target']} record matches '1'\". Let the form's picker fill it, or match a value the record carries: {{current_user.email}} against {$relation['target']}'s email field.",
+            'design_smell',
+        );
     }
 
     /**

@@ -758,7 +758,7 @@ class RecordWriteService
      * Resolve a relation field's value to a REAL target-record id, so a bad
      * reference never persists as a dangling foreign key. Each reference is kept
      * only when it is an existing record id of the target object, or a value that
-     * uniquely identifies one (its name/title — any of the target's string
+     * uniquely identifies one (its name/title/email — any of the target's text
      * fields, case-insensitively). Anything else — the target OBJECT id, a
      * hallucinated record id, an unmatched name — is a hard error, surfaced to the
      * caller instead of silently stored. This closes the seeding bug where a demo
@@ -822,8 +822,19 @@ class RecordWriteService
     }
 
     /**
+     * The field types whose value can NAME a record. Free text, plus the contact
+     * trio: those are stored as text and read as text, and an email is the only
+     * stable handle the platform has on the person a row is about — which is
+     * what «link the signed-in user to their own row» needs. Left out, a form
+     * that wrote `{{current_user.email}}` into a relation had no spelling that
+     * could ever resolve, and the platform's own answer to "who is filing this"
+     * was a platform user id no record has.
+     */
+    private const NAMING_TYPES = ['string', 'long_text', 'email', 'phone', 'url'];
+
+    /**
      * Build (once per target, per write) an index of the target object's existing
-     * records: the set of record ids, and a map from each record's string-field
+     * records: the set of record ids, and a map from each record's text-field
      * values (lower-cased) to its id — so a relation can be given by name.
      *
      * @param  array<string, mixed>  $target
@@ -837,11 +848,11 @@ class RecordWriteService
             return $relCache[$targetId];
         }
 
-        $stringSlugs = array_values(array_map(
+        $namingSlugs = array_values(array_map(
             fn (array $f): string => (string) $f['slug'],
             array_filter(
                 $target['fields'] ?? [],
-                fn ($f): bool => is_array($f) && in_array($f['type'] ?? '', ['string', 'long_text'], true),
+                fn ($f): bool => is_array($f) && in_array($f['type'] ?? '', self::NAMING_TYPES, true),
             ),
         ));
 
@@ -852,10 +863,10 @@ class RecordWriteService
             ->where('object_definition_id', $targetId)
             ->orderBy('created_at')
             ->get(['id', 'data'])
-            ->each(function (Record $record) use (&$ids, &$byValue, $stringSlugs): void {
+            ->each(function (Record $record) use (&$ids, &$byValue, $namingSlugs): void {
                 $ids[$record->id] = true;
                 $data = is_array($record->data) ? $record->data : [];
-                foreach ($stringSlugs as $slug) {
+                foreach ($namingSlugs as $slug) {
                     $value = $data[$slug] ?? null;
                     if (is_scalar($value) && trim((string) $value) !== '') {
                         // First record wins when two share a label — deterministic.
