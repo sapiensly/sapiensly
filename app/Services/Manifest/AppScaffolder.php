@@ -4217,9 +4217,21 @@ class AppScaffolder
     }
 
     /**
-     * Seed values for the "new order" button so create_record gets a non-empty
-     * object: the status' first option when there is a status, else the first
-     * scalar field (blank). Empty ⇒ caller skips POS generation.
+     * What the "new order" button writes.
+     *
+     * `values` is the WHOLE payload — nothing merges anything into it — so this
+     * has to satisfy every REQUIRED field of the order object or the button is
+     * refused on every press. It did not: the status was set, the required
+     * folio beside it was not, and the till's first tap failed on a page the
+     * scaffolder had just built. Seeding a required field with `''` (the old
+     * fallback) fails the same check, since blank is what required means.
+     *
+     * Only values that are honestly derivable at a till: a status opens on its
+     * first option, an identifier nobody has typed yet gets a timestamp folio,
+     * a date is today, a number is zero. A required field we cannot fill — a
+     * relation to a customer, an email — means this is not a till order, so the
+     * POS screen is not built AT ALL rather than built broken (empty ⇒ the
+     * caller skips POS generation).
      *
      * @param  array<string, mixed>  $orderDef
      * @param  array<string, mixed>|null  $status
@@ -4227,15 +4239,50 @@ class AppScaffolder
      */
     private function posNewOrderValues(array $orderDef, ?array $status): array
     {
+        $values = [];
         if ($status !== null && ! empty($status['options'])) {
-            return [$status['slug'] => $status['options'][0]['value']];
-        }
-        $seed = $this->firstDefFieldOfType($orderDef, ['string', 'number', 'currency', 'boolean']);
-        if ($seed === null) {
-            return [];
+            $values[(string) $status['slug']] = $status['options'][0]['value'];
         }
 
-        return [$seed['slug'] => ($seed['type'] === 'boolean' ? false : '')];
+        foreach ($orderDef['fields'] ?? [] as $field) {
+            if (empty($field['required']) || array_key_exists((string) $field['slug'], $values)) {
+                continue;
+            }
+            if (in_array($field['type'] ?? '', self::DERIVED_TYPES, true) || ($field['default'] ?? null) !== null) {
+                continue;
+            }
+
+            $seed = $this->posSeedValue($field);
+            if ($seed === null) {
+                return [];
+            }
+            $values[(string) $field['slug']] = $seed;
+        }
+
+        return $values;
+    }
+
+    /**
+     * A value for one required field of a new order, or null when the till has
+     * no honest answer for it.
+     *
+     * @param  array<string, mixed>  $field
+     */
+    private function posSeedValue(array $field): string|int|bool|null
+    {
+        return match ($field['type'] ?? '') {
+            // An order opened at a till has no name yet, and a folio is exactly
+            // the thing a timestamp can be.
+            'string' => '{{now(\'YmdHis\')}}',
+            'number', 'currency' => 0,
+            'boolean' => false,
+            'date' => '{{today()}}',
+            'datetime' => '{{now()}}',
+            'single_select' => is_array($field['options'] ?? null) && $field['options'] !== []
+                ? (string) $field['options'][0]['value']
+                : null,
+            default => null,
+        };
     }
 
     /**

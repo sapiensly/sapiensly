@@ -5666,7 +5666,7 @@
                         },
                         "values": {
                             "type": "object",
-                            "description": "Field-slug → value map. Values can be expression strings ({{form.x}}, {{row.id}}, {{current_user.id}}) OR literal scalars (true, 42, \"open\", null). RecordWriteService casts them to the field's type on save.",
+                            "description": "Field-slug → value map, and the WHOLE payload written — nothing merges the form's own fields into it, so a required field missing here is refused on every submit. Values can be expression strings ({{form.x}}, {{row.id}}, {{current_user.id}}) OR literal scalars (true, 42, \"open\", null). RecordWriteService casts them to the field's type on save. Two things this map must not do: fill a RELATION with {{current_user.id}} (that is the platform user id, never a record id — use {{form.<slug>}}, or {{current_user.email}} against the target's email field), and overwrite a field the same form renders (whatever the person chose is then discarded).",
                             "additionalProperties": {
                                 "type": ["string", "boolean", "number", "null"]
                             }
@@ -5694,7 +5694,7 @@
                         },
                         "values": {
                             "type": "object",
-                            "description": "Field-slug → value map. Values can be expression strings ({{form.x}}, {{row.id}}, {{current_user.id}}) OR literal scalars (true, 42, \"open\", null). RecordWriteService casts them to the field's type on save.",
+                            "description": "Field-slug → value map, and the WHOLE payload written — nothing merges the form's own fields into it, so a required field missing here is refused on every submit. Values can be expression strings ({{form.x}}, {{row.id}}, {{current_user.id}}) OR literal scalars (true, 42, \"open\", null). RecordWriteService casts them to the field's type on save. Two things this map must not do: fill a RELATION with {{current_user.id}} (that is the platform user id, never a record id — use {{form.<slug>}}, or {{current_user.email}} against the target's email field), and overwrite a field the same form renders (whatever the person chose is then discarded).",
                             "additionalProperties": {
                                 "type": ["string", "boolean", "number", "null"]
                             }

@@ -346,6 +346,193 @@ class ManifestValidator
         $this->lintDuplicateOverviews($manifest, $warnings);
         $this->lintObjectShape($manifest, $warnings);
         $this->lintUserIdIntoRelation($manifest, $warnings);
+        $this->lintUnwritableCreates($manifest, $warnings);
+        $this->lintDiscardedInput($manifest, $warnings);
+    }
+
+    /**
+     * R16 — a `create_record` that can never succeed.
+     *
+     * `values` is the WHOLE payload: `AppActionExecutor` resolves that map and
+     * hands it to the write path, and nothing merges the form's own fields into
+     * it. So a required field missing from `values` is not a risk, it is a
+     * guaranteed 422 on every press, for ever — «Ubicación Check-in is
+     * required» on a form that never had a way to say it.
+     *
+     * That is exactly how the live check-in page failed a SECOND time: fixing
+     * the relation it wrote wrong only uncovered the required field it wrote
+     * not at all. Rendering the field on the form does not save it either,
+     * which is what makes this worth deciding in code — the two look
+     * interchangeable when you read the page.
+     *
+     * A field with a declared `default` is fine (the write path fills it), and
+     * derived fields are computed, never written.
+     *
+     * @param  array<string, mixed>  $manifest
+     * @param  list<ManifestValidationError>  $warnings
+     */
+    private function lintUnwritableCreates(array $manifest, array &$warnings): void
+    {
+        $this->eachRecordAction($manifest, '', function (array $action, array $object, string $pointer) use (&$warnings): void {
+            if (($action['type'] ?? null) !== 'create_record') {
+                return;
+            }
+
+            $values = $action['values'] ?? null;
+            // No map at all is a different (schema) matter; an empty one is a
+            // create that writes nothing, and every required field is missing
+            // by definition — reported as the same thing either way.
+            if (! is_array($values) || $values === []) {
+                return;
+            }
+
+            foreach ($object['fields'] ?? [] as $field) {
+                if (! is_array($field) || empty($field['required'])) {
+                    continue;
+                }
+                if (in_array($field['type'] ?? '', ['formula', 'lookup', 'rollup'], true)) {
+                    continue;
+                }
+                if (($field['default'] ?? null) !== null) {
+                    continue;
+                }
+                // The write path accepts a values map keyed either way.
+                if (array_key_exists((string) ($field['slug'] ?? ''), $values)
+                    || array_key_exists((string) ($field['id'] ?? ''), $values)) {
+                    continue;
+                }
+
+                $name = (string) ($field['name'] ?? $field['slug'] ?? '');
+                $warnings[] = new ManifestValidationError(
+                    "{$pointer}/values",
+                    "'{$name}' is required on {$object['name']} and this create_record never writes it — `values` is the whole payload, so every submit is refused with \"{$name} is required\" and the form can never be filed. Add '{$field['slug']}' to `values`, give the field a `default`, or stop requiring it.",
+                    'design_smell',
+                );
+            }
+        });
+    }
+
+    /**
+     * R17 — a form that asks, and then throws the answer away.
+     *
+     * A control the person can see and change, whose value the action then
+     * overwrites with something else, is worse than no control: the app looks
+     * like it took the answer. On the live check-in page BOTH visible choices
+     * were like this — «Empleado» was picked from a real list and written as
+     * `{{current_user.id}}`, «Estado» was a select written as the constant
+     * `"presente"`.
+     *
+     * Only plainly editable fields count. `readonly` says the value is not the
+     * person's to give, and a field under `visible_if` may not be submitted at
+     * all, which is a legitimate reason for the action to supply it.
+     *
+     * @param  array<string, mixed>  $manifest
+     * @param  list<ManifestValidationError>  $warnings
+     */
+    private function lintDiscardedInput(array $manifest, array &$warnings): void
+    {
+        $this->eachRecordAction($manifest, '', function (array $action, array $object, string $pointer, array $formFields) use (&$warnings): void {
+            $values = $action['values'] ?? null;
+            if (! is_array($values) || $formFields === []) {
+                return;
+            }
+
+            $byId = [];
+            foreach ($object['fields'] ?? [] as $field) {
+                if (is_array($field) && isset($field['id'])) {
+                    $byId[(string) $field['id']] = $field;
+                }
+            }
+
+            foreach ($formFields as $formField) {
+                if (! empty($formField['readonly_expression']) || isset($formField['visible_if'])) {
+                    continue;
+                }
+                $field = $byId[(string) ($formField['field_id'] ?? '')] ?? null;
+                if ($field === null || ! empty($field['readonly'])) {
+                    continue;
+                }
+
+                $slug = (string) ($field['slug'] ?? '');
+                $written = $values[$slug] ?? $values[(string) ($field['id'] ?? '')] ?? null;
+                if (! is_string($written) || $slug === '') {
+                    continue;
+                }
+                if (preg_match('/\{\{\s*form\.'.preg_quote($slug, '/').'\s*\}\}/', $written) === 1) {
+                    continue;
+                }
+
+                $name = (string) ($field['name'] ?? $slug);
+                $warnings[] = new ManifestValidationError(
+                    "{$pointer}/values/{$slug}",
+                    "this form asks for '{$name}' and then writes '{$written}' instead — whatever the person chooses is discarded, and the control looks like it was taken into account. Write {{form.{$slug}}}, or take the field off the form if the app decides its value.",
+                    'design_smell',
+                );
+            }
+        });
+    }
+
+    /**
+     * Every create_record / update_record anywhere under the manifest, with the
+     * object it writes to, its JSON pointer, and the fields of the enclosing
+     * form when there is one.
+     *
+     * Walks generically for the same reason `eachNavigation` does: a record
+     * write lives on a form's on_submit, a button's on_click, a table column's,
+     * a modal nested three levels down — and the one place a walk forgets is
+     * where the next broken form will be.
+     *
+     * @param  array<string, mixed>  $manifest
+     * @param  callable(array<string, mixed>, array<string, mixed>, string, list<array<string, mixed>>): void  $emit
+     */
+    private function eachRecordAction(array $manifest, string $pointer, callable $emit): void
+    {
+        $objectsById = [];
+        foreach ($manifest['objects'] ?? [] as $object) {
+            if (is_array($object) && isset($object['id'])) {
+                $objectsById[(string) $object['id']] = $object;
+            }
+        }
+
+        $this->scanRecordActions($manifest, $pointer, [], $objectsById, $emit);
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $formFields  the fields of the nearest enclosing form
+     * @param  array<string, array<string, mixed>>  $objectsById
+     * @param  callable(array<string, mixed>, array<string, mixed>, string, list<array<string, mixed>>): void  $emit
+     */
+    private function scanRecordActions(mixed $node, string $pointer, array $formFields, array $objectsById, callable $emit): void
+    {
+        if (! is_array($node)) {
+            return;
+        }
+
+        // A form's own fields travel down to its on_submit — including a
+        // multi_step_form's, where they are a level further in.
+        if (in_array($node['type'] ?? null, ['form', 'multi_step_form'], true)) {
+            $formFields = array_values(array_filter($node['fields'] ?? [], is_array(...)));
+            foreach ($node['steps'] ?? [] as $step) {
+                foreach ($step['fields'] ?? [] as $field) {
+                    if (is_array($field)) {
+                        $formFields[] = $field;
+                    }
+                }
+            }
+        }
+
+        if (in_array($node['type'] ?? null, ['create_record', 'update_record'], true)) {
+            $object = $objectsById[(string) ($node['object_id'] ?? '')] ?? null;
+            if ($object !== null) {
+                $emit($node, $object, $pointer, $formFields);
+            }
+        }
+
+        foreach ($node as $key => $child) {
+            if (is_array($child)) {
+                $this->scanRecordActions($child, $pointer.'/'.$key, $formFields, $objectsById, $emit);
+            }
+        }
     }
 
     /**
